@@ -29,7 +29,7 @@ use tower_http::{
 use tracing::{Level, Span};
 use uuid::Uuid;
 
-use crate::{Config, EventStream, db, policy::PolicyEngine};
+use crate::{Config, EventStream, Scheduler, db, policy::PolicyEngine};
 
 /// Health check response
 #[derive(Debug, Serialize)]
@@ -144,20 +144,24 @@ pub struct Server {
     event_stream: Arc<EventStream>,
     /// Policy engine for capability-based security
     policy_engine: Arc<PolicyEngine>,
+    /// Background task scheduler
+    scheduler: Arc<tokio::sync::Mutex<Scheduler>>,
 }
 
 impl Server {
-    /// Create a new server with the given configuration, event stream, and policy engine.
+    /// Create a new server with the given configuration, event stream, policy engine, and scheduler.
     #[must_use]
     pub fn new(
         config: Arc<Config>,
         event_stream: Arc<EventStream>,
         policy_engine: Arc<PolicyEngine>,
+        scheduler: Arc<tokio::sync::Mutex<Scheduler>>,
     ) -> Self {
         Self {
             config,
             event_stream,
             policy_engine,
+            scheduler,
         }
     }
 
@@ -191,6 +195,14 @@ impl Server {
         );
         let router = build_router(state.clone());
 
+        // Start the scheduler background task
+        {
+            let mut scheduler = self.scheduler.lock().await;
+            if let Err(e) = scheduler.start().await {
+                tracing::warn!(error = %e, "Failed to start scheduler, continuing without heartbeats");
+            }
+        }
+
         let addr = format!("0.0.0.0:{}", self.config.http_port);
         let listener = TcpListener::bind(&addr).await.map_err(|e| {
             carnelian_common::Error::Connection(format!("Failed to bind to {}: {}", addr, e))
@@ -210,6 +222,14 @@ impl Server {
             .with_graceful_shutdown(shutdown)
             .await
             .map_err(|e| carnelian_common::Error::Connection(format!("Server error: {}", e)))?;
+
+        // Shutdown the scheduler before publishing shutdown event
+        {
+            let mut scheduler = self.scheduler.lock().await;
+            if let Err(e) = scheduler.shutdown().await {
+                tracing::warn!(error = %e, "Failed to shutdown scheduler gracefully");
+            }
+        }
 
         // Publish shutdown event
         state.event_stream.publish(EventEnvelope::new(

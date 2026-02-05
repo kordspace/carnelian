@@ -20,7 +20,7 @@ use std::time::Duration;
 use clap::{Parser, Subcommand};
 use std::sync::Arc;
 
-use carnelian_core::{Config, EventStream, PolicyEngine, Server};
+use carnelian_core::{Config, EventStream, PolicyEngine, Scheduler, Server};
 
 /// 🔥 Carnelian OS - Local-first AI agent mainframe
 #[derive(Parser)]
@@ -144,20 +144,28 @@ async fn handle_start(
     config.load_owner_keypair_from_db().await?;
 
     // Create event stream with configured capacity
-    let event_stream = EventStream::with_max_payload(
+    let event_stream = Arc::new(EventStream::with_max_payload(
         config.event_buffer_capacity,
         config.event_broadcast_capacity,
         config.event_max_payload_bytes,
-    );
+    ));
 
     // Create policy engine with database pool
     let policy_engine = PolicyEngine::new(config.pool()?.clone());
 
+    // Create scheduler with heartbeat interval from config
+    let scheduler = Scheduler::new(
+        config.pool()?.clone(),
+        event_stream.clone(),
+        Duration::from_millis(config.heartbeat_interval_ms),
+    );
+
     // Create server
     let server = Server::new(
         Arc::new(config),
-        Arc::new(event_stream),
+        event_stream,
         Arc::new(policy_engine),
+        Arc::new(tokio::sync::Mutex::new(scheduler)),
     );
 
     // Write PID file only after all initialization succeeds
