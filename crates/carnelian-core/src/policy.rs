@@ -8,7 +8,7 @@ use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
 use carnelian_common::{Error, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value as JsonValue};
+use serde_json::{Value as JsonValue, json};
 use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
@@ -60,17 +60,17 @@ impl PolicyEngine {
         capability_key: &str,
         event_stream: Option<&EventStream>,
     ) -> Result<bool> {
-        let result: Option<Uuid> = sqlx::query_scalar(
+        let result = sqlx::query_scalar!(
             r#"
             SELECT grant_id FROM capability_grants 
             WHERE subject_type = $1 AND subject_id = $2 AND capability_key = $3
               AND (expires_at IS NULL OR expires_at > NOW())
             LIMIT 1
             "#,
+            subject_type,
+            subject_id,
+            capability_key,
         )
-        .bind(subject_type)
-        .bind(subject_id)
-        .bind(capability_key)
         .fetch_optional(&self.pool)
         .await
         .map_err(Error::Database)?;
@@ -117,21 +117,21 @@ impl PolicyEngine {
         expires_at: Option<DateTime<Utc>>,
         event_stream: Option<&EventStream>,
     ) -> Result<Uuid> {
-        let grant_id: Uuid = sqlx::query_scalar(
+        let grant_id: Uuid = sqlx::query_scalar!(
             r#"
             INSERT INTO capability_grants 
               (subject_type, subject_id, capability_key, scope, constraints, approved_by, expires_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING grant_id
             "#,
+            subject_type,
+            subject_id,
+            capability_key,
+            scope,
+            constraints,
+            approved_by,
+            expires_at,
         )
-        .bind(subject_type)
-        .bind(subject_id)
-        .bind(capability_key)
-        .bind(&scope)
-        .bind(&constraints)
-        .bind(approved_by)
-        .bind(expires_at)
         .fetch_one(&self.pool)
         .await
         .map_err(|e| {
@@ -176,11 +176,13 @@ impl PolicyEngine {
         grant_id: Uuid,
         event_stream: Option<&EventStream>,
     ) -> Result<bool> {
-        let result = sqlx::query(r#"DELETE FROM capability_grants WHERE grant_id = $1"#)
-            .bind(grant_id)
-            .execute(&self.pool)
-            .await
-            .map_err(Error::Database)?;
+        let result = sqlx::query!(
+            r#"DELETE FROM capability_grants WHERE grant_id = $1"#,
+            grant_id,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(Error::Database)?;
 
         let revoked = result.rows_affected() > 0;
 
@@ -206,7 +208,8 @@ impl PolicyEngine {
         subject_type: &str,
         subject_id: Uuid,
     ) -> Result<Vec<CapabilityGrant>> {
-        let rows: Vec<CapabilityGrant> = sqlx::query_as(
+        let rows = sqlx::query_as!(
+            CapabilityGrant,
             r#"
             SELECT 
                 grant_id,
@@ -223,9 +226,9 @@ impl PolicyEngine {
               AND (expires_at IS NULL OR expires_at > NOW())
             ORDER BY created_at DESC
             "#,
+            subject_type,
+            subject_id,
         )
-        .bind(subject_type)
-        .bind(subject_id)
         .fetch_all(&self.pool)
         .await
         .map_err(Error::Database)?;
@@ -256,30 +259,27 @@ impl PolicyEngine {
             ));
         }
 
-        // Get skill's required capabilities
-        let required_capabilities: Option<JsonValue> = sqlx::query_scalar(
+        // Get skill's required capabilities (TEXT[] in database)
+        let required_capabilities: Option<Vec<String>> = sqlx::query_scalar!(
             r#"SELECT capabilities_required FROM skills WHERE skill_id = $1"#,
+            skill_id,
         )
-        .bind(skill_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Error::Database)?;
+        .map_err(Error::Database)?
+        .flatten();
 
         // Check each required capability for the skill
         if let Some(caps) = required_capabilities {
-            if let Some(cap_array) = caps.as_array() {
-                for cap in cap_array {
-                    if let Some(capability_key) = cap.as_str() {
-                        if !self
-                            .check_capability("skill", skill_id, capability_key, event_stream)
-                            .await?
-                        {
-                            return Err(Error::Security(format!(
-                                "Skill lacks required capability: {}",
-                                capability_key
-                            )));
-                        }
-                    }
+            for capability_key in &caps {
+                if !self
+                    .check_capability("skill", skill_id, capability_key, event_stream)
+                    .await?
+                {
+                    return Err(Error::Security(format!(
+                        "Skill lacks required capability: {}",
+                        capability_key
+                    )));
                 }
             }
         }
@@ -331,7 +331,9 @@ mod tests {
 
         // Grant the capability
         let grant_id = engine
-            .grant_capability("identity", subject_id, "fs.read", None, None, None, None, None)
+            .grant_capability(
+                "identity", subject_id, "fs.read", None, None, None, None, None,
+            )
             .await
             .expect("Grant should succeed");
 
@@ -407,11 +409,15 @@ mod tests {
 
         // Grant multiple capabilities
         engine
-            .grant_capability("identity", subject_id, "fs.read", None, None, None, None, None)
+            .grant_capability(
+                "identity", subject_id, "fs.read", None, None, None, None, None,
+            )
             .await
             .expect("Grant should succeed");
         engine
-            .grant_capability("identity", subject_id, "fs.write", None, None, None, None, None)
+            .grant_capability(
+                "identity", subject_id, "fs.write", None, None, None, None, None,
+            )
             .await
             .expect("Grant should succeed");
 
