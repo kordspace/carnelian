@@ -36,6 +36,7 @@ notify.workspace = true
 notify-debouncer-mini.workspace = true
 globset.workspace = true
 pgvector.workspace = true
+rand = "0.8"
 
 [[bin]]
 name = "carnelian"
