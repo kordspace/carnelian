@@ -45,14 +45,17 @@ pub async fn check_database_health(pool: &PgPool) -> Result<bool> {
     .await;
 
     match result {
-        Ok(Ok(1)) => Ok(true),
+        Ok(Ok(1)) => {
+            tracing::debug!("Database health check passed");
+            Ok(true)
+        }
         Ok(Ok(_)) => Ok(false), // Unexpected result
         Ok(Err(e)) => {
-            tracing::warn!("Database health check query failed: {}", e);
+            tracing::warn!(error = %e, "Database health check query failed");
             Ok(false)
         }
         Err(_) => {
-            tracing::warn!("Database health check timed out");
+            tracing::warn!(timeout_secs = HEALTH_CHECK_TIMEOUT_SECS, "Database health check timed out");
             Ok(false)
         }
     }
@@ -88,9 +91,10 @@ pub async fn ensure_database_connection(config: &mut crate::config::Config) -> R
         let delay = Duration::from_secs(BASE_RECONNECT_DELAY_SECS * 2u64.pow(attempt - 1));
 
         tracing::warn!(
-            "Database connection unhealthy, attempting reconnection (attempt {}/{})",
-            attempt,
-            MAX_RECONNECT_ATTEMPTS
+            attempt = attempt,
+            max_attempts = MAX_RECONNECT_ATTEMPTS,
+            delay_secs = delay.as_secs(),
+            "Attempting database reconnection"
         );
 
         match config.connect_database().await {
@@ -98,18 +102,28 @@ pub async fn ensure_database_connection(config: &mut crate::config::Config) -> R
                 // Verify the new connection is healthy
                 if let Ok(pool) = config.pool() {
                     if check_database_health(pool).await? {
-                        tracing::info!("Database reconnection successful");
+                        tracing::info!(
+                            attempt = attempt,
+                            "Database reconnection successful"
+                        );
                         return Ok(());
                     }
                 }
             }
             Err(e) => {
-                tracing::warn!("Reconnection attempt {} failed: {}", attempt, e);
+                tracing::warn!(
+                    attempt = attempt,
+                    error = %e,
+                    "Reconnection attempt failed"
+                );
             }
         }
 
         if attempt < MAX_RECONNECT_ATTEMPTS {
-            tracing::info!("Waiting {:?} before next reconnection attempt", delay);
+            tracing::debug!(
+                delay_secs = delay.as_secs(),
+                "Waiting before next reconnection attempt"
+            );
             sleep(delay).await;
         }
     }
@@ -136,7 +150,7 @@ pub async fn ensure_database_connection(config: &mut crate::config::Config) -> R
 /// run_migrations(&pool).await?;
 /// ```
 pub async fn run_migrations(pool: &PgPool) -> Result<()> {
-    tracing::info!("Running database migrations...");
+    tracing::info!(migrations_path = "db/migrations", "Running database migrations");
 
     sqlx::migrate!("../../db/migrations").run(pool).await?;
 

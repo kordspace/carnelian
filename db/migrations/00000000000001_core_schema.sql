@@ -256,15 +256,21 @@ CREATE INDEX idx_heartbeat_history_ts ON heartbeat_history(ts DESC);
 -- ============================================================================
 -- SEED DATA: Insert core identity for Lian
 -- ============================================================================
-INSERT INTO identities (name, pronouns, identity_type, directives)
+INSERT INTO identities (name, pronouns, identity_type, soul_file_path, directives)
 VALUES (
     'Lian',
     'she/her',
     'core',
+    'souls/lian.md',
     '["Assist Marco with development tasks", "Maintain system integrity", "Learn and adapt"]'::jsonb
 );
 
 -- Insert default capabilities
+-- Capability mapping to original requirements:
+--   fs.read, fs.write     -> filesystem access
+--   net.http              -> network access  
+--   process.spawn         -> exec.shell equivalent (more precise naming)
+--   model.inference       -> model.local + model.remote combined (more flexible)
 INSERT INTO capabilities (capability_key, description) VALUES
     ('fs.read', 'Read files from the filesystem'),
     ('fs.write', 'Write files to the filesystem'),
@@ -273,9 +279,12 @@ INSERT INTO capabilities (capability_key, description) VALUES
     ('net.websocket', 'Establish WebSocket connections'),
     ('process.spawn', 'Spawn child processes'),
     ('process.kill', 'Kill running processes'),
+    ('exec.shell', 'Execute shell commands'),
     ('db.read', 'Read from the database'),
     ('db.write', 'Write to the database'),
     ('model.inference', 'Request model inference'),
+    ('model.local', 'Request local model inference'),
+    ('model.remote', 'Request remote model inference'),
     ('skill.execute', 'Execute skills'),
     ('task.create', 'Create new tasks'),
     ('task.cancel', 'Cancel running tasks'),

@@ -52,11 +52,14 @@ SQLx doesn't support automatic rollback. To revert:
 SQLx verifies queries at compile time. For offline builds (CI/CD):
 
 ```bash
-# Generate query metadata for offline compilation
-cargo sqlx prepare
+# Install sqlx-cli if not already installed
+cargo install sqlx-cli --no-default-features --features postgres
 
-# This creates .sqlx/ directory - commit it to version control
-git add .sqlx/
+# Generate query metadata for offline compilation
+cargo sqlx prepare --workspace
+
+# This creates .sqlx/ directory in each crate - commit to version control
+git add crates/carnelian-core/.sqlx/
 ```
 
 For CI builds without database access:
@@ -64,6 +67,19 @@ For CI builds without database access:
 ```bash
 export SQLX_OFFLINE=true
 cargo build
+```
+
+### Migration Path Resolution
+
+The `sqlx::migrate!` macro resolves paths **relative to the crate's `Cargo.toml`**, not the source file. For `carnelian-core`:
+
+- Crate location: `crates/carnelian-core/`
+- Migration path: `../../db/migrations` → resolves to `db/migrations/`
+
+To verify the path is correct:
+```bash
+# From crates/carnelian-core/, this should list migration files:
+ls ../../db/migrations/
 ```
 
 ## Core Schema
@@ -119,4 +135,67 @@ Ensure PostgreSQL is running:
 ```bash
 docker-compose ps
 docker-compose up -d carnelian-postgres
+```
+
+## Seed Data
+
+The core schema migration creates the following seed data:
+
+### Default Identity (🦎 Lian)
+
+| Field | Value |
+|-------|-------|
+| `name` | `Lian` |
+| `pronouns` | `she/her` |
+| `identity_type` | `core` |
+| `soul_file_path` | `souls/lian.md` (placeholder) |
+| `directives` | Assist Marco, maintain system integrity, learn and adapt |
+
+### Default Capabilities
+
+| Capability Key | Description | Requirement Mapping |
+|----------------|-------------|---------------------|
+| `fs.read` | Read files from filesystem | filesystem access |
+| `fs.write` | Write files to filesystem | filesystem access |
+| `fs.delete` | Delete files from filesystem | filesystem access |
+| `net.http` | Make HTTP requests | network access |
+| `net.websocket` | Establish WebSocket connections | network access |
+| `process.spawn` | Spawn child processes | exec.shell equivalent |
+| `process.kill` | Kill running processes | process management |
+| `db.read` | Read from database | database access |
+| `db.write` | Write to database | database access |
+| `model.inference` | Request model inference | model.local + model.remote |
+| `skill.execute` | Execute skills | skill execution |
+| `task.create` | Create new tasks | task management |
+| `task.cancel` | Cancel running tasks | task management |
+| `config.read` | Read configuration | configuration access |
+| `config.write` | Write configuration | configuration access |
+| `ledger.read` | Read audit ledger | ledger access |
+| `ledger.write` | Write to audit ledger | ledger access |
+
+### Default Model Provider (Ollama)
+
+| Field | Value |
+|-------|-------|
+| `provider_type` | `local` |
+| `name` | `ollama` |
+| `config.base_url` | `http://localhost:11434` |
+| `config.default_model` | `deepseek-r1:7b` |
+
+## Using Carnelian CLI
+
+The `carnelian` CLI provides migration commands:
+
+```bash
+# Run all pending migrations
+carnelian migrate
+
+# Show pending migrations without applying (dry-run)
+carnelian migrate --dry-run
+
+# Use a specific database URL
+carnelian migrate --database-url postgresql://user:pass@host/db
+
+# With custom config and log level
+carnelian migrate --config custom.toml --log-level DEBUG
 ```
