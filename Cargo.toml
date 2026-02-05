@@ -1,0 +1,91 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/carnelian-core",
+    "crates/carnelian-ui",
+    "crates/carnelian-worker-node",
+    "crates/carnelian-worker-python",
+    "crates/carnelian-worker-shell",
+    "crates/carnelian-common",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Marco <info@kordspace.com>"]
+license = "MIT"
+repository = "https://github.com/kordspace/carnelian"
+rust-version = "1.85"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.43", features = ["full"] }
+# Web framework (Axum - Tokio-native, Dioxus fullstack compatible)
+axum = { version = "0.8", features = ["ws", "macros"] }
+axum-extra = { version = "0.10", features = ["typed-header"] }
+tower = { version = "0.5", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip", "timeout", "limit"] }
+# Database (SQLx - async-first, compile-time query verification)
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "chrono", "json", "migrate"] }
+refinery = { version = "0.8", features = ["tokio-postgres"] }
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+json5 = "0.4"
+# Error handling
+anyhow = "1.0"
+thiserror = "2.0"
+# Logging & tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+# UUID
+uuid = { version = "1.11", features = ["v4", "v7", "serde"] }
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+# Cryptography (Ed25519 for owner-signed authority)
+ed25519-dalek = { version = "2.1", features = ["serde", "rand_core"] }
+blake3 = "1.5"
+# HTTP client (for remote model providers, ElevenLabs)
+reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"] }
+# WebSocket
+tokio-tungstenite = "0.26"
+# CLI
+clap = { version = "4.5", features = ["derive", "env"] }
+# Configuration
+config = "0.14"
+dotenvy = "0.15"
+# File watching (skill discovery)
+notify = "7.0"
+notify-debouncer-mini = "0.5"
+# Glob patterns (capability scopes)
+globset = "0.4"
+# Embeddings / pgvector
+pgvector = "0.4"
+# Process management (worker spawning)
+tokio-process = "0.2"
+# Dioxus (Desktop UI)
+dioxus = { version = "0.6", features = ["desktop", "router"] }
+dioxus-signals = "0.6"
+# Testing
+tokio-test = "0.4"
+testcontainers = "0.23"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = "warn"
+pedantic = "warn"
+nursery = "warn"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.dev.package.sqlx-macros]
+opt-level = 3  # Speed up compile-time query checking
