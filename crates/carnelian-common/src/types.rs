@@ -228,7 +228,7 @@ impl EventEnvelope {
 
     /// Set the correlation ID for request tracing.
     #[must_use]
-    pub fn with_correlation_id(mut self, correlation_id: Uuid) -> Self {
+    pub const fn with_correlation_id(mut self, correlation_id: Uuid) -> Self {
         self.correlation_id = Some(correlation_id);
         self
     }

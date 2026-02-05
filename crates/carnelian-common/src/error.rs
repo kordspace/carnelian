@@ -43,7 +43,7 @@ pub enum Error {
 
 impl<T> From<tokio::sync::broadcast::error::SendError<T>> for Error {
     fn from(err: tokio::sync::broadcast::error::SendError<T>) -> Self {
-        Self::Broadcast(format!("Failed to send event: {}", err))
+        Self::Broadcast(format!("Failed to send event: {err}"))
     }
 }
 
