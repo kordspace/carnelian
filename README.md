@@ -1,5 +1,7 @@
 # Carnelian OS
 
+[![CI](https://github.com/kordspace/carnelian/actions/workflows/ci.yml/badge.svg)](https://github.com/kordspace/carnelian/actions/workflows/ci.yml)
+
 A local-first AI agent mainframe built in Rust.
 
 ## Project Structure
