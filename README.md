@@ -30,6 +30,8 @@ The core value proposition is reliable AI agent orchestration with strong contai
 
 ## Architecture
 
+The following diagram illustrates the core interaction flow, based on the [Technical Plan](https://github.com/kordspace/carnelian/wiki/Technical-Plan).
+
 ```mermaid
 sequenceDiagram
     participant User
@@ -93,28 +95,109 @@ sequenceDiagram
 <details>
 <summary><strong>Windows (WSL2)</strong></summary>
 
-- Ensure WSL2 is installed and updated
-- Install NVIDIA GPU drivers on Windows host (not in WSL)
-- Enable GPU support in WSL2 (Windows 11 or Windows 10 21H2+)
-- Use Docker Desktop with WSL2 backend enabled
+```powershell
+# 1. Enable WSL2 (run as Administrator)
+wsl --install
+wsl --set-default-version 2
+
+# 2. Install NVIDIA GPU drivers on Windows host
+# Download from: https://www.nvidia.com/drivers
+# Verify: nvidia-smi (in PowerShell)
+
+# 3. Install Docker Desktop
+# Download from: https://www.docker.com/products/docker-desktop
+# Enable WSL2 backend in Settings > General
+# Enable GPU support in Settings > Resources > WSL Integration
+
+# 4. Install Rust (in WSL2 terminal)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+
+# 5. Install Node.js and Python (in WSL2)
+sudo apt update
+sudo apt install -y nodejs npm python3 python3-pip
+
+# 6. Verify installations
+docker --version
+cargo --version
+node --version
+python3 --version
+nvidia-smi  # Should show GPU in WSL2
+```
 
 </details>
 
 <details>
 <summary><strong>macOS</strong></summary>
 
-- GPU passthrough is not supported
-- Ollama will run in CPU-only mode with reduced performance
-- Consider using a Linux machine or cloud instance for GPU workloads
+```bash
+# Note: GPU passthrough is NOT supported on macOS
+# Ollama will run in CPU-only mode with reduced performance
+
+# 1. Install Homebrew (if not installed)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# 2. Install Docker Desktop
+brew install --cask docker
+# Or download from: https://www.docker.com/products/docker-desktop
+
+# 3. Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+
+# 4. Install Node.js and Python
+brew install node python@3.12
+
+# 5. Verify installations
+docker --version
+cargo --version
+node --version
+python3 --version
+
+# Note: For GPU workloads, consider using a Linux machine or cloud instance
+```
 
 </details>
 
 <details>
-<summary><strong>Linux</strong></summary>
+<summary><strong>Linux (Ubuntu/Debian)</strong></summary>
 
-- Install NVIDIA Container Toolkit for GPU support
-- Configure Docker to use NVIDIA runtime
-- Verify GPU access with `nvidia-smi`
+```bash
+# 1. Install Docker
+sudo apt update
+sudo apt install -y docker.io docker-compose
+sudo usermod -aG docker $USER
+newgrp docker
+
+# 2. Install NVIDIA drivers (if GPU present)
+sudo apt install -y nvidia-driver-535  # Or latest version
+sudo reboot
+
+# 3. Install NVIDIA Container Toolkit
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+  sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt update
+sudo apt install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+
+# 4. Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+
+# 5. Install Node.js and Python
+sudo apt install -y nodejs npm python3 python3-pip
+
+# 6. Verify installations
+docker --version
+cargo --version
+node --version
+python3 --version
+nvidia-smi
+docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi  # Test GPU in Docker
+```
 
 </details>
 
@@ -137,13 +220,18 @@ docker exec carnelian-ollama ollama pull deepseek-r1:7b
 # Urim (11GB VRAM):
 docker exec carnelian-ollama ollama pull deepseek-r1:32b
 
-# 5. Build Rust workspace
+# 5. Run database migrations
+cargo install sqlx-cli --no-default-features --features postgres
+export DATABASE_URL="postgresql://carnelian:carnelian@localhost:5432/carnelian"
+sqlx migrate run
+
+# 6. Build Rust workspace
 cargo build
 
-# 6. Run tests
+# 7. Run tests
 cargo test
 
-# 7. Start desktop UI
+# 8. Start desktop UI
 cargo run -p carnelian-ui
 ```
 
@@ -225,6 +313,12 @@ See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 
 - [Development Guide](docs/DEVELOPMENT.md) - Setup and workflow
 - [Docker Guide](docs/DOCKER.md) - Environment and troubleshooting
+
+### Project Planning
+
+- **Epic Brief:** Design goals, constraints, and success criteria
+- **Technical Plan:** Detailed architecture, component design, and implementation phases
+- **Core Flows:** Task lifecycle, event streaming, and capability checks
 
 ## Contributing
 
