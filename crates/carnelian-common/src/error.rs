@@ -8,7 +8,10 @@ pub enum Error {
     Config(String),
 
     #[error("Database error: {0}")]
-    Database(String),
+    Database(#[from] sqlx::Error),
+
+    #[error("Migration error: {0}")]
+    Migration(#[from] sqlx::migrate::MigrateError),
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -21,6 +24,9 @@ pub enum Error {
 
     #[error("Security error: {0}")]
     Security(String),
+
+    #[error("Connection error: {0}")]
+    Connection(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

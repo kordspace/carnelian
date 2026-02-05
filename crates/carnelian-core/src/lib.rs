@@ -4,6 +4,7 @@
 //! capability-based security, event streaming, and local model inference.
 
 pub mod config;
+pub mod db;
 pub mod ledger;
 pub mod policy;
 pub mod scheduler;
