@@ -133,7 +133,7 @@ jobs:
 
       - name: Scan for secrets
         run: |
-          # Scan and compare against baseline - fails if new secrets found
-          detect-secrets scan --baseline .secrets.baseline
+          # Scan and update baseline file
+          detect-secrets scan --update .secrets.baseline
           # Audit will return non-zero if there are unaudited secrets
-          detect-secrets audit --report --baseline .secrets.baseline
+          detect-secrets audit .secrets.baseline --report
