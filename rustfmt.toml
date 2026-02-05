@@ -2,13 +2,17 @@
 # These are project-wide formatting standards that align with the workspace edition.
 #
 # Note: Some options (imports_granularity, group_imports, format_code_in_doc_comments)
-# are nightly-only and commented out for stable toolchain compatibility.
+# require nightly rustfmt. On stable toolchain (1.85), these will emit warnings but
+# are included for completeness. The formatter will still work correctly.
 
 edition = "2024"
+style_edition = "2024"
 max_width = 100
 use_small_heuristics = "Default"
 
-# Nightly-only options (uncomment if using nightly toolchain):
-# imports_granularity = "Crate"
-# group_imports = "StdExternalCrate"
-# format_code_in_doc_comments = true
+# Import organization (nightly rustfmt feature)
+imports_granularity = "Crate"
+group_imports = "StdExternalCrate"
+
+# Documentation formatting (nightly rustfmt feature)
+format_code_in_doc_comments = true
