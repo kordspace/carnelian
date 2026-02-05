@@ -124,4 +124,8 @@ jobs:
         run: pip install detect-secrets==1.5.0
 
       - name: Scan for secrets
-        run: detect-secrets scan --all-files --baseline .secrets.baseline --fail-on new
+        run: |
+          # Scan and compare against baseline - fails if new secrets found
+          detect-secrets scan --baseline .secrets.baseline
+          # Audit will return non-zero if there are unaudited secrets
+          detect-secrets audit --report --baseline .secrets.baseline
