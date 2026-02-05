@@ -30,7 +30,7 @@ The core value proposition is reliable AI agent orchestration with strong contai
 
 ## Architecture
 
-The following diagram illustrates the core interaction flow, based on the [Technical Plan](https://github.com/kordspace/carnelian/wiki/Technical-Plan).
+The following diagram illustrates the core interaction flow, based on the architecture in [Epic Brief](spec:5e7be550-aec5-4ebb-b0e3-3ce021e3f9ab/7c191398-0049-4dc4-8378-585569a1a4e4) and [Technical Plan](spec:5e7be550-aec5-4ebb-b0e3-3ce021e3f9ab/3ccb59e1-e29e-4f62-883e-e5d97a90d157).
 
 ```mermaid
 sequenceDiagram
@@ -316,9 +316,8 @@ See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 
 ### Project Planning
 
-- **Epic Brief:** Design goals, constraints, and success criteria
-- **Technical Plan:** Detailed architecture, component design, and implementation phases
-- **Core Flows:** Task lifecycle, event streaming, and capability checks
+- **Epic Brief:** [`spec:5e7be550-aec5-4ebb-b0e3-3ce021e3f9ab/7c191398-0049-4dc4-8378-585569a1a4e4`](spec:5e7be550-aec5-4ebb-b0e3-3ce021e3f9ab/7c191398-0049-4dc4-8378-585569a1a4e4) - Design goals, machine profiles (Urim/Thummim), success criteria.
+- **Technical Plan:** [`spec:5e7be550-aec5-4ebb-b0e3-3ce021e3f9ab/3ccb59e1-e29e-4f62-883e-e5d97a90d157`](spec:5e7be550-aec5-4ebb-b0e3-3ce021e3f9ab/3ccb59e1-e29e-4f62-883e-e5d97a90d157) - Architecture, data model, components (includes Mermaid system diagram).
 
 ## Contributing
 
