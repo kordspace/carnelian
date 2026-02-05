@@ -1,6 +1,9 @@
 -- Core Schema Migration for Carnelian OS
 -- This migration creates the foundational tables for the orchestrator
 
+-- Enable pgcrypto extension for gen_random_uuid()
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- Enable pgvector extension for embedding storage
 CREATE EXTENSION IF NOT EXISTS vector;
 
