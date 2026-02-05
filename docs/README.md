@@ -1,8 +1,8 @@
-# Carnelian OS Documentation
+# 🔥 Carnelian OS Documentation
 
 ## Overview
 
-Carnelian OS is a local-first AI agent mainframe built in Rust.
+🔥 Carnelian OS is a local-first AI agent mainframe built in Rust.
 
 ## Architecture
 

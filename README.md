@@ -1,4 +1,4 @@
-# Carnelian OS
+# 🔥 Carnelian OS
 
 [![CI](https://github.com/kordspace/carnelian/actions/workflows/ci.yml/badge.svg)](https://github.com/kordspace/carnelian/actions/workflows/ci.yml)
 
@@ -6,11 +6,11 @@ A local-first AI agent mainframe built in Rust with capability-based security an
 
 ## Overview
 
-Carnelian OS is a production-grade rewrite of the experimental Thummim system. It addresses critical performance bottlenecks, security gaps, and architectural debt accumulated in the original Node.js/TypeScript monolith while preserving the 600+ skills, personality features, and core workflows that make the system valuable.
+🔥 Carnelian OS is a production-grade rewrite of the experimental Thummim system. It addresses critical performance bottlenecks, security gaps, and architectural debt accumulated in the original Node.js/TypeScript monolith while preserving the 600+ skills, personality features, and core workflows that make the system valuable.
 
 The core value proposition is reliable AI agent orchestration with strong containment guarantees, local-first execution via Ollama, and tamper-resistant auditability. Carnelian provides a foundation for autonomous task execution with proper resource controls, capability-based security, and event-stream architecture that prevents UI freezes under load.
 
-## Why Carnelian?
+## Why 🔥 Carnelian?
 
 **What's Preserved from Thummim:**
 - PostgreSQL backend with pgvector for embeddings

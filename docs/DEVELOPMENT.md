@@ -1,6 +1,6 @@
 # Development Guide
 
-This guide covers setting up your development environment and workflow for contributing to Carnelian OS.
+This guide covers setting up your development environment and workflow for contributing to 🔥 Carnelian OS.
 
 ## Prerequisites
 

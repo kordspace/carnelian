@@ -1,6 +1,6 @@
 # Docker Development Environment
 
-This guide covers setting up the local development infrastructure for Carnelian OS using Docker Compose.
+This guide covers setting up the local development infrastructure for 🔥 Carnelian OS using Docker Compose.
 
 ## Prerequisites
 
