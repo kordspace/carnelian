@@ -1,0 +1,13 @@
+{
+  "name": "@carnelian/node-worker",
+  "version": "0.1.0",
+  "description": "Node.js worker for Carnelian OS skill execution",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
