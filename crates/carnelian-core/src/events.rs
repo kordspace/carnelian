@@ -286,7 +286,9 @@ impl PriorityRingBuffer {
     /// Check if there are events with lower priority than the given level.
     fn has_lower_priority_events(&self, level: EventLevel) -> bool {
         let target_priority = level.priority();
-        self.buffer.iter().any(|e| e.level.priority() > target_priority)
+        self.buffer
+            .iter()
+            .any(|e| e.level.priority() > target_priority)
     }
 
     /// Deterministic sampling - returns true for 1 in N events.
@@ -354,11 +356,8 @@ impl PriorityRingBuffer {
     /// Get recent events without removing them.
     #[must_use]
     pub fn recent(&self, count: usize) -> Vec<&EventEnvelope> {
-        let mut events: Vec<&EventEnvelope> = self
-            .error_buffer
-            .iter()
-            .chain(self.buffer.iter())
-            .collect();
+        let mut events: Vec<&EventEnvelope> =
+            self.error_buffer.iter().chain(self.buffer.iter()).collect();
         events.sort_by(|a, b| b.timestamp.cmp(&a.timestamp)); // Most recent first
         events.truncate(count);
         events
@@ -658,7 +657,10 @@ mod tests {
 
         let debug_stored = buffer.len() - initial_len;
         // Should store roughly 10% (with some variance)
-        assert!(debug_stored < 30, "Expected ~10 DEBUG events, got {}", debug_stored);
+        assert!(
+            debug_stored < 30,
+            "Expected ~10 DEBUG events, got {debug_stored}"
+        );
     }
 
     #[test]
@@ -676,7 +678,10 @@ mod tests {
 
         let trace_stored = buffer.len() - initial_len;
         // Should store roughly 1% (with some variance)
-        assert!(trace_stored < 50, "Expected ~10 TRACE events, got {}", trace_stored);
+        assert!(
+            trace_stored < 50,
+            "Expected ~10 TRACE events, got {trace_stored}"
+        );
     }
 
     #[test]
@@ -743,7 +748,7 @@ mod tests {
 
         for i in 0..20 {
             let mut event = create_test_event(EventLevel::Info, 10);
-            event.actor_id = Some(format!("actor-{}", i));
+            event.actor_id = Some(format!("actor-{i}"));
             stream.publish(event);
         }
 
@@ -820,7 +825,10 @@ mod tests {
         }
 
         // WARN events should be stored since there are lower-priority DEBUG events
-        assert!(warn_stored > 0, "WARN events should be stored when lower-priority events exist");
+        assert!(
+            warn_stored > 0,
+            "WARN events should be stored when lower-priority events exist"
+        );
     }
 
     #[test]
@@ -833,7 +841,7 @@ mod tests {
         }
 
         // Count how many more WARN events can be stored
-        let initial_len = buffer.len();
+        let _initial_len = buffer.len();
         for _ in 0..20 {
             buffer.push(create_test_event(EventLevel::Warn, 10));
         }
@@ -857,7 +865,10 @@ mod tests {
         // Get the stored event
         let events = buffer.drain_all();
         assert_eq!(events.len(), 1);
-        assert!(events[0].truncated, "Event should be truncated at 1KB limit");
+        assert!(
+            events[0].truncated,
+            "Event should be truncated at 1KB limit"
+        );
         assert!(events[0].payload.get("max_allowed_bytes").is_some());
     }
 
@@ -871,6 +882,9 @@ mod tests {
 
         let recent = stream.recent_events(1);
         assert_eq!(recent.len(), 1);
-        assert!(recent[0].truncated, "Event should be truncated at 2KB limit");
+        assert!(
+            recent[0].truncated,
+            "Event should be truncated at 2KB limit"
+        );
     }
 }

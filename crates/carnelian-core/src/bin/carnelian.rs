@@ -1,3 +1,9 @@
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::redundant_closure_for_method_calls)]
+#![allow(clippy::single_match_else)]
+#![allow(clippy::match_same_arms)]
+#![allow(clippy::map_unwrap_or)]
+
 //! 🔥 Carnelian OS CLI
 //!
 //! Command-line interface for the Carnelian local-first AI agent mainframe.
@@ -77,7 +83,10 @@ async fn main() {
         Commands::Start => handle_start(cli.config, cli.log_level).await,
         Commands::Stop => handle_stop().await,
         Commands::Status { url } => handle_status(&url).await,
-        Commands::Migrate { dry_run, database_url } => handle_migrate(cli.config, cli.log_level, dry_run, database_url).await,
+        Commands::Migrate {
+            dry_run,
+            database_url,
+        } => handle_migrate(cli.config, cli.log_level, dry_run, database_url).await,
     };
 
     if let Err(e) = result {
@@ -193,7 +202,9 @@ async fn handle_stop() -> carnelian_common::Result<()> {
         let status = std::process::Command::new("kill")
             .args(["-TERM", &pid.to_string()])
             .status()
-            .map_err(|e| carnelian_common::Error::Config(format!("Failed to send signal: {}", e)))?;
+            .map_err(|e| {
+                carnelian_common::Error::Config(format!("Failed to send signal: {}", e))
+            })?;
 
         if !status.success() {
             println!("Process not found or permission denied. Removing stale PID file.");
@@ -207,7 +218,9 @@ async fn handle_stop() -> carnelian_common::Result<()> {
         let status = std::process::Command::new("taskkill")
             .args(["/PID", &pid.to_string()])
             .status()
-            .map_err(|e| carnelian_common::Error::Config(format!("Failed to run taskkill: {}", e)))?;
+            .map_err(|e| {
+                carnelian_common::Error::Config(format!("Failed to run taskkill: {}", e))
+            })?;
 
         if !status.success() {
             println!("Process may not exist. Removing stale PID file.");
@@ -240,7 +253,9 @@ async fn handle_status(url: &str) -> carnelian_common::Result<()> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()
-        .map_err(|e| carnelian_common::Error::Config(format!("Failed to create HTTP client: {}", e)))?;
+        .map_err(|e| {
+            carnelian_common::Error::Config(format!("Failed to create HTTP client: {}", e))
+        })?;
 
     // Query health endpoint
     let health_url = format!("{}/v1/health", url);
@@ -281,8 +296,14 @@ async fn handle_status(url: &str) -> carnelian_common::Result<()> {
         Ok(resp) if resp.status().is_success() => {
             let status_resp: serde_json::Value = resp.json().await.unwrap_or_default();
             (
-                status_resp["workers"].as_array().map(|a| a.len()).unwrap_or(0),
-                status_resp["models"].as_array().cloned().unwrap_or_default(),
+                status_resp["workers"]
+                    .as_array()
+                    .map(|a| a.len())
+                    .unwrap_or(0),
+                status_resp["models"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default(),
                 status_resp["queue_depth"].as_u64().unwrap_or(0),
             )
         }
@@ -307,7 +328,9 @@ async fn handle_status(url: &str) -> carnelian_common::Result<()> {
 fn get_pid_file_path() -> carnelian_common::Result<PathBuf> {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
-        .map_err(|_| carnelian_common::Error::Config("Could not determine home directory".to_string()))?;
+        .map_err(|_| {
+            carnelian_common::Error::Config("Could not determine home directory".to_string())
+        })?;
 
     Ok(PathBuf::from(home).join(".carnelian").join("carnelian.pid"))
 }
@@ -317,8 +340,9 @@ fn write_pid_file() -> carnelian_common::Result<()> {
     let pid_path = get_pid_file_path()?;
 
     if let Some(parent) = pid_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| carnelian_common::Error::Config(format!("Failed to create PID directory: {}", e)))?;
+        std::fs::create_dir_all(parent).map_err(|e| {
+            carnelian_common::Error::Config(format!("Failed to create PID directory: {}", e))
+        })?;
     }
 
     std::fs::write(&pid_path, std::process::id().to_string())
@@ -400,16 +424,15 @@ async fn handle_migrate(
 
     if dry_run {
         tracing::info!("Dry-run mode: checking pending migrations...");
-        
+
         // Get applied migration versions from database
-        let applied_versions: std::collections::HashSet<i64> = sqlx::query_scalar(
-            "SELECT version FROM _sqlx_migrations"
-        )
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
+        let applied_versions: std::collections::HashSet<i64> =
+            sqlx::query_scalar("SELECT version FROM _sqlx_migrations")
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .collect();
 
         // Compute pending migrations by diffing embedded vs applied
         let mut pending: Vec<_> = migrator
@@ -441,13 +464,13 @@ async fn handle_migrate(
                 println!("  → V{}: {}", m.version, m.description);
             }
         }
-        
+
         println!("\nDry-run complete. No changes were made.");
     } else {
         // Run migrations
         tracing::info!("Running database migrations...");
         carnelian_core::db::run_migrations(pool).await?;
-        
+
         println!("✓ Migrations completed successfully");
     }
 

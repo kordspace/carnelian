@@ -1,3 +1,34 @@
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::float_cmp)]
+#![allow(clippy::ignored_unit_patterns)]
+#![allow(clippy::match_same_arms)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(clippy::missing_const_for_fn)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::doc_markdown)]
+#![allow(clippy::module_name_repetitions)]
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::similar_names)]
+#![allow(clippy::struct_excessive_bools)]
+#![allow(clippy::fn_params_excessive_bools)]
+#![allow(clippy::redundant_closure)]
+#![allow(clippy::redundant_closure_for_method_calls)]
+#![allow(clippy::clone_on_copy)]
+#![allow(clippy::must_use_candidate)]
+#![allow(clippy::redundant_clone)]
+#![allow(clippy::field_reassign_with_default)]
+#![allow(clippy::single_match_else)]
+#![allow(clippy::if_not_else)]
+#![allow(clippy::needless_pass_by_value)]
+#![allow(clippy::trivially_copy_pass_by_ref)]
+#![allow(clippy::unreadable_literal)]
+#![allow(clippy::unnecessary_wraps)]
+#![allow(clippy::cognitive_complexity)]
+#![allow(clippy::manual_let_else)]
+
 //! 🔥 Carnelian OS Core Orchestrator
 //!
 //! The core orchestrator manages task scheduling, worker coordination,
@@ -62,10 +93,10 @@ pub mod worker;
 
 use std::env;
 use tracing_subscriber::{
+    EnvFilter, Layer,
     fmt::{self, format::FmtSpan},
     layer::SubscriberExt,
     util::SubscriberInitExt,
-    EnvFilter, Layer,
 };
 
 pub use carnelian_common::{Error, Result};
@@ -105,8 +136,8 @@ pub fn init_tracing(log_level: &str) -> Result<()> {
         .unwrap_or(false);
 
     // Build EnvFilter with provided log level as default, allow RUST_LOG overrides
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(log_level));
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level));
 
     if is_production {
         // Production: JSON output with full span context
@@ -124,7 +155,7 @@ pub fn init_tracing(log_level: &str) -> Result<()> {
         tracing_subscriber::registry()
             .with(json_layer)
             .try_init()
-            .map_err(|e| Error::Config(format!("Failed to initialize tracing: {}", e)))?;
+            .map_err(|e| Error::Config(format!("Failed to initialize tracing: {e}")))?;
     } else {
         // Development: pretty output with colors
         let pretty_layer = fmt::layer()
@@ -140,12 +171,16 @@ pub fn init_tracing(log_level: &str) -> Result<()> {
         tracing_subscriber::registry()
             .with(pretty_layer)
             .try_init()
-            .map_err(|e| Error::Config(format!("Failed to initialize tracing: {}", e)))?;
+            .map_err(|e| Error::Config(format!("Failed to initialize tracing: {e}")))?;
     }
 
     tracing::info!(
         version = VERSION,
-        environment = if is_production { "production" } else { "development" },
+        environment = if is_production {
+            "production"
+        } else {
+            "development"
+        },
         log_level = log_level,
         "🔥 Carnelian tracing initialized"
     );
