@@ -27,7 +27,7 @@ tower = { version = "0.5", features = ["full"] }
 tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip", "timeout", "limit"] }
 # Database (SQLx - async-first, compile-time query verification)
 # Note: Run `cargo sqlx prepare` after schema changes to generate .sqlx/ for offline builds
-sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "chrono", "json", "migrate", "macros", "offline"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "chrono", "json", "migrate"] }
 refinery = { version = "0.8", features = ["tokio-postgres"] }
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -46,10 +46,14 @@ chrono = { version = "0.4", features = ["serde"] }
 # Cryptography (Ed25519 for owner-signed authority)
 ed25519-dalek = { version = "2.1", features = ["serde", "rand_core"] }
 blake3 = "1.5"
+hex = "0.4"
 # HTTP client (for remote model providers, ElevenLabs)
 reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"] }
 # WebSocket
 tokio-tungstenite = "0.26"
+futures-util = "0.3"
+# HTTP types
+http = "1.2"
 # CLI
 clap = { version = "4.5", features = ["derive", "env"] }
 # Configuration
@@ -70,6 +74,8 @@ dioxus-signals = "0.6"
 # Testing
 tokio-test = "0.4"
 testcontainers = "0.23"
+# Platform-specific
+libc = "0.2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

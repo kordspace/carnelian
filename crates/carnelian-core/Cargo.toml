@@ -24,8 +24,11 @@ uuid.workspace = true
 chrono.workspace = true
 ed25519-dalek.workspace = true
 blake3.workspace = true
+hex.workspace = true
 reqwest.workspace = true
 tokio-tungstenite.workspace = true
+futures-util.workspace = true
+http.workspace = true
 clap.workspace = true
 config.workspace = true
 dotenvy.workspace = true
@@ -33,6 +36,14 @@ notify.workspace = true
 notify-debouncer-mini.workspace = true
 globset.workspace = true
 pgvector.workspace = true
+
+[[bin]]
+name = "carnelian"
+path = "src/bin/carnelian.rs"
+
+[dev-dependencies]
+testcontainers.workspace = true
+tokio-test.workspace = true
 
 [lints]
 workspace = true

@@ -1,8 +1,22 @@
 # 🔥 Carnelian OS
 
 [![CI](https://github.com/kordspace/carnelian/actions/workflows/ci.yml/badge.svg)](https://github.com/kordspace/carnelian/actions/workflows/ci.yml)
+[![🔥 Carnelian OS](https://img.shields.io/badge/🔥-Carnelian%20OS-D24B2A)](https://github.com/kordspace/carnelian)
+[![🦎 Lian](https://img.shields.io/badge/🦎-Lian-7C4DFF)](https://github.com/kordspace/carnelian)
 
 A local-first AI agent mainframe built in Rust with capability-based security and event-stream architecture.
+
+> 💎 *Carnelian is a gemstone — warm, fiery, and grounding. The name reflects both the system's Rust foundation and its role as a precious, reliable core.*
+
+## Brand Identity
+
+| Symbol | Name | Role |
+|--------|------|------|
+| 🔥 | **Carnelian OS** | System/runtime — the forge that refines and executes |
+| 🦎 | **Lian** | Agent personality — the spirit that reasons and decides |
+| 💎 | **Core** | Architectural foundations — security, ledger, guarantees |
+
+See [docs/BRAND.md](docs/BRAND.md) for the complete dual-theme brand kit (Forge/Night Lab).
 
 ## Overview
 
@@ -313,6 +327,8 @@ See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 
 - [Development Guide](docs/DEVELOPMENT.md) - Setup and workflow
 - [Docker Guide](docs/DOCKER.md) - Environment and troubleshooting
+- [Brand Kit](docs/BRAND.md) - Dual theme colors and styling
+- [Logging Philosophy](docs/LOGGING.md) - Structured logging conventions
 
 ### Project Planning
 
