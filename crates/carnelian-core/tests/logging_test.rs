@@ -1,3 +1,13 @@
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::needless_pass_by_value)]
+#![allow(unused_imports)]
+#![allow(clippy::use_self)]
+#![allow(clippy::doc_markdown)]
+#![allow(clippy::map_unwrap_or)]
+#![allow(clippy::const_is_empty)]
+#![allow(clippy::cognitive_complexity)]
+#![allow(clippy::assertions_on_constants)]
+
 //! Integration tests for the logging system
 //!
 //! Note: Tracing can only be initialized once per process. Tests that need to
@@ -84,17 +94,32 @@ fn test_environment_detection() {
     };
 
     // Test production detection
-    assert!(detect_production(Some("production"), None), "Should detect production environment");
+    assert!(
+        detect_production(Some("production"), None),
+        "Should detect production environment"
+    );
 
     // Test development detection (default)
-    assert!(!detect_production(None, None), "Should default to development environment");
+    assert!(
+        !detect_production(None, None),
+        "Should default to development environment"
+    );
 
     // Test RUST_ENV fallback
-    assert!(detect_production(None, Some("production")), "Should detect production via RUST_ENV fallback");
+    assert!(
+        detect_production(None, Some("production")),
+        "Should detect production via RUST_ENV fallback"
+    );
 
     // Test case insensitivity
-    assert!(detect_production(Some("PRODUCTION"), None), "Should handle uppercase");
-    assert!(detect_production(Some("Production"), None), "Should handle mixed case");
+    assert!(
+        detect_production(Some("PRODUCTION"), None),
+        "Should handle uppercase"
+    );
+    assert!(
+        detect_production(Some("Production"), None),
+        "Should handle mixed case"
+    );
 }
 
 /// Test that RUST_LOG environment variable format is valid for module filtering
@@ -113,8 +138,9 @@ fn test_rust_log_module_filter_format() {
         // Verify the filter string is valid format (contains = for module filters)
         let has_module_filter = filter.contains('=');
         assert!(
-            has_module_filter || ["error", "warn", "info", "debug", "trace"]
-                .contains(&filter.to_lowercase().as_str()),
+            has_module_filter
+                || ["error", "warn", "info", "debug", "trace"]
+                    .contains(&filter.to_lowercase().as_str()),
             "Filter '{}' should be valid RUST_LOG format",
             filter
         );
@@ -189,9 +215,9 @@ fn test_log_level_priority() {
 #[test]
 fn test_correlation_id_in_span() {
     use tracing::subscriber::with_default;
+    use tracing_subscriber::EnvFilter;
     use tracing_subscriber::fmt;
     use tracing_subscriber::layer::SubscriberExt;
-    use tracing_subscriber::EnvFilter;
 
     let writer = TestWriter::new();
     let writer_clone = writer.clone();
@@ -230,9 +256,9 @@ fn test_correlation_id_in_span() {
 #[test]
 fn test_json_output_format() {
     use tracing::subscriber::with_default;
+    use tracing_subscriber::EnvFilter;
     use tracing_subscriber::fmt;
     use tracing_subscriber::layer::SubscriberExt;
-    use tracing_subscriber::EnvFilter;
 
     let writer = TestWriter::new();
     let writer_clone = writer.clone();
@@ -269,9 +295,9 @@ fn test_json_output_format() {
 #[test]
 fn test_log_level_filtering() {
     use tracing::subscriber::with_default;
+    use tracing_subscriber::EnvFilter;
     use tracing_subscriber::fmt;
     use tracing_subscriber::layer::SubscriberExt;
-    use tracing_subscriber::EnvFilter;
 
     let writer = TestWriter::new();
     let writer_clone = writer.clone();
@@ -279,11 +305,7 @@ fn test_log_level_filtering() {
     // Set filter to WARN - should not see INFO or DEBUG
     let subscriber = tracing_subscriber::registry()
         .with(EnvFilter::new("warn"))
-        .with(
-            fmt::layer()
-                .with_writer(writer_clone)
-                .with_ansi(false),
-        );
+        .with(fmt::layer().with_writer(writer_clone).with_ansi(false));
 
     with_default(subscriber, || {
         tracing::debug!("Debug message - should not appear");
@@ -323,9 +345,9 @@ fn test_log_level_filtering() {
 #[test]
 fn test_pretty_output_format() {
     use tracing::subscriber::with_default;
+    use tracing_subscriber::EnvFilter;
     use tracing_subscriber::fmt;
     use tracing_subscriber::layer::SubscriberExt;
-    use tracing_subscriber::EnvFilter;
 
     let writer = TestWriter::new();
     let writer_clone = writer.clone();

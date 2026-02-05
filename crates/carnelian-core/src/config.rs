@@ -37,8 +37,8 @@ use carnelian_common::{Error, Result};
 use config::Config as ConfigBuilder;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier};
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
+use sqlx::postgres::PgPoolOptions;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -315,10 +315,7 @@ impl Config {
         // Initialize tracing early so all subsequent operations can log
         crate::init_tracing(&config.log_level)?;
 
-        tracing::info!(
-            config_file = "machine.toml",
-            "Configuration loaded"
-        );
+        tracing::info!(config_file = "machine.toml", "Configuration loaded");
         tracing::debug!("Applied environment variable overrides");
 
         config.validate()?;
@@ -402,9 +399,9 @@ impl Config {
                 .parse()
                 .map_err(|_| Error::Config(format!("Invalid PORT value: {}", port)))?;
         } else if let Ok(port) = std::env::var("CARNELIAN_HTTP_PORT") {
-            self.http_port = port
-                .parse()
-                .map_err(|_| Error::Config(format!("Invalid CARNELIAN_HTTP_PORT value: {}", port)))?;
+            self.http_port = port.parse().map_err(|_| {
+                Error::Config(format!("Invalid CARNELIAN_HTTP_PORT value: {}", port))
+            })?;
         }
 
         if let Ok(port) = std::env::var("CARNELIAN_WS_PORT") {
@@ -621,7 +618,7 @@ impl Config {
 
         // Query config_store for owner_keypair
         let row: Option<(Vec<u8>, bool)> = sqlx::query_as(
-            "SELECT value_blob, encrypted FROM config_store WHERE key = 'owner_keypair'"
+            "SELECT value_blob, encrypted FROM config_store WHERE key = 'owner_keypair'",
         )
         .fetch_optional(pool)
         .await
@@ -853,10 +850,7 @@ impl Config {
                 gpu_enabled: true,
                 default_model: "deepseek-r1:32b".to_string(),
             },
-            MachineProfile::Custom => self
-                .custom_machine_config
-                .clone()
-                .unwrap_or_default(),
+            MachineProfile::Custom => self.custom_machine_config.clone().unwrap_or_default(),
         }
     }
 

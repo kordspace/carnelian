@@ -55,7 +55,10 @@ pub async fn check_database_health(pool: &PgPool) -> Result<bool> {
             Ok(false)
         }
         Err(_) => {
-            tracing::warn!(timeout_secs = HEALTH_CHECK_TIMEOUT_SECS, "Database health check timed out");
+            tracing::warn!(
+                timeout_secs = HEALTH_CHECK_TIMEOUT_SECS,
+                "Database health check timed out"
+            );
             Ok(false)
         }
     }
@@ -102,10 +105,7 @@ pub async fn ensure_database_connection(config: &mut crate::config::Config) -> R
                 // Verify the new connection is healthy
                 if let Ok(pool) = config.pool() {
                     if check_database_health(pool).await? {
-                        tracing::info!(
-                            attempt = attempt,
-                            "Database reconnection successful"
-                        );
+                        tracing::info!(attempt = attempt, "Database reconnection successful");
                         return Ok(());
                     }
                 }
@@ -150,7 +150,10 @@ pub async fn ensure_database_connection(config: &mut crate::config::Config) -> R
 /// run_migrations(&pool).await?;
 /// ```
 pub async fn run_migrations(pool: &PgPool) -> Result<()> {
-    tracing::info!(migrations_path = "db/migrations", "Running database migrations");
+    tracing::info!(
+        migrations_path = "db/migrations",
+        "Running database migrations"
+    );
 
     sqlx::migrate!("../../db/migrations").run(pool).await?;
 

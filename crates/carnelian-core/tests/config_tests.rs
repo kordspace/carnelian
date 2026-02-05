@@ -1,3 +1,8 @@
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::needless_pass_by_value)]
+#![allow(clippy::unreadable_literal)]
+#![allow(clippy::doc_markdown)]
+
 //! Integration tests for configuration loading
 //!
 //! Tests cover:
@@ -25,7 +30,10 @@ fn test_load_from_toml_file() {
     assert_eq!(config.machine_profile, MachineProfile::Urim);
     assert_eq!(config.http_port, 19000);
     assert_eq!(config.ws_port, 19001);
-    assert_eq!(config.database_url, "postgresql://test:test@localhost:5432/test_db");
+    assert_eq!(
+        config.database_url,
+        "postgresql://test:test@localhost:5432/test_db"
+    );
     assert_eq!(config.ollama_url, "http://localhost:11434");
     assert_eq!(config.log_level, "DEBUG");
     assert_eq!(config.db_max_connections, 5);
@@ -39,15 +47,17 @@ fn test_load_from_toml_file() {
 #[test]
 fn test_load_pem_keypair() {
     let key_path = fixtures_path().join("test_key.pem");
-    
+
     let mut config = Config::default();
     config.owner_keypair_path = Some(key_path);
-    
-    config.load_owner_keypair().expect("Failed to load PEM keypair");
-    
+
+    config
+        .load_owner_keypair()
+        .expect("Failed to load PEM keypair");
+
     assert!(config.has_owner_keypair());
     assert!(config.owner_public_key.is_some());
-    
+
     // Verify the public key is hex-encoded (64 chars for 32 bytes)
     let public_key = config.owner_public_key.as_ref().unwrap();
     assert_eq!(public_key.len(), 64);
@@ -56,12 +66,14 @@ fn test_load_pem_keypair() {
 #[test]
 fn test_load_raw_keypair() {
     let key_path = fixtures_path().join("test_key_raw.bin");
-    
+
     let mut config = Config::default();
     config.owner_keypair_path = Some(key_path);
-    
-    config.load_owner_keypair().expect("Failed to load raw keypair");
-    
+
+    config
+        .load_owner_keypair()
+        .expect("Failed to load raw keypair");
+
     assert!(config.has_owner_keypair());
     assert!(config.owner_public_key.is_some());
 }
@@ -69,23 +81,29 @@ fn test_load_raw_keypair() {
 #[test]
 fn test_sign_and_verify() {
     let key_path = fixtures_path().join("test_key.pem");
-    
+
     let mut config = Config::default();
     config.owner_keypair_path = Some(key_path);
     config.load_owner_keypair().expect("Failed to load keypair");
-    
+
     let message = b"Hello, Carnelian OS!";
-    
+
     // Sign the message
-    let signature = config.sign_message(message).expect("Failed to sign message");
-    
+    let signature = config
+        .sign_message(message)
+        .expect("Failed to sign message");
+
     // Verify the signature
-    let is_valid = config.verify_signature(message, &signature).expect("Failed to verify");
+    let is_valid = config
+        .verify_signature(message, &signature)
+        .expect("Failed to verify");
     assert!(is_valid);
-    
+
     // Verify with wrong message fails
     let wrong_message = b"Wrong message";
-    let is_valid = config.verify_signature(wrong_message, &signature).expect("Failed to verify");
+    let is_valid = config
+        .verify_signature(wrong_message, &signature)
+        .expect("Failed to verify");
     assert!(!is_valid);
 }
 
@@ -98,7 +116,7 @@ fn test_machine_config_profiles() {
     assert_eq!(machine.max_memory_mb, 28672);
     assert!(machine.gpu_enabled);
     assert_eq!(machine.default_model, "deepseek-r1:7b");
-    
+
     // Test Urim profile
     let mut config = Config::default();
     config.machine_profile = MachineProfile::Urim;
@@ -107,7 +125,7 @@ fn test_machine_config_profiles() {
     assert_eq!(machine.max_memory_mb, 57344);
     assert!(machine.gpu_enabled);
     assert_eq!(machine.default_model, "deepseek-r1:32b");
-    
+
     // Test Custom profile with custom config
     let custom = MachineConfig {
         max_workers: 16,
@@ -154,7 +172,7 @@ fn test_validation_fails_for_invalid_log_level() {
 fn test_missing_keypair_file_does_not_error() {
     let mut config = Config::default();
     config.owner_keypair_path = Some(PathBuf::from("/nonexistent/path/key.pem"));
-    
+
     // Should not error, just warn
     assert!(config.load_owner_keypair().is_ok());
     assert!(!config.has_owner_keypair());
@@ -164,7 +182,7 @@ fn test_missing_keypair_file_does_not_error() {
 fn test_sign_without_keypair_errors() {
     let config = Config::default();
     assert!(!config.has_owner_keypair());
-    
+
     let result = config.sign_message(b"test");
     assert!(result.is_err());
 }
