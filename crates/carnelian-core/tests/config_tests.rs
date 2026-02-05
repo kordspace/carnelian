@@ -132,6 +132,7 @@ fn test_machine_config_profiles() {
         max_memory_mb: 131072,
         gpu_enabled: true,
         default_model: "llama3:70b".to_string(),
+        auto_restart_workers: true,
     };
     let mut config = Config::default();
     config.machine_profile = MachineProfile::Custom;

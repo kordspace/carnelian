@@ -100,6 +100,118 @@ pub struct Worker {
     pub last_health_check: Option<DateTime<Utc>>,
 }
 
+/// Result of a single health check on a worker.
+#[allow(dead_code)]
+struct HealthCheckResult {
+    /// Whether the worker is still alive
+    healthy: bool,
+    /// The worker's runtime type
+    runtime: WorkerRuntime,
+    /// Exit code if the worker has exited (Some(Some(code)) or Some(None) for signal)
+    #[allow(clippy::option_option)]
+    exit_code: Option<Option<i32>>,
+}
+
+/// Perform a health check on a single worker, updating its status and emitting events.
+///
+/// This is the shared implementation used by `check_worker_health`, `run_health_checks`,
+/// and the background health check loop. It:
+/// 1. Locks the registry, calls `try_wait()`, updates status/timestamps
+/// 2. Emits `WorkerHealthCheck` event
+/// 3. If unhealthy, emits `WorkerStopped` event and removes the worker from the registry
+///
+/// Returns `Ok(result)` with health status, or `Err` if the worker is not found.
+#[allow(clippy::significant_drop_tightening)]
+async fn perform_single_health_check(
+    workers: &RwLock<HashMap<String, Worker>>,
+    event_stream: &EventStream,
+    worker_id: &str,
+) -> Result<HealthCheckResult> {
+    let (healthy, runtime, exit_code) = {
+        let mut w = workers.write().await;
+        let worker = w
+            .get_mut(worker_id)
+            .ok_or_else(|| Error::Config(format!("Worker not found: {}", worker_id)))?;
+
+        let runtime = worker.runtime;
+
+        match worker.process.try_wait() {
+            Ok(Some(status)) => {
+                tracing::error!(
+                    worker_id = %worker_id,
+                    exit_code = ?status.code(),
+                    "Worker process exited unexpectedly"
+                );
+                worker.status = WorkerStatus::Failed;
+                (false, runtime, Some(status.code()))
+            }
+            Ok(None) => {
+                worker.last_health_check = Some(Utc::now());
+                (true, runtime, None)
+            }
+            Err(e) => {
+                tracing::warn!(
+                    worker_id = %worker_id,
+                    error = %e,
+                    "Failed to check worker health"
+                );
+                (false, runtime, None)
+            }
+        }
+    };
+
+    // Emit WorkerHealthCheck event (always)
+    if healthy {
+        event_stream.publish(EventEnvelope::new(
+            EventLevel::Debug,
+            EventType::WorkerHealthCheck,
+            json!({
+                "worker_id": worker_id,
+                "healthy": true,
+            }),
+        ));
+    } else {
+        event_stream.publish(EventEnvelope::new(
+            EventLevel::Error,
+            EventType::WorkerHealthCheck,
+            json!({
+                "worker_id": worker_id,
+                "healthy": false,
+                "exit_code": exit_code,
+            }),
+        ));
+
+        // Emit WorkerStopped for crashed/unexpectedly exited workers
+        let reason = match exit_code {
+            Some(Some(code)) => format!("crashed (exit code {})", code),
+            Some(None) => "crashed (signal)".to_string(),
+            None => "crashed".to_string(),
+        };
+        event_stream.publish(EventEnvelope::new(
+            EventLevel::Warn,
+            EventType::WorkerStopped,
+            json!({
+                "worker_id": worker_id,
+                "runtime": runtime.to_string(),
+                "reason": reason,
+            }),
+        ));
+
+        // Remove failed worker from registry
+        workers.write().await.remove(worker_id);
+        tracing::info!(
+            worker_id = %worker_id,
+            "Removed failed worker from registry"
+        );
+    }
+
+    Ok(HealthCheckResult {
+        healthy,
+        runtime,
+        exit_code,
+    })
+}
+
 /// Background worker manager maintaining an in-memory registry of active workers.
 ///
 /// Workers are spawned as child processes and monitored via periodic health checks.
@@ -317,9 +429,14 @@ impl WorkerManager {
         #[cfg(unix)]
         {
             if let Some(pid) = child.id() {
-                // Send SIGTERM for graceful shutdown
-                unsafe {
-                    libc::kill(pid as i32, libc::SIGTERM);
+                // Send SIGTERM for graceful shutdown using nix (safe wrapper)
+                let nix_pid = nix::unistd::Pid::from_raw(i32::try_from(pid).unwrap_or(i32::MAX));
+                if let Err(e) = nix::sys::signal::kill(nix_pid, nix::sys::signal::Signal::SIGTERM) {
+                    tracing::warn!(
+                        worker_id = %worker_id,
+                        error = %e,
+                        "Failed to send SIGTERM to worker"
+                    );
                 }
                 tracing::debug!(worker_id = %worker_id, pid = pid, "Sent SIGTERM to worker");
             }
@@ -432,100 +549,36 @@ impl WorkerManager {
     /// Check health of a specific worker.
     ///
     /// Uses `try_wait()` to check if the process is still alive without blocking.
-    /// Updates the worker status and emits a health check event.
+    /// Updates the worker status and emits health check and stopped events as needed.
+    /// Failed workers are removed from the registry.
     ///
     /// # Returns
     ///
     /// `true` if the worker is alive, `false` if it has exited.
-    #[allow(clippy::significant_drop_tightening)]
     pub async fn check_worker_health(&self, worker_id: &str) -> Result<bool> {
-        let mut workers = self.workers.write().await;
-        let worker = workers
-            .get_mut(worker_id)
-            .ok_or_else(|| Error::Config(format!("Worker not found: {}", worker_id)))?;
-
-        let runtime = worker.runtime;
-
-        let (healthy, exit_code): (bool, Option<Option<i32>>) = match worker.process.try_wait() {
-            Ok(Some(status)) => {
-                tracing::error!(
-                    worker_id = %worker_id,
-                    exit_code = ?status.code(),
-                    "Worker process exited unexpectedly"
-                );
-                worker.status = WorkerStatus::Failed;
-                (false, Some(status.code()))
-            }
-            Ok(None) => {
-                worker.last_health_check = Some(Utc::now());
-                (true, None)
-            }
-            Err(e) => {
-                tracing::warn!(
-                    worker_id = %worker_id,
-                    error = %e,
-                    "Failed to check worker health"
-                );
-                (false, None)
-            }
-        };
-        drop(workers);
-
-        if healthy {
-            self.event_stream.publish(EventEnvelope::new(
-                EventLevel::Debug,
-                EventType::WorkerHealthCheck,
-                json!({
-                    "worker_id": worker_id,
-                    "healthy": true,
-                }),
-            ));
-        } else {
-            self.event_stream.publish(EventEnvelope::new(
-                EventLevel::Error,
-                EventType::WorkerHealthCheck,
-                json!({
-                    "worker_id": worker_id,
-                    "healthy": false,
-                    "exit_code": exit_code,
-                }),
-            ));
-
-            // Emit WorkerStopped for crashed/unexpectedly exited workers
-            let reason = match exit_code {
-                Some(Some(code)) => format!("crashed (exit code {})", code),
-                Some(None) => "crashed (signal)".to_string(),
-                None => "crashed".to_string(),
-            };
-            self.event_stream.publish(EventEnvelope::new(
-                EventLevel::Warn,
-                EventType::WorkerStopped,
-                json!({
-                    "worker_id": worker_id,
-                    "runtime": runtime.to_string(),
-                    "reason": reason,
-                }),
-            ));
-        }
-
-        Ok(healthy)
+        let result =
+            perform_single_health_check(&self.workers, &self.event_stream, worker_id).await?;
+        Ok(result.healthy)
     }
 
     /// Run health checks on all active workers.
     ///
-    /// Checks each worker and logs a summary. Failed workers are logged
-    /// at WARN level for potential restart.
+    /// Checks each worker and logs a summary. Failed workers are removed
+    /// from the registry and have `WorkerStopped` events emitted.
     pub async fn run_health_checks(&self) -> Result<()> {
         let worker_ids: Vec<String> = self.workers.read().await.keys().cloned().collect();
         let mut healthy_count = 0usize;
         let mut failed_count = 0usize;
 
         for worker_id in &worker_ids {
-            match self.check_worker_health(worker_id).await {
-                Ok(true) => healthy_count += 1,
-                Ok(false) => {
-                    failed_count += 1;
-                    tracing::warn!(worker_id = %worker_id, "Worker failed health check");
+            match perform_single_health_check(&self.workers, &self.event_stream, worker_id).await {
+                Ok(result) => {
+                    if result.healthy {
+                        healthy_count += 1;
+                    } else {
+                        failed_count += 1;
+                        tracing::warn!(worker_id = %worker_id, "Worker failed health check");
+                    }
                 }
                 Err(e) => {
                     failed_count += 1;
@@ -550,7 +603,9 @@ impl WorkerManager {
 
     /// Start the background health check loop.
     ///
-    /// Spawns a tokio task that runs health checks every 30 seconds.
+    /// Spawns a tokio task that runs health checks every 30 seconds using the
+    /// shared `perform_single_health_check` function. Failed workers are automatically
+    /// removed from the registry and have `WorkerStopped` events emitted.
     /// The loop responds to the shutdown signal for graceful termination.
     fn start_health_check_loop(&mut self) {
         let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
@@ -572,40 +627,21 @@ impl WorkerManager {
                         let mut failed = 0usize;
 
                         for worker_id in &worker_ids {
-                            let mut w = workers.write().await;
-                            if let Some(worker) = w.get_mut(worker_id) {
-                                match worker.process.try_wait() {
-                                    Ok(Some(status)) => {
-                                        tracing::error!(
-                                            worker_id = %worker_id,
-                                            exit_code = ?status.code(),
-                                            "Worker process exited unexpectedly"
-                                        );
-                                        worker.status = WorkerStatus::Failed;
-                                        failed += 1;
-
-                                        event_stream.publish(EventEnvelope::new(
-                                            EventLevel::Error,
-                                            EventType::WorkerHealthCheck,
-                                            json!({
-                                                "worker_id": worker_id,
-                                                "healthy": false,
-                                                "exit_code": status.code(),
-                                            }),
-                                        ));
-                                    }
-                                    Ok(None) => {
-                                        worker.last_health_check = Some(Utc::now());
+                            match perform_single_health_check(&workers, &event_stream, worker_id).await {
+                                Ok(result) => {
+                                    if result.healthy {
                                         healthy += 1;
-                                    }
-                                    Err(e) => {
-                                        tracing::warn!(
-                                            worker_id = %worker_id,
-                                            error = %e,
-                                            "Failed to check worker health"
-                                        );
+                                    } else {
                                         failed += 1;
                                     }
+                                }
+                                Err(e) => {
+                                    failed += 1;
+                                    tracing::warn!(
+                                        worker_id = %worker_id,
+                                        error = %e,
+                                        "Background health check error"
+                                    );
                                 }
                             }
                         }
@@ -709,6 +745,7 @@ mod tests {
             max_memory_mb: 8192,
             gpu_enabled: false,
             default_model: "test".to_string(),
+            auto_restart_workers: false,
         });
         config.machine_profile = crate::config::MachineProfile::Custom;
         let config = Arc::new(config);

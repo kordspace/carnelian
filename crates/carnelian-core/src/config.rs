@@ -173,6 +173,13 @@ pub struct MachineConfig {
     pub gpu_enabled: bool,
     /// Default Ollama model
     pub default_model: String,
+    /// Whether to automatically restart crashed workers
+    #[serde(default = "default_auto_restart_workers")]
+    pub auto_restart_workers: bool,
+}
+
+fn default_auto_restart_workers() -> bool {
+    true
 }
 
 impl Default for MachineConfig {
@@ -182,6 +189,7 @@ impl Default for MachineConfig {
             max_memory_mb: 8192,
             gpu_enabled: false,
             default_model: "deepseek-r1:7b".to_string(),
+            auto_restart_workers: true,
         }
     }
 }
@@ -861,12 +869,14 @@ impl Config {
                 max_memory_mb: 28672, // 28GB, leaving 4GB for system
                 gpu_enabled: true,
                 default_model: "deepseek-r1:7b".to_string(),
+                auto_restart_workers: true,
             },
             MachineProfile::Urim => MachineConfig {
                 max_workers: 8,
                 max_memory_mb: 57344, // 56GB, leaving 8GB for system
                 gpu_enabled: true,
                 default_model: "deepseek-r1:32b".to_string(),
+                auto_restart_workers: true,
             },
             MachineProfile::Custom => self.custom_machine_config.clone().unwrap_or_default(),
         }
@@ -991,6 +1001,7 @@ mod tests {
             max_memory_mb: 131072,
             gpu_enabled: true,
             default_model: "llama3:70b".to_string(),
+            auto_restart_workers: true,
         };
         let config = Config {
             machine_profile: MachineProfile::Custom,
