@@ -1,0 +1,2 @@
+-- Initial schema placeholder
+-- Actual migrations will be created in Phase 1
