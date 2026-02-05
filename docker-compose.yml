@@ -1,0 +1,129 @@
+# =============================================================================
+# Carnelian OS - Development Environment
+# =============================================================================
+# This Docker Compose configuration provides local development infrastructure:
+# - PostgreSQL 16 with pgvector extension for vector embeddings
+# - Ollama runtime with NVIDIA GPU support for local LLM inference
+#
+# Machine Profiles:
+# - Thummim: RTX 2080 Super (8GB VRAM), 32GB RAM
+# - Urim: RTX 2080 Ti (11GB VRAM), 64GB RAM
+#
+# Quick Start:
+#   docker-compose up -d
+#   docker-compose ps
+#   docker-compose logs -f
+#
+# Shutdown:
+#   docker-compose down          # Preserve data
+#   docker-compose down -v       # Remove volumes (data loss!)
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 with pgvector Extension
+  # ---------------------------------------------------------------------------
+  # Connection String: postgresql://carnelian:carnelian@localhost:5432/carnelian
+  # Docker Internal:   postgresql://carnelian:carnelian@carnelian-postgres:5432/carnelian
+  #
+  # The pgvector extension enables vector similarity search for embeddings.
+  # Run migrations with: sqlx migrate run --database-url <connection_string>
+  # See db/migrations/README.md for migration instructions.
+  # ---------------------------------------------------------------------------
+  carnelian-postgres:
+    image: pgvector/pgvector:pg16
+    container_name: carnelian-postgres
+    environment:
+      POSTGRES_USER: carnelian
+      POSTGRES_PASSWORD: carnelian
+      POSTGRES_DB: carnelian
+      PGVECTOR_DIMS: 1536
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U carnelian"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+        reservations:
+          memory: 512M
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Ollama Runtime with NVIDIA GPU Support
+  # ---------------------------------------------------------------------------
+  # API Endpoint: http://localhost:11434
+  # Docker Internal: http://carnelian-ollama:11434
+  #
+  # GPU Requirements:
+  # - NVIDIA GPU with CUDA support
+  # - NVIDIA Container Toolkit installed
+  # - Docker configured for GPU access
+  #
+  # Model Download:
+  #   docker exec carnelian-ollama ollama pull deepseek-r1:7b    # Thummim
+  #   docker exec carnelian-ollama ollama pull deepseek-r1:32b   # Urim (if VRAM allows)
+  #
+  # Memory Requirements:
+  # - deepseek-r1:7b (Q4_K_M): ~6GB VRAM, ~8GB RAM
+  # - deepseek-r1:32b: ~20GB VRAM (requires Urim or better)
+  # ---------------------------------------------------------------------------
+  carnelian-ollama:
+    image: ollama/ollama:latest
+    container_name: carnelian-ollama
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      NVIDIA_VISIBLE_DEVICES: all
+      OLLAMA_KEEP_ALIVE: "-1"      # Keep models loaded indefinitely
+      OLLAMA_NUM_GPU: "999"        # Use all available GPU layers
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    deploy:
+      resources:
+        limits:
+          cpus: "8"
+          memory: 12G
+        reservations:
+          memory: 4G
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "ps"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+# =============================================================================
+# Named Volumes
+# =============================================================================
+# Data Persistence Strategy:
+# - postgres-data: PostgreSQL database files (schemas, tables, indexes)
+# - ollama-models: Downloaded Ollama models (can be large, 4-20GB per model)
+#
+# Backup Recommendations:
+# - PostgreSQL: Use pg_dump for logical backups
+# - Ollama models: Can be re-downloaded, but caching saves bandwidth
+#
+# To inspect volumes:
+#   docker volume inspect carnelian_postgres-data
+#   docker volume inspect carnelian_ollama-models
+# =============================================================================
+volumes:
+  postgres-data:
+    driver: local
+  ollama-models:
+    driver: local
