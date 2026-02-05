@@ -43,7 +43,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
-use carnelian_core::{Config, EventStream, PolicyEngine, Server};
+use carnelian_core::{Config, EventStream, PolicyEngine, Scheduler, Server};
 use futures_util::StreamExt;
 use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
 use tokio::sync::oneshot;
@@ -63,6 +63,19 @@ fn create_test_policy_engine() -> Arc<PolicyEngine> {
         .connect_lazy("postgresql://test:test@localhost:5432/test")
         .expect("Failed to create lazy pool");
     Arc::new(PolicyEngine::new(pool))
+}
+
+/// Create a lazy Scheduler for tests that don't need database access
+fn create_test_scheduler(event_stream: Arc<EventStream>) -> Arc<tokio::sync::Mutex<Scheduler>> {
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_lazy("postgresql://test:test@localhost:5432/test")
+        .expect("Failed to create lazy pool");
+    Arc::new(tokio::sync::Mutex::new(Scheduler::new(
+        pool,
+        event_stream,
+        Duration::from_secs(3600), // Long interval for tests - won't actually tick
+    )))
 }
 
 /// Create a test configuration with in-memory settings (no database)
@@ -124,11 +137,13 @@ async fn test_full_server_startup() {
         config.event_broadcast_capacity,
         config.event_max_payload_bytes,
     );
+    let event_stream = Arc::new(event_stream);
 
     let server = Server::new(
         Arc::new(config),
-        Arc::new(event_stream),
+        event_stream.clone(),
         create_test_policy_engine(),
+        create_test_scheduler(event_stream),
     );
 
     // Start server in background
@@ -184,7 +199,7 @@ async fn test_websocket_event_reception() {
     let event_stream = Arc::new(event_stream);
     let event_stream_clone = event_stream.clone();
 
-    let server = Server::new(Arc::new(config), event_stream, create_test_policy_engine());
+    let server = Server::new(Arc::new(config), event_stream.clone(), create_test_policy_engine(), create_test_scheduler(event_stream));
 
     // Start server in background
     let server_handle = tokio::spawn(async move { server.run().await });
@@ -272,7 +287,7 @@ async fn test_load_handling_10k_events_per_minute() {
     let event_stream = Arc::new(event_stream);
     let event_stream_clone = event_stream.clone();
 
-    let server = Server::new(Arc::new(config), event_stream, create_test_policy_engine());
+    let server = Server::new(Arc::new(config), event_stream.clone(), create_test_policy_engine(), create_test_scheduler(event_stream));
 
     // Start server in background
     let server_handle = tokio::spawn(async move { server.run().await });
@@ -452,7 +467,7 @@ async fn test_graceful_shutdown_behavior() {
     let event_stream = Arc::new(event_stream);
     let event_stream_clone = event_stream.clone();
 
-    let server = Server::new(Arc::new(config), event_stream, create_test_policy_engine());
+    let server = Server::new(Arc::new(config), event_stream.clone(), create_test_policy_engine(), create_test_scheduler(event_stream));
 
     // Create a oneshot channel to trigger graceful shutdown
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
@@ -569,7 +584,7 @@ async fn test_event_stream_backpressure() {
     let event_stream = Arc::new(event_stream);
     let event_stream_clone = event_stream.clone();
 
-    let server = Server::new(Arc::new(config), event_stream, create_test_policy_engine());
+    let server = Server::new(Arc::new(config), event_stream.clone(), create_test_policy_engine(), create_test_scheduler(event_stream));
 
     // Start server in background
     let server_handle = tokio::spawn(async move { server.run().await });
@@ -635,7 +650,7 @@ async fn test_multiple_websocket_clients() {
     let event_stream = Arc::new(event_stream);
     let event_stream_clone = event_stream.clone();
 
-    let server = Server::new(Arc::new(config), event_stream, create_test_policy_engine());
+    let server = Server::new(Arc::new(config), event_stream.clone(), create_test_policy_engine(), create_test_scheduler(event_stream));
 
     // Start server in background
     let server_handle = tokio::spawn(async move { server.run().await });
@@ -701,11 +716,13 @@ async fn test_health_endpoint_status() {
         config.event_broadcast_capacity,
         config.event_max_payload_bytes,
     );
+    let event_stream = Arc::new(event_stream);
 
     let server = Server::new(
         Arc::new(config),
-        Arc::new(event_stream),
+        event_stream.clone(),
         create_test_policy_engine(),
+        create_test_scheduler(event_stream),
     );
 
     // Start server in background
@@ -813,11 +830,19 @@ async fn test_database_server_startup() {
         config.event_broadcast_capacity,
         config.event_max_payload_bytes,
     );
+    let event_stream = Arc::new(event_stream);
 
     // Create PolicyEngine with the real database pool
     let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
 
-    let server = Server::new(Arc::new(config), Arc::new(event_stream), policy_engine);
+    // Create Scheduler with the real database pool
+    let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
+        pool.clone(),
+        event_stream.clone(),
+        Duration::from_secs(3600),
+    )));
+
+    let server = Server::new(Arc::new(config), event_stream, policy_engine, scheduler);
 
     // Start server in background
     let server_handle = tokio::spawn(async move { server.run().await });
@@ -883,9 +908,15 @@ async fn test_database_connection_failure() {
         config.event_broadcast_capacity,
         config.event_max_payload_bytes,
     );
+    let event_stream = Arc::new(event_stream);
 
-    let policy_engine = Arc::new(PolicyEngine::new(pool));
-    let server = Server::new(Arc::new(config), Arc::new(event_stream), policy_engine);
+    let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
+    let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
+        pool,
+        event_stream.clone(),
+        Duration::from_secs(3600),
+    )));
+    let server = Server::new(Arc::new(config), event_stream, policy_engine, scheduler);
 
     // Start server in background
     let server_handle = tokio::spawn(async move { server.run().await });
@@ -974,7 +1005,12 @@ async fn test_database_reconnection() {
     let event_stream_clone = event_stream.clone();
 
     let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
-    let server = Server::new(Arc::new(config), event_stream, policy_engine);
+    let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
+        pool.clone(),
+        event_stream.clone(),
+        Duration::from_secs(3600),
+    )));
+    let server = Server::new(Arc::new(config), event_stream, policy_engine, scheduler);
 
     // Start server in background
     let server_handle = tokio::spawn(async move { server.run().await });
@@ -1101,8 +1137,13 @@ async fn test_database_reconnection_under_load() {
     let event_stream = Arc::new(event_stream);
     let event_stream_clone = event_stream.clone();
 
-    let policy_engine = Arc::new(PolicyEngine::new(pool));
-    let server = Server::new(Arc::new(config), event_stream, policy_engine);
+    let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
+    let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
+        pool,
+        event_stream.clone(),
+        Duration::from_secs(3600),
+    )));
+    let server = Server::new(Arc::new(config), event_stream, policy_engine, scheduler);
 
     // Start server in background
     let server_handle = tokio::spawn(async move { server.run().await });

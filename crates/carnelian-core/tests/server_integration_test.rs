@@ -10,7 +10,7 @@
 //! Integration tests for the HTTP/WebSocket server
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
-use carnelian_core::{Config, EventStream, PolicyEngine, Server};
+use carnelian_core::{Config, EventStream, PolicyEngine, Scheduler, Server};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
 use std::sync::Arc;
@@ -52,6 +52,19 @@ fn create_test_policy_engine() -> Arc<PolicyEngine> {
     Arc::new(PolicyEngine::new(pool))
 }
 
+/// Create a lazy Scheduler for tests that don't need database access
+fn create_test_scheduler(event_stream: Arc<EventStream>) -> Arc<tokio::sync::Mutex<Scheduler>> {
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_lazy("postgresql://test:test@localhost:5432/test")
+        .expect("Failed to create lazy pool");
+    Arc::new(tokio::sync::Mutex::new(Scheduler::new(
+        pool,
+        event_stream,
+        Duration::from_secs(3600),
+    )))
+}
+
 #[tokio::test]
 async fn test_websocket_event_streaming() {
     // Allocate a random available port
@@ -67,6 +80,7 @@ async fn test_websocket_event_streaming() {
         config.clone(),
         event_stream.clone(),
         create_test_policy_engine(),
+        create_test_scheduler(event_stream.clone()),
     );
 
     // Spawn server in background
@@ -141,6 +155,7 @@ async fn test_websocket_backpressure() {
         config.clone(),
         event_stream.clone(),
         create_test_policy_engine(),
+        create_test_scheduler(event_stream.clone()),
     );
 
     // Spawn server in background
@@ -202,7 +217,7 @@ async fn test_server_port_configuration() {
     let event_stream = Arc::new(EventStream::new(100, 10));
     let config = Arc::new(config);
 
-    let server = Server::new(config.clone(), event_stream, create_test_policy_engine());
+    let server = Server::new(config.clone(), event_stream.clone(), create_test_policy_engine(), create_test_scheduler(event_stream));
 
     assert_eq!(server.port(), port);
 }
@@ -222,6 +237,7 @@ async fn test_event_json_serialization() {
         config.clone(),
         event_stream.clone(),
         create_test_policy_engine(),
+        create_test_scheduler(event_stream.clone()),
     );
 
     // Spawn server in background
