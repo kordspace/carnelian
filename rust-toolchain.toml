@@ -1,0 +1,7 @@
+# Carnelian OS Rust toolchain configuration
+# This pins the Rust version for reproducible builds across all developers.
+
+[toolchain]
+channel = "1.85"
+components = ["rustfmt", "clippy", "rust-src"]
+profile = "minimal"

@@ -1,0 +1,12 @@
+# Carnelian OS Clippy configuration
+# Workspace-level lints are defined in Cargo.toml.
+# This file contains project-specific exceptions and overrides.
+
+# Allow debug macros and assertions in test code
+allow-dbg-in-tests = true
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-print-in-tests = true
+
+# Safe arithmetic operations that don't need overflow checks
+arithmetic-side-effects-allowed = ["usize", "u32", "u64"]

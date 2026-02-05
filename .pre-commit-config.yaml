@@ -1,0 +1,54 @@
+# Carnelian OS Pre-commit Configuration
+# Install: prek install
+# Manual run: prek run --all-files
+#
+# This configuration uses prek (Rust-based pre-commit tool) for Git hooks.
+# Install prek: cargo install prek
+
+repos:
+  # Basic file hygiene hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(docs/|dist/|target/)
+      - id: end-of-file-fixer
+        exclude: ^(docs/|dist/|target/)
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: check-toml
+
+  # Secret detection
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: ^(dist/|target/|Cargo\.lock|package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$
+
+  # Shell script linting
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.11.0
+    hooks:
+      - id: shellcheck
+        files: \.(sh|bash)$
+
+  # Rust-specific hooks (local)
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --all -- --check
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy --workspace --all-targets -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false
