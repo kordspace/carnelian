@@ -30,6 +30,7 @@ Think of branding as a thin "skin" around serious structured logs.
 |------|-------|-------|
 | 🔥 | Carnelian OS | System/runtime logs (core/gateway/services) |
 | 🦎 | Lian | Agent reasoning, memory shaping decisions, tool selection |
+| 💎 | Core | Architectural guarantees, security invariants, foundational events |
 | ✅ | — | Health state / completed milestone |
 | 🟣 | — | Insight / design rationale / non-fatal unusual decision |
 | 🟢 🟡 🔴 | — | Optional level glyphs for human readability |
@@ -109,8 +110,8 @@ These fields should be in every log line (when applicable):
 
 | Field | Values |
 |-------|--------|
-| `brand` | `carnelian`, `lian` |
-| `icon` | `🔥`, `🦎`, `✅`, `🟣` |
+| `brand` | `carnelian`, `lian`, `core` |
+| `icon` | `🔥`, `🦎`, `💎`, `✅`, `🟣` |
 | `agent` | `lian` |
 | `agent_id` | UUID |
 
@@ -153,6 +154,19 @@ runtime_ready
 runtime_shutdown
 config_loaded
 config_invalid
+```
+
+### 💎 Security & Ledger
+
+```
+capability_granted
+capability_denied
+capability_revoked
+ledger_event_created
+ledger_hash_verified
+ledger_integrity_check
+signature_verified
+signature_failed
 ```
 
 ### 🧠 Memory

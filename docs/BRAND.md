@@ -1,5 +1,7 @@
 # 🔥 Carnelian OS — Dual Theme Brand Kit
 
+> 💎 *Carnelian is a gemstone — warm, fiery, and grounding. The name reflects both the system's Rust foundation and its role as a precious, reliable core.*
+
 ## Theme Concept
 
 - **Light mode ("Forge"):** ember + gold + bone → warm, optimistic, premium
@@ -86,8 +88,9 @@ These rules keep the brand cohesive across all touchpoints:
 
 1. **🔥 is always "Carnelian OS"** — titles, repo badges, product identity
 2. **🦎 Lian gets purple-forward accents** — tips, "agent voice", insight callouts
-3. **Greens are "system health / correctness / success"** — checks, "stable", "verified", "ready"
-4. **Gold is "highlight / emphasis" in light mode only** — in dark mode use purple for emphasis
+3. **💎 Gemstone references** — premium features, core values, architectural foundations
+4. **Greens are "system health / correctness / success"** — checks, "stable", "verified", "ready"
+5. **Gold is "highlight / emphasis" in light mode only** — in dark mode use purple for emphasis
 
 ---
 
@@ -111,6 +114,7 @@ These rules keep the brand cohesive across all touchpoints:
 |------|------|-------|
 | 🔥 | Carnelian OS Note | Identity / architecture / invariants |
 | 🦎 | Lian Tip | Practical usage guidance, patterns |
+| 💎 | Gemstone | Premium features, core values, foundations |
 | ✅ | Healthy State | Green, success |
 | 🟣 | Insight | Purple, design rationale / tradeoffs |
 
@@ -123,6 +127,8 @@ These rules keep the brand cohesive across all touchpoints:
 > 🦎 **Lian Tip:** Keep tool outputs typed; shaping becomes trivial.
 
 > 🔥 **Carnelian OS Note:** All capability grants require explicit approval from the core identity.
+
+> 💎 **Gemstone:** The ledger's hash-chain provides tamper-resistant auditability — a core architectural guarantee.
 
 ---
 
@@ -176,6 +182,7 @@ These rules keep the brand cohesive across all touchpoints:
 
 - **Primary:** 🔥 emoji + "Carnelian OS" text
 - **Agent:** 🦎 emoji + "Lian" text
+- **Gemstone:** 💎 emoji for premium/core features
 - **Combined:** "🔥 Carnelian OS • 🦎 Lian"
 
 ### Badge Examples
@@ -183,4 +190,22 @@ These rules keep the brand cohesive across all touchpoints:
 ```markdown
 [![🔥 Carnelian OS](https://img.shields.io/badge/🔥-Carnelian%20OS-D24B2A)](https://github.com/kordspace/carnelian)
 [![🦎 Lian](https://img.shields.io/badge/🦎-Lian-7C4DFF)](https://github.com/kordspace/carnelian)
+[![💎 Core](https://img.shields.io/badge/💎-Core-0F6B4C)](https://github.com/kordspace/carnelian)
 ```
+
+---
+
+## Gemstone Symbolism
+
+💎 **Why Carnelian?**
+
+Carnelian is a semi-precious gemstone known for:
+- **Warmth** — Its fiery orange-red color reflects the Rust language and the "forge" theme
+- **Grounding** — Associated with stability and courage, fitting for a reliable system core
+- **Clarity** — Historically used for seals and signatures, aligning with our capability-based security
+- **Energy** — Said to boost creativity and motivation, perfect for an AI agent platform
+
+The gemstone metaphor extends throughout the brand:
+- 🔥 **Fire** polishes the gem (the forge refines the system)
+- 💎 **Gem** is the precious result (reliable, valuable, enduring)
+- 🦎 **Lian** is the spirit within (the agent that brings it to life)
