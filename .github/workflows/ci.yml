@@ -42,6 +42,8 @@ jobs:
 
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+        env:
+          SQLX_OFFLINE: true
 
   # Rust build and test
   rust-build-test:
@@ -69,12 +71,18 @@ jobs:
 
       - name: Build workspace
         run: cargo build --workspace --all-targets
+        env:
+          SQLX_OFFLINE: true
 
       - name: Run tests
         run: cargo test --workspace
+        env:
+          SQLX_OFFLINE: true
 
       - name: Build documentation
         run: cargo doc --workspace --no-deps
+        env:
+          SQLX_OFFLINE: true
 
   # Node.js worker validation
   node-worker:
