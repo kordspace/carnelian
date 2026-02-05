@@ -146,6 +146,10 @@ pub struct Config {
     #[serde(default = "default_event_broadcast_capacity")]
     pub event_broadcast_capacity: usize,
 
+    /// Heartbeat interval in milliseconds (default: 555,555ms ≈ 9.26 minutes)
+    #[serde(default = "default_heartbeat_interval_ms")]
+    pub heartbeat_interval_ms: u64,
+
     /// Database pool (not serialized, initialized separately)
     #[serde(skip)]
     db_pool: Option<Arc<PgPool>>,
@@ -226,6 +230,10 @@ fn default_event_broadcast_capacity() -> usize {
     100
 }
 
+fn default_heartbeat_interval_ms() -> u64 {
+    555_555
+}
+
 /// Machine profile determining resource limits and default model
 ///
 /// # Variants
@@ -275,6 +283,7 @@ impl Default for Config {
             event_buffer_capacity: default_event_buffer_capacity(),
             event_max_payload_bytes: default_event_max_payload_bytes(),
             event_broadcast_capacity: default_event_broadcast_capacity(),
+            heartbeat_interval_ms: default_heartbeat_interval_ms(),
             db_pool: None,
             owner_signing_key: None,
         }
@@ -426,6 +435,15 @@ impl Config {
 
         if let Ok(path) = std::env::var("CARNELIAN_OWNER_KEYPAIR_PATH") {
             self.owner_keypair_path = Some(PathBuf::from(path));
+        }
+
+        if let Ok(interval) = std::env::var("CARNELIAN_HEARTBEAT_INTERVAL_MS") {
+            self.heartbeat_interval_ms = interval.parse().map_err(|_| {
+                Error::Config(format!(
+                    "Invalid CARNELIAN_HEARTBEAT_INTERVAL_MS value: {}",
+                    interval
+                ))
+            })?;
         }
 
         Ok(())
