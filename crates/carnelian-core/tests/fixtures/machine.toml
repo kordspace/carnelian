@@ -1,0 +1,12 @@
+# Test configuration file for unit tests
+
+machine_profile = "urim"
+http_port = 19000
+ws_port = 19001
+database_url = "postgresql://test:test@localhost:5432/test_db"
+ollama_url = "http://localhost:11434"
+log_level = "DEBUG"
+
+db_max_connections = 5
+db_connection_timeout_secs = 15
+db_idle_timeout_secs = 300
