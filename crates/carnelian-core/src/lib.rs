@@ -105,6 +105,7 @@ pub use events::{EventStream, EventStreamStats, PriorityRingBuffer};
 pub use policy::{CapabilityGrant, PolicyEngine};
 pub use scheduler::Scheduler;
 pub use server::{AppState, Server};
+pub use worker::WorkerManager;
 
 /// Core orchestrator version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

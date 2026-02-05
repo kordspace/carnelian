@@ -304,10 +304,7 @@ impl Scheduler {
         .await
         .map_err(Error::Database)?;
 
-        tracing::debug!(
-            pending_count = pending_tasks.len(),
-            "Polled task queue"
-        );
+        tracing::debug!(pending_count = pending_tasks.len(), "Polled task queue");
 
         Ok(())
     }

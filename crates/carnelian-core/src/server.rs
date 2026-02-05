@@ -29,6 +29,7 @@ use tower_http::{
 use tracing::{Level, Span};
 use uuid::Uuid;
 
+use crate::worker::WorkerManager;
 use crate::{Config, EventStream, Scheduler, db, policy::PolicyEngine};
 
 /// Health check response
@@ -89,6 +90,8 @@ pub struct AppState {
     pub event_stream: Arc<EventStream>,
     /// Policy engine for capability-based security
     pub policy_engine: Arc<PolicyEngine>,
+    /// Worker manager for process lifecycle
+    pub worker_manager: Arc<tokio::sync::Mutex<WorkerManager>>,
     /// Correlation ID counter for request tracing
     correlation_counter: Arc<AtomicU64>,
 }
@@ -100,11 +103,13 @@ impl AppState {
         config: Arc<Config>,
         event_stream: Arc<EventStream>,
         policy_engine: Arc<PolicyEngine>,
+        worker_manager: Arc<tokio::sync::Mutex<WorkerManager>>,
     ) -> Self {
         Self {
             config,
             event_stream,
             policy_engine,
+            worker_manager,
             correlation_counter: Arc::new(AtomicU64::new(0)),
         }
     }
@@ -146,22 +151,26 @@ pub struct Server {
     policy_engine: Arc<PolicyEngine>,
     /// Background task scheduler
     scheduler: Arc<tokio::sync::Mutex<Scheduler>>,
+    /// Worker process manager
+    worker_manager: Arc<tokio::sync::Mutex<WorkerManager>>,
 }
 
 impl Server {
-    /// Create a new server with the given configuration, event stream, policy engine, and scheduler.
+    /// Create a new server with the given configuration, event stream, policy engine, scheduler, and worker manager.
     #[must_use]
     pub fn new(
         config: Arc<Config>,
         event_stream: Arc<EventStream>,
         policy_engine: Arc<PolicyEngine>,
         scheduler: Arc<tokio::sync::Mutex<Scheduler>>,
+        worker_manager: Arc<tokio::sync::Mutex<WorkerManager>>,
     ) -> Self {
         Self {
             config,
             event_stream,
             policy_engine,
             scheduler,
+            worker_manager,
         }
     }
 
@@ -192,6 +201,7 @@ impl Server {
             self.config.clone(),
             self.event_stream.clone(),
             self.policy_engine.clone(),
+            self.worker_manager.clone(),
         );
         let router = build_router(state.clone());
 
@@ -200,6 +210,14 @@ impl Server {
             let mut scheduler = self.scheduler.lock().await;
             if let Err(e) = scheduler.start().await {
                 tracing::warn!(error = %e, "Failed to start scheduler, continuing without heartbeats");
+            }
+        }
+
+        // Start worker processes
+        {
+            let mut worker_manager = self.worker_manager.lock().await;
+            if let Err(e) = worker_manager.start_workers().await {
+                tracing::warn!(error = %e, "Failed to start workers");
             }
         }
 
@@ -222,6 +240,14 @@ impl Server {
             .with_graceful_shutdown(shutdown)
             .await
             .map_err(|e| carnelian_common::Error::Connection(format!("Server error: {}", e)))?;
+
+        // Stop workers before scheduler shutdown
+        {
+            let mut worker_manager = self.worker_manager.lock().await;
+            if let Err(e) = worker_manager.stop_all_workers().await {
+                tracing::warn!(error = %e, "Failed to stop workers gracefully");
+            }
+        }
 
         // Shutdown the scheduler before publishing shutdown event
         {
@@ -325,10 +351,14 @@ async fn health_handler(State(state): State<AppState>) -> impl IntoResponse {
 ///
 /// Returns current system status including workers, models, and queue depth.
 /// Note: Workers and models will be populated when those systems are implemented.
-async fn status_handler(State(_state): State<AppState>) -> impl IntoResponse {
-    // TODO: Populate these fields when worker and task queue systems are implemented
+async fn status_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let workers = {
+        let worker_manager = state.worker_manager.lock().await;
+        worker_manager.get_worker_status().await
+    };
+
     let response = StatusResponse {
-        workers: vec![],
+        workers,
         models: vec![],
         queue_depth: 0,
     };
@@ -488,7 +518,11 @@ mod tests {
             .connect_lazy("postgresql://test:test@localhost:5432/test")
             .expect("Failed to create lazy pool");
         let policy_engine = Arc::new(PolicyEngine::new(pool));
-        AppState::new(config, event_stream, policy_engine)
+        let worker_manager = Arc::new(tokio::sync::Mutex::new(WorkerManager::new(
+            config.clone(),
+            event_stream.clone(),
+        )));
+        AppState::new(config, event_stream, policy_engine, worker_manager)
     }
 
     #[tokio::test]

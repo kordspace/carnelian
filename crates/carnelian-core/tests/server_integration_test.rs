@@ -10,7 +10,7 @@
 //! Integration tests for the HTTP/WebSocket server
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
-use carnelian_core::{Config, EventStream, PolicyEngine, Scheduler, Server};
+use carnelian_core::{Config, EventStream, PolicyEngine, Scheduler, Server, WorkerManager};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
 use std::sync::Arc;
@@ -65,6 +65,17 @@ fn create_test_scheduler(event_stream: Arc<EventStream>) -> Arc<tokio::sync::Mut
     )))
 }
 
+/// Create a WorkerManager for tests
+fn create_test_worker_manager(
+    config: Arc<Config>,
+    event_stream: Arc<EventStream>,
+) -> Arc<tokio::sync::Mutex<WorkerManager>> {
+    Arc::new(tokio::sync::Mutex::new(WorkerManager::new(
+        config,
+        event_stream,
+    )))
+}
+
 #[tokio::test]
 async fn test_websocket_event_streaming() {
     // Allocate a random available port
@@ -81,6 +92,7 @@ async fn test_websocket_event_streaming() {
         event_stream.clone(),
         create_test_policy_engine(),
         create_test_scheduler(event_stream.clone()),
+        create_test_worker_manager(config, event_stream.clone()),
     );
 
     // Spawn server in background
@@ -156,6 +168,7 @@ async fn test_websocket_backpressure() {
         event_stream.clone(),
         create_test_policy_engine(),
         create_test_scheduler(event_stream.clone()),
+        create_test_worker_manager(config, event_stream.clone()),
     );
 
     // Spawn server in background
@@ -217,7 +230,13 @@ async fn test_server_port_configuration() {
     let event_stream = Arc::new(EventStream::new(100, 10));
     let config = Arc::new(config);
 
-    let server = Server::new(config.clone(), event_stream.clone(), create_test_policy_engine(), create_test_scheduler(event_stream));
+    let server = Server::new(
+        config.clone(),
+        event_stream.clone(),
+        create_test_policy_engine(),
+        create_test_scheduler(event_stream.clone()),
+        create_test_worker_manager(config, event_stream),
+    );
 
     assert_eq!(server.port(), port);
 }
@@ -238,6 +257,7 @@ async fn test_event_json_serialization() {
         event_stream.clone(),
         create_test_policy_engine(),
         create_test_scheduler(event_stream.clone()),
+        create_test_worker_manager(config, event_stream.clone()),
     );
 
     // Spawn server in background

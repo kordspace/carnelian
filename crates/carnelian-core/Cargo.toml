@@ -38,6 +38,9 @@ globset.workspace = true
 pgvector.workspace = true
 rand = "0.8"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [[bin]]
 name = "carnelian"
 path = "src/bin/carnelian.rs"

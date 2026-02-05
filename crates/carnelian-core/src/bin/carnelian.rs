@@ -20,7 +20,7 @@ use std::time::Duration;
 use clap::{Parser, Subcommand};
 use std::sync::Arc;
 
-use carnelian_core::{Config, EventStream, PolicyEngine, Scheduler, Server};
+use carnelian_core::{Config, EventStream, PolicyEngine, Scheduler, Server, WorkerManager};
 
 /// 🔥 Carnelian OS - Local-first AI agent mainframe
 #[derive(Parser)]
@@ -160,12 +160,20 @@ async fn handle_start(
         Duration::from_millis(config.heartbeat_interval_ms),
     );
 
+    // Create worker manager
+    let config_arc = Arc::new(config);
+    let worker_manager = Arc::new(tokio::sync::Mutex::new(WorkerManager::new(
+        config_arc.clone(),
+        event_stream.clone(),
+    )));
+
     // Create server
     let server = Server::new(
-        Arc::new(config),
+        config_arc,
         event_stream,
         Arc::new(policy_engine),
         Arc::new(tokio::sync::Mutex::new(scheduler)),
+        worker_manager,
     );
 
     // Write PID file only after all initialization succeeds

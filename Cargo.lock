@@ -629,6 +629,7 @@ dependencies = [
  "globset",
  "hex",
  "http",
+ "libc",
  "notify",
  "notify-debouncer-mini",
  "pgvector",

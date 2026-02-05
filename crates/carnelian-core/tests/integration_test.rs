@@ -43,7 +43,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
-use carnelian_core::{Config, EventStream, PolicyEngine, Scheduler, Server};
+use carnelian_core::{Config, EventStream, PolicyEngine, Scheduler, Server, WorkerManager};
 use futures_util::StreamExt;
 use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
 use tokio::sync::oneshot;
@@ -75,6 +75,17 @@ fn create_test_scheduler(event_stream: Arc<EventStream>) -> Arc<tokio::sync::Mut
         pool,
         event_stream,
         Duration::from_secs(3600), // Long interval for tests - won't actually tick
+    )))
+}
+
+/// Create a WorkerManager for tests
+fn create_test_worker_manager(
+    config: Arc<Config>,
+    event_stream: Arc<EventStream>,
+) -> Arc<tokio::sync::Mutex<WorkerManager>> {
+    Arc::new(tokio::sync::Mutex::new(WorkerManager::new(
+        config,
+        event_stream,
     )))
 }
 
@@ -138,12 +149,14 @@ async fn test_full_server_startup() {
         config.event_max_payload_bytes,
     );
     let event_stream = Arc::new(event_stream);
+    let config = Arc::new(config);
 
     let server = Server::new(
-        Arc::new(config),
+        config.clone(),
         event_stream.clone(),
         create_test_policy_engine(),
-        create_test_scheduler(event_stream),
+        create_test_scheduler(event_stream.clone()),
+        create_test_worker_manager(config, event_stream),
     );
 
     // Start server in background
@@ -198,8 +211,15 @@ async fn test_websocket_event_reception() {
     );
     let event_stream = Arc::new(event_stream);
     let event_stream_clone = event_stream.clone();
+    let config = Arc::new(config);
 
-    let server = Server::new(Arc::new(config), event_stream.clone(), create_test_policy_engine(), create_test_scheduler(event_stream));
+    let server = Server::new(
+        config.clone(),
+        event_stream.clone(),
+        create_test_policy_engine(),
+        create_test_scheduler(event_stream.clone()),
+        create_test_worker_manager(config, event_stream),
+    );
 
     // Start server in background
     let server_handle = tokio::spawn(async move { server.run().await });
@@ -286,8 +306,15 @@ async fn test_load_handling_10k_events_per_minute() {
     );
     let event_stream = Arc::new(event_stream);
     let event_stream_clone = event_stream.clone();
+    let config = Arc::new(config);
 
-    let server = Server::new(Arc::new(config), event_stream.clone(), create_test_policy_engine(), create_test_scheduler(event_stream));
+    let server = Server::new(
+        config.clone(),
+        event_stream.clone(),
+        create_test_policy_engine(),
+        create_test_scheduler(event_stream.clone()),
+        create_test_worker_manager(config, event_stream),
+    );
 
     // Start server in background
     let server_handle = tokio::spawn(async move { server.run().await });
@@ -466,8 +493,15 @@ async fn test_graceful_shutdown_behavior() {
     );
     let event_stream = Arc::new(event_stream);
     let event_stream_clone = event_stream.clone();
+    let config = Arc::new(config);
 
-    let server = Server::new(Arc::new(config), event_stream.clone(), create_test_policy_engine(), create_test_scheduler(event_stream));
+    let server = Server::new(
+        config.clone(),
+        event_stream.clone(),
+        create_test_policy_engine(),
+        create_test_scheduler(event_stream.clone()),
+        create_test_worker_manager(config, event_stream),
+    );
 
     // Create a oneshot channel to trigger graceful shutdown
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
@@ -583,8 +617,15 @@ async fn test_event_stream_backpressure() {
     );
     let event_stream = Arc::new(event_stream);
     let event_stream_clone = event_stream.clone();
+    let config = Arc::new(config);
 
-    let server = Server::new(Arc::new(config), event_stream.clone(), create_test_policy_engine(), create_test_scheduler(event_stream));
+    let server = Server::new(
+        config.clone(),
+        event_stream.clone(),
+        create_test_policy_engine(),
+        create_test_scheduler(event_stream.clone()),
+        create_test_worker_manager(config, event_stream),
+    );
 
     // Start server in background
     let server_handle = tokio::spawn(async move { server.run().await });
@@ -649,8 +690,15 @@ async fn test_multiple_websocket_clients() {
     );
     let event_stream = Arc::new(event_stream);
     let event_stream_clone = event_stream.clone();
+    let config = Arc::new(config);
 
-    let server = Server::new(Arc::new(config), event_stream.clone(), create_test_policy_engine(), create_test_scheduler(event_stream));
+    let server = Server::new(
+        config.clone(),
+        event_stream.clone(),
+        create_test_policy_engine(),
+        create_test_scheduler(event_stream.clone()),
+        create_test_worker_manager(config, event_stream),
+    );
 
     // Start server in background
     let server_handle = tokio::spawn(async move { server.run().await });
@@ -717,12 +765,14 @@ async fn test_health_endpoint_status() {
         config.event_max_payload_bytes,
     );
     let event_stream = Arc::new(event_stream);
+    let config = Arc::new(config);
 
     let server = Server::new(
-        Arc::new(config),
+        config.clone(),
         event_stream.clone(),
         create_test_policy_engine(),
-        create_test_scheduler(event_stream),
+        create_test_scheduler(event_stream.clone()),
+        create_test_worker_manager(config, event_stream),
     );
 
     // Start server in background
@@ -842,18 +892,23 @@ async fn test_database_server_startup() {
         Duration::from_secs(3600),
     )));
 
-    let server = Server::new(Arc::new(config), event_stream, policy_engine, scheduler);
+    let config = Arc::new(config);
+    let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
+    let server = Server::new(
+        config,
+        event_stream,
+        policy_engine,
+        scheduler,
+        worker_manager,
+    );
 
     // Start server in background
     let server_handle = tokio::spawn(async move { server.run().await });
 
     // Wait for server to be ready
-    assert!(
-        wait_for_server(port, 10).await,
-        "Server should become ready"
-    );
+    assert!(wait_for_server(port, 5).await, "Server should become ready");
 
-    // Query health endpoint
+    // Query health endpoint - should be healthy with database
     let client = reqwest::Client::new();
     let resp = client
         .get(format!("http://127.0.0.1:{}/v1/health", port))
@@ -916,7 +971,15 @@ async fn test_database_connection_failure() {
         event_stream.clone(),
         Duration::from_secs(3600),
     )));
-    let server = Server::new(Arc::new(config), event_stream, policy_engine, scheduler);
+    let config = Arc::new(config);
+    let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
+    let server = Server::new(
+        config,
+        event_stream,
+        policy_engine,
+        scheduler,
+        worker_manager,
+    );
 
     // Start server in background
     let server_handle = tokio::spawn(async move { server.run().await });
@@ -1010,7 +1073,15 @@ async fn test_database_reconnection() {
         event_stream.clone(),
         Duration::from_secs(3600),
     )));
-    let server = Server::new(Arc::new(config), event_stream, policy_engine, scheduler);
+    let config = Arc::new(config);
+    let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
+    let server = Server::new(
+        config,
+        event_stream,
+        policy_engine,
+        scheduler,
+        worker_manager,
+    );
 
     // Start server in background
     let server_handle = tokio::spawn(async move { server.run().await });
@@ -1143,7 +1214,15 @@ async fn test_database_reconnection_under_load() {
         event_stream.clone(),
         Duration::from_secs(3600),
     )));
-    let server = Server::new(Arc::new(config), event_stream, policy_engine, scheduler);
+    let config = Arc::new(config);
+    let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
+    let server = Server::new(
+        config,
+        event_stream,
+        policy_engine,
+        scheduler,
+        worker_manager,
+    );
 
     // Start server in background
     let server_handle = tokio::spawn(async move { server.run().await });
