@@ -1,17 +1,154 @@
-//! Carnelian OS Core Orchestrator
+//! 🔥 Carnelian OS Core Orchestrator
 //!
 //! The core orchestrator manages task scheduling, worker coordination,
 //! capability-based security, event streaming, and local model inference.
+//!
+//! # Logging System
+//!
+//! Carnelian uses the `tracing` crate for structured logging with the following features:
+//!
+//! ## Log Levels
+//!
+//! - **ERROR**: Unrecoverable failures requiring immediate attention
+//! - **WARN**: Degraded state or recoverable issues (e.g., database reconnection)
+//! - **INFO**: Lifecycle events (startup, shutdown, configuration loaded)
+//! - **DEBUG**: Detailed operational information (event storage, subscriptions)
+//! - **TRACE**: Verbose debugging (sampling decisions, individual event processing)
+//!
+//! ## Environment-Based Formatting
+//!
+//! - **Production** (`CARNELIAN_ENV=production`): JSON output with full span context
+//! - **Development** (default): Pretty-printed output with colors and line numbers
+//!
+//! ## Correlation IDs
+//!
+//! All HTTP requests receive a UUID v7 correlation ID via `CorrelationIdMakeSpan`.
+//! Propagate correlation IDs through operations using spans:
+//!
+//! ```ignore
+//! let span = tracing::info_span!("operation", correlation_id = %id);
+//! let _guard = span.enter();
+//! // All logs within this scope include correlation_id
+//! ```
+//!
+//! ## Configuration
+//!
+//! | Variable | Description |
+//! |----------|-------------|
+//! | `LOG_LEVEL` | Default log level (ERROR, WARN, INFO, DEBUG, TRACE) |
+//! | `RUST_LOG` | Per-module filtering (e.g., `carnelian_core=debug,sqlx=warn`) |
+//! | `CARNELIAN_ENV` | Environment mode (`production` or `development`) |
+//!
+//! ## Structured Logging Best Practices
+//!
+//! Use structured fields instead of string interpolation:
+//!
+//! ```ignore
+//! // Good: structured fields
+//! tracing::info!(user_id = %id, action = "login", "User authenticated");
+//!
+//! // Avoid: string interpolation
+//! tracing::info!("User {} authenticated with action login", id);
+//! ```
 
 pub mod config;
 pub mod db;
+pub mod events;
 pub mod ledger;
 pub mod policy;
 pub mod scheduler;
 pub mod server;
 pub mod worker;
 
+use std::env;
+use tracing_subscriber::{
+    fmt::{self, format::FmtSpan},
+    layer::SubscriberExt,
+    util::SubscriberInitExt,
+    EnvFilter, Layer,
+};
+
 pub use carnelian_common::{Error, Result};
+pub use config::Config;
+pub use events::{EventStream, EventStreamStats, PriorityRingBuffer};
+pub use policy::{CapabilityGrant, PolicyEngine};
+pub use server::{AppState, Server};
 
 /// Core orchestrator version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Initialize the global tracing subscriber with environment-based formatting.
+///
+/// # Arguments
+///
+/// * `log_level` - Default log level (ERROR, WARN, INFO, DEBUG, TRACE)
+///
+/// # Environment Variables
+///
+/// * `CARNELIAN_ENV` or `RUST_ENV` - Set to "production" for JSON output, otherwise pretty output
+/// * `RUST_LOG` - Override per-module log levels (e.g., `carnelian_core=debug,sqlx=warn`)
+///
+/// # Errors
+///
+/// Returns an error if the global subscriber has already been initialized.
+///
+/// # Example
+///
+/// ```ignore
+/// carnelian_core::init_tracing("INFO")?;
+/// ```
+pub fn init_tracing(log_level: &str) -> Result<()> {
+    // Detect environment: production uses JSON, development uses pretty
+    let is_production = env::var("CARNELIAN_ENV")
+        .or_else(|_| env::var("RUST_ENV"))
+        .map(|v| v.to_lowercase() == "production")
+        .unwrap_or(false);
+
+    // Build EnvFilter with provided log level as default, allow RUST_LOG overrides
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new(log_level));
+
+    if is_production {
+        // Production: JSON output with full span context
+        let json_layer = fmt::layer()
+            .json()
+            .with_current_span(true)
+            .with_span_list(true)
+            .with_ansi(false)
+            .with_target(true)
+            .with_thread_ids(true)
+            .with_file(true)
+            .with_line_number(true)
+            .with_filter(env_filter);
+
+        tracing_subscriber::registry()
+            .with(json_layer)
+            .try_init()
+            .map_err(|e| Error::Config(format!("Failed to initialize tracing: {}", e)))?;
+    } else {
+        // Development: pretty output with colors
+        let pretty_layer = fmt::layer()
+            .pretty()
+            .with_ansi(true)
+            .with_target(true)
+            .with_thread_ids(true)
+            .with_file(true)
+            .with_line_number(true)
+            .with_span_events(FmtSpan::CLOSE)
+            .with_filter(env_filter);
+
+        tracing_subscriber::registry()
+            .with(pretty_layer)
+            .try_init()
+            .map_err(|e| Error::Config(format!("Failed to initialize tracing: {}", e)))?;
+    }
+
+    tracing::info!(
+        version = VERSION,
+        environment = if is_production { "production" } else { "development" },
+        log_level = log_level,
+        "🔥 Carnelian tracing initialized"
+    );
+
+    Ok(())
+}
