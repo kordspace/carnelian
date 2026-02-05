@@ -1,3 +1,14 @@
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::needless_pass_by_value)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(clippy::doc_markdown)]
+#![allow(clippy::collapsible_match)]
+#![allow(clippy::len_zero)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::match_same_arms)]
+#![allow(clippy::manual_assert)]
+#![allow(clippy::cast_precision_loss)]
+
 //! Comprehensive Integration Tests for Carnelian Core
 //!
 //! These tests validate the complete system behavior under realistic conditions:
@@ -32,9 +43,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
-use carnelian_core::{Config, EventStream, Server};
+use carnelian_core::{Config, EventStream, PolicyEngine, Server};
 use futures_util::StreamExt;
-use testcontainers::{runners::AsyncRunner, GenericImage, ImageExt};
+use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
 use tokio::sync::oneshot;
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
@@ -43,6 +54,15 @@ use tokio_tungstenite::tungstenite::Message;
 fn allocate_random_port() -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind to random port");
     listener.local_addr().unwrap().port()
+}
+
+/// Create a lazy PolicyEngine for tests that don't need database access
+fn create_test_policy_engine() -> Arc<PolicyEngine> {
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_lazy("postgresql://test:test@localhost:5432/test")
+        .expect("Failed to create lazy pool");
+    Arc::new(PolicyEngine::new(pool))
 }
 
 /// Create a test configuration with in-memory settings (no database)
@@ -105,16 +125,21 @@ async fn test_full_server_startup() {
         config.event_max_payload_bytes,
     );
 
-    let server = Server::new(Arc::new(config), Arc::new(event_stream));
+    let server = Server::new(
+        Arc::new(config),
+        Arc::new(event_stream),
+        create_test_policy_engine(),
+    );
 
     // Start server in background
-    let server_handle = tokio::spawn(async move {
-        server.run().await
-    });
+    let server_handle = tokio::spawn(async move { server.run().await });
 
     // Wait for server to be ready
     let ready = timeout(Duration::from_secs(10), wait_for_server(port, 5)).await;
-    assert!(ready.is_ok() && ready.unwrap(), "Server should become ready");
+    assert!(
+        ready.is_ok() && ready.unwrap(),
+        "Server should become ready"
+    );
 
     // Verify health endpoint
     let client = reqwest::Client::new();
@@ -159,12 +184,10 @@ async fn test_websocket_event_reception() {
     let event_stream = Arc::new(event_stream);
     let event_stream_clone = event_stream.clone();
 
-    let server = Server::new(Arc::new(config), event_stream);
+    let server = Server::new(Arc::new(config), event_stream, create_test_policy_engine());
 
     // Start server in background
-    let server_handle = tokio::spawn(async move {
-        server.run().await
-    });
+    let server_handle = tokio::spawn(async move { server.run().await });
 
     // Wait for server to be ready
     assert!(wait_for_server(port, 5).await, "Server should become ready");
@@ -201,10 +224,13 @@ async fn test_websocket_event_reception() {
         while received_count < test_events.len() {
             if let Some(Ok(msg)) = read.next().await {
                 if let Message::Text(text) = msg {
-                    let event: EventEnvelope = serde_json::from_str(&text)
-                        .expect("Should deserialize event");
+                    let event: EventEnvelope =
+                        serde_json::from_str(&text).expect("Should deserialize event");
                     // Verify event was deserialized correctly
-                    assert!(format!("{:?}", event.event_id).len() > 0, "Event ID should be present");
+                    assert!(
+                        format!("{:?}", event.event_id).len() > 0,
+                        "Event ID should be present"
+                    );
                     received_count += 1;
                 }
             }
@@ -213,7 +239,11 @@ async fn test_websocket_event_reception() {
     .await;
 
     assert!(result.is_ok(), "Should receive all events within timeout");
-    assert_eq!(received_count, test_events.len(), "Should receive all published events");
+    assert_eq!(
+        received_count,
+        test_events.len(),
+        "Should receive all published events"
+    );
 
     // Clean up
     server_handle.abort();
@@ -242,12 +272,10 @@ async fn test_load_handling_10k_events_per_minute() {
     let event_stream = Arc::new(event_stream);
     let event_stream_clone = event_stream.clone();
 
-    let server = Server::new(Arc::new(config), event_stream);
+    let server = Server::new(Arc::new(config), event_stream, create_test_policy_engine());
 
     // Start server in background
-    let server_handle = tokio::spawn(async move {
-        server.run().await
-    });
+    let server_handle = tokio::spawn(async move { server.run().await });
 
     // Wait for server to be ready
     assert!(wait_for_server(port, 5).await, "Server should become ready");
@@ -276,7 +304,8 @@ async fn test_load_handling_10k_events_per_minute() {
                 Ok(Message::Text(text)) => {
                     received_count_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     // Count ERROR events received
-                    if text.contains("\"level\":\"Error\"") || text.contains("\"level\":\"ERROR\"") {
+                    if text.contains("\"level\":\"Error\"") || text.contains("\"level\":\"ERROR\"")
+                    {
                         error_received_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
                 }
@@ -321,7 +350,10 @@ async fn test_load_handling_10k_events_per_minute() {
 
         // Check client is still connected every 1000 events
         if i % 1000 == 0 && !client_connected.load(std::sync::atomic::Ordering::Relaxed) {
-            panic!("WebSocket client disconnected during load test at event {}", i);
+            panic!(
+                "WebSocket client disconnected during load test at event {}",
+                i
+            );
         }
     }
     let elapsed = start.elapsed();
@@ -336,17 +368,30 @@ async fn test_load_handling_10k_events_per_minute() {
 
     println!("=== Load Test Results ===");
     println!("Published {} events in {:?}", total_events, elapsed);
-    println!("Events/second: {:.1}", total_events as f64 / elapsed.as_secs_f64());
+    println!(
+        "Events/second: {:.1}",
+        total_events as f64 / elapsed.as_secs_f64()
+    );
     println!("Received {} events via WebSocket", final_count);
-    println!("ERROR events: published={}, received={}", error_published, final_error_received);
+    println!(
+        "ERROR events: published={}, received={}",
+        error_published, final_error_received
+    );
     println!("Client still connected: {}", still_connected);
     println!("Buffer stats: {:?}", stats);
 
     // ASSERTION 1: WebSocket client stays connected
-    assert!(still_connected, "WebSocket client should stay connected throughout load test");
+    assert!(
+        still_connected,
+        "WebSocket client should stay connected throughout load test"
+    );
 
     // ASSERTION 2: ERROR events are never dropped
-    let error_dropped = stats.dropped_counts.get(&EventLevel::Error).copied().unwrap_or(0);
+    let error_dropped = stats
+        .dropped_counts
+        .get(&EventLevel::Error)
+        .copied()
+        .unwrap_or(0);
     assert_eq!(error_dropped, 0, "ERROR events should never be dropped");
 
     // ASSERTION 3: All ERROR events should be received (they have highest priority)
@@ -357,9 +402,20 @@ async fn test_load_handling_10k_events_per_minute() {
     );
 
     // ASSERTION 4: Lower-priority events may be sampled/dropped (backpressure working)
-    let trace_dropped = stats.dropped_counts.get(&EventLevel::Trace).copied().unwrap_or(0);
-    let debug_dropped = stats.dropped_counts.get(&EventLevel::Debug).copied().unwrap_or(0);
-    println!("TRACE dropped: {}, DEBUG dropped: {}", trace_dropped, debug_dropped);
+    let trace_dropped = stats
+        .dropped_counts
+        .get(&EventLevel::Trace)
+        .copied()
+        .unwrap_or(0);
+    let debug_dropped = stats
+        .dropped_counts
+        .get(&EventLevel::Debug)
+        .copied()
+        .unwrap_or(0);
+    println!(
+        "TRACE dropped: {}, DEBUG dropped: {}",
+        trace_dropped, debug_dropped
+    );
 
     // ASSERTION 5: Reasonable throughput - at least 30% of events received
     // (accounting for sampling of low-priority events)
@@ -396,16 +452,18 @@ async fn test_graceful_shutdown_behavior() {
     let event_stream = Arc::new(event_stream);
     let event_stream_clone = event_stream.clone();
 
-    let server = Server::new(Arc::new(config), event_stream);
+    let server = Server::new(Arc::new(config), event_stream, create_test_policy_engine());
 
     // Create a oneshot channel to trigger graceful shutdown
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
 
     // Start server with custom shutdown signal
     let server_handle = tokio::spawn(async move {
-        server.run_with_shutdown(async {
-            let _ = shutdown_rx.await;
-        }).await
+        server
+            .run_with_shutdown(async {
+                let _ = shutdown_rx.await;
+            })
+            .await
     });
 
     // Wait for server to be ready
@@ -428,7 +486,10 @@ async fn test_graceful_shutdown_behavior() {
 
     // Receive the event
     let receive_result = timeout(Duration::from_secs(2), read.next()).await;
-    assert!(receive_result.is_ok(), "Should receive event before shutdown");
+    assert!(
+        receive_result.is_ok(),
+        "Should receive event before shutdown"
+    );
 
     // Trigger graceful shutdown
     shutdown_tx.send(()).expect("Should send shutdown signal");
@@ -449,17 +510,30 @@ async fn test_graceful_shutdown_behavior() {
             }
         }
         true // Stream ended
-    }).await;
+    })
+    .await;
 
-    assert!(ws_close_result.is_ok(), "WebSocket should close within timeout");
+    assert!(
+        ws_close_result.is_ok(),
+        "WebSocket should close within timeout"
+    );
 
     // Verify server task completes gracefully (not aborted)
     let shutdown_result = timeout(Duration::from_secs(5), server_handle).await;
-    assert!(shutdown_result.is_ok(), "Server should shut down within timeout");
+    assert!(
+        shutdown_result.is_ok(),
+        "Server should shut down within timeout"
+    );
 
     let server_result = shutdown_result.unwrap();
-    assert!(server_result.is_ok(), "Server task should complete without panic");
-    assert!(server_result.unwrap().is_ok(), "Server should shut down successfully");
+    assert!(
+        server_result.is_ok(),
+        "Server task should complete without panic"
+    );
+    assert!(
+        server_result.unwrap().is_ok(),
+        "Server should shut down successfully"
+    );
 
     // Verify server is no longer responding
     let client = reqwest::Client::builder()
@@ -472,7 +546,10 @@ async fn test_graceful_shutdown_behavior() {
         .send()
         .await;
 
-    assert!(health_result.is_err(), "Server should not respond after shutdown");
+    assert!(
+        health_result.is_err(),
+        "Server should not respond after shutdown"
+    );
 }
 
 /// Test event stream backpressure and priority handling
@@ -492,12 +569,10 @@ async fn test_event_stream_backpressure() {
     let event_stream = Arc::new(event_stream);
     let event_stream_clone = event_stream.clone();
 
-    let server = Server::new(Arc::new(config), event_stream);
+    let server = Server::new(Arc::new(config), event_stream, create_test_policy_engine());
 
     // Start server in background
-    let server_handle = tokio::spawn(async move {
-        server.run().await
-    });
+    let server_handle = tokio::spawn(async move { server.run().await });
 
     // Wait for server to be ready
     assert!(wait_for_server(port, 5).await, "Server should become ready");
@@ -518,18 +593,22 @@ async fn test_event_stream_backpressure() {
     let stats = event_stream_clone.stats();
 
     // Verify ERROR events are never dropped
-    let error_dropped = stats.dropped_counts.get(&EventLevel::Error).copied().unwrap_or(0);
+    let error_dropped = stats
+        .dropped_counts
+        .get(&EventLevel::Error)
+        .copied()
+        .unwrap_or(0);
     assert_eq!(error_dropped, 0, "ERROR events should never be dropped");
 
     // Verify some lower-priority events were dropped (backpressure working)
     let total_dropped: usize = stats.dropped_counts.values().copied().sum();
-    assert!(total_dropped > 0, "Some events should be dropped due to backpressure");
+    assert!(
+        total_dropped > 0,
+        "Some events should be dropped due to backpressure"
+    );
 
     // Verify buffer is at or near capacity
-    assert!(
-        stats.buffer_len <= 100,
-        "Buffer should not exceed capacity"
-    );
+    assert!(stats.buffer_len <= 100, "Buffer should not exceed capacity");
 
     // Clean up
     server_handle.abort();
@@ -549,12 +628,10 @@ async fn test_multiple_websocket_clients() {
     let event_stream = Arc::new(event_stream);
     let event_stream_clone = event_stream.clone();
 
-    let server = Server::new(Arc::new(config), event_stream);
+    let server = Server::new(Arc::new(config), event_stream, create_test_policy_engine());
 
     // Start server in background
-    let server_handle = tokio::spawn(async move {
-        server.run().await
-    });
+    let server_handle = tokio::spawn(async move { server.run().await });
 
     // Wait for server to be ready
     assert!(wait_for_server(port, 5).await, "Server should become ready");
@@ -574,7 +651,11 @@ async fn test_multiple_websocket_clients() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     // Verify subscriber count
-    assert_eq!(event_stream_clone.subscriber_count(), 3, "Should have 3 subscribers");
+    assert_eq!(
+        event_stream_clone.subscriber_count(),
+        3,
+        "Should have 3 subscribers"
+    );
 
     // Publish an event
     let event = create_test_event(EventLevel::Info, "Broadcast test");
@@ -585,9 +666,18 @@ async fn test_multiple_websocket_clients() {
     let recv2 = timeout(Duration::from_secs(2), read2.next()).await;
     let recv3 = timeout(Duration::from_secs(2), read3.next()).await;
 
-    assert!(recv1.is_ok() && recv1.unwrap().is_some(), "Client 1 should receive event");
-    assert!(recv2.is_ok() && recv2.unwrap().is_some(), "Client 2 should receive event");
-    assert!(recv3.is_ok() && recv3.unwrap().is_some(), "Client 3 should receive event");
+    assert!(
+        recv1.is_ok() && recv1.unwrap().is_some(),
+        "Client 1 should receive event"
+    );
+    assert!(
+        recv2.is_ok() && recv2.unwrap().is_some(),
+        "Client 2 should receive event"
+    );
+    assert!(
+        recv3.is_ok() && recv3.unwrap().is_some(),
+        "Client 3 should receive event"
+    );
 
     // Clean up
     server_handle.abort();
@@ -605,12 +695,14 @@ async fn test_health_endpoint_status() {
         config.event_max_payload_bytes,
     );
 
-    let server = Server::new(Arc::new(config), Arc::new(event_stream));
+    let server = Server::new(
+        Arc::new(config),
+        Arc::new(event_stream),
+        create_test_policy_engine(),
+    );
 
     // Start server in background
-    let server_handle = tokio::spawn(async move {
-        server.run().await
-    });
+    let server_handle = tokio::spawn(async move { server.run().await });
 
     // Wait for server to be ready
     assert!(wait_for_server(port, 5).await, "Server should become ready");
@@ -649,9 +741,12 @@ async fn test_health_endpoint_status() {
 
 /// Create a PostgreSQL container for testing
 async fn create_postgres_container() -> testcontainers::ContainerAsync<GenericImage> {
-    let image = GenericImage::new("postgres", "16-alpine")
-        .with_wait_for(testcontainers::core::WaitFor::message_on_stderr("database system is ready to accept connections"));
-    
+    let image = GenericImage::new("postgres", "16-alpine").with_wait_for(
+        testcontainers::core::WaitFor::message_on_stderr(
+            "database system is ready to accept connections",
+        ),
+    );
+
     image
         .with_env_var("POSTGRES_USER", "test")
         .with_env_var("POSTGRES_PASSWORD", "test")
@@ -663,7 +758,10 @@ async fn create_postgres_container() -> testcontainers::ContainerAsync<GenericIm
 
 /// Get the database URL from a running container
 async fn get_database_url(container: &testcontainers::ContainerAsync<GenericImage>) -> String {
-    let port = container.get_host_port_ipv4(5432).await.expect("Failed to get port");
+    let port = container
+        .get_host_port_ipv4(5432)
+        .await
+        .expect("Failed to get port");
     format!("postgresql://test:test@127.0.0.1:{}/carnelian_test", port)
 }
 
@@ -686,14 +784,21 @@ async fn test_database_server_startup() {
     config.database_url = database_url;
 
     // Connect to database
-    config.connect_database().await.expect("Should connect to database");
+    config
+        .connect_database()
+        .await
+        .expect("Should connect to database");
 
     // Run migrations
     let pool = config.pool().expect("Should have pool");
-    carnelian_core::db::run_migrations(pool).await.expect("Should run migrations");
+    carnelian_core::db::run_migrations(pool)
+        .await
+        .expect("Should run migrations");
 
     // Verify database health
-    let is_healthy = carnelian_core::db::check_database_health(pool).await.expect("Health check should succeed");
+    let is_healthy = carnelian_core::db::check_database_health(pool)
+        .await
+        .expect("Health check should succeed");
     assert!(is_healthy, "Database should be healthy");
 
     let event_stream = EventStream::with_max_payload(
@@ -702,15 +807,19 @@ async fn test_database_server_startup() {
         config.event_max_payload_bytes,
     );
 
-    let server = Server::new(Arc::new(config), Arc::new(event_stream));
+    // Create PolicyEngine with the real database pool
+    let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
+
+    let server = Server::new(Arc::new(config), Arc::new(event_stream), policy_engine);
 
     // Start server in background
-    let server_handle = tokio::spawn(async move {
-        server.run().await
-    });
+    let server_handle = tokio::spawn(async move { server.run().await });
 
     // Wait for server to be ready
-    assert!(wait_for_server(port, 10).await, "Server should become ready");
+    assert!(
+        wait_for_server(port, 10).await,
+        "Server should become ready"
+    );
 
     // Query health endpoint
     let client = reqwest::Client::new();
@@ -756,7 +865,11 @@ async fn test_database_connection_failure() {
     config.database_url = database_url.clone();
 
     // Connect to database first
-    config.connect_database().await.expect("Should connect to database");
+    config
+        .connect_database()
+        .await
+        .expect("Should connect to database");
+    let pool = config.pool().expect("Should have pool").clone();
 
     let event_stream = EventStream::with_max_payload(
         config.event_buffer_capacity,
@@ -764,15 +877,17 @@ async fn test_database_connection_failure() {
         config.event_max_payload_bytes,
     );
 
-    let server = Server::new(Arc::new(config), Arc::new(event_stream));
+    let policy_engine = Arc::new(PolicyEngine::new(pool));
+    let server = Server::new(Arc::new(config), Arc::new(event_stream), policy_engine);
 
     // Start server in background
-    let server_handle = tokio::spawn(async move {
-        server.run().await
-    });
+    let server_handle = tokio::spawn(async move { server.run().await });
 
     // Wait for server to be ready
-    assert!(wait_for_server(port, 10).await, "Server should become ready");
+    assert!(
+        wait_for_server(port, 10).await,
+        "Server should become ready"
+    );
 
     // Verify initial healthy state
     let client = reqwest::Client::new();
@@ -832,11 +947,16 @@ async fn test_database_reconnection() {
     config.database_url = database_url.clone();
 
     // Connect to database
-    config.connect_database().await.expect("Should connect to database");
+    config
+        .connect_database()
+        .await
+        .expect("Should connect to database");
 
     // Run migrations
     let pool = config.pool().expect("Should have pool");
-    carnelian_core::db::run_migrations(pool).await.expect("Should run migrations");
+    carnelian_core::db::run_migrations(pool)
+        .await
+        .expect("Should run migrations");
 
     let event_stream = EventStream::with_max_payload(
         config.event_buffer_capacity,
@@ -846,15 +966,17 @@ async fn test_database_reconnection() {
     let event_stream = Arc::new(event_stream);
     let event_stream_clone = event_stream.clone();
 
-    let server = Server::new(Arc::new(config), event_stream);
+    let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
+    let server = Server::new(Arc::new(config), event_stream, policy_engine);
 
     // Start server in background
-    let server_handle = tokio::spawn(async move {
-        server.run().await
-    });
+    let server_handle = tokio::spawn(async move { server.run().await });
 
     // Wait for server to be ready
-    assert!(wait_for_server(port, 10).await, "Server should become ready");
+    assert!(
+        wait_for_server(port, 10).await,
+        "Server should become ready"
+    );
 
     // Connect WebSocket client
     let ws_url = format!("ws://127.0.0.1:{}/v1/events/ws", port);
@@ -872,7 +994,10 @@ async fn test_database_reconnection() {
     event_stream_clone.publish(event);
 
     let recv = timeout(Duration::from_secs(2), read.next()).await;
-    assert!(recv.is_ok() && recv.unwrap().is_some(), "Should receive event before failure");
+    assert!(
+        recv.is_ok() && recv.unwrap().is_some(),
+        "Should receive event before failure"
+    );
 
     // Verify initial healthy state
     let client = reqwest::Client::new();
@@ -907,7 +1032,10 @@ async fn test_database_reconnection() {
     event_stream_clone.publish(event);
 
     let recv = timeout(Duration::from_secs(2), read.next()).await;
-    assert!(recv.is_ok() && recv.unwrap().is_some(), "Should receive event during database failure");
+    assert!(
+        recv.is_ok() && recv.unwrap().is_some(),
+        "Should receive event during database failure"
+    );
 
     // Start a new PostgreSQL container (simulates database coming back)
     println!("Starting new PostgreSQL container...");
@@ -922,7 +1050,10 @@ async fn test_database_reconnection() {
     event_stream_clone.publish(event);
 
     let recv = timeout(Duration::from_secs(2), read.next()).await;
-    assert!(recv.is_ok() && recv.unwrap().is_some(), "Should receive event after database restart");
+    assert!(
+        recv.is_ok() && recv.unwrap().is_some(),
+        "Should receive event after database restart"
+    );
 
     // Clean up
     server_handle.abort();
@@ -949,7 +1080,11 @@ async fn test_database_reconnection_under_load() {
     config.event_buffer_capacity = 10_000;
 
     // Connect to database
-    config.connect_database().await.expect("Should connect to database");
+    config
+        .connect_database()
+        .await
+        .expect("Should connect to database");
+    let pool = config.pool().expect("Should have pool").clone();
 
     let event_stream = EventStream::with_max_payload(
         config.event_buffer_capacity,
@@ -959,15 +1094,17 @@ async fn test_database_reconnection_under_load() {
     let event_stream = Arc::new(event_stream);
     let event_stream_clone = event_stream.clone();
 
-    let server = Server::new(Arc::new(config), event_stream);
+    let policy_engine = Arc::new(PolicyEngine::new(pool));
+    let server = Server::new(Arc::new(config), event_stream, policy_engine);
 
     // Start server in background
-    let server_handle = tokio::spawn(async move {
-        server.run().await
-    });
+    let server_handle = tokio::spawn(async move { server.run().await });
 
     // Wait for server to be ready
-    assert!(wait_for_server(port, 10).await, "Server should become ready");
+    assert!(
+        wait_for_server(port, 10).await,
+        "Server should become ready"
+    );
 
     // Connect WebSocket client
     let ws_url = format!("ws://127.0.0.1:{}/v1/events/ws", port);
@@ -1008,7 +1145,10 @@ async fn test_database_reconnection_under_load() {
 
     let count_before_failure = received_count.load(std::sync::atomic::Ordering::Relaxed);
     println!("Events received before failure: {}", count_before_failure);
-    assert!(count_before_failure > 0, "Should receive events before failure");
+    assert!(
+        count_before_failure > 0,
+        "Should receive events before failure"
+    );
 
     // Stop the PostgreSQL container
     println!("Stopping PostgreSQL container during load...");
@@ -1018,7 +1158,10 @@ async fn test_database_reconnection_under_load() {
     tokio::time::sleep(Duration::from_secs(5)).await;
 
     let count_during_failure = received_count.load(std::sync::atomic::Ordering::Relaxed);
-    println!("Events received during failure: {}", count_during_failure - count_before_failure);
+    println!(
+        "Events received during failure: {}",
+        count_during_failure - count_before_failure
+    );
     assert!(
         count_during_failure > count_before_failure,
         "Should continue receiving events during database failure"
@@ -1043,7 +1186,10 @@ async fn test_database_reconnection_under_load() {
     tokio::time::sleep(Duration::from_secs(5)).await;
 
     let count_after_restart = received_count.load(std::sync::atomic::Ordering::Relaxed);
-    println!("Events received after restart: {}", count_after_restart - count_during_failure);
+    println!(
+        "Events received after restart: {}",
+        count_after_restart - count_during_failure
+    );
     assert!(
         count_after_restart > count_during_failure,
         "Should continue receiving events after database restart"
@@ -1071,11 +1217,13 @@ async fn test_migration_seed_data() {
         .expect("Failed to connect to database");
 
     // Run migrations
-    carnelian_core::db::run_migrations(&pool).await.expect("Migrations should succeed");
+    carnelian_core::db::run_migrations(&pool)
+        .await
+        .expect("Migrations should succeed");
 
     // Verify Lian identity exists
     let lian: (String, String, String, Option<String>) = sqlx::query_as(
-        "SELECT name, pronouns, identity_type, soul_file_path FROM identities WHERE name = 'Lian'"
+        "SELECT name, pronouns, identity_type, soul_file_path FROM identities WHERE name = 'Lian'",
     )
     .fetch_one(&pool)
     .await
@@ -1087,24 +1235,31 @@ async fn test_migration_seed_data() {
     assert_eq!(lian.3, Some("souls/lian.md".to_string()));
 
     // Verify capabilities exist
-    let capability_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM capabilities"
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Should query capabilities");
+    let capability_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM capabilities")
+        .fetch_one(&pool)
+        .await
+        .expect("Should query capabilities");
 
-    assert!(capability_count >= 20, "Should have at least 20 default capabilities, got {}", capability_count);
+    assert!(
+        capability_count >= 20,
+        "Should have at least 20 default capabilities, got {}",
+        capability_count
+    );
 
     // Verify specific required capabilities (including requested contract keys)
     let required_capabilities = vec![
-        "fs.read", "fs.write", "net.http", 
-        "process.spawn", "model.inference",
-        "exec.shell", "model.local", "model.remote"  // Requested capability keys
+        "fs.read",
+        "fs.write",
+        "net.http",
+        "process.spawn",
+        "model.inference",
+        "exec.shell",
+        "model.local",
+        "model.remote", // Requested capability keys
     ];
     for cap in required_capabilities {
         let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM capabilities WHERE capability_key = $1)"
+            "SELECT EXISTS(SELECT 1 FROM capabilities WHERE capability_key = $1)",
         )
         .bind(cap)
         .fetch_one(&pool)
@@ -1115,18 +1270,19 @@ async fn test_migration_seed_data() {
     }
 
     // Verify Ollama provider exists
-    let ollama: (String, String) = sqlx::query_as(
-        "SELECT provider_type, name FROM model_providers WHERE name = 'ollama'"
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Ollama provider should exist");
+    let ollama: (String, String) =
+        sqlx::query_as("SELECT provider_type, name FROM model_providers WHERE name = 'ollama'")
+            .fetch_one(&pool)
+            .await
+            .expect("Ollama provider should exist");
 
     assert_eq!(ollama.0, "local");
     assert_eq!(ollama.1, "ollama");
 
     // Verify migrations are idempotent (running again should not error)
-    carnelian_core::db::run_migrations(&pool).await.expect("Running migrations again should succeed (idempotent)");
+    carnelian_core::db::run_migrations(&pool)
+        .await
+        .expect("Running migrations again should succeed (idempotent)");
 
     println!("✓ All seed data verified successfully");
 }

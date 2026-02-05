@@ -4,19 +4,19 @@
 //! for real-time event streaming to UI clients.
 
 use axum::{
-    extract::{ws::Message, State, WebSocketUpgrade},
+    Json, Router,
+    extract::{State, WebSocketUpgrade, ws::Message},
     response::IntoResponse,
     routing::get,
-    Json, Router,
 };
-use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
 use carnelian_common::Result;
-use serde::Serialize;
+use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
 use futures_util::{SinkExt, StreamExt};
-use http::{header, Method};
+use http::{Method, header};
+use serde::Serialize;
 use serde_json::json;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tower_http::{
@@ -29,7 +29,7 @@ use tower_http::{
 use tracing::{Level, Span};
 use uuid::Uuid;
 
-use crate::{db, policy::PolicyEngine, Config, EventStream};
+use crate::{Config, EventStream, db, policy::PolicyEngine};
 
 /// Health check response
 #[derive(Debug, Serialize)]
@@ -260,11 +260,7 @@ fn build_router(state: AppState) -> Router {
                     Method::DELETE,
                     Method::OPTIONS,
                 ])
-                .allow_headers([
-                    header::CONTENT_TYPE,
-                    header::AUTHORIZATION,
-                    header::ACCEPT,
-                ]),
+                .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::ACCEPT]),
         )
         // Request tracing with correlation IDs (UUID v7)
         .layer(
@@ -328,10 +324,7 @@ async fn status_handler(State(_state): State<AppState>) -> impl IntoResponse {
 }
 
 /// WebSocket upgrade handler for event streaming.
-async fn ws_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(|socket| handle_websocket(socket, state))
 }
 
@@ -469,7 +462,13 @@ mod tests {
     fn create_test_state() -> AppState {
         let config = Arc::new(Config::default());
         let event_stream = Arc::new(EventStream::new(100, 10));
-        AppState::new(config, event_stream)
+        // Create a lazy pool that won't connect until used - tests that don't hit DB will work
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .connect_lazy("postgresql://test:test@localhost:5432/test")
+            .expect("Failed to create lazy pool");
+        let policy_engine = Arc::new(PolicyEngine::new(pool));
+        AppState::new(config, event_stream, policy_engine)
     }
 
     #[tokio::test]

@@ -1,7 +1,16 @@
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::needless_pass_by_value)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(unused_imports)]
+#![allow(clippy::collapsible_match)]
+#![allow(clippy::match_same_arms)]
+#![allow(clippy::doc_markdown)]
+#![allow(clippy::redundant_clone)]
+
 //! Integration tests for the HTTP/WebSocket server
 
-use carnelian_core::{Config, EventStream, Server};
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
+use carnelian_core::{Config, EventStream, PolicyEngine, Server};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
 use std::sync::Arc;
@@ -34,6 +43,15 @@ async fn wait_for_server(port: u16, timeout: Duration) -> bool {
     false
 }
 
+/// Create a lazy PolicyEngine for tests that don't need database access
+fn create_test_policy_engine() -> Arc<PolicyEngine> {
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_lazy("postgresql://test:test@localhost:5432/test")
+        .expect("Failed to create lazy pool");
+    Arc::new(PolicyEngine::new(pool))
+}
+
 #[tokio::test]
 async fn test_websocket_event_streaming() {
     // Allocate a random available port
@@ -45,7 +63,11 @@ async fn test_websocket_event_streaming() {
     let event_stream = Arc::new(EventStream::new(100, 10));
     let config = Arc::new(config);
 
-    let server = Server::new(config.clone(), event_stream.clone());
+    let server = Server::new(
+        config.clone(),
+        event_stream.clone(),
+        create_test_policy_engine(),
+    );
 
     // Spawn server in background
     let server_handle = tokio::spawn(async move {
@@ -92,7 +114,11 @@ async fn test_websocket_event_streaming() {
     });
 
     let _ = timeout.await;
-    assert!(received_count >= 5, "Expected at least 5 events, got {}", received_count);
+    assert!(
+        received_count >= 5,
+        "Expected at least 5 events, got {}",
+        received_count
+    );
 
     // Clean up
     let _ = ws_stream.close(None).await;
@@ -111,7 +137,11 @@ async fn test_websocket_backpressure() {
     let event_stream = Arc::new(EventStream::new(100, 5));
     let config = Arc::new(config);
 
-    let server = Server::new(config.clone(), event_stream.clone());
+    let server = Server::new(
+        config.clone(),
+        event_stream.clone(),
+        create_test_policy_engine(),
+    );
 
     // Spawn server in background
     let server_handle = tokio::spawn(async move {
@@ -172,7 +202,7 @@ async fn test_server_port_configuration() {
     let event_stream = Arc::new(EventStream::new(100, 10));
     let config = Arc::new(config);
 
-    let server = Server::new(config.clone(), event_stream);
+    let server = Server::new(config.clone(), event_stream, create_test_policy_engine());
 
     assert_eq!(server.port(), port);
 }
@@ -188,7 +218,11 @@ async fn test_event_json_serialization() {
     let event_stream = Arc::new(EventStream::new(100, 10));
     let config = Arc::new(config);
 
-    let server = Server::new(config.clone(), event_stream.clone());
+    let server = Server::new(
+        config.clone(),
+        event_stream.clone(),
+        create_test_policy_engine(),
+    );
 
     // Spawn server in background
     let server_handle = tokio::spawn(async move {
@@ -242,7 +276,10 @@ async fn test_event_json_serialization() {
     });
 
     let result = timeout.await.unwrap_or(false);
-    assert!(result, "Should have received and parsed TaskCompleted event");
+    assert!(
+        result,
+        "Should have received and parsed TaskCompleted event"
+    );
 
     // Clean up
     let _ = ws_stream.close(None).await;
