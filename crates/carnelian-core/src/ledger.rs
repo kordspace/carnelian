@@ -302,7 +302,7 @@ impl Ledger {
         &self,
         grant_id: Uuid,
         subject_type: &str,
-        subject_id: Uuid,
+        subject_id: &str,
         capability_key: &str,
         approved_by: Option<Uuid>,
     ) -> Result<i64> {

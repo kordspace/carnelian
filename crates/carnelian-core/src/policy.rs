@@ -22,8 +22,8 @@ pub struct CapabilityGrant {
     pub grant_id: Uuid,
     /// Type of subject: 'identity', 'skill', 'channel', 'session'
     pub subject_type: String,
-    /// UUID of the subject
-    pub subject_id: Uuid,
+    /// Subject identifier (UUID string or external reference like "telegram:12345")
+    pub subject_id: String,
     /// Capability key (e.g., 'fs.read', 'net.http')
     pub capability_key: String,
     /// Optional scope restriction (JSON)
@@ -57,21 +57,21 @@ impl PolicyEngine {
     pub async fn check_capability(
         &self,
         subject_type: &str,
-        subject_id: Uuid,
+        subject_id: &str,
         capability_key: &str,
         event_stream: Option<&EventStream>,
     ) -> Result<bool> {
-        let result = sqlx::query_scalar!(
-            r#"
+        let result = sqlx::query_scalar::<_, Uuid>(
+            r"
             SELECT grant_id FROM capability_grants 
             WHERE subject_type = $1 AND subject_id = $2 AND capability_key = $3
               AND (expires_at IS NULL OR expires_at > NOW())
             LIMIT 1
-            "#,
-            subject_type,
-            subject_id,
-            capability_key,
+            ",
         )
+        .bind(subject_type)
+        .bind(subject_id)
+        .bind(capability_key)
         .fetch_optional(&self.pool)
         .await
         .map_err(Error::Database)?;
@@ -110,7 +110,7 @@ impl PolicyEngine {
     pub async fn grant_capability(
         &self,
         subject_type: &str,
-        subject_id: Uuid,
+        subject_id: &str,
         capability_key: &str,
         scope: Option<JsonValue>,
         constraints: Option<JsonValue>,
@@ -119,21 +119,21 @@ impl PolicyEngine {
         event_stream: Option<&EventStream>,
         ledger: Option<&Ledger>,
     ) -> Result<Uuid> {
-        let grant_id: Uuid = sqlx::query_scalar!(
-            r#"
+        let grant_id: Uuid = sqlx::query_scalar::<_, Uuid>(
+            r"
             INSERT INTO capability_grants 
               (subject_type, subject_id, capability_key, scope, constraints, approved_by, expires_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING grant_id
-            "#,
-            subject_type,
-            subject_id,
-            capability_key,
-            scope,
-            constraints,
-            approved_by,
-            expires_at,
+            ",
         )
+        .bind(subject_type)
+        .bind(subject_id)
+        .bind(capability_key)
+        .bind(&scope)
+        .bind(&constraints)
+        .bind(approved_by)
+        .bind(expires_at)
         .fetch_one(&self.pool)
         .await
         .map_err(|e| {
@@ -235,11 +235,10 @@ impl PolicyEngine {
     pub async fn list_grants_for_subject(
         &self,
         subject_type: &str,
-        subject_id: Uuid,
+        subject_id: &str,
     ) -> Result<Vec<CapabilityGrant>> {
-        let rows = sqlx::query_as!(
-            CapabilityGrant,
-            r#"
+        let rows = sqlx::query_as::<_, CapabilityGrant>(
+            r"
             SELECT 
                 grant_id,
                 subject_type,
@@ -254,10 +253,10 @@ impl PolicyEngine {
             WHERE subject_type = $1 AND subject_id = $2
               AND (expires_at IS NULL OR expires_at > NOW())
             ORDER BY created_at DESC
-            "#,
-            subject_type,
-            subject_id,
+            ",
         )
+        .bind(subject_type)
+        .bind(subject_id)
         .fetch_all(&self.pool)
         .await
         .map_err(Error::Database)?;
@@ -280,7 +279,12 @@ impl PolicyEngine {
     ) -> Result<()> {
         // Check if identity has task.create capability
         if !self
-            .check_capability("identity", identity_id, "task.create", event_stream)
+            .check_capability(
+                "identity",
+                &identity_id.to_string(),
+                "task.create",
+                event_stream,
+            )
             .await?
         {
             return Err(Error::Security(
@@ -302,7 +306,7 @@ impl PolicyEngine {
         if let Some(caps) = required_capabilities {
             for capability_key in &caps {
                 if !self
-                    .check_capability("skill", skill_id, capability_key, event_stream)
+                    .check_capability("skill", &skill_id.to_string(), capability_key, event_stream)
                     .await?
                 {
                     return Err(Error::Security(format!(
@@ -332,7 +336,12 @@ mod tests {
 
         let engine = PolicyEngine::new(pool);
         let result = engine
-            .check_capability("identity", Uuid::new_v4(), "nonexistent.capability", None)
+            .check_capability(
+                "identity",
+                &Uuid::new_v4().to_string(),
+                "nonexistent.capability",
+                None,
+            )
             .await
             .expect("Check should not error");
 
@@ -349,11 +358,11 @@ mod tests {
             .expect("Failed to connect to database");
 
         let engine = PolicyEngine::new(pool);
-        let subject_id = Uuid::new_v4();
+        let subject_id = Uuid::new_v4().to_string();
 
         // Initially should not have capability
         let before = engine
-            .check_capability("identity", subject_id, "fs.read", None)
+            .check_capability("identity", &subject_id, "fs.read", None)
             .await
             .expect("Check should not error");
         assert!(!before, "Should not have capability before grant");
@@ -361,14 +370,22 @@ mod tests {
         // Grant the capability
         let grant_id = engine
             .grant_capability(
-                "identity", subject_id, "fs.read", None, None, None, None, None, None,
+                "identity",
+                &subject_id,
+                "fs.read",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
             )
             .await
             .expect("Grant should succeed");
 
         // Now should have capability
         let after = engine
-            .check_capability("identity", subject_id, "fs.read", None)
+            .check_capability("identity", &subject_id, "fs.read", None)
             .await
             .expect("Check should not error");
         assert!(after, "Should have capability after grant");
@@ -382,7 +399,7 @@ mod tests {
 
         // Should no longer have capability
         let after_revoke = engine
-            .check_capability("identity", subject_id, "fs.read", None)
+            .check_capability("identity", &subject_id, "fs.read", None)
             .await
             .expect("Check should not error");
         assert!(!after_revoke, "Should not have capability after revocation");
@@ -398,14 +415,14 @@ mod tests {
             .expect("Failed to connect to database");
 
         let engine = PolicyEngine::new(pool);
-        let subject_id = Uuid::new_v4();
+        let subject_id = Uuid::new_v4().to_string();
 
         // Grant with past expiration
         let past = Utc::now() - chrono::Duration::hours(1);
         let _grant_id = engine
             .grant_capability(
                 "identity",
-                subject_id,
+                &subject_id,
                 "fs.read",
                 None,
                 None,
@@ -419,7 +436,7 @@ mod tests {
 
         // Should not have capability (expired)
         let result = engine
-            .check_capability("identity", subject_id, "fs.read", None)
+            .check_capability("identity", &subject_id, "fs.read", None)
             .await
             .expect("Check should not error");
         assert!(!result, "Expired grant should not be valid");
@@ -435,25 +452,41 @@ mod tests {
             .expect("Failed to connect to database");
 
         let engine = PolicyEngine::new(pool);
-        let subject_id = Uuid::new_v4();
+        let subject_id = Uuid::new_v4().to_string();
 
         // Grant multiple capabilities
         engine
             .grant_capability(
-                "identity", subject_id, "fs.read", None, None, None, None, None, None,
+                "identity",
+                &subject_id,
+                "fs.read",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
             )
             .await
             .expect("Grant should succeed");
         engine
             .grant_capability(
-                "identity", subject_id, "fs.write", None, None, None, None, None, None,
+                "identity",
+                &subject_id,
+                "fs.write",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
             )
             .await
             .expect("Grant should succeed");
 
         // List grants
         let grants = engine
-            .list_grants_for_subject("identity", subject_id)
+            .list_grants_for_subject("identity", &subject_id)
             .await
             .expect("List should not error");
 
