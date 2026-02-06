@@ -11,24 +11,71 @@
 //! 3. Health checks run every 30 seconds to detect crashed workers
 //! 4. On shutdown, workers receive SIGTERM with a 5-second timeout before SIGKILL
 //!
+//! # Worker Transport Layer
+//!
+//! The `WorkerTransport` trait abstracts skill invocation from the underlying
+//! communication mechanism. The first implementation, `ProcessJsonlTransport`,
+//! uses JSON Lines over stdin/stdout for bidirectional communication.
+//!
+//! ## JSON Lines Protocol
+//!
+//! Request (written to stdin):
+//! ```json
+//! {"type":"Invoke","message_id":"...","payload":{"run_id":"...","skill_name":"...","input":{},"timeout_secs":300}}
+//! ```
+//!
+//! Response (read from stdout):
+//! ```json
+//! {"type":"InvokeResult","message_id":"...","payload":{"run_id":"...","status":"Success","result":{},"duration_ms":42}}
+//! ```
+//!
+//! ## Timeout Enforcement
+//!
+//! When a skill exceeds its timeout, the transport sends SIGTERM to the worker
+//! process and waits for `skill_timeout_grace_period_secs`. If the process is
+//! still alive after the grace period, SIGKILL is sent.
+//!
+//! ## Output Limits
+//!
+//! Output is tracked per invocation. If it exceeds `skill_max_output_bytes`,
+//! the response is truncated and `InvokeResponse.truncated` is set to `true`.
+//!
 //! # Integration
 //!
 //! The `WorkerManager` is stored in `AppState` and initialized in the binary.
 //! The status endpoint reports active workers via `get_worker_status()`.
+//!
+//! ## Using WorkerTransport for Skill Invocation
+//!
+//! ```ignore
+//! let transport = worker_manager.get_transport("node-worker-1")?;
+//! let response = transport.invoke(InvokeRequest {
+//!     run_id: RunId::new(),
+//!     skill_name: "my_skill".into(),
+//!     input: serde_json::json!({"key": "value"}),
+//!     timeout_secs: 60,
+//!     correlation_id: None,
+//! }).await?;
+//! ```
 
 use crate::config::Config;
 use crate::events::EventStream;
 use crate::server::WorkerInfo;
-use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
+use carnelian_common::types::{
+    CancelRequest, EventEnvelope, EventLevel, EventType, HealthResponse, InvokeRequest,
+    InvokeResponse, InvokeStatus, RunId, StreamEvent, TransportMessage,
+};
 use carnelian_common::{Error, Result};
 use chrono::{DateTime, Utc};
 use serde_json::json;
 use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::Arc;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::{Child, ChildStderr, ChildStdout};
-use tokio::sync::{RwLock, watch};
+use std::time::Instant;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout};
+use tokio::sync::{RwLock, mpsc, oneshot, watch};
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 /// Worker runtime type
@@ -88,8 +135,8 @@ pub struct Worker {
     pub id: String,
     /// Runtime type
     pub runtime: WorkerRuntime,
-    /// The spawned tokio process handle
-    pub process: Child,
+    /// The spawned tokio process handle (None when transport owns the process)
+    pub process: Option<Child>,
     /// Current status
     pub status: WorkerStatus,
     /// Currently executing task ID
@@ -98,6 +145,524 @@ pub struct Worker {
     pub started_at: DateTime<Utc>,
     /// Last successful health check
     pub last_health_check: Option<DateTime<Utc>>,
+    /// Transport for skill invocation (created after spawn)
+    pub transport: Option<Arc<dyn WorkerTransport>>,
+}
+
+// =============================================================================
+// WORKER TRANSPORT TRAIT
+// =============================================================================
+
+/// Trait abstracting skill invocation from the underlying communication mechanism.
+///
+/// Implementations handle serialization, timeout enforcement, output limits,
+/// and event streaming for a specific transport protocol.
+#[async_trait::async_trait]
+pub trait WorkerTransport: Send + Sync {
+    /// Invoke a skill and wait for completion.
+    ///
+    /// Sends the request to the worker, enforces timeout, and returns the response.
+    /// Emits `SkillInvokeStart` before sending and `SkillInvokeEnd`/`SkillInvokeFailed` after.
+    async fn invoke(&self, request: InvokeRequest) -> Result<InvokeResponse>;
+
+    /// Subscribe to streaming events for a given run.
+    ///
+    /// Returns a channel receiver that yields `StreamEvent` messages as they arrive.
+    async fn stream_events(&self, run_id: RunId) -> Result<mpsc::Receiver<StreamEvent>>;
+
+    /// Cancel a running skill execution.
+    ///
+    /// Triggers the cancellation token and sends SIGTERM to the worker process.
+    async fn cancel(&self, run_id: RunId, reason: String) -> Result<()>;
+
+    /// Check transport health by verifying the worker process is alive.
+    async fn health(&self) -> Result<HealthResponse>;
+
+    /// Gracefully shut down the transport and its underlying worker process.
+    ///
+    /// Cancels all active runs, sends SIGTERM, waits the grace period,
+    /// then SIGKILL if the process is still alive.
+    async fn shutdown(&self) -> Result<()>;
+}
+
+// =============================================================================
+// PROCESS JSONL TRANSPORT
+// =============================================================================
+
+/// Context for a single active skill execution run.
+struct RunContext {
+    /// Channel sender for streaming events to subscribers
+    event_tx: mpsc::Sender<StreamEvent>,
+    /// Token to signal cancellation
+    cancel_token: CancellationToken,
+    /// Accumulated output size in bytes
+    output_bytes: usize,
+    /// Accumulated log line count
+    log_lines: usize,
+    /// Oneshot sender for delivering the final InvokeResponse to the waiting invoke() call
+    response_tx: Option<oneshot::Sender<InvokeResponse>>,
+}
+
+/// JSON Lines transport over stdin/stdout of a worker process.
+///
+/// Sends `TransportMessage` as JSON Lines to the worker's stdin and reads
+/// responses from stdout. Supports timeout enforcement, output truncation,
+/// cancellation, and event streaming.
+///
+/// ## Demultiplexing
+///
+/// The background stdout reader dispatches each `InvokeResult` to the
+/// corresponding run's oneshot sender, allowing multiple concurrent `invoke()`
+/// calls without holding a global lock.
+pub struct ProcessJsonlTransport {
+    /// Worker identifier
+    worker_id: String,
+    /// Handle to the worker's stdin for writing requests
+    stdin: Arc<tokio::sync::Mutex<ChildStdin>>,
+    /// Application configuration for timeouts and limits
+    config: Arc<Config>,
+    /// Event stream for emitting lifecycle events
+    event_stream: Arc<EventStream>,
+    /// Active runs indexed by RunId — used for event routing, output tracking,
+    /// cancellation tokens, and per-run response delivery via oneshot senders.
+    active_runs: Arc<RwLock<HashMap<RunId, RunContext>>>,
+    /// When the transport was created (for uptime calculation)
+    created_at: Instant,
+    /// Process handle for health checks and shutdown
+    process: Arc<tokio::sync::Mutex<Child>>,
+}
+
+impl ProcessJsonlTransport {
+    /// Create a new `ProcessJsonlTransport` from a spawned worker process.
+    ///
+    /// Takes ownership of the process stdin and stdout, spawning a background
+    /// task to read stdout and route messages to active runs.
+    pub fn new(
+        worker_id: String,
+        mut process: Child,
+        config: Arc<Config>,
+        event_stream: Arc<EventStream>,
+    ) -> Result<(Self, Option<ChildStderr>)> {
+        let stdin = process
+            .stdin
+            .take()
+            .ok_or_else(|| Error::Connection("Worker stdin not available".to_string()))?;
+        let stdout = process
+            .stdout
+            .take()
+            .ok_or_else(|| Error::Connection("Worker stdout not available".to_string()))?;
+        let stderr = process.stderr.take();
+
+        let active_runs: Arc<RwLock<HashMap<RunId, RunContext>>> =
+            Arc::new(RwLock::new(HashMap::new()));
+
+        // Spawn background stdout reader that demuxes responses to per-run oneshot senders
+        let reader_runs = active_runs.clone();
+        let reader_worker_id = worker_id.clone();
+        let reader_config = config.clone();
+        tokio::spawn(async move {
+            Self::read_stdout_loop(stdout, reader_worker_id, reader_runs, reader_config).await;
+        });
+
+        Ok((
+            Self {
+                worker_id,
+                stdin: Arc::new(tokio::sync::Mutex::new(stdin)),
+                config,
+                event_stream,
+                active_runs,
+                created_at: Instant::now(),
+                process: Arc::new(tokio::sync::Mutex::new(process)),
+            },
+            stderr,
+        ))
+    }
+
+    /// Background task reading stdout line-by-line, parsing JSON Lines,
+    /// and dispatching messages to per-run oneshot senders and event channels.
+    ///
+    /// `InvokeResult` messages are delivered to the corresponding run's oneshot
+    /// sender, allowing multiple concurrent `invoke()` calls. `Stream` messages
+    /// update output tracking and are forwarded to the run's event channel.
+    async fn read_stdout_loop(
+        stdout: ChildStdout,
+        worker_id: String,
+        active_runs: Arc<RwLock<HashMap<RunId, RunContext>>>,
+        config: Arc<Config>,
+    ) {
+        let reader = BufReader::new(stdout);
+        let mut lines = reader.lines();
+
+        while let Ok(Some(line)) = lines.next_line().await {
+            if line.trim().is_empty() {
+                continue;
+            }
+
+            match serde_json::from_str::<TransportMessage>(&line) {
+                Ok(TransportMessage::InvokeResult { payload, .. }) => {
+                    let run_id = payload.run_id;
+                    let mut runs = active_runs.write().await;
+                    if let Some(ctx) = runs.get_mut(&run_id) {
+                        // Apply output limit enforcement (Comment 3)
+                        let mut resp = payload;
+                        let result_bytes = serde_json::to_string(&resp.result)
+                            .map(|s| s.len())
+                            .unwrap_or(0);
+                        if Self::check_output_limits(ctx, result_bytes, &config) {
+                            let original_size = ctx.output_bytes + result_bytes;
+                            resp.result = json!({
+                                "...": "output truncated",
+                                "original_size_bytes": original_size,
+                                "max_output_bytes": config.skill_max_output_bytes,
+                                "log_lines": ctx.log_lines,
+                                "max_log_lines": config.skill_max_log_lines,
+                            });
+                            resp.truncated = true;
+                        }
+                        // Deliver to the waiting invoke() call via oneshot
+                        if let Some(tx) = ctx.response_tx.take() {
+                            let _ = tx.send(resp);
+                        }
+                    } else {
+                        tracing::warn!(
+                            worker_id = %worker_id,
+                            run_id = ?run_id,
+                            "Received InvokeResult for unknown run_id, discarding"
+                        );
+                    }
+                }
+                Ok(TransportMessage::Stream { ref payload, .. }) => {
+                    let mut runs = active_runs.write().await;
+                    if let Some(ctx) = runs.get_mut(&payload.run_id) {
+                        // Track output bytes and log lines
+                        ctx.output_bytes += payload.message.len();
+                        ctx.log_lines += 1;
+                        // Forward to event subscriber
+                        let _ = ctx.event_tx.try_send(payload.clone());
+                    }
+                }
+                Ok(msg) => {
+                    // Other message types (HealthResult, etc.) — log and discard
+                    tracing::debug!(
+                        worker_id = %worker_id,
+                        msg_type = ?std::mem::discriminant(&msg),
+                        "Received non-invoke/stream message from worker"
+                    );
+                }
+                Err(e) => {
+                    // Non-JSON lines are logged as worker output
+                    tracing::info!(
+                        worker_id = %worker_id,
+                        stream = "stdout",
+                        parse_error = %e,
+                        "{}", line
+                    );
+                }
+            }
+        }
+
+        tracing::debug!(worker_id = %worker_id, "Stdout reader loop ended");
+    }
+
+    /// Write bytes to the worker's stdin, acquiring the lock briefly.
+    async fn write_to_stdin(&self, data: &[u8]) -> Result<()> {
+        let mut stdin = self.stdin.lock().await;
+        stdin.write_all(data).await.map_err(|e| {
+            Error::Connection(format!("Failed to write to worker stdin: {e}"))
+        })?;
+        stdin.flush().await.map_err(|e| {
+            Error::Connection(format!("Failed to flush worker stdin: {e}"))
+        })?;
+        drop(stdin);
+        Ok(())
+    }
+
+    /// Send SIGTERM (Unix) or kill (Windows) to the worker process,
+    /// wait the grace period, then SIGKILL if still alive.
+    #[allow(clippy::significant_drop_tightening)]
+    async fn cancel_with_signal(&self) {
+        let grace = std::time::Duration::from_secs(self.config.skill_timeout_grace_period_secs);
+        let mut proc = self.process.lock().await;
+
+        #[cfg(unix)]
+        {
+            if let Some(pid) = proc.id() {
+                let nix_pid = nix::unistd::Pid::from_raw(i32::try_from(pid).unwrap_or(i32::MAX));
+                let _ =
+                    nix::sys::signal::kill(nix_pid, nix::sys::signal::Signal::SIGTERM);
+                tracing::debug!(
+                    worker_id = %self.worker_id,
+                    pid = pid,
+                    "Sent SIGTERM for cancellation"
+                );
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            tracing::debug!(
+                worker_id = %self.worker_id,
+                "Non-Unix platform, will use kill() after grace period"
+            );
+        }
+
+        // Wait grace period then force kill
+        let exited = tokio::time::timeout(grace, proc.wait()).await;
+        if exited.is_err() {
+            tracing::warn!(
+                worker_id = %self.worker_id,
+                "Worker did not exit within grace period, sending SIGKILL"
+            );
+            let _ = proc.kill().await;
+        }
+    }
+
+    /// Enforce output limits: returns true if the output should be truncated.
+    fn check_output_limits(ctx: &RunContext, additional_bytes: usize, config: &Config) -> bool {
+        ctx.output_bytes + additional_bytes > config.skill_max_output_bytes
+            || ctx.log_lines >= config.skill_max_log_lines
+    }
+
+    /// Emit the appropriate completion event after an invoke finishes.
+    fn emit_invoke_completion_event(
+        &self,
+        run_id: RunId,
+        result: &Result<InvokeResponse>,
+        start: Instant,
+    ) {
+        match result {
+            Ok(resp) if resp.status == InvokeStatus::Success => {
+                self.event_stream.publish(
+                    EventEnvelope::new(
+                        EventLevel::Info,
+                        EventType::SkillInvokeEnd,
+                        json!({
+                            "run_id": run_id,
+                            "worker_id": &self.worker_id,
+                            "duration_ms": resp.duration_ms,
+                            "truncated": resp.truncated,
+                        }),
+                    )
+                    .with_actor_id(&self.worker_id),
+                );
+            }
+            Ok(resp) => {
+                self.event_stream.publish(
+                    EventEnvelope::new(
+                        EventLevel::Warn,
+                        EventType::SkillInvokeFailed,
+                        json!({
+                            "run_id": run_id,
+                            "worker_id": &self.worker_id,
+                            "status": format!("{:?}", resp.status),
+                            "error": resp.error,
+                            "duration_ms": resp.duration_ms,
+                        }),
+                    )
+                    .with_actor_id(&self.worker_id),
+                );
+            }
+            Err(e) => {
+                self.event_stream.publish(
+                    EventEnvelope::new(
+                        EventLevel::Error,
+                        EventType::SkillInvokeFailed,
+                        json!({
+                            "run_id": run_id,
+                            "worker_id": &self.worker_id,
+                            "error": e.to_string(),
+                            "duration_ms": start.elapsed().as_millis() as u64,
+                        }),
+                    )
+                    .with_actor_id(&self.worker_id),
+                );
+            }
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl WorkerTransport for ProcessJsonlTransport {
+    #[allow(clippy::too_many_lines)]
+    async fn invoke(&self, request: InvokeRequest) -> Result<InvokeResponse> {
+        let run_id = request.run_id;
+        let timeout_secs = request.timeout_secs;
+        let start = Instant::now();
+        let deadline = start + std::time::Duration::from_secs(timeout_secs);
+
+        // Create per-run oneshot channel for response delivery
+        let (response_tx, response_rx) = oneshot::channel::<InvokeResponse>();
+
+        // Create run context with oneshot sender
+        let (event_tx, _event_rx) = mpsc::channel::<StreamEvent>(100);
+        let cancel_token = CancellationToken::new();
+        let ctx = RunContext {
+            event_tx,
+            cancel_token: cancel_token.clone(),
+            output_bytes: 0,
+            log_lines: 0,
+            response_tx: Some(response_tx),
+        };
+        self.active_runs.write().await.insert(run_id, ctx);
+
+        // Emit SkillInvokeStart event
+        self.event_stream.publish(
+            EventEnvelope::new(
+                EventLevel::Info,
+                EventType::SkillInvokeStart,
+                json!({
+                    "run_id": run_id,
+                    "skill_name": &request.skill_name,
+                    "worker_id": &self.worker_id,
+                }),
+            )
+            .with_actor_id(&self.worker_id),
+        );
+
+        // Serialize and send request
+        let msg = TransportMessage::Invoke {
+            message_id: Uuid::now_v7(),
+            payload: request,
+        };
+        let mut line = serde_json::to_string(&msg)
+            .map_err(|e| Error::Connection(format!("Failed to serialize request: {e}")))?;
+        line.push('\n');
+
+        self.write_to_stdin(line.as_bytes()).await?;
+
+        // Wait for response, timeout, or cancellation
+        let timeout_duration = deadline.saturating_duration_since(Instant::now());
+        let result = tokio::select! {
+            _ = cancel_token.cancelled() => {
+                self.cancel_with_signal().await;
+                Ok(InvokeResponse {
+                    run_id,
+                    status: InvokeStatus::Cancelled,
+                    result: json!({}),
+                    error: Some("Cancelled by request".to_string()),
+                    exit_code: None,
+                    duration_ms: start.elapsed().as_millis() as u64,
+                    truncated: false,
+                })
+            }
+            _ = tokio::time::sleep(timeout_duration) => {
+                self.cancel_with_signal().await;
+                Ok(InvokeResponse {
+                    run_id,
+                    status: InvokeStatus::Timeout,
+                    result: json!({}),
+                    error: Some(format!("Skill execution timed out after {timeout_secs}s")),
+                    exit_code: None,
+                    duration_ms: start.elapsed().as_millis() as u64,
+                    truncated: false,
+                })
+            }
+            response = response_rx => {
+                response.map_err(|_| Error::Connection(
+                    "Worker stdout closed before response received".to_string()
+                ))
+            }
+        };
+
+        // Clean up run context
+        self.active_runs.write().await.remove(&run_id);
+
+        // Emit completion event
+        self.emit_invoke_completion_event(run_id, &result, start);
+
+        result
+    }
+
+    async fn stream_events(&self, run_id: RunId) -> Result<mpsc::Receiver<StreamEvent>> {
+        let (tx, rx) = mpsc::channel::<StreamEvent>(100);
+        let mut runs = self.active_runs.write().await;
+        if let Some(ctx) = runs.get_mut(&run_id) {
+            ctx.event_tx = tx;
+            Ok(rx)
+        } else {
+            Err(Error::Config(format!(
+                "No active run found for run_id {:?}",
+                run_id
+            )))
+        }
+    }
+
+    async fn cancel(&self, run_id: RunId, reason: String) -> Result<()> {
+        // First, send a Cancel message to stdin so the worker can perform graceful cleanup
+        let cancel_msg = TransportMessage::Cancel {
+            message_id: Uuid::now_v7(),
+            payload: CancelRequest {
+                run_id,
+                reason: reason.clone(),
+            },
+        };
+        if let Ok(mut line) = serde_json::to_string(&cancel_msg) {
+            line.push('\n');
+            if let Err(e) = self.write_to_stdin(line.as_bytes()).await {
+                tracing::warn!(
+                    worker_id = %self.worker_id,
+                    run_id = ?run_id,
+                    error = %e,
+                    "Failed to send Cancel message to worker stdin, proceeding with token cancellation"
+                );
+            }
+        }
+
+        // Then trigger the local cancellation token (which invoke() select! listens on)
+        let runs = self.active_runs.read().await;
+        runs.get(&run_id).map_or_else(
+            || {
+                Err(Error::Config(format!(
+                    "No active run found for run_id {run_id:?}"
+                )))
+            },
+            |ctx| {
+                tracing::info!(
+                    worker_id = %self.worker_id,
+                    run_id = ?run_id,
+                    reason = %reason,
+                    "Cancelling skill execution"
+                );
+                ctx.cancel_token.cancel();
+                Ok(())
+            },
+        )
+    }
+
+    async fn health(&self) -> Result<HealthResponse> {
+        let wait_result = self.process.lock().await.try_wait();
+        let healthy = match wait_result {
+            Ok(Some(_)) | Err(_) => false,
+            Ok(None) => true,
+        };
+
+        Ok(HealthResponse {
+            healthy,
+            worker_id: self.worker_id.clone(),
+            uptime_secs: self.created_at.elapsed().as_secs(),
+        })
+    }
+
+    async fn shutdown(&self) -> Result<()> {
+        tracing::info!(worker_id = %self.worker_id, "Shutting down transport");
+
+        // Cancel all active runs so waiting invoke() calls return immediately
+        {
+            let runs = self.active_runs.read().await;
+            for (run_id, ctx) in runs.iter() {
+                tracing::debug!(
+                    worker_id = %self.worker_id,
+                    run_id = ?run_id,
+                    "Cancelling active run during shutdown"
+                );
+                ctx.cancel_token.cancel();
+            }
+        }
+
+        // Terminate the worker process via SIGTERM + grace period + SIGKILL
+        self.cancel_with_signal().await;
+
+        Ok(())
+    }
 }
 
 /// Result of a single health check on a worker.
@@ -116,12 +681,12 @@ struct HealthCheckResult {
 ///
 /// This is the shared implementation used by `check_worker_health`, `run_health_checks`,
 /// and the background health check loop. It:
-/// 1. Locks the registry, calls `try_wait()`, updates status/timestamps
+/// 1. Locks the registry, checks health via transport or `try_wait()`, updates status/timestamps
 /// 2. Emits `WorkerHealthCheck` event
 /// 3. If unhealthy, emits `WorkerStopped` event and removes the worker from the registry
 ///
 /// Returns `Ok(result)` with health status, or `Err` if the worker is not found.
-#[allow(clippy::significant_drop_tightening)]
+#[allow(clippy::significant_drop_tightening, clippy::too_many_lines)]
 async fn perform_single_health_check(
     workers: &RwLock<HashMap<String, Worker>>,
     event_stream: &EventStream,
@@ -135,28 +700,58 @@ async fn perform_single_health_check(
 
         let runtime = worker.runtime;
 
-        match worker.process.try_wait() {
-            Ok(Some(status)) => {
-                tracing::error!(
-                    worker_id = %worker_id,
-                    exit_code = ?status.code(),
-                    "Worker process exited unexpectedly"
-                );
-                worker.status = WorkerStatus::Failed;
-                (false, runtime, Some(status.code()))
+        // If the worker has a transport, use it for health checks
+        if let Some(ref transport) = worker.transport {
+            match transport.health().await {
+                Ok(resp) if resp.healthy => {
+                    worker.last_health_check = Some(Utc::now());
+                    (true, runtime, None)
+                }
+                Ok(_) => {
+                    tracing::error!(
+                        worker_id = %worker_id,
+                        "Worker process exited unexpectedly (transport health check)"
+                    );
+                    worker.status = WorkerStatus::Failed;
+                    (false, runtime, None)
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        worker_id = %worker_id,
+                        error = %e,
+                        "Failed to check worker health via transport"
+                    );
+                    (false, runtime, None)
+                }
             }
-            Ok(None) => {
-                worker.last_health_check = Some(Utc::now());
-                (true, runtime, None)
+        } else if let Some(ref mut process) = worker.process {
+            match process.try_wait() {
+                Ok(Some(status)) => {
+                    tracing::error!(
+                        worker_id = %worker_id,
+                        exit_code = ?status.code(),
+                        "Worker process exited unexpectedly"
+                    );
+                    worker.status = WorkerStatus::Failed;
+                    (false, runtime, Some(status.code()))
+                }
+                Ok(None) => {
+                    worker.last_health_check = Some(Utc::now());
+                    (true, runtime, None)
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        worker_id = %worker_id,
+                        error = %e,
+                        "Failed to check worker health"
+                    );
+                    (false, runtime, None)
+                }
             }
-            Err(e) => {
-                tracing::warn!(
-                    worker_id = %worker_id,
-                    error = %e,
-                    "Failed to check worker health"
-                );
-                (false, runtime, None)
-            }
+        } else {
+            // No process and no transport — mark as failed
+            worker.status = WorkerStatus::Failed;
+            (false, runtime, None)
         }
     };
 
@@ -308,10 +903,11 @@ impl WorkerManager {
 
         cmd.env("WORKER_ID", &worker_id)
             .env("CARNELIAN_API_URL", &api_url)
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        let mut child = cmd.spawn().map_err(|e| {
+        let child = cmd.spawn().map_err(|e| {
             tracing::error!(
                 worker_id = %worker_id,
                 runtime = %runtime,
@@ -321,27 +917,31 @@ impl WorkerManager {
             Error::Connection(format!("Failed to spawn {} worker: {}", runtime, e))
         })?;
 
-        // Capture stdout/stderr before moving child into Worker
-        let stdout = child.stdout.take();
-        let stderr = child.stderr.take();
+        // Create transport from the spawned process
+        let (transport, stderr) = ProcessJsonlTransport::new(
+            worker_id.clone(),
+            child,
+            self.config.clone(),
+            self.event_stream.clone(),
+        )?;
+        let transport: Arc<dyn WorkerTransport> = Arc::new(transport);
 
         let worker = Worker {
             id: worker_id.clone(),
             runtime,
-            process: child,
+            process: None,
             status: WorkerStatus::Starting,
             current_task: None,
             started_at: Utc::now(),
             last_health_check: None,
+            transport: Some(transport),
         };
 
         self.workers.write().await.insert(worker_id.clone(), worker);
 
-        // Spawn output handlers for stdout/stderr
-        if let Some(stdout) = stdout {
-            if let Some(stderr) = stderr {
-                Self::spawn_output_handler(worker_id.clone(), stdout, stderr);
-            }
+        // Spawn stderr handler if available
+        if let Some(stderr) = stderr {
+            Self::spawn_stderr_handler(worker_id.clone(), stderr);
         }
 
         // Emit WorkerStarted event
@@ -405,84 +1005,98 @@ impl WorkerManager {
 
     /// Stop a specific worker by ID.
     ///
-    /// Sends SIGTERM (or kill on Windows) and waits up to 5 seconds
-    /// for the process to exit. If the timeout expires, sends SIGKILL.
+    /// For transport-owned workers, calls `transport.shutdown()` which cancels
+    /// all active runs and sends SIGTERM/SIGKILL to the process. For legacy
+    /// process-owned workers, sends SIGTERM directly and waits up to 5 seconds.
     ///
     /// # Errors
     ///
     /// Returns an error if the worker ID is not found in the registry.
     #[allow(clippy::significant_drop_tightening)]
     pub async fn stop_worker(&mut self, worker_id: &str) -> Result<()> {
-        // Phase 1: Mark as stopping and extract the child handle + runtime.
-        // Release the write lock before awaiting process exit.
-        let (mut child, runtime) = {
+        // Phase 1: Remove worker from registry, extract transport + process + runtime.
+        let (transport, child, runtime) = {
             let mut workers = self.workers.write().await;
             let worker = workers
                 .remove(worker_id)
-                .ok_or_else(|| Error::Config(format!("Worker not found: {}", worker_id)))?;
-            (worker.process, worker.runtime)
+                .ok_or_else(|| Error::Config(format!("Worker not found: {worker_id}")))?;
+            (worker.transport, worker.process, worker.runtime)
         };
 
         tracing::info!(worker_id = %worker_id, "Stopping worker");
 
-        // Phase 2: Send SIGTERM (Unix) or platform-appropriate termination signal.
-        #[cfg(unix)]
-        {
-            if let Some(pid) = child.id() {
-                // Send SIGTERM for graceful shutdown using nix (safe wrapper)
-                let nix_pid = nix::unistd::Pid::from_raw(i32::try_from(pid).unwrap_or(i32::MAX));
-                if let Err(e) = nix::sys::signal::kill(nix_pid, nix::sys::signal::Signal::SIGTERM) {
-                    tracing::warn!(
-                        worker_id = %worker_id,
-                        error = %e,
-                        "Failed to send SIGTERM to worker"
-                    );
-                }
-                tracing::debug!(worker_id = %worker_id, pid = pid, "Sent SIGTERM to worker");
-            }
-        }
-        #[cfg(not(unix))]
-        {
-            // On Windows, there is no SIGTERM; start() will use TerminateProcess via kill().
-            // We attempt a graceful wait first, then fall back to kill().
-            tracing::debug!(worker_id = %worker_id, "Non-Unix platform, will use kill() as fallback");
-        }
-
-        // Phase 3: Wait up to 5 seconds for the process to exit gracefully.
-        let exited = tokio::time::timeout(std::time::Duration::from_secs(5), child.wait()).await;
-
-        match exited {
-            Ok(Ok(status)) => {
-                tracing::info!(
-                    worker_id = %worker_id,
-                    exit_code = ?status.code(),
-                    "Worker stopped gracefully"
-                );
-            }
-            Ok(Err(e)) => {
+        // Phase 2: If transport owns the process, use transport.shutdown() to
+        // cancel active runs and terminate the process.
+        if let Some(transport) = transport {
+            if let Err(e) = transport.shutdown().await {
                 tracing::warn!(
                     worker_id = %worker_id,
                     error = %e,
-                    "Error waiting for worker exit"
+                    "Error during transport shutdown"
                 );
             }
-            Err(_) => {
-                // Phase 4: Timeout expired — force kill with SIGKILL.
-                tracing::warn!(
+        } else if let Some(mut child) = child {
+            // Legacy path: process is owned directly by the Worker struct.
+            #[cfg(unix)]
+            {
+                if let Some(pid) = child.id() {
+                    let nix_pid =
+                        nix::unistd::Pid::from_raw(i32::try_from(pid).unwrap_or(i32::MAX));
+                    if let Err(e) =
+                        nix::sys::signal::kill(nix_pid, nix::sys::signal::Signal::SIGTERM)
+                    {
+                        tracing::warn!(
+                            worker_id = %worker_id,
+                            error = %e,
+                            "Failed to send SIGTERM to worker"
+                        );
+                    }
+                    tracing::debug!(worker_id = %worker_id, pid = pid, "Sent SIGTERM to worker");
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                tracing::debug!(
                     worker_id = %worker_id,
-                    "Worker did not exit within 5 seconds, sending SIGKILL"
+                    "Non-Unix platform, will use kill() as fallback"
                 );
-                if let Err(e) = child.kill().await {
-                    tracing::error!(
+            }
+
+            let exited =
+                tokio::time::timeout(std::time::Duration::from_secs(5), child.wait()).await;
+
+            match exited {
+                Ok(Ok(status)) => {
+                    tracing::info!(
+                        worker_id = %worker_id,
+                        exit_code = ?status.code(),
+                        "Worker stopped gracefully"
+                    );
+                }
+                Ok(Err(e)) => {
+                    tracing::warn!(
                         worker_id = %worker_id,
                         error = %e,
-                        "Failed to SIGKILL worker"
+                        "Error waiting for worker exit"
                     );
+                }
+                Err(_) => {
+                    tracing::warn!(
+                        worker_id = %worker_id,
+                        "Worker did not exit within 5 seconds, sending SIGKILL"
+                    );
+                    if let Err(e) = child.kill().await {
+                        tracing::error!(
+                            worker_id = %worker_id,
+                            error = %e,
+                            "Failed to SIGKILL worker"
+                        );
+                    }
                 }
             }
         }
 
-        // Phase 5: Emit WorkerStopped event.
+        // Phase 3: Emit WorkerStopped event.
         self.event_stream.publish(EventEnvelope::new(
             EventLevel::Info,
             EventType::WorkerStopped,
@@ -684,20 +1298,25 @@ impl WorkerManager {
         self.workers.read().await.len()
     }
 
-    /// Spawn background tasks to read and log worker stdout/stderr.
+    /// Get the transport for a specific worker.
     ///
-    /// Each stream is read line-by-line using `BufReader` and logged
-    /// with the worker_id for traceability.
-    fn spawn_output_handler(worker_id: String, stdout: ChildStdout, stderr: ChildStderr) {
-        let wid = worker_id.clone();
-        tokio::spawn(async move {
-            let reader = BufReader::new(stdout);
-            let mut lines = reader.lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                tracing::info!(worker_id = %wid, stream = "stdout", "{}", line);
-            }
-        });
+    /// # Errors
+    ///
+    /// Returns an error if the worker is not found or has no transport.
+    #[allow(clippy::significant_drop_tightening)]
+    pub async fn get_transport(&self, worker_id: &str) -> Result<Arc<dyn WorkerTransport>> {
+        let workers = self.workers.read().await;
+        let worker = workers
+            .get(worker_id)
+            .ok_or_else(|| Error::Config(format!("Worker not found: {}", worker_id)))?;
+        worker
+            .transport
+            .clone()
+            .ok_or_else(|| Error::Config(format!("Worker {} has no transport", worker_id)))
+    }
 
+    /// Spawn a background task to read and log worker stderr.
+    fn spawn_stderr_handler(worker_id: String, stderr: ChildStderr) {
         tokio::spawn(async move {
             let reader = BufReader::new(stderr);
             let mut lines = reader.lines();
