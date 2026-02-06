@@ -36,6 +36,8 @@ notify.workspace = true
 notify-debouncer-mini.workspace = true
 globset.workspace = true
 pgvector.workspace = true
+async-trait.workspace = true
+tokio-util.workspace = true
 rand = "0.8"
 
 [target.'cfg(unix)'.dependencies]

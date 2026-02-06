@@ -257,3 +257,141 @@ impl EventEnvelope {
         matches!(self.level, EventLevel::Error)
     }
 }
+
+// =============================================================================
+// WORKER TRANSPORT PROTOCOL
+// =============================================================================
+
+/// Request to invoke a skill on a worker
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InvokeRequest {
+    /// Unique identifier for this execution run
+    pub run_id: RunId,
+    /// Name of the skill to invoke
+    pub skill_name: String,
+    /// Input payload for the skill
+    pub input: JsonValue,
+    /// Timeout in seconds for this invocation
+    pub timeout_secs: u64,
+    /// Correlation ID for request tracing
+    pub correlation_id: Option<Uuid>,
+}
+
+/// Request to cancel a running skill execution
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CancelRequest {
+    /// Run ID of the execution to cancel
+    pub run_id: RunId,
+    /// Reason for cancellation
+    pub reason: String,
+}
+
+/// Health check request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthRequest;
+
+/// Status of a skill invocation
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum InvokeStatus {
+    /// Skill completed successfully
+    Success,
+    /// Skill execution failed
+    Failed,
+    /// Skill execution timed out
+    Timeout,
+    /// Skill execution was cancelled
+    Cancelled,
+}
+
+/// Response from a skill invocation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InvokeResponse {
+    /// Run ID this response corresponds to
+    pub run_id: RunId,
+    /// Outcome status
+    pub status: InvokeStatus,
+    /// Result payload (empty object on failure)
+    pub result: JsonValue,
+    /// Error message if status is not Success
+    pub error: Option<String>,
+    /// Process exit code if available
+    pub exit_code: Option<i32>,
+    /// Execution duration in milliseconds
+    pub duration_ms: u64,
+    /// Whether the output was truncated due to size limits
+    pub truncated: bool,
+}
+
+/// Type of stream event emitted during skill execution
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StreamEventType {
+    /// Log output from the worker
+    Log,
+    /// Progress update (percentage, stage, etc.)
+    Progress,
+    /// Artifact produced during execution
+    Artifact,
+}
+
+/// A streaming event emitted during skill execution
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamEvent {
+    /// Run ID this event belongs to
+    pub run_id: RunId,
+    /// Type of stream event
+    pub event_type: StreamEventType,
+    /// When the event was emitted
+    pub timestamp: DateTime<Utc>,
+    /// Log level (relevant for Log events)
+    pub level: Option<EventLevel>,
+    /// Human-readable message
+    pub message: String,
+    /// Additional structured fields
+    pub fields: JsonValue,
+}
+
+/// Health check response from a worker transport
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthResponse {
+    /// Whether the worker is healthy
+    pub healthy: bool,
+    /// Worker identifier
+    pub worker_id: String,
+    /// Uptime in seconds
+    pub uptime_secs: u64,
+}
+
+/// Envelope for all transport messages, enabling request/response correlation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum TransportMessage {
+    /// Invoke a skill
+    Invoke {
+        message_id: Uuid,
+        payload: InvokeRequest,
+    },
+    /// Cancel a running invocation
+    Cancel {
+        message_id: Uuid,
+        payload: CancelRequest,
+    },
+    /// Health check request
+    Health {
+        message_id: Uuid,
+    },
+    /// Invoke response
+    InvokeResult {
+        message_id: Uuid,
+        payload: InvokeResponse,
+    },
+    /// Streaming event
+    Stream {
+        message_id: Uuid,
+        payload: StreamEvent,
+    },
+    /// Health check response
+    HealthResult {
+        message_id: Uuid,
+        payload: HealthResponse,
+    },
+}

@@ -155,6 +155,22 @@ pub struct Config {
     #[serde(default = "default_heartbeat_interval_ms")]
     pub heartbeat_interval_ms: u64,
 
+    /// Skill execution timeout in seconds (default: 300 = 5 minutes)
+    #[serde(default = "default_skill_timeout_secs")]
+    pub skill_timeout_secs: u64,
+
+    /// Grace period after SIGTERM before SIGKILL in seconds (default: 5)
+    #[serde(default = "default_skill_timeout_grace_period_secs")]
+    pub skill_timeout_grace_period_secs: u64,
+
+    /// Maximum skill output size in bytes (default: 1,048,576 = 1MB)
+    #[serde(default = "default_skill_max_output_bytes")]
+    pub skill_max_output_bytes: usize,
+
+    /// Maximum number of log lines per skill execution (default: 10,000)
+    #[serde(default = "default_skill_max_log_lines")]
+    pub skill_max_log_lines: usize,
+
     /// Database pool (not serialized, initialized separately)
     #[serde(skip)]
     db_pool: Option<Arc<PgPool>>,
@@ -247,6 +263,22 @@ fn default_heartbeat_interval_ms() -> u64 {
     555_555
 }
 
+fn default_skill_timeout_secs() -> u64 {
+    300
+}
+
+fn default_skill_timeout_grace_period_secs() -> u64 {
+    5
+}
+
+fn default_skill_max_output_bytes() -> usize {
+    1_048_576
+}
+
+fn default_skill_max_log_lines() -> usize {
+    10_000
+}
+
 /// Machine profile determining resource limits and default model
 ///
 /// # Variants
@@ -298,6 +330,10 @@ impl Default for Config {
             event_max_payload_bytes: default_event_max_payload_bytes(),
             event_broadcast_capacity: default_event_broadcast_capacity(),
             heartbeat_interval_ms: default_heartbeat_interval_ms(),
+            skill_timeout_secs: default_skill_timeout_secs(),
+            skill_timeout_grace_period_secs: default_skill_timeout_grace_period_secs(),
+            skill_max_output_bytes: default_skill_max_output_bytes(),
+            skill_max_log_lines: default_skill_max_log_lines(),
             db_pool: None,
             owner_signing_key: None,
         }
@@ -449,6 +485,36 @@ impl Config {
                     "Invalid CARNELIAN_HEARTBEAT_INTERVAL_MS value: {}",
                     interval
                 ))
+            })?;
+        }
+
+        if let Ok(val) = std::env::var("CARNELIAN_SKILL_TIMEOUT_SECS") {
+            self.skill_timeout_secs = val.parse().map_err(|_| {
+                Error::Config(format!("Invalid CARNELIAN_SKILL_TIMEOUT_SECS value: {}", val))
+            })?;
+        }
+
+        if let Ok(val) = std::env::var("CARNELIAN_SKILL_TIMEOUT_GRACE_PERIOD_SECS") {
+            self.skill_timeout_grace_period_secs = val.parse().map_err(|_| {
+                Error::Config(format!(
+                    "Invalid CARNELIAN_SKILL_TIMEOUT_GRACE_PERIOD_SECS value: {}",
+                    val
+                ))
+            })?;
+        }
+
+        if let Ok(val) = std::env::var("CARNELIAN_SKILL_MAX_OUTPUT_BYTES") {
+            self.skill_max_output_bytes = val.parse().map_err(|_| {
+                Error::Config(format!(
+                    "Invalid CARNELIAN_SKILL_MAX_OUTPUT_BYTES value: {}",
+                    val
+                ))
+            })?;
+        }
+
+        if let Ok(val) = std::env::var("CARNELIAN_SKILL_MAX_LOG_LINES") {
+            self.skill_max_log_lines = val.parse().map_err(|_| {
+                Error::Config(format!("Invalid CARNELIAN_SKILL_MAX_LOG_LINES value: {}", val))
             })?;
         }
 

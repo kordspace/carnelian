@@ -29,14 +29,31 @@ machine_profile = "thummim"
 # =============================================================================
 # Server Configuration
 # =============================================================================
-# HTTP and WebSocket ports for the API server.
+# HTTP port for the API server (serves both REST and WebSocket).
 #
-# Can be overridden with:
-# - PORT or CARNELIAN_HTTP_PORT for http_port
-# - CARNELIAN_WS_PORT for ws_port
+# Port 18789: Core HTTP API + WebSocket endpoint (ws://host:18789/v1/events/ws)
+# Port 18790: Reserved for future LLM Gateway Service
+#
+# Can be overridden with PORT or CARNELIAN_HTTP_PORT environment variable.
 
 http_port = 18789
-ws_port = 18790
+
+# =============================================================================
+# Skill Execution Configuration
+# =============================================================================
+# Timeouts and output limits for worker skill invocations.
+
+# Skill execution timeout in seconds (default: 300 = 5 minutes)
+skill_timeout_secs = 300
+
+# Grace period after SIGTERM before SIGKILL in seconds (default: 5)
+skill_timeout_grace_period_secs = 5
+
+# Maximum skill output size in bytes (default: 1048576 = 1MB)
+skill_max_output_bytes = 1048576
+
+# Maximum number of log lines per skill execution (default: 10000)
+skill_max_log_lines = 10000
 
 # =============================================================================
 # Database Configuration

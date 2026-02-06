@@ -625,6 +625,7 @@ name = "carnelian-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
  "axum-extra",
  "blake3",
@@ -653,6 +654,7 @@ dependencies = [
  "tokio",
  "tokio-test",
  "tokio-tungstenite",
+ "tokio-util",
  "tower",
  "tower-http",
  "tracing",

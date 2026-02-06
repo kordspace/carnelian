@@ -75,6 +75,9 @@ dioxus-signals = "0.6"
 tokio-test = "0.4"
 testcontainers = "0.23"
 memory-stats = "1.2"
+# Async utilities
+async-trait = "0.1"
+tokio-util = { version = "0.7", features = ["codec"] }
 # Platform-specific
 libc = "0.2"
 
