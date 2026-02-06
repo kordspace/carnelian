@@ -90,6 +90,10 @@ pub struct Config {
     #[serde(default = "default_database_url")]
     pub database_url: String,
 
+    /// HTTP API bind address (default: "0.0.0.0")
+    #[serde(default = "default_bind_address")]
+    pub bind_address: String,
+
     /// HTTP API port (default: 18789)
     #[serde(default = "default_http_port")]
     pub http_port: u16,
@@ -198,6 +202,10 @@ fn default_database_url() -> String {
     "postgresql://carnelian:carnelian@localhost:5432/carnelian".to_string()
 }
 
+fn default_bind_address() -> String {
+    "0.0.0.0".to_string()
+}
+
 fn default_http_port() -> u16 {
     18789
 }
@@ -277,6 +285,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             database_url: default_database_url(),
+            bind_address: default_bind_address(),
             http_port: default_http_port(),
             ws_port: default_ws_port(),
             ollama_url: default_ollama_url(),
