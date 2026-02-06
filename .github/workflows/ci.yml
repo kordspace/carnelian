@@ -119,7 +119,7 @@ jobs:
     needs: rust-build-test
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: test
           POSTGRES_PASSWORD: test
