@@ -376,9 +376,9 @@ async fn get_database_url(container: &testcontainers::ContainerAsync<GenericImag
 /// Measure current physical memory usage in bytes.
 /// Panics if memory stats are unavailable so acceptance criteria is always enforced.
 fn measure_memory_usage() -> usize {
-    memory_stats()
-        .map(|stats| stats.physical_mem)
-        .expect("memory_stats() returned None — cannot enforce memory acceptance criteria on this platform")
+    memory_stats().map(|stats| stats.physical_mem).expect(
+        "memory_stats() returned None — cannot enforce memory acceptance criteria on this platform",
+    )
 }
 
 // =============================================================================
