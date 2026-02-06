@@ -128,7 +128,6 @@ async fn main() {
 }
 
 /// Handle the `start` command - launch the orchestrator
-#[allow(clippy::cognitive_complexity)]
 async fn handle_start(
     config_path: Option<PathBuf>,
     log_level_override: Option<String>,
@@ -460,7 +459,6 @@ fn is_process_running(pid: u32) -> bool {
 }
 
 /// Handle the `migrate` command - run database migrations
-#[allow(clippy::cognitive_complexity)]
 async fn handle_migrate(
     config_path: Option<PathBuf>,
     log_level_override: Option<String>,

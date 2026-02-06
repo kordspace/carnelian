@@ -15,7 +15,7 @@ edition = "2024"
 authors = ["Marco <info@kordspace.com>"]
 license = "MIT"
 repository = "https://github.com/kordspace/carnelian"
-rust-version = "1.88"
+rust-version = "1.85"
 
 [workspace.dependencies]
 # Async runtime
@@ -69,8 +69,8 @@ pgvector = "0.4"
 # Process management (worker spawning)
 tokio-process = "0.2"
 # Dioxus (Desktop UI)
-dioxus = { version = "0.7", features = ["desktop", "router"] }
-dioxus-signals = "0.7"
+dioxus = { version = "0.6", features = ["desktop", "router"] }
+dioxus-signals = "0.6"
 # Testing
 tokio-test = "0.4"
 testcontainers = "0.23"
