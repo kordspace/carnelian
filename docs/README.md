@@ -25,6 +25,10 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for installation and configuration instruct
 | [BRAND.md](BRAND.md) | 🔥 Dual theme brand kit (Forge / Night Lab) |
 | [LOGGING.md](LOGGING.md) | 🔥 Logging philosophy and conventions |
 
+## Architecture
+
+**Security:** blake3-based ledger, capability grants, policy engine (shipped in Phase 1).
+
 ## Machine Profiles
 
 - **Thummim**: 2080 Super, 32GB RAM (constrained)

@@ -136,8 +136,13 @@ CREATE INDEX idx_run_logs_level ON run_logs(level);
 CREATE INDEX idx_run_logs_ts ON run_logs(ts DESC);
 
 -- ============================================================================
--- LEDGER_EVENTS: Tamper-resistant audit log with hash chain
+-- LEDGER_EVENTS: Tamper-resistant audit log with blake3 hash chain
 -- ============================================================================
+-- Hash-chain integrity using blake3 algorithm:
+--   - payload_hash: blake3(canonical_json_payload)
+--   - event_hash: blake3(timestamp || actor_id || action_type || payload_hash || prev_hash)
+--   - Each event links to previous via prev_hash, creating immutable chain
+--   - Verification: recompute all hashes and check chain integrity
 CREATE TABLE ledger_events (
     event_id BIGSERIAL PRIMARY KEY,
     ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),

@@ -114,6 +114,56 @@ jobs:
         working-directory: workers/node-worker
         run: node index.js
 
+  # Integration tests (requires PostgreSQL)
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: rust-build-test
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: carnelian_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: carnelian-rust
+
+      - name: Pre-build workspace (so CLI tests don't compile inside cargo test)
+        run: cargo build --workspace --tests
+        env:
+          SQLX_OFFLINE: true
+
+      - name: Run integration tests
+        run: cargo test --workspace -- --ignored
+        env:
+          SQLX_OFFLINE: true
+          DATABASE_URL: postgresql://test:test@localhost:5432/carnelian_test
+
   # Secret scanning
   secrets:
     name: Secret Scanning

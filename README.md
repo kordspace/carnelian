@@ -290,8 +290,14 @@ carnelian/
 - **Local-First Inference** - Ollama integration with GPU support, remote fallback
 - **Heartbeat System** - 555,555ms wake routine with mantra rotation, auto-task queuing
 - **Worker Sandboxing** - Isolated execution with explicit capability grants
-- **Tamper-Resistant Ledger** - Hash-chain audit trail for privileged actions
+- **Tamper-Resistant Ledger** - Hash-chain audit trail using **blake3** for integrity verification
 - **600+ Skills** - Full compatibility with existing Thummim skill library via Node worker
+
+### Security Architecture Notes
+
+The ledger uses **blake3** (not SHA-256) for hash-chain integrity, providing faster performance than traditional cryptographic hashes while maintaining collision resistance.
+
+Note: The policy engine (`crates/carnelian-core/src/policy.rs`) and ledger manager (`crates/carnelian-core/src/ledger.rs`) shipped early as part of Phase 1 foundation, though originally planned for Phase 4 in the roadmap.
 
 ## Development
 

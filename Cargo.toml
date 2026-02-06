@@ -22,7 +22,7 @@ rust-version = "1.85"
 tokio = { version = "1.43", features = ["full"] }
 # Web framework (Axum - Tokio-native, Dioxus fullstack compatible)
 axum = { version = "0.8", features = ["ws", "macros"] }
-axum-extra = { version = "0.10", features = ["typed-header"] }
+axum-extra = { version = "0.12", features = ["typed-header"] }
 tower = { version = "0.5", features = ["full"] }
 tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip", "timeout", "limit"] }
 # Database (SQLx - async-first, compile-time query verification)
@@ -48,20 +48,20 @@ ed25519-dalek = { version = "2.1", features = ["serde", "rand_core"] }
 blake3 = "1.5"
 hex = "0.4"
 # HTTP client (for remote model providers, ElevenLabs)
-reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"] }
+reqwest = { version = "0.13", features = ["json", "stream", "rustls"] }
 # WebSocket
-tokio-tungstenite = "0.26"
+tokio-tungstenite = "0.28"
 futures-util = "0.3"
 # HTTP types
 http = "1.2"
 # CLI
 clap = { version = "4.5", features = ["derive", "env"] }
 # Configuration
-config = "0.14"
+config = "0.15"
 dotenvy = "0.15"
 # File watching (skill discovery)
-notify = "7.0"
-notify-debouncer-mini = "0.5"
+notify = "8.0"
+notify-debouncer-mini = "0.7"
 # Glob patterns (capability scopes)
 globset = "0.4"
 # Embeddings / pgvector
@@ -69,8 +69,8 @@ pgvector = "0.4"
 # Process management (worker spawning)
 tokio-process = "0.2"
 # Dioxus (Desktop UI)
-dioxus = { version = "0.6", features = ["desktop", "router"] }
-dioxus-signals = "0.6"
+dioxus = { version = "0.7", features = ["desktop", "router"] }
+dioxus-signals = "0.7"
 # Testing
 tokio-test = "0.4"
 testcontainers = "0.23"

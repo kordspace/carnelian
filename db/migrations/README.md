@@ -95,13 +95,25 @@ The `00000000000001_core_schema.sql` migration creates the foundational tables:
 | `tasks` | Work queue for orchestrator |
 | `task_runs` | Execution attempts for tasks |
 | `run_logs` | Structured logs for task runs |
-| `ledger_events` | Tamper-resistant audit log with hash chain |
+| `ledger_events` | Tamper-resistant audit log with **blake3** hash chain |
 | `memories` | Memory storage with vector embeddings (pgvector) |
 | `model_providers` | LLM provider configurations |
 | `usage_costs` | Token usage and cost tracking |
 | `config_store` | Key-value configuration storage |
 | `config_versions` | Configuration change history |
 | `heartbeat_history` | Heartbeat tracking for wake routine |
+
+### Ledger Hash-Chain Architecture
+
+The ledger uses **blake3** for cryptographic hashing (not SHA-256). Each event contains:
+
+- `payload_hash` — blake3 of the canonical JSON payload
+- `prev_hash` — previous event's `event_hash`, linking the chain
+- `event_hash` — blake3 of all fields (timestamp, actor, action, payload_hash, prev_hash)
+
+Verification: `Ledger::verify_chain()` replays the entire chain and recomputes hashes. See `crates/carnelian-core/src/ledger.rs` for implementation details.
+
+Note: The ledger and policy engine shipped in Phase 1 (originally planned for Phase 4).
 
 ## Environment Variables
 

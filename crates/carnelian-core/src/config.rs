@@ -255,6 +255,7 @@ fn default_heartbeat_interval_ms() -> u64 {
 /// - `Urim`: RTX 2080 Ti (11GB VRAM), 64GB RAM - high-end profile
 /// - `Custom`: User-defined settings via `custom_machine_config`
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
 pub enum MachineProfile {
     #[default]
     Thummim,
