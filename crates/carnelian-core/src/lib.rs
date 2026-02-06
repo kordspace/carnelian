@@ -102,6 +102,7 @@ use tracing_subscriber::{
 pub use carnelian_common::{Error, Result};
 pub use config::Config;
 pub use events::{EventStream, EventStreamStats, PriorityRingBuffer};
+pub use ledger::{Ledger, LedgerEvent};
 pub use policy::{CapabilityGrant, PolicyEngine};
 pub use scheduler::Scheduler;
 pub use server::{AppState, Server};
