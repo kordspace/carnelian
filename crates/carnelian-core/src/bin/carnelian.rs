@@ -13,12 +13,17 @@
 //! - `carnelian start` - Start the orchestrator
 //! - `carnelian stop` - Stop a running instance
 //! - `carnelian status` - Query the status endpoint
+//! - `carnelian migrate` - Run database migrations
+//! - `carnelian logs` - Stream events from running instance
 
 use std::path::PathBuf;
 use std::time::Duration;
 
+use carnelian_common::types::{EventEnvelope, EventLevel};
 use clap::{Parser, Subcommand};
+use futures_util::{SinkExt, StreamExt};
 use std::sync::Arc;
+use tokio_tungstenite::tungstenite::protocol::Message;
 
 use carnelian_core::{Config, EventStream, Ledger, PolicyEngine, Scheduler, Server, WorkerManager};
 
@@ -34,7 +39,10 @@ use carnelian_core::{Config, EventStream, Ledger, PolicyEngine, Scheduler, Serve
   carnelian stop                     Stop gracefully
   carnelian migrate                  Run database migrations
   carnelian migrate --dry-run        Show pending migrations without applying
-  carnelian migrate --database-url postgres://user:pass@host/db  Use specific database")]
+  carnelian logs                     Stream events from running instance
+  carnelian logs -f --level ERROR    Stream only ERROR events
+  carnelian logs --url http://remote:18789  Connect to remote instance
+  carnelian --database-url postgres://user:pass@host/db migrate  Use specific database")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -46,6 +54,10 @@ struct Cli {
     /// Override log level (ERROR, WARN, INFO, DEBUG, TRACE)
     #[arg(long, global = true, env = "LOG_LEVEL")]
     log_level: Option<String>,
+
+    /// Override database URL (takes precedence over config file and environment)
+    #[arg(long, global = true, env = "DATABASE_URL")]
+    database_url: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -68,10 +80,25 @@ enum Commands {
         /// Show pending migrations without applying them
         #[arg(long, default_value_t = false)]
         dry_run: bool,
+    },
 
-        /// Override database URL (takes precedence over config file and environment)
-        #[arg(long, visible_alias = "url")]
-        database_url: Option<String>,
+    /// Stream events from a running Carnelian instance
+    Logs {
+        /// URL of the Carnelian server
+        #[arg(long, default_value = "http://localhost:18789")]
+        url: String,
+
+        /// Keep connection open and stream events continuously
+        #[arg(long, short = 'f')]
+        follow: bool,
+
+        /// Filter events by minimum level (ERROR, WARN, INFO, DEBUG, TRACE)
+        #[arg(long)]
+        level: Option<String>,
+
+        /// Filter events by type (e.g., `TaskCreated`, `WorkerStarted`)
+        #[arg(long)]
+        event_type: Option<String>,
     },
 }
 
@@ -80,13 +107,18 @@ async fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        Commands::Start => handle_start(cli.config, cli.log_level).await,
+        Commands::Start => handle_start(cli.config, cli.log_level, cli.database_url).await,
         Commands::Stop => handle_stop().await,
         Commands::Status { url } => handle_status(&url).await,
-        Commands::Migrate {
-            dry_run,
-            database_url,
-        } => handle_migrate(cli.config, cli.log_level, dry_run, database_url).await,
+        Commands::Migrate { dry_run } => {
+            handle_migrate(cli.config, cli.log_level, dry_run, cli.database_url).await
+        }
+        Commands::Logs {
+            url,
+            follow,
+            level,
+            event_type,
+        } => handle_logs(&url, follow, level, event_type).await,
     };
 
     if let Err(e) = result {
@@ -99,6 +131,7 @@ async fn main() {
 async fn handle_start(
     config_path: Option<PathBuf>,
     log_level_override: Option<String>,
+    database_url_override: Option<String>,
 ) -> carnelian_common::Result<()> {
     // Load configuration first (before tracing, since Config::load initializes tracing)
     let mut config = if let Some(path) = config_path {
@@ -125,6 +158,11 @@ async fn handle_start(
         version = carnelian_common::VERSION,
         "🔥 Carnelian OS starting..."
     );
+
+    // Override database URL if specified via CLI (takes precedence over config and env)
+    if let Some(url) = database_url_override {
+        config.database_url = url;
+    }
 
     // Validate configuration
     config.validate()?;
@@ -514,4 +552,182 @@ async fn handle_migrate(
     }
 
     Ok(())
+}
+
+/// Handle the `logs` command - stream events from a running instance
+#[allow(clippy::too_many_lines, clippy::redundant_pub_crate)]
+async fn handle_logs(
+    url: &str,
+    follow: bool,
+    level_filter: Option<String>,
+    event_type_filter: Option<String>,
+) -> carnelian_common::Result<()> {
+    // Parse level filter if provided
+    let min_level = if let Some(ref level_str) = level_filter {
+        Some(parse_event_level(level_str)?)
+    } else {
+        None
+    };
+
+    // Convert HTTP URL to WebSocket URL
+    let ws_base = url
+        .replace("http://", "ws://")
+        .replace("https://", "wss://");
+    let ws_url = format!("{}/v1/events/ws", ws_base.trim_end_matches('/'));
+
+    println!(
+        "🔥 Connecting to Carnelian at {}...",
+        url.trim_end_matches('/')
+    );
+
+    // Establish WebSocket connection
+    let (ws_stream, _) = tokio_tungstenite::connect_async(&ws_url)
+        .await
+        .map_err(|e| {
+            carnelian_common::Error::Connection(format!(
+                "Failed to connect to Carnelian at {}. Is it running?\n  Error: {}",
+                url, e
+            ))
+        })?;
+
+    println!("🔥 Connected — streaming events{}\n", {
+        let mut filters = Vec::new();
+        if let Some(ref l) = level_filter {
+            filters.push(format!("level >= {}", l.to_uppercase()));
+        }
+        if let Some(ref t) = event_type_filter {
+            filters.push(format!("type = {}", t));
+        }
+        if filters.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", filters.join(", "))
+        }
+    });
+
+    let (mut sender, mut receiver) = ws_stream.split();
+    let mut event_count = 0usize;
+
+    loop {
+        tokio::select! {
+            msg = receiver.next() => {
+                match msg {
+                    Some(Ok(Message::Text(text))) => {
+                        match serde_json::from_str::<EventEnvelope>(&text) {
+                            Ok(event) => {
+                                // Apply level filter
+                                if let Some(ref min) = min_level {
+                                    if (event.level as u8) > (*min as u8) {
+                                        continue;
+                                    }
+                                }
+
+                                // Apply event type filter (case-insensitive substring match)
+                                if let Some(ref type_filter) = event_type_filter {
+                                    let event_type_str = format!("{:?}", event.event_type);
+                                    if !event_type_str
+                                        .to_lowercase()
+                                        .contains(&type_filter.to_lowercase())
+                                    {
+                                        continue;
+                                    }
+                                }
+
+                                println!("{}", format_event(&event));
+                                event_count += 1;
+
+                                // If not following, exit after first event
+                                if !follow {
+                                    break;
+                                }
+                            }
+                            Err(_) => {
+                                // Not a valid EventEnvelope, print raw for debugging
+                                eprintln!("  [raw] {}", text);
+                            }
+                        }
+                    }
+                    Some(Ok(Message::Ping(data))) => {
+                        if let Err(e) = sender.send(Message::Pong(data)).await {
+                            eprintln!("Failed to send pong: {}", e);
+                            break;
+                        }
+                    }
+                    Some(Ok(Message::Close(_))) => {
+                        println!("\n🔥 Server closed connection");
+                        break;
+                    }
+                    Some(Err(e)) => {
+                        return Err(carnelian_common::Error::Connection(format!(
+                            "WebSocket error: {}",
+                            e
+                        )));
+                    }
+                    None => {
+                        println!("\n🔥 Connection closed");
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            _ = tokio::signal::ctrl_c() => {
+                println!("\n🔥 Disconnecting... ({} events received)", event_count);
+                break;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Parse a string into an `EventLevel` (case-insensitive)
+fn parse_event_level(s: &str) -> carnelian_common::Result<EventLevel> {
+    match s.to_uppercase().as_str() {
+        "ERROR" => Ok(EventLevel::Error),
+        "WARN" => Ok(EventLevel::Warn),
+        "INFO" => Ok(EventLevel::Info),
+        "DEBUG" => Ok(EventLevel::Debug),
+        "TRACE" => Ok(EventLevel::Trace),
+        _ => Err(carnelian_common::Error::Config(format!(
+            "Invalid log level '{}'. Valid levels: ERROR, WARN, INFO, DEBUG, TRACE",
+            s
+        ))),
+    }
+}
+
+/// Format an `EventEnvelope` for terminal display with ANSI colors
+fn format_event(event: &EventEnvelope) -> String {
+    let ts = event.timestamp.format("%Y-%m-%d %H:%M:%S%.3f");
+
+    let (level_str, color_code) = match event.level {
+        EventLevel::Error => ("ERROR", "\x1b[31m"),
+        EventLevel::Warn => ("WARN ", "\x1b[33m"),
+        EventLevel::Info => ("INFO ", "\x1b[32m"),
+        EventLevel::Debug => ("DEBUG", "\x1b[34m"),
+        EventLevel::Trace => ("TRACE", "\x1b[90m"),
+    };
+    let reset = "\x1b[0m";
+
+    let event_type = format!("{:?}", event.event_type);
+
+    let mut meta_parts = Vec::new();
+    if let Some(ref actor) = event.actor_id {
+        meta_parts.push(format!("actor={}", actor));
+    }
+    if let Some(ref corr) = event.correlation_id {
+        meta_parts.push(format!("correlation={}", corr));
+    }
+    let meta = if meta_parts.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", meta_parts.join(" "))
+    };
+
+    let payload = if event.payload.is_null() || event.payload == serde_json::json!({}) {
+        String::new()
+    } else {
+        format!("\n  payload: {}", event.payload)
+    };
+
+    format!("{color_code}[{ts}] {level_str} {event_type}{meta}{payload}{reset}")
 }
