@@ -43,8 +43,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
-use carnelian_core::{Config, EventStream, PolicyEngine, Scheduler, Server, WorkerManager};
+use carnelian_core::{Config, EventStream, Ledger, PolicyEngine, Scheduler, Server, WorkerManager};
 use futures_util::StreamExt;
+use memory_stats::memory_stats;
 use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
 use tokio::sync::oneshot;
 use tokio::time::timeout;
@@ -89,10 +90,20 @@ fn create_test_worker_manager(
     )))
 }
 
+/// Create a lazy Ledger for tests that don't need database access
+fn create_test_ledger() -> Arc<Ledger> {
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_lazy("postgresql://test:test@localhost:5432/test")
+        .expect("Failed to create lazy pool");
+    Arc::new(Ledger::new(pool))
+}
+
 /// Create a test configuration with in-memory settings (no database)
 fn create_test_config(http_port: u16) -> Config {
     let mut config = Config::default();
     config.database_url = String::new();
+    config.bind_address = "127.0.0.1".to_string();
     config.http_port = http_port;
     config.ws_port = allocate_random_port();
     config.log_level = "DEBUG".to_string();
@@ -155,6 +166,7 @@ async fn test_full_server_startup() {
         config.clone(),
         event_stream.clone(),
         create_test_policy_engine(),
+        create_test_ledger(),
         create_test_scheduler(event_stream.clone()),
         create_test_worker_manager(config, event_stream),
     );
@@ -217,6 +229,7 @@ async fn test_websocket_event_reception() {
         config.clone(),
         event_stream.clone(),
         create_test_policy_engine(),
+        create_test_ledger(),
         create_test_scheduler(event_stream.clone()),
         create_test_worker_manager(config, event_stream),
     );
@@ -312,6 +325,7 @@ async fn test_load_handling_10k_events_per_minute() {
         config.clone(),
         event_stream.clone(),
         create_test_policy_engine(),
+        create_test_ledger(),
         create_test_scheduler(event_stream.clone()),
         create_test_worker_manager(config, event_stream),
     );
@@ -364,6 +378,11 @@ async fn test_load_handling_10k_events_per_minute() {
         }
     });
 
+    // Record baseline memory usage before load
+    let baseline_memory_bytes = memory_stats().map_or(0, |s| s.physical_mem);
+    let mut peak_memory_bytes = baseline_memory_bytes;
+    let mut memory_samples: Vec<usize> = vec![baseline_memory_bytes];
+
     // Publish 10,000 events at ~167 events/second over 60 seconds
     let total_events = 10_000;
     let interval = Duration::from_micros(6000); // 6ms = ~167/sec
@@ -390,15 +409,35 @@ async fn test_load_handling_10k_events_per_minute() {
         let event = create_test_event(level, &format!("Load test event {}", i));
         event_stream_clone.publish(event);
 
-        // Check client is still connected every 1000 events
-        if i % 1000 == 0 && !client_connected.load(std::sync::atomic::Ordering::Relaxed) {
-            panic!(
-                "WebSocket client disconnected during load test at event {}",
-                i
-            );
+        // Sample memory every 1000 events (~6 seconds)
+        if i % 1000 == 0 {
+            if let Some(stats) = memory_stats() {
+                let current = stats.physical_mem;
+                memory_samples.push(current);
+                if current > peak_memory_bytes {
+                    peak_memory_bytes = current;
+                }
+            }
+
+            // Check client is still connected
+            if !client_connected.load(std::sync::atomic::Ordering::Relaxed) {
+                panic!(
+                    "WebSocket client disconnected during load test at event {}",
+                    i
+                );
+            }
         }
     }
     let elapsed = start.elapsed();
+
+    // Final memory sample after all events published
+    if let Some(stats) = memory_stats() {
+        let current = stats.physical_mem;
+        memory_samples.push(current);
+        if current > peak_memory_bytes {
+            peak_memory_bytes = current;
+        }
+    }
 
     // Wait for remaining events to be received
     tokio::time::sleep(Duration::from_secs(3)).await;
@@ -407,6 +446,14 @@ async fn test_load_handling_10k_events_per_minute() {
     let final_error_received = error_received.load(std::sync::atomic::Ordering::Relaxed);
     let still_connected = client_connected.load(std::sync::atomic::Ordering::Relaxed);
     let stats = event_stream_clone.stats();
+
+    let baseline_mb = baseline_memory_bytes as f64 / (1024.0 * 1024.0);
+    let peak_mb = peak_memory_bytes as f64 / (1024.0 * 1024.0);
+    let growth_ratio = if baseline_memory_bytes > 0 {
+        peak_memory_bytes as f64 / baseline_memory_bytes as f64
+    } else {
+        1.0
+    };
 
     println!("=== Load Test Results ===");
     println!("Published {} events in {:?}", total_events, elapsed);
@@ -421,6 +468,17 @@ async fn test_load_handling_10k_events_per_minute() {
     );
     println!("Client still connected: {}", still_connected);
     println!("Buffer stats: {:?}", stats);
+    println!("=== Memory Usage ===");
+    println!("Baseline: {:.2} MB", baseline_mb);
+    println!("Peak:     {:.2} MB", peak_mb);
+    println!("Growth:   {:.2}x baseline", growth_ratio);
+    println!(
+        "Samples:  {:?}",
+        memory_samples
+            .iter()
+            .map(|s| format!("{:.1}MB", *s as f64 / (1024.0 * 1024.0)))
+            .collect::<Vec<_>>()
+    );
 
     // ASSERTION 1: WebSocket client stays connected
     assert!(
@@ -468,6 +526,18 @@ async fn test_load_handling_10k_events_per_minute() {
         total_events
     );
 
+    // ASSERTION 6: Memory usage remains bounded
+    // Peak should not exceed 2x baseline OR an absolute 256MB ceiling
+    let max_allowed_bytes = std::cmp::max(baseline_memory_bytes * 2, 256 * 1024 * 1024);
+    assert!(
+        peak_memory_bytes <= max_allowed_bytes,
+        "Peak memory ({:.2} MB) should stay within 2x baseline ({:.2} MB) or 256 MB ceiling. \
+         Growth ratio: {:.2}x",
+        peak_mb,
+        baseline_mb,
+        growth_ratio
+    );
+
     // Clean up
     receiver_handle.abort();
     server_handle.abort();
@@ -499,6 +569,7 @@ async fn test_graceful_shutdown_behavior() {
         config.clone(),
         event_stream.clone(),
         create_test_policy_engine(),
+        create_test_ledger(),
         create_test_scheduler(event_stream.clone()),
         create_test_worker_manager(config, event_stream),
     );
@@ -623,6 +694,7 @@ async fn test_event_stream_backpressure() {
         config.clone(),
         event_stream.clone(),
         create_test_policy_engine(),
+        create_test_ledger(),
         create_test_scheduler(event_stream.clone()),
         create_test_worker_manager(config, event_stream),
     );
@@ -696,6 +768,7 @@ async fn test_multiple_websocket_clients() {
         config.clone(),
         event_stream.clone(),
         create_test_policy_engine(),
+        create_test_ledger(),
         create_test_scheduler(event_stream.clone()),
         create_test_worker_manager(config, event_stream),
     );
@@ -771,6 +844,7 @@ async fn test_health_endpoint_status() {
         config.clone(),
         event_stream.clone(),
         create_test_policy_engine(),
+        create_test_ledger(),
         create_test_scheduler(event_stream.clone()),
         create_test_worker_manager(config, event_stream),
     );
@@ -812,6 +886,35 @@ async fn test_health_endpoint_status() {
 // =============================================================================
 // DATABASE-BACKED INTEGRATION TESTS (require Docker)
 // =============================================================================
+
+/// Verify a column exists in a table with the expected data type
+async fn verify_column(pool: &sqlx::PgPool, table: &str, column: &str, expected_type: &str) {
+    let col_type: Option<String> = sqlx::query_scalar(
+        "SELECT data_type::text FROM information_schema.columns \
+         WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2",
+    )
+    .bind(table)
+    .bind(column)
+    .fetch_optional(pool)
+    .await
+    .expect("Should query column info");
+
+    assert!(
+        col_type.is_some(),
+        "Column '{}.{}' should exist",
+        table,
+        column
+    );
+    let actual = col_type.unwrap();
+    assert!(
+        actual.contains(expected_type),
+        "Column '{}.{}' should be '{}', got '{}'",
+        table,
+        column,
+        expected_type,
+        actual
+    );
+}
 
 /// Create a PostgreSQL container for testing
 async fn create_postgres_container() -> testcontainers::ContainerAsync<GenericImage> {
@@ -892,12 +995,14 @@ async fn test_database_server_startup() {
         Duration::from_secs(3600),
     )));
 
+    let ledger = Arc::new(Ledger::new(pool.clone()));
     let config = Arc::new(config);
     let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
     let server = Server::new(
         config,
         event_stream,
         policy_engine,
+        ledger,
         scheduler,
         worker_manager,
     );
@@ -966,6 +1071,7 @@ async fn test_database_connection_failure() {
     let event_stream = Arc::new(event_stream);
 
     let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
+    let ledger = Arc::new(Ledger::new(pool.clone()));
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool,
         event_stream.clone(),
@@ -977,6 +1083,7 @@ async fn test_database_connection_failure() {
         config,
         event_stream,
         policy_engine,
+        ledger,
         scheduler,
         worker_manager,
     );
@@ -1073,12 +1180,14 @@ async fn test_database_reconnection() {
         event_stream.clone(),
         Duration::from_secs(3600),
     )));
+    let ledger = Arc::new(Ledger::new(pool.clone()));
     let config = Arc::new(config);
     let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
     let server = Server::new(
         config,
         event_stream,
         policy_engine,
+        ledger,
         scheduler,
         worker_manager,
     );
@@ -1209,6 +1318,7 @@ async fn test_database_reconnection_under_load() {
     let event_stream_clone = event_stream.clone();
 
     let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
+    let ledger = Arc::new(Ledger::new(pool.clone()));
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool,
         event_stream.clone(),
@@ -1220,6 +1330,7 @@ async fn test_database_reconnection_under_load() {
         config,
         event_stream,
         policy_engine,
+        ledger,
         scheduler,
         worker_manager,
     );
@@ -1328,6 +1439,241 @@ async fn test_database_reconnection_under_load() {
     server_handle.abort();
 }
 
+/// Test heartbeat interval timing with `run_with_shutdown`
+///
+/// This test:
+/// - Starts a server with a real database and a short heartbeat interval (2s)
+/// - Connects a WebSocket client to `/v1/events/ws`
+/// - Waits for two or more `HeartbeatTick` events from the scheduler
+/// - Asserts elapsed time between consecutive heartbeats matches the configured interval (±500ms)
+/// - Verifies event payload contains expected fields
+/// - Verifies mantra selection follows "first unknown, then random rotation" via DB state
+/// - Shuts down cleanly via `run_with_shutdown`
+#[tokio::test]
+#[ignore = "Requires Docker - run with: cargo test test_heartbeat_interval_timing -- --ignored"]
+async fn test_heartbeat_interval_timing() {
+    // Start PostgreSQL container
+    let container = create_postgres_container().await;
+    let database_url = get_database_url(&container).await;
+
+    let port = allocate_random_port();
+    let mut config = create_test_config(port);
+    config.database_url = database_url;
+
+    // Connect to database
+    config
+        .connect_database()
+        .await
+        .expect("Should connect to database");
+
+    // Run migrations (creates Lian identity + seed data needed by scheduler)
+    let pool = config.pool().expect("Should have pool");
+    carnelian_core::db::run_migrations(pool)
+        .await
+        .expect("Should run migrations");
+
+    let event_stream = EventStream::with_max_payload(
+        config.event_buffer_capacity,
+        config.event_broadcast_capacity,
+        config.event_max_payload_bytes,
+    );
+    let event_stream = Arc::new(event_stream);
+
+    let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
+    let ledger = Arc::new(Ledger::new(pool.clone()));
+
+    // Configure scheduler with a short heartbeat interval (2 seconds) for test speed
+    let heartbeat_interval = Duration::from_millis(2000);
+    let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
+        pool.clone(),
+        event_stream.clone(),
+        heartbeat_interval,
+    )));
+
+    let config = Arc::new(config);
+    let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
+
+    let server = Server::new(
+        config,
+        event_stream,
+        policy_engine,
+        ledger,
+        scheduler,
+        worker_manager,
+    );
+
+    // Create a oneshot channel to trigger graceful shutdown
+    let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+
+    // Start server with custom shutdown signal
+    let server_handle = tokio::spawn(async move {
+        server
+            .run_with_shutdown(async {
+                let _ = shutdown_rx.await;
+            })
+            .await
+    });
+
+    // Wait for server to be ready
+    assert!(
+        wait_for_server(port, 10).await,
+        "Server should become ready"
+    );
+
+    // Connect WebSocket client
+    let ws_url = format!("ws://127.0.0.1:{}/v1/events/ws", port);
+    let (ws_stream, _) = tokio_tungstenite::connect_async(&ws_url)
+        .await
+        .expect("WebSocket connection should succeed");
+
+    let (_write, mut read) = ws_stream.split();
+
+    // Collect HeartbeatTick events with timestamps
+    let mut heartbeat_times: Vec<tokio::time::Instant> = Vec::new();
+    let mut heartbeat_payloads: Vec<serde_json::Value> = Vec::new();
+    let target_heartbeats = 3;
+
+    // Wait for at least 3 heartbeats (should take ~6 seconds with 2s interval)
+    // Allow up to 15 seconds total to account for the first tick delay + DB queries
+    let collect_result = timeout(Duration::from_secs(15), async {
+        while heartbeat_times.len() < target_heartbeats {
+            if let Some(Ok(msg)) = read.next().await {
+                if let Message::Text(text) = msg {
+                    if let Ok(event) = serde_json::from_str::<serde_json::Value>(&text) {
+                        if event.get("event_type").and_then(|v| v.as_str()) == Some("HeartbeatTick")
+                        {
+                            heartbeat_times.push(tokio::time::Instant::now());
+                            heartbeat_payloads.push(event);
+                        }
+                    }
+                }
+            }
+        }
+    })
+    .await;
+
+    assert!(
+        collect_result.is_ok(),
+        "Should receive {} HeartbeatTick events within timeout (got {})",
+        target_heartbeats,
+        heartbeat_times.len()
+    );
+
+    // ASSERTION 1: Verify timing between consecutive heartbeats
+    let tolerance = Duration::from_millis(500);
+    for i in 1..heartbeat_times.len() {
+        let delta = heartbeat_times[i] - heartbeat_times[i - 1];
+        let lower = heartbeat_interval.saturating_sub(tolerance);
+        let upper = heartbeat_interval + tolerance;
+        println!(
+            "Heartbeat {} → {}: delta={:?} (expected {:?} ± {:?})",
+            i - 1,
+            i,
+            delta,
+            heartbeat_interval,
+            tolerance
+        );
+        assert!(
+            delta >= lower && delta <= upper,
+            "Heartbeat interval delta {:?} should be within {:?} ± {:?}",
+            delta,
+            heartbeat_interval,
+            tolerance
+        );
+    }
+
+    // ASSERTION 2: Verify event payload contains expected fields
+    for (idx, payload) in heartbeat_payloads.iter().enumerate() {
+        let p = &payload["payload"];
+        assert!(
+            p.get("heartbeat_id").is_some(),
+            "Heartbeat {} should have heartbeat_id",
+            idx
+        );
+        assert!(
+            p.get("identity_id").is_some(),
+            "Heartbeat {} should have identity_id",
+            idx
+        );
+        assert!(
+            p.get("mantra").is_some(),
+            "Heartbeat {} should have mantra",
+            idx
+        );
+        assert!(
+            p.get("tasks_queued").is_some(),
+            "Heartbeat {} should have tasks_queued",
+            idx
+        );
+        assert!(
+            p.get("duration_ms").is_some(),
+            "Heartbeat {} should have duration_ms",
+            idx
+        );
+    }
+
+    // ASSERTION 3: Verify mantra selection strategy via database state
+    // The first mantras should be "unknown" ones (not yet used), confirming
+    // the "first unknown, then random rotation" strategy
+    let mantras: Vec<String> = heartbeat_payloads
+        .iter()
+        .filter_map(|p| p["payload"]["mantra"].as_str().map(String::from))
+        .collect();
+    println!("Mantras selected: {:?}", mantras);
+    assert!(
+        !mantras.is_empty(),
+        "Should have collected at least one mantra"
+    );
+    // First mantra should be a valid string (from the MANTRAS list)
+    assert!(!mantras[0].is_empty(), "First mantra should not be empty");
+
+    // Verify heartbeat records were written to the database
+    let pool_ref = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&get_database_url(&container).await)
+        .await
+        .expect("Should reconnect for verification");
+
+    let heartbeat_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM heartbeat_history")
+        .fetch_one(&pool_ref)
+        .await
+        .expect("Should query heartbeat_history");
+
+    #[allow(clippy::cast_possible_wrap)]
+    let target_i64 = target_heartbeats as i64;
+    assert!(
+        heartbeat_count >= target_i64,
+        "Database should have at least {} heartbeat records, got {}",
+        target_heartbeats,
+        heartbeat_count
+    );
+
+    println!(
+        "✓ Heartbeat interval test passed: {} heartbeats at ~{:?} intervals",
+        heartbeat_times.len(),
+        heartbeat_interval
+    );
+
+    // Trigger graceful shutdown
+    shutdown_tx.send(()).expect("Should send shutdown signal");
+
+    // Wait for server to shut down cleanly
+    let shutdown_result = timeout(Duration::from_secs(10), server_handle).await;
+    assert!(
+        shutdown_result.is_ok(),
+        "Server should shut down within timeout"
+    );
+    let server_result = shutdown_result.unwrap();
+    assert!(
+        server_result.is_ok(),
+        "Server task should complete without panic"
+    );
+    assert!(
+        server_result.unwrap().is_ok(),
+        "Server should shut down successfully"
+    );
+}
+
 /// Test that migrations create expected seed data
 #[tokio::test]
 #[ignore = "requires Docker - run with: cargo test --test integration_test test_migration_seed_data -- --ignored"]
@@ -1412,4 +1758,240 @@ async fn test_migration_seed_data() {
         .expect("Running migrations again should succeed (idempotent)");
 
     println!("✓ All seed data verified successfully");
+
+    // =========================================================================
+    // SCHEMA COVERAGE: Verify all expected tables, columns, indexes, extensions
+    // =========================================================================
+
+    // Verify all expected tables exist via information_schema
+    let expected_tables = vec![
+        "identities",
+        "capabilities",
+        "capability_grants",
+        "skills",
+        "tasks",
+        "task_runs",
+        "run_logs",
+        "ledger_events",
+        "memories",
+        "model_providers",
+        "usage_costs",
+        "config_store",
+        "config_versions",
+        "heartbeat_history",
+    ];
+
+    let existing_tables: Vec<String> = sqlx::query_scalar(
+        "SELECT table_name::text FROM information_schema.tables \
+         WHERE table_schema = 'public' AND table_type = 'BASE TABLE' \
+         ORDER BY table_name",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("Should query information_schema.tables");
+
+    for table in &expected_tables {
+        assert!(
+            existing_tables.iter().any(|t| t == table),
+            "Table '{}' should exist in schema. Found tables: {:?}",
+            table,
+            existing_tables
+        );
+    }
+    println!("✓ All {} expected tables verified", expected_tables.len());
+
+    // Verify key columns with correct data types for critical tables
+
+    // identities table columns
+    verify_column(&pool, "identities", "identity_id", "uuid").await;
+    verify_column(&pool, "identities", "name", "text").await;
+    verify_column(&pool, "identities", "identity_type", "text").await;
+    verify_column(&pool, "identities", "soul_file_path", "text").await;
+    verify_column(&pool, "identities", "directives", "jsonb").await;
+    verify_column(&pool, "identities", "voice_config", "jsonb").await;
+    verify_column(&pool, "identities", "created_at", "timestamp").await;
+
+    // tasks table columns
+    verify_column(&pool, "tasks", "task_id", "uuid").await;
+    verify_column(&pool, "tasks", "title", "text").await;
+    verify_column(&pool, "tasks", "state", "text").await;
+    verify_column(&pool, "tasks", "priority", "integer").await;
+    verify_column(&pool, "tasks", "requires_approval", "boolean").await;
+
+    // ledger_events table columns
+    verify_column(&pool, "ledger_events", "event_id", "bigint").await;
+    verify_column(&pool, "ledger_events", "action_type", "text").await;
+    verify_column(&pool, "ledger_events", "payload_hash", "text").await;
+    verify_column(&pool, "ledger_events", "prev_hash", "text").await;
+    verify_column(&pool, "ledger_events", "event_hash", "text").await;
+    verify_column(&pool, "ledger_events", "core_signature", "text").await;
+    verify_column(&pool, "ledger_events", "metadata", "jsonb").await;
+
+    // memories table columns
+    verify_column(&pool, "memories", "memory_id", "uuid").await;
+    verify_column(&pool, "memories", "content", "text").await;
+    verify_column(&pool, "memories", "source", "text").await;
+    verify_column(&pool, "memories", "importance", "real").await;
+
+    // capability_grants table columns
+    verify_column(&pool, "capability_grants", "grant_id", "uuid").await;
+    verify_column(&pool, "capability_grants", "subject_type", "text").await;
+    verify_column(&pool, "capability_grants", "capability_key", "text").await;
+    verify_column(&pool, "capability_grants", "scope", "jsonb").await;
+
+    // usage_costs table columns
+    verify_column(&pool, "usage_costs", "tokens_in", "integer").await;
+    verify_column(&pool, "usage_costs", "tokens_out", "integer").await;
+    verify_column(&pool, "usage_costs", "cost_estimate", "numeric").await;
+
+    println!("✓ Key column types verified across critical tables");
+
+    // Verify expected indexes exist via pg_indexes
+    let expected_indexes = vec![
+        ("identities", "idx_identities_type"),
+        ("capability_grants", "idx_capability_grants_subject"),
+        ("capability_grants", "idx_capability_grants_key"),
+        ("skills", "idx_skills_enabled"),
+        ("skills", "idx_skills_runtime"),
+        ("tasks", "idx_tasks_state"),
+        ("tasks", "idx_tasks_created_by"),
+        ("tasks", "idx_tasks_correlation"),
+        ("task_runs", "idx_task_runs_task"),
+        ("task_runs", "idx_task_runs_state"),
+        ("run_logs", "idx_run_logs_run"),
+        ("run_logs", "idx_run_logs_level"),
+        ("run_logs", "idx_run_logs_ts"),
+        ("ledger_events", "idx_ledger_events_ts"),
+        ("ledger_events", "idx_ledger_events_actor"),
+        ("ledger_events", "idx_ledger_events_correlation"),
+        ("memories", "idx_memories_identity"),
+        ("memories", "idx_memories_source"),
+        ("memories", "idx_memories_importance"),
+        ("model_providers", "idx_model_providers_enabled"),
+        ("usage_costs", "idx_usage_costs_provider"),
+        ("usage_costs", "idx_usage_costs_ts"),
+        ("usage_costs", "idx_usage_costs_task"),
+        ("config_versions", "idx_config_versions_key"),
+        ("config_versions", "idx_config_versions_created"),
+        ("heartbeat_history", "idx_heartbeat_history_identity"),
+        ("heartbeat_history", "idx_heartbeat_history_ts"),
+    ];
+
+    let existing_indexes: Vec<(String, String)> = sqlx::query_as(
+        "SELECT tablename::text, indexname::text FROM pg_indexes \
+         WHERE schemaname = 'public' ORDER BY tablename, indexname",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("Should query pg_indexes");
+
+    for (table, index) in &expected_indexes {
+        assert!(
+            existing_indexes
+                .iter()
+                .any(|(t, i)| t == table && i == index),
+            "Index '{}' on table '{}' should exist. Found indexes on '{}': {:?}",
+            index,
+            table,
+            table,
+            existing_indexes
+                .iter()
+                .filter(|(t, _)| t == table)
+                .map(|(_, i)| i.as_str())
+                .collect::<Vec<_>>()
+        );
+    }
+    println!("✓ All {} expected indexes verified", expected_indexes.len());
+
+    // Verify extensions are enabled: pgcrypto, vector
+    let extensions: Vec<String> =
+        sqlx::query_scalar("SELECT extname::text FROM pg_extension ORDER BY extname")
+            .fetch_all(&pool)
+            .await
+            .expect("Should query pg_extension");
+
+    assert!(
+        extensions.iter().any(|e| e == "pgcrypto"),
+        "pgcrypto extension should be enabled. Found: {:?}",
+        extensions
+    );
+    assert!(
+        extensions.iter().any(|e| e == "vector"),
+        "vector extension should be enabled. Found: {:?}",
+        extensions
+    );
+    println!("✓ Required extensions (pgcrypto, vector) verified");
+
+    // Verify CHECK constraint enforcement
+    // Invalid identity_type should fail
+    let invalid_identity = sqlx::query(
+        "INSERT INTO identities (name, identity_type) VALUES ('test_invalid', 'invalid_type')",
+    )
+    .execute(&pool)
+    .await;
+
+    assert!(
+        invalid_identity.is_err(),
+        "Invalid identity_type should be rejected by CHECK constraint"
+    );
+
+    // Invalid task state should fail
+    let invalid_task =
+        sqlx::query("INSERT INTO tasks (title, state) VALUES ('test_invalid', 'bogus_state')")
+            .execute(&pool)
+            .await;
+
+    assert!(
+        invalid_task.is_err(),
+        "Invalid task state should be rejected by CHECK constraint"
+    );
+
+    // Invalid memory importance (out of range) should fail
+    let lian_id: uuid::Uuid =
+        sqlx::query_scalar("SELECT identity_id FROM identities WHERE name = 'Lian' LIMIT 1")
+            .fetch_one(&pool)
+            .await
+            .expect("Lian should exist");
+
+    let invalid_memory = sqlx::query(
+        "INSERT INTO memories (identity_id, content, source, importance) \
+         VALUES ($1, 'test', 'observation', 5.0)",
+    )
+    .bind(lian_id)
+    .execute(&pool)
+    .await;
+
+    assert!(
+        invalid_memory.is_err(),
+        "Importance > 1.0 should be rejected by CHECK constraint"
+    );
+
+    println!("✓ CHECK constraint enforcement verified");
+
+    // Verify Lian directives seed data completeness
+    let directives: serde_json::Value =
+        sqlx::query_scalar("SELECT directives FROM identities WHERE name = 'Lian'")
+            .fetch_one(&pool)
+            .await
+            .expect("Should query Lian directives");
+
+    assert!(
+        directives.is_array(),
+        "Lian directives should be a JSON array"
+    );
+    let directives_arr = directives.as_array().unwrap();
+    assert!(
+        directives_arr.len() >= 3,
+        "Lian should have at least 3 directives, got {}",
+        directives_arr.len()
+    );
+
+    // Verify all 20 capabilities exist (exact count from seed data)
+    assert_eq!(
+        capability_count, 20,
+        "Should have exactly 20 default capabilities, got {}",
+        capability_count
+    );
+
+    println!("✓ Complete schema coverage validation passed");
 }

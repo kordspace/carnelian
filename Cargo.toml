@@ -74,6 +74,7 @@ dioxus-signals = "0.6"
 # Testing
 tokio-test = "0.4"
 testcontainers = "0.23"
+memory-stats = "1.2"
 # Platform-specific
 libc = "0.2"
 

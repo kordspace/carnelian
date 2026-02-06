@@ -10,7 +10,7 @@
 //! Integration tests for the HTTP/WebSocket server
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
-use carnelian_core::{Config, EventStream, PolicyEngine, Scheduler, Server, WorkerManager};
+use carnelian_core::{Config, EventStream, Ledger, PolicyEngine, Scheduler, Server, WorkerManager};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
 use std::sync::Arc;
@@ -76,12 +76,22 @@ fn create_test_worker_manager(
     )))
 }
 
+/// Create a lazy Ledger for tests that don't need database access
+fn create_test_ledger() -> Arc<Ledger> {
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_lazy("postgresql://test:test@localhost:5432/test")
+        .expect("Failed to create lazy pool");
+    Arc::new(Ledger::new(pool))
+}
+
 #[tokio::test]
 async fn test_websocket_event_streaming() {
     // Allocate a random available port
     let port = allocate_random_port().await;
 
     let mut config = Config::default();
+    config.bind_address = "127.0.0.1".to_string();
     config.http_port = port;
 
     let event_stream = Arc::new(EventStream::new(100, 10));
@@ -91,6 +101,7 @@ async fn test_websocket_event_streaming() {
         config.clone(),
         event_stream.clone(),
         create_test_policy_engine(),
+        create_test_ledger(),
         create_test_scheduler(event_stream.clone()),
         create_test_worker_manager(config, event_stream.clone()),
     );
@@ -157,6 +168,7 @@ async fn test_websocket_backpressure() {
     let port = allocate_random_port().await;
 
     let mut config = Config::default();
+    config.bind_address = "127.0.0.1".to_string();
     config.http_port = port;
 
     // Small broadcast capacity to trigger lag
@@ -167,6 +179,7 @@ async fn test_websocket_backpressure() {
         config.clone(),
         event_stream.clone(),
         create_test_policy_engine(),
+        create_test_ledger(),
         create_test_scheduler(event_stream.clone()),
         create_test_worker_manager(config, event_stream.clone()),
     );
@@ -225,6 +238,7 @@ async fn test_server_port_configuration() {
     let port = allocate_random_port().await;
 
     let mut config = Config::default();
+    config.bind_address = "127.0.0.1".to_string();
     config.http_port = port;
 
     let event_stream = Arc::new(EventStream::new(100, 10));
@@ -234,6 +248,7 @@ async fn test_server_port_configuration() {
         config.clone(),
         event_stream.clone(),
         create_test_policy_engine(),
+        create_test_ledger(),
         create_test_scheduler(event_stream.clone()),
         create_test_worker_manager(config, event_stream),
     );
@@ -247,6 +262,7 @@ async fn test_event_json_serialization() {
     let port = allocate_random_port().await;
 
     let mut config = Config::default();
+    config.bind_address = "127.0.0.1".to_string();
     config.http_port = port;
 
     let event_stream = Arc::new(EventStream::new(100, 10));
@@ -256,6 +272,7 @@ async fn test_event_json_serialization() {
         config.clone(),
         event_stream.clone(),
         create_test_policy_engine(),
+        create_test_ledger(),
         create_test_scheduler(event_stream.clone()),
         create_test_worker_manager(config, event_stream.clone()),
     );
