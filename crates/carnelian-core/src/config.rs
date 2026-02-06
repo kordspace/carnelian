@@ -95,12 +95,13 @@ pub struct Config {
     pub bind_address: String,
 
     /// HTTP API port (default: 18789)
+    ///
+    /// This port serves both HTTP REST API and WebSocket connections.
+    /// WebSocket endpoint: ws://host:port/v1/events/ws
+    ///
+    /// Port 18790 is reserved for future LLM Gateway Service.
     #[serde(default = "default_http_port")]
     pub http_port: u16,
-
-    /// WebSocket port (default: 18790)
-    #[serde(default = "default_ws_port")]
-    pub ws_port: u16,
 
     /// Ollama API endpoint URL
     #[serde(default = "default_ollama_url")]
@@ -210,10 +211,6 @@ fn default_http_port() -> u16 {
     18789
 }
 
-fn default_ws_port() -> u16 {
-    18790
-}
-
 fn default_ollama_url() -> String {
     "http://localhost:11434".to_string()
 }
@@ -287,7 +284,6 @@ impl Default for Config {
             database_url: default_database_url(),
             bind_address: default_bind_address(),
             http_port: default_http_port(),
-            ws_port: default_ws_port(),
             ollama_url: default_ollama_url(),
             machine_profile: MachineProfile::default(),
             log_level: default_log_level(),
@@ -353,7 +349,6 @@ impl Config {
 
         tracing::info!(
             http_port = config.http_port,
-            ws_port = config.ws_port,
             machine_profile = ?config.machine_profile,
             "Configuration ready"
         );
@@ -401,7 +396,6 @@ impl Config {
     ///
     /// - `DATABASE_URL` → `database_url`
     /// - `PORT` or `CARNELIAN_HTTP_PORT` → `http_port`
-    /// - `CARNELIAN_WS_PORT` → `ws_port`
     /// - `LOG_LEVEL` → `log_level` (simple levels only: ERROR, WARN, INFO, DEBUG, TRACE)
     /// - `MACHINE_PROFILE` → `machine_profile`
     /// - `CARNELIAN_OLLAMA_URL` → `ollama_url`
@@ -428,12 +422,6 @@ impl Config {
             self.http_port = port.parse().map_err(|_| {
                 Error::Config(format!("Invalid CARNELIAN_HTTP_PORT value: {}", port))
             })?;
-        }
-
-        if let Ok(port) = std::env::var("CARNELIAN_WS_PORT") {
-            self.ws_port = port
-                .parse()
-                .map_err(|_| Error::Config(format!("Invalid CARNELIAN_WS_PORT value: {}", port)))?;
         }
 
         // Only use LOG_LEVEL for simple log level override
@@ -495,13 +483,6 @@ impl Config {
             return Err(Error::Config(format!(
                 "http_port must be >= 1024, got {}",
                 self.http_port
-            )));
-        }
-
-        if self.ws_port < 1024 {
-            return Err(Error::Config(format!(
-                "ws_port must be >= 1024, got {}",
-                self.ws_port
             )));
         }
 
@@ -946,7 +927,6 @@ mod tests {
     fn test_default_config() {
         let config = Config::default();
         assert_eq!(config.http_port, 18789);
-        assert_eq!(config.ws_port, 18790);
         assert_eq!(config.log_level, "INFO");
         assert_eq!(config.machine_profile, MachineProfile::Thummim);
         assert!(config.validate().is_ok());
@@ -1026,10 +1006,6 @@ mod tests {
     fn test_validation_invalid_port() {
         let mut config = Config::default();
         config.http_port = 80; // Below 1024
-        assert!(config.validate().is_err());
-
-        config.http_port = 18789;
-        config.ws_port = 80; // Below 1024
         assert!(config.validate().is_err());
     }
 

@@ -29,7 +29,6 @@ fn test_load_from_toml_file() {
 
     assert_eq!(config.machine_profile, MachineProfile::Urim);
     assert_eq!(config.http_port, 19000);
-    assert_eq!(config.ws_port, 19001);
     assert_eq!(
         config.database_url,
         "postgresql://test:test@localhost:5432/test_db"

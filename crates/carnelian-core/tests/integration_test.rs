@@ -105,7 +105,6 @@ fn create_test_config(http_port: u16) -> Config {
     config.database_url = String::new();
     config.bind_address = "127.0.0.1".to_string();
     config.http_port = http_port;
-    config.ws_port = allocate_random_port();
     config.log_level = "DEBUG".to_string();
     config.event_buffer_capacity = 10_000;
     config.event_broadcast_capacity = 100;
@@ -1836,6 +1835,7 @@ async fn test_migration_seed_data() {
     // capability_grants table columns
     verify_column(&pool, "capability_grants", "grant_id", "uuid").await;
     verify_column(&pool, "capability_grants", "subject_type", "text").await;
+    verify_column(&pool, "capability_grants", "subject_id", "text").await;
     verify_column(&pool, "capability_grants", "capability_key", "text").await;
     verify_column(&pool, "capability_grants", "scope", "jsonb").await;
 
