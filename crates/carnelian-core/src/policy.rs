@@ -13,6 +13,7 @@ use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
 use crate::EventStream;
+use crate::ledger::Ledger;
 
 /// Represents a capability grant from the database
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -116,6 +117,7 @@ impl PolicyEngine {
         approved_by: Option<Uuid>,
         expires_at: Option<DateTime<Utc>>,
         event_stream: Option<&EventStream>,
+        ledger: Option<&Ledger>,
     ) -> Result<Uuid> {
         let grant_id: Uuid = sqlx::query_scalar!(
             r#"
@@ -165,6 +167,22 @@ impl PolicyEngine {
             ));
         }
 
+        // Log to audit ledger
+        if let Some(ledger) = ledger {
+            if let Err(e) = ledger
+                .log_capability_grant(
+                    grant_id,
+                    subject_type,
+                    subject_id,
+                    capability_key,
+                    approved_by,
+                )
+                .await
+            {
+                tracing::warn!(error = %e, "Failed to log capability grant to ledger");
+            }
+        }
+
         Ok(grant_id)
     }
 
@@ -174,7 +192,9 @@ impl PolicyEngine {
     pub async fn revoke_capability(
         &self,
         grant_id: Uuid,
+        revoked_by: Option<Uuid>,
         event_stream: Option<&EventStream>,
+        ledger: Option<&Ledger>,
     ) -> Result<bool> {
         let result = sqlx::query!(
             r#"DELETE FROM capability_grants WHERE grant_id = $1"#,
@@ -196,6 +216,15 @@ impl PolicyEngine {
                     EventType::CapabilityRevoked,
                     json!({ "grant_id": grant_id }),
                 ));
+            }
+        }
+
+        // Log to audit ledger
+        if revoked {
+            if let Some(ledger) = ledger {
+                if let Err(e) = ledger.log_capability_revoke(grant_id, revoked_by).await {
+                    tracing::warn!(error = %e, "Failed to log capability revoke to ledger");
+                }
             }
         }
 
@@ -332,7 +361,7 @@ mod tests {
         // Grant the capability
         let grant_id = engine
             .grant_capability(
-                "identity", subject_id, "fs.read", None, None, None, None, None,
+                "identity", subject_id, "fs.read", None, None, None, None, None, None,
             )
             .await
             .expect("Grant should succeed");
@@ -346,7 +375,7 @@ mod tests {
 
         // Revoke and verify
         let revoked = engine
-            .revoke_capability(grant_id, None)
+            .revoke_capability(grant_id, None, None, None)
             .await
             .expect("Revoke should not error");
         assert!(revoked, "Should have revoked the grant");
@@ -383,6 +412,7 @@ mod tests {
                 None,
                 Some(past),
                 None,
+                None,
             )
             .await
             .expect("Grant should succeed");
@@ -410,13 +440,13 @@ mod tests {
         // Grant multiple capabilities
         engine
             .grant_capability(
-                "identity", subject_id, "fs.read", None, None, None, None, None,
+                "identity", subject_id, "fs.read", None, None, None, None, None, None,
             )
             .await
             .expect("Grant should succeed");
         engine
             .grant_capability(
-                "identity", subject_id, "fs.write", None, None, None, None, None,
+                "identity", subject_id, "fs.write", None, None, None, None, None, None,
             )
             .await
             .expect("Grant should succeed");

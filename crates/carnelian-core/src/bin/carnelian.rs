@@ -20,7 +20,7 @@ use std::time::Duration;
 use clap::{Parser, Subcommand};
 use std::sync::Arc;
 
-use carnelian_core::{Config, EventStream, PolicyEngine, Scheduler, Server, WorkerManager};
+use carnelian_core::{Config, EventStream, Ledger, PolicyEngine, Scheduler, Server, WorkerManager};
 
 /// 🔥 Carnelian OS - Local-first AI agent mainframe
 #[derive(Parser)]
@@ -160,6 +160,28 @@ async fn handle_start(
         Duration::from_millis(config.heartbeat_interval_ms),
     );
 
+    // Create audit ledger and verify chain integrity
+    let ledger = Ledger::new(config.pool()?.clone());
+    ledger.load_last_hash().await?;
+
+    match ledger.verify_chain().await {
+        Ok(true) => {
+            tracing::info!("Ledger chain verification passed");
+        }
+        Ok(false) => {
+            tracing::error!("Ledger chain verification FAILED — tampered or corrupted audit trail");
+            return Err(carnelian_common::Error::Config(
+                "Ledger chain verification failed".to_string(),
+            ));
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "Ledger chain verification error");
+            return Err(e);
+        }
+    }
+
+    let ledger = Arc::new(ledger);
+
     // Create worker manager
     let config_arc = Arc::new(config);
     let worker_manager = Arc::new(tokio::sync::Mutex::new(WorkerManager::new(
@@ -172,6 +194,7 @@ async fn handle_start(
         config_arc,
         event_stream,
         Arc::new(policy_engine),
+        ledger,
         Arc::new(tokio::sync::Mutex::new(scheduler)),
         worker_manager,
     );

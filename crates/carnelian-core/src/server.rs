@@ -29,6 +29,7 @@ use tower_http::{
 use tracing::{Level, Span};
 use uuid::Uuid;
 
+use crate::ledger::Ledger;
 use crate::worker::WorkerManager;
 use crate::{Config, EventStream, Scheduler, db, policy::PolicyEngine};
 
@@ -90,6 +91,8 @@ pub struct AppState {
     pub event_stream: Arc<EventStream>,
     /// Policy engine for capability-based security
     pub policy_engine: Arc<PolicyEngine>,
+    /// Audit ledger for tamper-resistant logging
+    pub ledger: Arc<Ledger>,
     /// Worker manager for process lifecycle
     pub worker_manager: Arc<tokio::sync::Mutex<WorkerManager>>,
     /// Correlation ID counter for request tracing
@@ -103,12 +106,14 @@ impl AppState {
         config: Arc<Config>,
         event_stream: Arc<EventStream>,
         policy_engine: Arc<PolicyEngine>,
+        ledger: Arc<Ledger>,
         worker_manager: Arc<tokio::sync::Mutex<WorkerManager>>,
     ) -> Self {
         Self {
             config,
             event_stream,
             policy_engine,
+            ledger,
             worker_manager,
             correlation_counter: Arc::new(AtomicU64::new(0)),
         }
@@ -149,6 +154,8 @@ pub struct Server {
     event_stream: Arc<EventStream>,
     /// Policy engine for capability-based security
     policy_engine: Arc<PolicyEngine>,
+    /// Audit ledger for tamper-resistant logging
+    ledger: Arc<Ledger>,
     /// Background task scheduler
     scheduler: Arc<tokio::sync::Mutex<Scheduler>>,
     /// Worker process manager
@@ -156,12 +163,13 @@ pub struct Server {
 }
 
 impl Server {
-    /// Create a new server with the given configuration, event stream, policy engine, scheduler, and worker manager.
+    /// Create a new server with the given configuration, event stream, policy engine, ledger, scheduler, and worker manager.
     #[must_use]
     pub fn new(
         config: Arc<Config>,
         event_stream: Arc<EventStream>,
         policy_engine: Arc<PolicyEngine>,
+        ledger: Arc<Ledger>,
         scheduler: Arc<tokio::sync::Mutex<Scheduler>>,
         worker_manager: Arc<tokio::sync::Mutex<WorkerManager>>,
     ) -> Self {
@@ -169,6 +177,7 @@ impl Server {
             config,
             event_stream,
             policy_engine,
+            ledger,
             scheduler,
             worker_manager,
         }
@@ -201,6 +210,7 @@ impl Server {
             self.config.clone(),
             self.event_stream.clone(),
             self.policy_engine.clone(),
+            self.ledger.clone(),
             self.worker_manager.clone(),
         );
         let router = build_router(state.clone());
@@ -221,7 +231,7 @@ impl Server {
             }
         }
 
-        let addr = format!("0.0.0.0:{}", self.config.http_port);
+        let addr = format!("{}:{}", self.config.bind_address, self.config.http_port);
         let listener = TcpListener::bind(&addr).await.map_err(|e| {
             carnelian_common::Error::Connection(format!("Failed to bind to {}: {}", addr, e))
         })?;
@@ -517,12 +527,13 @@ mod tests {
             .max_connections(1)
             .connect_lazy("postgresql://test:test@localhost:5432/test")
             .expect("Failed to create lazy pool");
-        let policy_engine = Arc::new(PolicyEngine::new(pool));
+        let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
+        let ledger = Arc::new(Ledger::new(pool));
         let worker_manager = Arc::new(tokio::sync::Mutex::new(WorkerManager::new(
             config.clone(),
             event_stream.clone(),
         )));
-        AppState::new(config, event_stream, policy_engine, worker_manager)
+        AppState::new(config, event_stream, policy_engine, ledger, worker_manager)
     }
 
     #[tokio::test]
