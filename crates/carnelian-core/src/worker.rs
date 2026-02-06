@@ -367,12 +367,14 @@ impl ProcessJsonlTransport {
     /// Write bytes to the worker's stdin, acquiring the lock briefly.
     async fn write_to_stdin(&self, data: &[u8]) -> Result<()> {
         let mut stdin = self.stdin.lock().await;
-        stdin.write_all(data).await.map_err(|e| {
-            Error::Connection(format!("Failed to write to worker stdin: {e}"))
-        })?;
-        stdin.flush().await.map_err(|e| {
-            Error::Connection(format!("Failed to flush worker stdin: {e}"))
-        })?;
+        stdin
+            .write_all(data)
+            .await
+            .map_err(|e| Error::Connection(format!("Failed to write to worker stdin: {e}")))?;
+        stdin
+            .flush()
+            .await
+            .map_err(|e| Error::Connection(format!("Failed to flush worker stdin: {e}")))?;
         drop(stdin);
         Ok(())
     }
@@ -388,8 +390,7 @@ impl ProcessJsonlTransport {
         {
             if let Some(pid) = proc.id() {
                 let nix_pid = nix::unistd::Pid::from_raw(i32::try_from(pid).unwrap_or(i32::MAX));
-                let _ =
-                    nix::sys::signal::kill(nix_pid, nix::sys::signal::Signal::SIGTERM);
+                let _ = nix::sys::signal::kill(nix_pid, nix::sys::signal::Signal::SIGTERM);
                 tracing::debug!(
                     worker_id = %self.worker_id,
                     pid = pid,

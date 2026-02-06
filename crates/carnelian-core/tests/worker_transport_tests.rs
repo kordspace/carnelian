@@ -18,9 +18,7 @@ fn mock_worker_path() -> String {
 }
 
 /// Spawn a mock worker process with optional environment overrides.
-fn spawn_mock_worker(
-    envs: Vec<(&str, &str)>,
-) -> tokio::process::Child {
+fn spawn_mock_worker(envs: Vec<(&str, &str)>) -> tokio::process::Child {
     let mut cmd = tokio::process::Command::new("node");
     cmd.arg(mock_worker_path())
         .env("WORKER_ID", "test-mock-worker")
@@ -30,7 +28,8 @@ fn spawn_mock_worker(
     for (k, v) in envs {
         cmd.env(k, v);
     }
-    cmd.spawn().expect("Failed to spawn mock worker (is Node.js installed?)")
+    cmd.spawn()
+        .expect("Failed to spawn mock worker (is Node.js installed?)")
 }
 
 /// Create a test config with short timeouts for faster tests.
@@ -67,7 +66,10 @@ async fn test_process_jsonl_invoke_success() {
         correlation_id: None,
     };
 
-    let response = transport.invoke(request).await.expect("Invoke should succeed");
+    let response = transport
+        .invoke(request)
+        .await
+        .expect("Invoke should succeed");
 
     assert_eq!(response.run_id, run_id);
     assert_eq!(response.status, InvokeStatus::Success);
@@ -104,7 +106,10 @@ async fn test_process_jsonl_timeout_enforcement() {
         correlation_id: None,
     };
 
-    let response = transport.invoke(request).await.expect("Invoke should return timeout");
+    let response = transport
+        .invoke(request)
+        .await
+        .expect("Invoke should return timeout");
 
     assert_eq!(response.run_id, run_id);
     assert_eq!(response.status, InvokeStatus::Timeout);
@@ -136,14 +141,20 @@ async fn test_process_jsonl_output_truncation() {
         correlation_id: None,
     };
 
-    let response = transport.invoke(request).await.expect("Invoke should succeed");
+    let response = transport
+        .invoke(request)
+        .await
+        .expect("Invoke should succeed");
 
     assert_eq!(response.run_id, run_id);
     assert_eq!(response.status, InvokeStatus::Success);
     // The 2MB result payload exceeds skill_max_output_bytes (1MB), so the transport
     // should replace it with a truncation marker and set truncated = true.
     assert!(response.truncated, "Response should be marked as truncated");
-    assert!(response.result["..."].is_string(), "Result should contain truncation marker");
+    assert!(
+        response.result["..."].is_string(),
+        "Result should contain truncation marker"
+    );
 }
 
 #[tokio::test]
@@ -170,9 +181,7 @@ async fn test_process_jsonl_cancellation() {
 
     // Spawn invoke in background
     let transport_clone = transport.clone();
-    let invoke_handle = tokio::spawn(async move {
-        transport_clone.invoke(request).await
-    });
+    let invoke_handle = tokio::spawn(async move { transport_clone.invoke(request).await });
 
     // Wait a moment then cancel
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -181,7 +190,10 @@ async fn test_process_jsonl_cancellation() {
         .await
         .expect("Cancel should succeed");
 
-    let response = invoke_handle.await.unwrap().expect("Invoke should return cancelled");
+    let response = invoke_handle
+        .await
+        .unwrap()
+        .expect("Invoke should return cancelled");
 
     assert_eq!(response.run_id, run_id);
     assert_eq!(response.status, InvokeStatus::Cancelled);
@@ -209,7 +221,10 @@ async fn test_process_jsonl_event_streaming() {
         correlation_id: None,
     };
 
-    let response = transport.invoke(request).await.expect("Invoke should succeed");
+    let response = transport
+        .invoke(request)
+        .await
+        .expect("Invoke should succeed");
 
     assert_eq!(response.run_id, run_id);
     assert_eq!(response.status, InvokeStatus::Success);
@@ -228,7 +243,10 @@ async fn test_process_jsonl_health_check() {
             .expect("Failed to create transport");
 
     // Worker should be healthy
-    let health = transport.health().await.expect("Health check should succeed");
+    let health = transport
+        .health()
+        .await
+        .expect("Health check should succeed");
     assert!(health.healthy);
     assert_eq!(health.worker_id, "test-worker-health");
     assert!(health.uptime_secs < 60); // Just started

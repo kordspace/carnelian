@@ -490,7 +490,10 @@ impl Config {
 
         if let Ok(val) = std::env::var("CARNELIAN_SKILL_TIMEOUT_SECS") {
             self.skill_timeout_secs = val.parse().map_err(|_| {
-                Error::Config(format!("Invalid CARNELIAN_SKILL_TIMEOUT_SECS value: {}", val))
+                Error::Config(format!(
+                    "Invalid CARNELIAN_SKILL_TIMEOUT_SECS value: {}",
+                    val
+                ))
             })?;
         }
 
@@ -514,7 +517,10 @@ impl Config {
 
         if let Ok(val) = std::env::var("CARNELIAN_SKILL_MAX_LOG_LINES") {
             self.skill_max_log_lines = val.parse().map_err(|_| {
-                Error::Config(format!("Invalid CARNELIAN_SKILL_MAX_LOG_LINES value: {}", val))
+                Error::Config(format!(
+                    "Invalid CARNELIAN_SKILL_MAX_LOG_LINES value: {}",
+                    val
+                ))
             })?;
         }
 

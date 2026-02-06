@@ -376,9 +376,7 @@ pub enum TransportMessage {
         payload: CancelRequest,
     },
     /// Health check request
-    Health {
-        message_id: Uuid,
-    },
+    Health { message_id: Uuid },
     /// Invoke response
     InvokeResult {
         message_id: Uuid,
