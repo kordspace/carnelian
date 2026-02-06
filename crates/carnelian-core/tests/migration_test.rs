@@ -449,7 +449,7 @@ async fn test_phase1_delta_xp_system() {
         "Level 5 milestone should be 'unlock_sub_agents'"
     );
 
-    // Query level 99: verify total_xp_required = 680760606
+    // Query level 99: verify total_xp_required = 3875297318 (exponent 1.172)
     let level99_total: i64 =
         sqlx::query_scalar("SELECT total_xp_required FROM level_progression WHERE level = 99")
             .fetch_one(&pool)
@@ -457,8 +457,8 @@ async fn test_phase1_delta_xp_system() {
             .expect("Level 99 should exist");
 
     assert_eq!(
-        level99_total, 680_760_606,
-        "Level 99 total_xp_required should be 680760606"
+        level99_total, 3_875_297_318,
+        "Level 99 total_xp_required should be 3875297318"
     );
 
     // Verify agent_xp table
@@ -695,7 +695,7 @@ async fn test_phase1_delta_seed_data() {
 
     assert_eq!(lian_xp.0, 0, "Lian total_xp should be 0");
     assert_eq!(lian_xp.1, 1, "Lian level should be 1");
-    assert_eq!(lian_xp.2, 115, "Lian xp_to_next_level should be 115");
+    assert_eq!(lian_xp.2, 117, "Lian xp_to_next_level should be 117");
 
     // Verify machine profile configs in config_store
     let urim_config: serde_json::Value =
