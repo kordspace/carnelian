@@ -170,7 +170,9 @@ mod tests {
     async fn test_health_check_with_valid_pool() {
         // This test requires a running PostgreSQL instance
         // Run with: cargo test --package carnelian-core -- --ignored
-        let pool = PgPool::connect("postgresql://carnelian:carnelian@localhost:5432/carnelian")
+        let db_url = std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian".into());
+        let pool = PgPool::connect(&db_url)
             .await
             .expect("Failed to connect to database");
 

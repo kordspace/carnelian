@@ -328,9 +328,11 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires database connection"]
     async fn test_check_capability_returns_false_for_nonexistent() {
+        let db_url = std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian".into());
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
-            .connect("postgresql://carnelian:carnelian@localhost:5432/carnelian")
+            .connect(&db_url)
             .await
             .expect("Failed to connect to database");
 
@@ -351,9 +353,11 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires database connection"]
     async fn test_grant_and_check_capability() {
+        let db_url = std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian".into());
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
-            .connect("postgresql://carnelian:carnelian@localhost:5432/carnelian")
+            .connect(&db_url)
             .await
             .expect("Failed to connect to database");
 
@@ -408,9 +412,11 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires database connection"]
     async fn test_expired_grants_not_valid() {
+        let db_url = std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian".into());
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
-            .connect("postgresql://carnelian:carnelian@localhost:5432/carnelian")
+            .connect(&db_url)
             .await
             .expect("Failed to connect to database");
 
@@ -445,9 +451,11 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires database connection"]
     async fn test_list_grants_for_subject() {
+        let db_url = std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian".into());
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
-            .connect("postgresql://carnelian:carnelian@localhost:5432/carnelian")
+            .connect(&db_url)
             .await
             .expect("Failed to connect to database");
 

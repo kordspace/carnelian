@@ -501,9 +501,11 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires database connection"]
     async fn test_append_event_updates_last_hash() {
+        let db_url = std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian".into());
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
-            .connect("postgresql://carnelian:carnelian@localhost:5432/carnelian")
+            .connect(&db_url)
             .await
             .expect("Failed to connect to database");
 
@@ -526,9 +528,11 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires database connection"]
     async fn test_verify_chain_empty_ledger() {
+        let db_url = std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian".into());
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
-            .connect("postgresql://carnelian:carnelian@localhost:5432/carnelian")
+            .connect(&db_url)
             .await
             .expect("Failed to connect to database");
 
@@ -541,9 +545,11 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires database connection"]
     async fn test_verify_chain_multiple_events() {
+        let db_url = std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian".into());
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
-            .connect("postgresql://carnelian:carnelian@localhost:5432/carnelian")
+            .connect(&db_url)
             .await
             .expect("Failed to connect to database");
 
