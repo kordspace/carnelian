@@ -153,6 +153,11 @@ jobs:
         env:
           SQLX_OFFLINE: true
 
+      - name: Run database migrations
+        run: cargo run --bin carnelian -- migrate --database-url postgresql://test:test@localhost:5432/carnelian_test
+        env:
+          SQLX_OFFLINE: true
+
       - name: Run integration tests
         run: cargo test --workspace -- --ignored
         env:
