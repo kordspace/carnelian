@@ -72,6 +72,12 @@ SET
     );
 
 -- Step 4: Update default value for xp_to_next_level to match new level 2 threshold
-ALTER TABLE agent_xp
-ALTER COLUMN xp_to_next_level
-SET DEFAULT (SELECT total_xp_required FROM level_progression WHERE level = 2);
+-- PostgreSQL does not allow subqueries in DEFAULT expressions, so we use a DO block.
+DO $$
+DECLARE
+    new_default bigint;
+BEGIN
+    SELECT total_xp_required INTO new_default FROM level_progression WHERE level = 2;
+    EXECUTE format('ALTER TABLE agent_xp ALTER COLUMN xp_to_next_level SET DEFAULT %s', new_default);
+END
+$$;
