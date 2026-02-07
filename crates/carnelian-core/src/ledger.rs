@@ -42,7 +42,7 @@
 //! ```
 
 use carnelian_common::{Error, Result};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use sqlx::{FromRow, PgPool};
@@ -178,7 +178,13 @@ impl Ledger {
         correlation_id: Option<Uuid>,
     ) -> Result<i64> {
         let payload_hash = Self::compute_payload_hash(&payload);
-        let ts = Utc::now();
+        // Truncate to microsecond precision to match PostgreSQL TIMESTAMPTZ storage.
+        // Without this, nanoseconds are lost on DB round-trip, breaking hash verification.
+        let ts = {
+            let now = Utc::now();
+            now.with_nanosecond((now.nanosecond() / 1_000) * 1_000)
+                .unwrap_or(now)
+        };
 
         // Begin a serializable transaction and lock the latest row to prevent
         // concurrent appends from reading a stale prev_hash.
@@ -536,7 +542,12 @@ mod tests {
             .await
             .expect("Failed to connect to database");
 
-        // Use a fresh database or accept existing chain
+        // Clean slate: remove any events left by other tests
+        sqlx::query("TRUNCATE ledger_events")
+            .execute(&pool)
+            .await
+            .expect("Failed to truncate ledger_events");
+
         let ledger = Ledger::new(pool);
         let result = ledger.verify_chain().await.expect("verify_chain failed");
         assert!(result, "Chain should verify (empty or valid)");
@@ -552,6 +563,12 @@ mod tests {
             .connect(&db_url)
             .await
             .expect("Failed to connect to database");
+
+        // Clean slate: remove any events left by other tests
+        sqlx::query("TRUNCATE ledger_events")
+            .execute(&pool)
+            .await
+            .expect("Failed to truncate ledger_events");
 
         let ledger = Ledger::new(pool);
         ledger
