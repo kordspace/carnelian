@@ -148,6 +148,9 @@ jobs:
         with:
           shared-key: carnelian-rust
 
+      - name: Pre-pull pgvector image for testcontainers
+        run: docker pull pgvector/pgvector:pg16
+
       - name: Pre-build workspace (so CLI tests don't compile inside cargo test)
         run: cargo build --workspace --tests
         env:

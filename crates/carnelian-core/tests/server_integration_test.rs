@@ -349,7 +349,7 @@ async fn test_event_json_serialization() {
 
 /// Create a PostgreSQL container for testing
 async fn create_postgres_container() -> testcontainers::ContainerAsync<GenericImage> {
-    let image = GenericImage::new("postgres", "16-alpine").with_wait_for(
+    let image = GenericImage::new("pgvector/pgvector", "pg16").with_wait_for(
         testcontainers::core::WaitFor::message_on_stderr(
             "database system is ready to accept connections",
         ),
