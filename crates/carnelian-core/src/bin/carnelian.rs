@@ -127,7 +127,7 @@ async fn main() {
     }
 }
 
-/// Resolve the server URL from an explicit value, CARNELIAN_HTTP_PORT env var, or default.
+/// Resolve the server URL from an explicit value, `CARNELIAN_HTTP_PORT` env var, or default.
 fn resolve_url(explicit: Option<String>) -> String {
     if let Some(url) = explicit {
         return url;
