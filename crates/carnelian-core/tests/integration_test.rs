@@ -499,7 +499,8 @@ async fn test_load_handling_10k_events_per_minute() {
     assert!(
         final_error_received >= error_published,
         "All ERROR events should be received (got {}/{})",
-        final_error_received, error_published
+        final_error_received,
+        error_published
     );
 
     // ASSERTION 4: Lower-priority events may be sampled/dropped (backpressure working)
