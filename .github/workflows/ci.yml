@@ -97,19 +97,19 @@ jobs:
 
       - name: Install dependencies
         working-directory: workers/node-worker
-        run: npm install
+        run: npm ci
+
+      - name: Build TypeScript
+        working-directory: workers/node-worker
+        run: npm run build
 
       - name: Run lint (if present)
         working-directory: workers/node-worker
         run: npm run lint --if-present
 
-      - name: Run tests (if present)
+      - name: Run tests
         working-directory: workers/node-worker
-        run: npm test --if-present
-
-      - name: Validate worker starts
-        working-directory: workers/node-worker
-        run: node index.js
+        run: npm test
 
   # Integration tests (requires PostgreSQL)
   integration-tests:
@@ -150,6 +150,15 @@ jobs:
 
       - name: Pre-pull pgvector image for testcontainers
         run: docker pull pgvector/pgvector:pg16
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+
+      - name: Build Node.js worker
+        working-directory: workers/node-worker
+        run: npm ci && npm run build
 
       - name: Pre-build workspace (so CLI tests don't compile inside cargo test)
         run: cargo build --workspace --tests

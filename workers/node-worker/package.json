@@ -2,13 +2,21 @@
   "name": "@carnelian/node-worker",
   "version": "0.1.0",
   "description": "Node.js worker for Carnelian OS skill execution",
-  "main": "index.js",
+  "type": "module",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "node index.js",
-    "lint": "echo 'No linter configured yet'",
-    "test": "echo 'No tests configured yet'"
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "node --test --test-name-pattern=. dist/__tests__/manifest.test.js dist/__tests__/protocol.test.js dist/__tests__/events.test.js dist/__tests__/health.test.js dist/__tests__/execution.test.js dist/__tests__/integration.test.js",
+    "dev": "tsc --watch"
   },
-  "dependencies": {},
+  "dependencies": {
+    "yaml": "^2.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.4.0"
+  },
   "engines": {
     "node": ">=18.0.0"
   }

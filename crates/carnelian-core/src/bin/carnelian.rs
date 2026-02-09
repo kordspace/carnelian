@@ -71,8 +71,8 @@ enum Commands {
     /// Query the status of a running instance
     Status {
         /// URL of the Carnelian server
-        #[arg(long, default_value = "http://localhost:18789")]
-        url: String,
+        #[arg(long, env = "CARNELIAN_URL")]
+        url: Option<String>,
     },
 
     /// Run database migrations
@@ -85,8 +85,8 @@ enum Commands {
     /// Stream events from a running Carnelian instance
     Logs {
         /// URL of the Carnelian server
-        #[arg(long, default_value = "http://localhost:18789")]
-        url: String,
+        #[arg(long, env = "CARNELIAN_URL")]
+        url: Option<String>,
 
         /// Keep connection open and stream events continuously
         #[arg(long, short = 'f')]
@@ -109,7 +109,7 @@ async fn main() {
     let result = match cli.command {
         Commands::Start => handle_start(cli.config, cli.log_level, cli.database_url).await,
         Commands::Stop => handle_stop().await,
-        Commands::Status { url } => handle_status(&url).await,
+        Commands::Status { url } => handle_status(&resolve_url(url)).await,
         Commands::Migrate { dry_run } => {
             handle_migrate(cli.config, cli.log_level, dry_run, cli.database_url).await
         }
@@ -118,13 +118,24 @@ async fn main() {
             follow,
             level,
             event_type,
-        } => handle_logs(&url, follow, level, event_type).await,
+        } => handle_logs(&resolve_url(url), follow, level, event_type).await,
     };
 
     if let Err(e) = result {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     }
+}
+
+/// Resolve the server URL from an explicit value, CARNELIAN_HTTP_PORT env var, or default.
+fn resolve_url(explicit: Option<String>) -> String {
+    if let Some(url) = explicit {
+        return url;
+    }
+    if let Ok(port) = std::env::var("CARNELIAN_HTTP_PORT") {
+        return format!("http://localhost:{}", port);
+    }
+    "http://localhost:18789".to_string()
 }
 
 /// Handle the `start` command - launch the orchestrator

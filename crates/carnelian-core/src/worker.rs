@@ -884,7 +884,7 @@ impl WorkerManager {
         let mut cmd = match runtime {
             WorkerRuntime::Node => {
                 let mut c = tokio::process::Command::new("node");
-                c.args(["workers/node-worker/index.js"]);
+                c.args(["workers/node-worker/dist/index.js"]);
                 c
             }
             WorkerRuntime::Python => {

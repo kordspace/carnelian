@@ -7,7 +7,7 @@ use axum::{
     Json, Router,
     extract::{State, WebSocketUpgrade, ws::Message},
     response::IntoResponse,
-    routing::get,
+    routing::{get, post},
 };
 use carnelian_common::Result;
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
@@ -293,6 +293,7 @@ fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/v1/health", get(health_handler))
         .route("/v1/status", get(status_handler))
+        .route("/v1/events", post(publish_event_handler))
         .route("/v1/events/ws", get(ws_handler))
         // 10MB request body limit
         .layer(RequestBodyLimitLayer::new(10 * 1024 * 1024))
@@ -381,6 +382,44 @@ async fn status_handler(State(state): State<AppState>) -> impl IntoResponse {
     );
 
     Json(response)
+}
+
+/// Publish event handler — accepts JSON event payloads via HTTP POST.
+///
+/// Publishes the event to the EventStream so WebSocket subscribers receive it.
+async fn publish_event_handler(
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let event_type_str = body["event_type"]
+        .as_str()
+        .unwrap_or("Custom");
+    let level_str = body["level"]
+        .as_str()
+        .unwrap_or("Info");
+
+    let level = match level_str {
+        "Error" | "ERROR" => EventLevel::Error,
+        "Warn" | "WARN" => EventLevel::Warn,
+        "Debug" | "DEBUG" => EventLevel::Debug,
+        "Trace" | "TRACE" => EventLevel::Trace,
+        _ => EventLevel::Info,
+    };
+
+    let event_type = match event_type_str {
+        "TaskCreated" => EventType::TaskCreated,
+        "TaskStarted" => EventType::TaskStarted,
+        "TaskCompleted" => EventType::TaskCompleted,
+        "TaskFailed" => EventType::TaskFailed,
+        "WorkerStarted" => EventType::WorkerStarted,
+        "WorkerStopped" => EventType::WorkerStopped,
+        other => EventType::Custom(other.to_string()),
+    };
+
+    let data = body.get("data").cloned().unwrap_or(json!({}));
+    state.event_stream.publish(EventEnvelope::new(level, event_type, data));
+
+    Json(json!({"status": "ok"}))
 }
 
 /// WebSocket upgrade handler for event streaming.
