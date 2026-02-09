@@ -412,7 +412,7 @@ async fn publish_event_handler(
         other => EventType::Custom(other.to_string()),
     };
 
-    let data = body.get("data").cloned().unwrap_or(json!({}));
+    let data = body.get("data").cloned().unwrap_or_else(|| json!({}));
     state
         .event_stream
         .publish(EventEnvelope::new(level, event_type, data));
