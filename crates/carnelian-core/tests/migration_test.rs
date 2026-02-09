@@ -240,7 +240,7 @@ async fn test_phase1_delta_skill_versions() {
     // Verify UNIQUE constraint on (skill_id, version)
     // Insert a test skill first
     let skill_id: uuid::Uuid = sqlx::query_scalar(
-        "INSERT INTO skills (name, runtime, entry_point) VALUES ('test_versioned_skill', 'node', 'index.js') RETURNING skill_id",
+        "INSERT INTO skills (name, runtime) VALUES ('test_versioned_skill', 'node') RETURNING skill_id",
     )
     .fetch_one(&pool)
     .await
@@ -635,7 +635,7 @@ async fn test_phase1_delta_elixirs_system() {
     verify_table_exists(&pool, "elixir_drafts").await;
 
     let skill_id: uuid::Uuid = sqlx::query_scalar(
-        "INSERT INTO skills (name, runtime, entry_point) VALUES ('draft_test_skill', 'node', 'index.js') RETURNING skill_id",
+        "INSERT INTO skills (name, runtime) VALUES ('draft_test_skill', 'node') RETURNING skill_id",
     )
     .fetch_one(&pool)
     .await
@@ -932,7 +932,7 @@ async fn test_schema_fixes_lz4_compression() {
 
     let large_content = "x".repeat(10_000); // 10KB of data
     let memory_id: uuid::Uuid = sqlx::query_scalar(
-        "INSERT INTO memories (identity_id, content, source) VALUES ($1, $2, 'test') RETURNING memory_id",
+        "INSERT INTO memories (identity_id, content, source) VALUES ($1, $2, 'observation') RETURNING memory_id",
     )
     .bind(lian_id)
     .bind(&large_content)
