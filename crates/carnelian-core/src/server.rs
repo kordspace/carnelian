@@ -391,12 +391,8 @@ async fn publish_event_handler(
     State(state): State<AppState>,
     Json(body): Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    let event_type_str = body["event_type"]
-        .as_str()
-        .unwrap_or("Custom");
-    let level_str = body["level"]
-        .as_str()
-        .unwrap_or("Info");
+    let event_type_str = body["event_type"].as_str().unwrap_or("Custom");
+    let level_str = body["level"].as_str().unwrap_or("Info");
 
     let level = match level_str {
         "Error" | "ERROR" => EventLevel::Error,
@@ -417,7 +413,9 @@ async fn publish_event_handler(
     };
 
     let data = body.get("data").cloned().unwrap_or(json!({}));
-    state.event_stream.publish(EventEnvelope::new(level, event_type, data));
+    state
+        .event_stream
+        .publish(EventEnvelope::new(level, event_type, data));
 
     Json(json!({"status": "ok"}))
 }
