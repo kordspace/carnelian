@@ -14,6 +14,8 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 package-lock.json
+# But allow node-worker lockfile for reproducible CI builds
+!workers/node-worker/package-lock.json
 yarn.lock
 pnpm-lock.yaml
 
