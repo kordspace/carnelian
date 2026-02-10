@@ -306,4 +306,99 @@ h3 { font-size: 16px; font-weight: 600; color: #E0E0E0; }
 ::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.25);
 }
+
+/* ============================================================
+   WINDOW CONTROLS (tray menu fallback)
+   ============================================================ */
+
+.window-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.btn-window-control {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    padding: 0;
+}
+
+.btn-quit:hover {
+    background: rgba(231, 76, 60, 0.3) !important;
+    border-color: rgba(231, 76, 60, 0.5) !important;
+    color: #E74C3C !important;
+}
+
+/* ============================================================
+   TRAY STATUS BADGE
+   ============================================================ */
+
+.tray-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.tray-icon { font-size: 10px; }
+.tray-label { color: #A0A0A0; }
+
+.tray-running { background: rgba(46, 204, 113, 0.15); }
+.tray-running .tray-label { color: #2ECC71; }
+
+.tray-connecting { background: rgba(243, 156, 18, 0.15); }
+.tray-connecting .tray-label { color: #F39C12; }
+
+.tray-stopped { background: rgba(231, 76, 60, 0.15); }
+.tray-stopped .tray-label { color: #E74C3C; }
+
+.tray-error { background: rgba(231, 76, 60, 0.15); }
+.tray-error .tray-label { color: #E74C3C; }
+
+/* ============================================================
+   SYSTEM STATUS (top bar)
+   ============================================================ */
+
+.system-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.system-status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.system-status-badge.healthy {
+    background: rgba(46, 204, 113, 0.15);
+    color: #2ECC71;
+}
+
+.system-status-badge.unhealthy {
+    background: rgba(231, 76, 60, 0.15);
+    color: #E74C3C;
+}
+
+.system-version {
+    color: #7F8C8D;
+    font-size: 11px;
+}
+
+.system-uptime {
+    color: #7F8C8D;
+    font-size: 11px;
+}
 ";

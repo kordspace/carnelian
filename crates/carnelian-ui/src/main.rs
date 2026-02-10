@@ -29,7 +29,8 @@ pub enum Route {
     Skills {},
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     tracing_subscriber::fmt::init();
 
     components::system_tray::init_system_tray();
