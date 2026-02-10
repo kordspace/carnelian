@@ -158,6 +158,11 @@ pub enum EventType {
     CapabilityDenied,
     CapabilityRevoked,
 
+    // Skill management
+    SkillDiscovered,
+    SkillUpdated,
+    SkillRemoved,
+
     // System events
     RuntimeStart,
     RuntimeReady,

@@ -1,0 +1,16 @@
+{
+  "name": "healthcheck",
+  "description": "Simple health check skill that verifies system connectivity and returns status",
+  "runtime": "shell",
+  "version": "1.0.0",
+  "capabilities_required": [],
+  "sandbox": {
+    "network": "disabled",
+    "max_memory_mb": 64,
+    "max_cpu_percent": 10
+  },
+  "openclaw_compat": {
+    "emoji": "💓",
+    "tags": ["system", "utility"]
+  }
+}

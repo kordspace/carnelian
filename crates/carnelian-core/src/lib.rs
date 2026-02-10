@@ -89,6 +89,7 @@ pub mod ledger;
 pub mod policy;
 pub mod scheduler;
 pub mod server;
+pub mod skills;
 pub mod worker;
 
 use std::env;
@@ -106,6 +107,7 @@ pub use ledger::{Ledger, LedgerEvent};
 pub use policy::{CapabilityGrant, PolicyEngine};
 pub use scheduler::Scheduler;
 pub use server::{AppState, Server};
+pub use skills::{SkillDiscovery, SkillManifest};
 pub use worker::WorkerManager;
 
 /// Core orchestrator version

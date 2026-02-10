@@ -171,6 +171,10 @@ pub struct Config {
     #[serde(default = "default_skill_max_log_lines")]
     pub skill_max_log_lines: usize,
 
+    /// Path to skills registry directory (default: ./skills/registry)
+    #[serde(default = "default_skills_registry_path")]
+    pub skills_registry_path: PathBuf,
+
     /// Maximum retry attempts for failed tasks (default: 3)
     #[serde(default = "default_task_max_retry_attempts")]
     pub task_max_retry_attempts: u32,
@@ -295,6 +299,10 @@ fn default_task_retry_delay_secs() -> u64 {
     5
 }
 
+fn default_skills_registry_path() -> PathBuf {
+    PathBuf::from("./skills/registry")
+}
+
 /// Machine profile determining resource limits and default model
 ///
 /// # Variants
@@ -350,6 +358,7 @@ impl Default for Config {
             skill_timeout_grace_period_secs: default_skill_timeout_grace_period_secs(),
             skill_max_output_bytes: default_skill_max_output_bytes(),
             skill_max_log_lines: default_skill_max_log_lines(),
+            skills_registry_path: default_skills_registry_path(),
             task_max_retry_attempts: default_task_max_retry_attempts(),
             task_retry_delay_secs: default_task_retry_delay_secs(),
             db_pool: None,

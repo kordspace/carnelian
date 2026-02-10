@@ -51,6 +51,7 @@ path = "src/bin/carnelian.rs"
 testcontainers.workspace = true
 tokio-test.workspace = true
 memory-stats.workspace = true
+tempfile = "3.14"
 
 [lints]
 workspace = true

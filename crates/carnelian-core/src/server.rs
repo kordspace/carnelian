@@ -15,7 +15,7 @@ use carnelian_common::types::{
     CancelTaskRequest, CancelTaskResponse, CreateTaskRequest, CreateTaskResponse, EventEnvelope,
     EventLevel, EventType, ListRunsResponse, ListSkillsResponse, ListTasksResponse,
     PaginatedRunLogsResponse, RunDetail, RunLogEntry, RunLogsQuery, SkillDetail,
-    SkillRefreshResponse, SkillToggleResponse, TaskDetail,
+    SkillToggleResponse, TaskDetail,
 };
 use futures_util::{SinkExt, StreamExt};
 use http::{Method, header};
@@ -242,6 +242,42 @@ impl Server {
             }
         }
 
+        // Initial skill discovery scan
+        if let Ok(pool) = self.config.pool() {
+            let discovery = crate::skills::SkillDiscovery::new(
+                pool.clone(),
+                Some(self.event_stream.clone()),
+                self.config.skills_registry_path.clone(),
+            );
+            match discovery.refresh().await {
+                Ok(r) => {
+                    if r.discovered > 0 || r.updated > 0 || r.removed > 0 {
+                        tracing::info!(
+                            discovered = r.discovered,
+                            updated = r.updated,
+                            removed = r.removed,
+                            "Initial skill discovery complete"
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "Initial skill discovery failed, continuing");
+                }
+            }
+        }
+
+        // Start file watcher for automatic skill discovery
+        let skill_watcher_handle = self.config.pool().map_or_else(
+            |_| None,
+            |pool| {
+                Some(crate::skills::start_file_watcher(
+                    pool.clone(),
+                    self.event_stream.clone(),
+                    self.config.skills_registry_path.clone(),
+                ))
+            },
+        );
+
         let addr = format!("{}:{}", self.config.bind_address, self.config.http_port);
         let listener = TcpListener::bind(&addr).await.map_err(|e| {
             carnelian_common::Error::Connection(format!("Failed to bind to {}: {}", addr, e))
@@ -261,6 +297,12 @@ impl Server {
             .with_graceful_shutdown(shutdown)
             .await
             .map_err(|e| carnelian_common::Error::Connection(format!("Server error: {}", e)))?;
+
+        // Stop skill file watcher
+        if let Some(handle) = skill_watcher_handle {
+            handle.abort();
+            tracing::debug!("Skill file watcher stopped");
+        }
 
         // Stop workers before scheduler shutdown
         {
@@ -1057,21 +1099,42 @@ async fn toggle_skill(state: AppState, skill_id: Uuid, enabled: bool) -> axum::r
 
 /// Trigger skill refresh via `POST /v1/skills/refresh`.
 ///
-/// This is a placeholder that returns zeroes. A full implementation would
-/// scan the filesystem / registry for new or updated skill manifests.
-async fn refresh_skills_handler(State(_state): State<AppState>) -> impl IntoResponse {
-    (
-        StatusCode::OK,
-        Json(
-            serde_json::to_value(SkillRefreshResponse {
-                discovered: 0,
-                updated: 0,
-                removed: 0,
-            })
-            .unwrap_or_default(),
-        ),
-    )
-        .into_response()
+/// Scans the skills registry directory for new, updated, or removed skill
+/// manifests and synchronizes the database accordingly.
+async fn refresh_skills_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p.clone(),
+        Err(e) => {
+            tracing::error!(error = %e, "Database pool unavailable for skill refresh");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Database unavailable"})),
+            )
+                .into_response();
+        }
+    };
+
+    let discovery = crate::skills::SkillDiscovery::new(
+        pool,
+        Some(state.event_stream.clone()),
+        state.config.skills_registry_path.clone(),
+    );
+
+    match discovery.refresh().await {
+        Ok(result) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(result).unwrap_or_default()),
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "Skill refresh failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Skill refresh failed: {}", e)})),
+            )
+                .into_response()
+        }
+    }
 }
 
 // =============================================================================

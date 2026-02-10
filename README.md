@@ -98,6 +98,7 @@ carnelian migrate                  # Run database migrations
 carnelian migrate --dry-run        # Show pending migrations
 carnelian logs                     # Stream events from running instance
 carnelian logs -f --level ERROR    # Stream only ERROR events
+carnelian skills refresh           # Scan registry and sync skills to database
 ```
 
 Global flags: `--database-url`, `--config`, `--log-level`, `--port`.
@@ -330,9 +331,10 @@ carnelian/
 │   │   │   ├── events.rs         # Event stream with backpressure and bounded buffers
 │   │   │   ├── policy.rs         # Capability-based security engine
 │   │   │   ├── ledger.rs         # blake3 hash-chain audit trail
+│   │   │   ├── skills.rs          # Skill discovery, manifest validation, file watcher
 │   │   │   ├── config.rs         # Configuration loading (TOML, env, CLI)
 │   │   │   └── db.rs             # Database connection and migrations
-│   │   └── tests/                # 8 test suites, 70+ tests
+│   │   └── tests/                # 9 test suites, 80+ tests
 │   ├── carnelian-common/         # Shared types, error handling, API models
 │   ├── carnelian-ui/             # Dioxus desktop UI
 │   ├── carnelian-worker-node/    # Node.js worker wrapper crate
@@ -364,6 +366,48 @@ carnelian/
 - **600+ Skills** - Full compatibility with existing Thummim skill library via Node worker
 - **Task Lifecycle** - Priority-based scheduling, concurrency limits, configurable retry policies
 - **LZ4 Compression** - Database column compression for large payloads (memories, logs, metadata)
+- **Skill Discovery** - Automatic filesystem watching with blake3 checksums and database sync
+
+## Skill Discovery
+
+Skills are defined by `skill.json` manifest files in the `skills/registry/` directory. Discovery runs automatically on server startup and via a file watcher (2-second debounce), or can be triggered manually.
+
+### Manifest Format
+
+Each skill is a subdirectory containing a `skill.json`:
+
+```json
+{
+  "name": "echo",
+  "description": "Echo test skill",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["fs.read"],
+  "sandbox": {
+    "network": "disabled",
+    "max_memory_mb": 128
+  },
+  "openclaw_compat": {
+    "emoji": "🔊",
+    "tags": ["utility"]
+  }
+}
+```
+
+Required fields: `name`, `description`, `runtime` (`node`|`python`|`shell`|`wasm`).
+
+### Discovery Modes
+
+| Mode | Trigger | Description |
+|------|---------|-------------|
+| **Startup** | Server boot | Full scan on `carnelian start` |
+| **File watcher** | Filesystem change | 2-second debounced scan of `skills/registry/` |
+| **CLI** | `carnelian skills refresh` | Manual scan with console output |
+| **API** | `POST /v1/skills/refresh` | Manual scan returning JSON counts |
+
+Manifests are checksummed with blake3 — skills are only updated in the database when the checksum changes. Stale skills (manifests removed from disk) are automatically deleted.
+
+See [skills/registry/README.md](skills/registry/README.md) for the full manifest specification.
 
 ### Security Architecture Notes
 
@@ -407,13 +451,14 @@ Run the local CI script before pushing to catch issues early:
 
 ### Testing
 
-The project has **70+ tests** across 8 test suites:
+The project has **80+ tests** across 9 test suites:
 
 | Suite | Tests | Docker | Description |
 |-------|-------|--------|-------------|
 | Unit tests | 12 | No | Core module tests (scheduler, policy, ledger, worker, db) |
 | Config tests | 11 | No | Configuration loading and validation |
 | Logging tests | 11 | No | Structured logging conventions |
+| Skill discovery tests | 6+12 | Mixed | Manifest validation (no Docker), DB integration (Docker) |
 | CLI tests | 7 | Yes | Full CLI command validation |
 | Integration tests | 7 | Yes | Database, server startup, load handling |
 | Migration tests | 12 | Yes | Schema migrations and seed data |

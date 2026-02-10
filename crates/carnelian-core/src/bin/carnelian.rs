@@ -100,6 +100,18 @@ enum Commands {
         #[arg(long)]
         event_type: Option<String>,
     },
+
+    /// Skill management commands
+    Skills {
+        #[command(subcommand)]
+        command: SkillsCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum SkillsCommands {
+    /// Manually refresh skill registry (scan for new/updated/removed skills)
+    Refresh,
 }
 
 #[tokio::main]
@@ -119,6 +131,9 @@ async fn main() {
             level,
             event_type,
         } => handle_logs(&resolve_url(url), follow, level, event_type).await,
+        Commands::Skills { command } => {
+            handle_skills(command, cli.config, cli.log_level, cli.database_url).await
+        }
     };
 
     if let Err(e) = result {
@@ -565,6 +580,60 @@ async fn handle_migrate(
     }
 
     Ok(())
+}
+
+/// Handle the `skills` subcommands
+async fn handle_skills(
+    command: SkillsCommands,
+    config_path: Option<PathBuf>,
+    log_level_override: Option<String>,
+    database_url_override: Option<String>,
+) -> carnelian_common::Result<()> {
+    match command {
+        SkillsCommands::Refresh => {
+            // Load configuration
+            let mut config = if let Some(path) = config_path {
+                Config::load_from_file(&path)?
+            } else {
+                Config::load_from_file(std::path::Path::new("machine.toml")).unwrap_or_default()
+            };
+
+            config.apply_env_overrides()?;
+
+            if let Some(level) = log_level_override {
+                config.log_level = level.to_uppercase();
+            }
+
+            if let Some(url) = database_url_override {
+                config.database_url = url;
+            }
+
+            carnelian_core::init_tracing(&config.log_level)?;
+
+            tracing::info!("🔥 Carnelian skills refresh starting...");
+
+            config.connect_database().await?;
+            let pool = config.pool()?.clone();
+
+            // Run migrations to ensure schema is up to date
+            carnelian_core::db::run_migrations(&pool).await?;
+
+            let discovery = carnelian_core::SkillDiscovery::new(
+                pool,
+                None, // No event stream for CLI
+                config.skills_registry_path.clone(),
+            );
+
+            let result = discovery.refresh().await?;
+
+            println!("🔥 Skill Registry Refresh Complete");
+            println!("   Discovered: {}", result.discovered);
+            println!("   Updated:    {}", result.updated);
+            println!("   Removed:    {}", result.removed);
+
+            Ok(())
+        }
+    }
 }
 
 /// Handle the `logs` command - stream events from a running instance

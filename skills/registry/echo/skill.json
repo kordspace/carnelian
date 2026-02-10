@@ -1,0 +1,17 @@
+{
+  "name": "echo",
+  "description": "Echo test skill that returns its input payload for debugging and integration testing",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": [],
+  "homepage": "https://github.com/kordspace/carnelian",
+  "sandbox": {
+    "network": "disabled",
+    "max_memory_mb": 128,
+    "max_cpu_percent": 25
+  },
+  "openclaw_compat": {
+    "emoji": "🔊",
+    "tags": ["utility", "testing"]
+  }
+}

@@ -77,6 +77,18 @@ Unit tests for structured logging conventions, log level filtering, and output f
 cargo test --test logging_test
 ```
 
+### Skill Discovery Tests (18 tests, mixed)
+
+Manifest validation (no Docker): valid/invalid manifests, runtime validation, checksum determinism, JSON parsing. Database integration (Docker): insert, update, unchanged detection, stale removal, multi-skill scan, invalid manifest skipping, event emission, empty/nonexistent registry, checksum storage, capabilities storage.
+
+```bash
+# Unit tests only (no Docker)
+cargo test --test skill_discovery_tests
+
+# Integration tests (requires Docker)
+cargo test --test skill_discovery_tests -- --ignored
+```
+
 ## All Integration Tests
 
 ```bash
