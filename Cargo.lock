@@ -672,9 +672,13 @@ dependencies = [
  "carnelian-core",
  "dioxus",
  "dioxus-signals",
+ "futures-util",
+ "http",
+ "reqwest 0.13.1",
  "serde",
  "serde_json",
  "tokio",
+ "tokio-tungstenite",
  "tracing",
  "tracing-subscriber",
 ]

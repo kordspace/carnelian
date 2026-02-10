@@ -17,6 +17,10 @@ serde_json.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+reqwest.workspace = true
+futures-util.workspace = true
+tokio-tungstenite.workspace = true
+http.workspace = true
 
 [lints]
 workspace = true

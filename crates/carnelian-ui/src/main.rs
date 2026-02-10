@@ -1,22 +1,93 @@
 //! Carnelian OS Desktop UI
 //!
 //! Dioxus-based desktop application for monitoring and controlling
-//! the Carnelian orchestrator.
+//! the Carnelian orchestrator. Features real-time event streaming
+//! via WebSocket, a glassy dark theme, and router-based navigation.
+
+mod components;
+mod pages;
+mod store;
+mod theme;
+mod websocket;
 
 use dioxus::prelude::*;
+
+use components::tab_nav::TabNav;
+use components::top_bar::TopBar;
+
+/// Application routes.
+#[derive(Routable, Clone, Debug, PartialEq, Eq)]
+pub enum Route {
+    #[layout(Layout)]
+    #[route("/")]
+    Dashboard {},
+    #[route("/tasks")]
+    Tasks {},
+    #[route("/events")]
+    Events {},
+    #[route("/skills")]
+    Skills {},
+}
 
 fn main() {
     tracing_subscriber::fmt::init();
 
+    components::system_tray::init_system_tray();
+
     dioxus::launch(app);
 }
 
+/// Root application component.
+///
+/// Initializes the `EventStreamStore` context provider, starts
+/// background WebSocket and status-polling tasks, and renders
+/// the router.
 fn app() -> Element {
+    let store = use_context_provider(store::EventStreamStore::new);
+    use_hook(move || store.start());
+
     rsx! {
-        div {
-            h1 { "Carnelian OS" }
-            p { "Version: {carnelian_common::VERSION}" }
-            p { "A local-first AI agent mainframe" }
+        style { {theme::GLOBAL_CSS} }
+        Router::<Route> {}
+    }
+}
+
+/// Layout component wrapping all routed pages.
+///
+/// Renders the top bar, tab navigation, and page content area.
+#[component]
+fn Layout() -> Element {
+    rsx! {
+        div { class: "app-container",
+            TopBar {}
+            TabNav {}
+            div { class: "main-content",
+                Outlet::<Route> {}
+            }
         }
     }
+}
+
+/// Dashboard page (delegates to `pages::dashboard`).
+#[component]
+fn Dashboard() -> Element {
+    pages::dashboard::Dashboard()
+}
+
+/// Tasks page (delegates to `pages::tasks`).
+#[component]
+fn Tasks() -> Element {
+    pages::tasks::Tasks()
+}
+
+/// Events page (delegates to `pages::events`).
+#[component]
+fn Events() -> Element {
+    pages::events::Events()
+}
+
+/// Skills page (delegates to `pages::skills`).
+#[component]
+fn Skills() -> Element {
+    pages::skills::Skills()
 }
