@@ -634,13 +634,12 @@ async fn test_poll_respects_concurrency_limit() {
     // Await all spawned execute_task handles so their DB writes are committed
     await_active_tasks(&active_tasks).await;
 
-    let still_pending: i64 = sqlx::query_scalar::<_, Option<i64>>(
-        r"SELECT COUNT(*) FROM tasks WHERE state = 'pending'",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to count pending tasks")
-    .unwrap_or(0);
+    let still_pending: i64 =
+        sqlx::query_scalar::<_, Option<i64>>(r"SELECT COUNT(*) FROM tasks WHERE state = 'pending'")
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to count pending tasks")
+            .unwrap_or(0);
     let dequeued_count = 5 - still_pending;
     assert_eq!(
         dequeued_count, 2,
@@ -648,12 +647,11 @@ async fn test_poll_respects_concurrency_limit() {
     );
 
     // Verify exactly 2 task_runs were created
-    let run_count: i64 =
-        sqlx::query_scalar::<_, Option<i64>>(r"SELECT COUNT(*) FROM task_runs")
-            .fetch_one(&pool)
-            .await
-            .expect("Failed to count task_runs")
-            .unwrap_or(0);
+    let run_count: i64 = sqlx::query_scalar::<_, Option<i64>>(r"SELECT COUNT(*) FROM task_runs")
+        .fetch_one(&pool)
+        .await
+        .expect("Failed to count task_runs")
+        .unwrap_or(0);
     assert_eq!(
         run_count, 2,
         "Exactly 2 task_runs should exist (one per dequeued task)"
@@ -692,13 +690,12 @@ async fn test_poll_respects_concurrency_limit() {
         }
     }
 
-    let still_pending_after: i64 = sqlx::query_scalar::<_, Option<i64>>(
-        r"SELECT COUNT(*) FROM tasks WHERE state = 'pending'",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to count pending tasks")
-    .unwrap_or(0);
+    let still_pending_after: i64 =
+        sqlx::query_scalar::<_, Option<i64>>(r"SELECT COUNT(*) FROM tasks WHERE state = 'pending'")
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to count pending tasks")
+            .unwrap_or(0);
     let total_dequeued = 5 - still_pending_after;
     assert_eq!(
         total_dequeued, 3,
