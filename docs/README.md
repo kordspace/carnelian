@@ -2,15 +2,16 @@
 
 ## Overview
 
-🔥 Carnelian OS is a local-first AI agent mainframe built in Rust.
+🔥 Carnelian OS is a local-first AI agent mainframe built in Rust with capability-based security and event-stream architecture.
 
 ## Architecture
 
-- **Core**: Rust orchestrator (Axum, Tokio, SQLx)
-- **UI**: Dioxus desktop application
-- **Workers**: Node.js, Python, Shell execution environments
-- **Database**: PostgreSQL 15+ with pgvector
-- **Models**: Local inference via Ollama (DeepSeek R1 7B)
+- **Core Orchestrator**: Rust (Axum, Tokio, SQLx) — HTTP API, WebSocket events, task scheduling
+- **Desktop UI**: Dioxus desktop application
+- **Workers**: Node.js, Python, Shell execution environments (JSONL transport protocol)
+- **Database**: PostgreSQL 16 with pgvector for vector embeddings
+- **Models**: Local-first inference via Ollama (DeepSeek R1)
+- **Security**: blake3-based hash-chain ledger, capability grants, deny-by-default policy engine
 
 ## Getting Started
 
@@ -25,18 +26,17 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for installation and configuration instruct
 | [BRAND.md](BRAND.md) | 🔥 Dual theme brand kit (Forge / Night Lab) |
 | [LOGGING.md](LOGGING.md) | 🔥 Logging philosophy and conventions |
 
-## Architecture
-
-**Security:** blake3-based ledger, capability grants, policy engine (shipped in Phase 1).
-
 ## Machine Profiles
 
-- **Thummim**: 2080 Super, 32GB RAM (constrained)
-- **Urim**: 2080 Ti, 64GB RAM (high-end)
+| Profile | GPU | RAM | Recommended Model |
+|---------|-----|-----|-------------------|
+| **Thummim** | RTX 2080 Super (8GB VRAM) | 32GB | `deepseek-r1:7b` |
+| **Urim** | RTX 2080 Ti (11GB VRAM) | 64GB | `deepseek-r1:32b` |
 
 ## Brand Identity
 
 - **🔥 Carnelian OS** — System/runtime identity
 - **🦎 Lian** — Agent personality
+- **💎 Core** — Architectural foundations
 
 See [BRAND.md](BRAND.md) for the complete brand kit.

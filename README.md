@@ -80,10 +80,66 @@ sequenceDiagram
 | **Core Orchestrator** | Axum/Tokio/SQLx | HTTP API, WebSocket events, task scheduling |
 | **Desktop UI** | Dioxus | Native desktop interface with event streaming |
 | **Policy Engine** | Rust | Capability-based security, deny-by-default |
-| **Worker Manager** | Rust | Worker lifecycle, sandboxing, capability grants |
-| **Node Worker** | Node.js | Executes 600+ existing Thummim skills |
-| **Ledger Manager** | Rust | Hash-chain audit trail for privileged actions |
-| **Model Router** | Rust | Local-first Ollama, remote fallback |
+| **Worker Manager** | Rust | Worker lifecycle, JSONL transport, capability grants |
+| **Node Worker** | Node.js/TypeScript | Executes 600+ existing Thummim skills |
+| **Ledger Manager** | Rust | blake3 hash-chain audit trail for privileged actions |
+| **Scheduler** | Rust | Priority-based task queue, retry policies, heartbeat |
+
+## CLI
+
+The `carnelian` binary provides a full command-line interface:
+
+```bash
+carnelian start                    # Start the orchestrator
+carnelian start --log-level DEBUG  # Start with debug logging
+carnelian status                   # Check if running
+carnelian stop                     # Stop gracefully
+carnelian migrate                  # Run database migrations
+carnelian migrate --dry-run        # Show pending migrations
+carnelian logs                     # Stream events from running instance
+carnelian logs -f --level ERROR    # Stream only ERROR events
+```
+
+Global flags: `--database-url`, `--config`, `--log-level`, `--port`.
+
+## API Endpoints
+
+All endpoints are prefixed with `/v1`.
+
+### System
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/health` | Health check (database connectivity, version) |
+| `GET` | `/v1/status` | System status |
+| `POST` | `/v1/events` | Publish an event |
+| `GET` | `/v1/events/ws` | WebSocket event stream |
+
+### Tasks
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/tasks` | Create a new task |
+| `GET` | `/v1/tasks` | List tasks |
+| `GET` | `/v1/tasks/{task_id}` | Get task details |
+| `POST` | `/v1/tasks/{task_id}/cancel` | Cancel a task |
+| `GET` | `/v1/tasks/{task_id}/runs` | List runs for a task |
+
+### Runs
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/runs/{run_id}` | Get run details |
+| `GET` | `/v1/runs/{run_id}/logs` | Get paginated run logs |
+
+### Skills
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/skills` | List registered skills |
+| `POST` | `/v1/skills/{skill_id}/enable` | Enable a skill |
+| `POST` | `/v1/skills/{skill_id}/disable` | Disable a skill |
+| `POST` | `/v1/skills/refresh` | Refresh skill registry |
 
 ## Prerequisites
 
@@ -245,8 +301,8 @@ cargo build
 # 7. Run tests
 cargo test
 
-# 8. Start desktop UI
-cargo run -p carnelian-ui
+# 8. Start the orchestrator
+cargo run --bin carnelian -- start
 ```
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for detailed setup and development workflow.
@@ -258,64 +314,158 @@ See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for detailed setup and developmen
 | **Thummim** | RTX 2080 Super | 8GB | 32GB | `deepseek-r1:7b` | Constrained profile for development |
 | **Urim** | RTX 2080 Ti | 11GB | 64GB | `deepseek-r1:32b` | High-end profile for production workloads |
 
-Profiles affect Docker resource limits and worker concurrency settings. See [docker-compose.yml](docker-compose.yml) for resource configuration.
+Profiles affect Docker resource limits and worker concurrency settings. See [docker-compose.yml](docker-compose.yml) and [machine.toml.example](machine.toml.example) for configuration.
 
 ## Project Structure
 
 ```
 carnelian/
 ├── crates/
-│   ├── carnelian-core/           # Core orchestrator (Axum server, policy engine, scheduler)
-│   ├── carnelian-ui/             # Dioxus desktop UI (event stream, task management)
-│   ├── carnelian-common/         # Shared types and utilities
-│   ├── carnelian-worker-node/    # Node.js worker wrapper
-│   ├── carnelian-worker-python/  # Python worker wrapper
-│   └── carnelian-worker-shell/   # Shell worker wrapper
+│   ├── carnelian-core/           # Core orchestrator (Axum server, scheduler, policy, ledger, workers)
+│   │   ├── src/
+│   │   │   ├── bin/carnelian.rs  # CLI binary (start, stop, status, migrate, logs)
+│   │   │   ├── server.rs         # HTTP API + WebSocket server
+│   │   │   ├── scheduler.rs      # Task queue, priority scheduling, retry policies
+│   │   │   ├── worker.rs         # Worker manager, JSONL transport, process lifecycle
+│   │   │   ├── events.rs         # Event stream with backpressure and bounded buffers
+│   │   │   ├── policy.rs         # Capability-based security engine
+│   │   │   ├── ledger.rs         # blake3 hash-chain audit trail
+│   │   │   ├── config.rs         # Configuration loading (TOML, env, CLI)
+│   │   │   └── db.rs             # Database connection and migrations
+│   │   └── tests/                # 8 test suites, 70+ tests
+│   ├── carnelian-common/         # Shared types, error handling, API models
+│   ├── carnelian-ui/             # Dioxus desktop UI
+│   ├── carnelian-worker-node/    # Node.js worker wrapper crate
+│   ├── carnelian-worker-python/  # Python worker wrapper crate
+│   └── carnelian-worker-shell/   # Shell worker wrapper crate
 ├── workers/
-│   ├── node-worker/              # Node.js worker (600+ skills)
+│   ├── node-worker/              # Node.js/TypeScript worker (600+ skills)
 │   ├── python-worker/            # Python worker
 │   └── shell-worker/             # Shell worker
 ├── skills/
 │   └── registry/                 # Skill bundles and manifests
 ├── db/
-│   └── migrations/               # SQL migrations (PostgreSQL with pgvector)
-├── docs/                         # Comprehensive documentation
-└── .github/workflows/            # CI/CD pipeline (lint, build, test)
+│   └── migrations/               # SQL migrations (5 migration files, PostgreSQL 16 + pgvector)
+├── docs/                         # Documentation (development, docker, brand, logging)
+├── scripts/
+│   ├── setup-hooks.sh            # Development environment setup
+│   └── ci-local.sh               # Local CI checks before pushing
+└── .github/workflows/ci.yml      # CI pipeline (lint, build, test, integration, secrets)
 ```
 
 ## Key Features
 
-- **Capability-Based Security** - Deny-by-default with explicit grants, owner-signed authority for privileged actions
-- **Event-Stream Architecture** - Priority-based sampling, bounded buffers, no UI freezes
+- **Capability-Based Security** - Deny-by-default with explicit grants, owner-signed Ed25519 authority
+- **Event-Stream Architecture** - Priority-based sampling, bounded buffers, WebSocket streaming
 - **Local-First Inference** - Ollama integration with GPU support, remote fallback
 - **Heartbeat System** - 555,555ms wake routine with mantra rotation, auto-task queuing
-- **Worker Sandboxing** - Isolated execution with explicit capability grants
-- **Tamper-Resistant Ledger** - Hash-chain audit trail using **blake3** for integrity verification
+- **Worker Sandboxing** - Isolated process execution with JSONL transport protocol
+- **Tamper-Resistant Ledger** - blake3 hash-chain audit trail for integrity verification
 - **600+ Skills** - Full compatibility with existing Thummim skill library via Node worker
+- **Task Lifecycle** - Priority-based scheduling, concurrency limits, configurable retry policies
+- **LZ4 Compression** - Database column compression for large payloads (memories, logs, metadata)
 
 ### Security Architecture Notes
 
 The ledger uses **blake3** (not SHA-256) for hash-chain integrity, providing faster performance than traditional cryptographic hashes while maintaining collision resistance.
 
-Note: The policy engine (`crates/carnelian-core/src/policy.rs`) and ledger manager (`crates/carnelian-core/src/ledger.rs`) shipped early as part of Phase 1 foundation, though originally planned for Phase 4 in the roadmap.
+The policy engine (`crates/carnelian-core/src/policy.rs`) and ledger manager (`crates/carnelian-core/src/ledger.rs`) shipped early as part of Phase 1 foundation, though originally planned for Phase 4 in the roadmap.
 
 ## Development
 
 - **Setup Guide:** [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 - **Docker Guide:** [docs/DOCKER.md](docs/DOCKER.md)
+- **Logging Guide:** [docs/LOGGING.md](docs/LOGGING.md)
 
-Pre-commit hooks (prek) run automatically on commit. CI enforces formatting (rustfmt) and linting (clippy).
+Pre-commit hooks (prek) run automatically on commit. CI enforces formatting (rustfmt), linting (clippy), and secret scanning.
 
 ```bash
 # Format code
 cargo fmt --all
 
 # Run lints
-cargo clippy --workspace --all-targets
+cargo clippy --workspace --all-targets -- -D warnings
+
+# Run unit tests
+cargo test --workspace
 
 # Run all pre-commit hooks
 prek run --all-files
 ```
+
+### Local CI Checks
+
+Run the local CI script before pushing to catch issues early:
+
+```bash
+# Quick checks (fmt, clippy, unit tests, doc-tests) — no Docker needed
+./scripts/ci-local.sh
+
+# Full checks including integration tests — requires Docker
+./scripts/ci-local.sh --full
+```
+
+### Testing
+
+The project has **70+ tests** across 8 test suites:
+
+| Suite | Tests | Docker | Description |
+|-------|-------|--------|-------------|
+| Unit tests | 12 | No | Core module tests (scheduler, policy, ledger, worker, db) |
+| Config tests | 11 | No | Configuration loading and validation |
+| Logging tests | 11 | No | Structured logging conventions |
+| CLI tests | 7 | Yes | Full CLI command validation |
+| Integration tests | 7 | Yes | Database, server startup, load handling |
+| Migration tests | 12 | Yes | Schema migrations and seed data |
+| Scheduler tests | 7 | Yes | Priority scheduling, concurrency, retries |
+| Server tests | 8 | Yes | HTTP API, WebSocket, compression |
+| Worker transport tests | 7 | Yes | JSONL protocol, timeouts, cancellation |
+
+```bash
+# Unit tests only (no Docker)
+cargo test --workspace
+
+# All integration tests (requires Docker)
+cargo test --workspace -- --ignored
+
+# Specific test suite
+cargo test --test scheduler_integration_test -- --ignored
+```
+
+See [crates/carnelian-core/tests/README.md](crates/carnelian-core/tests/README.md) for detailed test documentation.
+
+### CI Pipeline
+
+The GitHub Actions CI pipeline runs on every push to `main` and on pull requests:
+
+1. **Rust Lint** — `cargo fmt --check` + `cargo clippy -D warnings`
+2. **Rust Build & Test** — `cargo build` + `cargo test` + `cargo doc`
+3. **Node.js Worker** — `npm ci` + `npm run build` + `npm test`
+4. **Integration Tests** — PostgreSQL service + all `--ignored` tests
+5. **Secret Scanning** — `detect-secrets` baseline audit
+
+## Database
+
+PostgreSQL 16 with pgvector extension. Schema managed via SQLx migrations in `db/migrations/`:
+
+| Migration | Description |
+|-----------|-------------|
+| `00000000000000_init.sql` | pgvector extension |
+| `00000000000001_core_schema.sql` | Core tables (identities, skills, tasks, task_runs, run_logs, etc.) |
+| `00000000000002_phase1_delta.sql` | Phase 1 additions (sessions, skill_versions, workflows, sub_agents, XP, elixirs) |
+| `00000000000003_schema_fixes.sql` | Schema refinements (pronouns, subject_id TEXT, LZ4 compression) |
+| `00000000000004_xp_curve_retune.sql` | XP curve rebalancing |
+| `00000000000005_config_store_value_blob.sql` | Config store value column |
+
+## Configuration
+
+Configuration is loaded in order of precedence (highest wins):
+
+1. **Environment variables** (`DATABASE_URL`, `CARNELIAN_HTTP_PORT`, etc.)
+2. **Config file** (`machine.toml` — copy from `machine.toml.example`)
+3. **Built-in defaults**
+
+See [.env.example](.env.example) for environment variables and [machine.toml.example](machine.toml.example) for file-based configuration.
 
 ## Troubleshooting
 
@@ -326,15 +476,20 @@ prek run --all-files
 | **Ollama model download slow** | Models are large (4-20GB), monitor with `docker-compose logs -f carnelian-ollama` |
 | **Rust build errors** | Update toolchain: `rustup update`, clean build: `cargo clean` |
 | **Pre-commit hooks failing** | Run `cargo fmt --all` and `cargo clippy --workspace --all-targets --fix` |
+| **Integration tests failing** | Ensure Docker is running, run `./scripts/ci-local.sh --full` locally |
 
 See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 
 ## Documentation
 
-- [Development Guide](docs/DEVELOPMENT.md) - Setup and workflow
-- [Docker Guide](docs/DOCKER.md) - Environment and troubleshooting
-- [Brand Kit](docs/BRAND.md) - Dual theme colors and styling
-- [Logging Philosophy](docs/LOGGING.md) - Structured logging conventions
+| Document | Description |
+|----------|-------------|
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Development setup and workflow |
+| [docs/DOCKER.md](docs/DOCKER.md) | Docker environment and troubleshooting |
+| [docs/BRAND.md](docs/BRAND.md) | Dual theme brand kit (Forge / Night Lab) |
+| [docs/LOGGING.md](docs/LOGGING.md) | Structured logging philosophy and conventions |
+| [crates/carnelian-core/tests/README.md](crates/carnelian-core/tests/README.md) | Test suite documentation |
+| [db/migrations/README.md](db/migrations/README.md) | Database migration guide |
 
 ### Project Planning
 
@@ -346,7 +501,7 @@ See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 This is currently a personal project (Marco + Mim). The architecture is designed for eventual sharing as a platform.
 
 - Pre-commit hooks enforce code quality
-- CI requires passing lint and build checks
+- CI requires passing lint, build, and integration test checks
 - See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for code style
 
 ## License
