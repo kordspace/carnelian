@@ -509,7 +509,7 @@ pub struct ListSkillsResponse {
     pub skills: Vec<SkillDetail>,
 }
 
-/// Request body for `PUT /v1/skills/:id/enable` and `PUT /v1/skills/:id/disable`.
+/// Response body for `POST /v1/skills/:id/enable` and `POST /v1/skills/:id/disable`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillToggleResponse {
     pub skill_id: Uuid,
