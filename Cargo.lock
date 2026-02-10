@@ -681,6 +681,7 @@ dependencies = [
  "tokio-tungstenite",
  "tracing",
  "tracing-subscriber",
+ "tray-icon",
 ]
 
 [[package]]

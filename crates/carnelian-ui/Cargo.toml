@@ -21,6 +21,7 @@ reqwest.workspace = true
 futures-util.workspace = true
 tokio-tungstenite.workspace = true
 http.workspace = true
+tray-icon.workspace = true
 
 [lints]
 workspace = true

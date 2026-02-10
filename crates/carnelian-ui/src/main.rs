@@ -12,6 +12,7 @@ mod websocket;
 
 use dioxus::prelude::*;
 
+use components::system_tray::SystemTray;
 use components::tab_nav::TabNav;
 use components::top_bar::TopBar;
 
@@ -49,6 +50,7 @@ fn app() -> Element {
 
     rsx! {
         style { {theme::GLOBAL_CSS} }
+        SystemTray {}
         Router::<Route> {}
     }
 }

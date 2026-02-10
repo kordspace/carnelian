@@ -1,58 +1,195 @@
 //! System tray integration for background operation.
 //!
-//! Dioxus 0.6 desktop does not expose a stable cross-platform system tray
-//! API. This module provides:
+//! Uses the `tray-icon` and `muda` crates (transitive deps of
+//! `dioxus-desktop`) to create a native system tray icon with:
 //!
-//! - **`init_system_tray()`** — pre-launch initialization (logging, future
-//!   native tray setup).
-//! - **`WindowControls`** — in-app window control buttons (minimize, hide
-//!   to background, quit) that serve as the tray-menu equivalent.
-//! - **`TrayStatusBadge`** — connection-state-aware status indicator that
-//!   mirrors what a native tray icon would display.
+//! - **Dynamic icon** — green (Connected), yellow (Connecting),
+//!   gray (Disconnected), red (Error).
+//! - **Context menu** — Show Window, Hide Window, Quit.
+//! - **Reactive updates** — icon color changes when
+//!   `EventStreamStore::connection_state` changes.
 //!
-//! When Dioxus desktop gains a stable tray API, `init_system_tray` will
-//! register a native icon and context menu, and the in-app controls will
-//! become optional.
+//! The tray icon **must** be created on the event-loop thread, so
+//! `init_system_tray()` only registers the menu-event handler, and
+//! `SystemTray` (a Dioxus component) builds the actual icon after
+//! the event loop is running.
+
+use std::sync::OnceLock;
 
 use dioxus::prelude::*;
+use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
+use tray_icon::{Icon as TrayIconImage, TrayIcon, TrayIconBuilder};
 
 use crate::store::EventStreamStore;
 use crate::websocket::ConnectionState;
 
-/// Initialize system tray behavior.
-///
-/// Called before `dioxus::launch`. On platforms where Dioxus exposes a
-/// native tray API this will register the icon and menu. Currently logs
-/// the initialization and defers to in-app `WindowControls`.
-pub fn init_system_tray() {
-    tracing::info!(
-        "System tray: using in-app window controls (native tray unavailable in Dioxus 0.6)"
-    );
+// ── Menu item IDs (used to match events) ────────────────────
 
-    // Platform-specific native tray setup would go here:
-    //
-    // #[cfg(target_os = "windows")]
-    // { /* Win32 tray icon via `windows` crate */ }
-    //
-    // #[cfg(target_os = "macos")]
-    // { /* NSStatusItem via `objc` crate */ }
-    //
-    // #[cfg(target_os = "linux")]
-    // { /* libappindicator or StatusNotifierItem */ }
+/// Stable string IDs for context-menu items.
+const MENU_SHOW: &str = "show_window";
+const MENU_HIDE: &str = "hide_window";
+const MENU_QUIT: &str = "quit";
+
+// ── Tray icon pixel data ────────────────────────────────────
+
+/// Generate a 16×16 RGBA icon filled with a single colour.
+fn solid_icon(r: u8, g: u8, b: u8) -> TrayIconImage {
+    let size = 16_u32;
+    let mut rgba = Vec::with_capacity((size * size * 4) as usize);
+    for _ in 0..(size * size) {
+        rgba.extend_from_slice(&[r, g, b, 255]);
+    }
+    TrayIconImage::from_rgba(rgba, size, size).expect("valid 16×16 icon")
 }
 
-/// In-app window control buttons that replicate a tray context menu.
+fn icon_connected() -> TrayIconImage {
+    solid_icon(46, 204, 113)
+}
+fn icon_connecting() -> TrayIconImage {
+    solid_icon(243, 156, 18)
+}
+fn icon_disconnected() -> TrayIconImage {
+    solid_icon(127, 140, 141)
+}
+fn icon_error() -> TrayIconImage {
+    solid_icon(231, 76, 60)
+}
+
+// ── Pre-launch initialisation ───────────────────────────────
+
+/// Global holder for menu-item IDs so the event handler can
+/// match them without capturing local state.
+static MENU_IDS: OnceLock<MenuIds> = OnceLock::new();
+
+struct MenuIds {
+    show: tray_icon::menu::MenuId,
+    hide: tray_icon::menu::MenuId,
+    quit: tray_icon::menu::MenuId,
+}
+
+/// Pre-launch setup: register the global `MenuEvent` handler.
 ///
-/// Renders three actions:
-/// - **Minimize** — minimize the window (logged; native minimize requires
-///   platform-specific window handle access).
-/// - **Hide** — hide the window (background operation).
-/// - **Quit** — close the application.
+/// The handler runs on the event-loop thread whenever a tray
+/// context-menu item is clicked.  Window show/hide is logged
+/// (Dioxus 0.6 does not expose a stable window-handle API);
+/// Quit terminates the process.
+pub fn init_system_tray() {
+    tracing::info!("System tray: registering menu-event handler");
+    MenuEvent::set_event_handler(Some(handle_menu_event));
+}
+
+/// Dispatch a tray context-menu click to the appropriate action.
+#[allow(clippy::needless_pass_by_value)] // Signature required by MenuEvent::set_event_handler
+fn handle_menu_event(event: MenuEvent) {
+    let Some(ids) = MENU_IDS.get() else {
+        return;
+    };
+    if event.id == ids.show {
+        tracing::info!("Tray menu: Show Window");
+    } else if event.id == ids.hide {
+        tracing::info!("Tray menu: Hide Window");
+    } else if event.id == ids.quit {
+        tracing::info!("Tray menu: Quit");
+        std::process::exit(0);
+    }
+}
+
+// ── Dioxus component: creates & updates the native tray ─────
+
+/// Return the tray icon image for a given connection state.
+fn icon_for_state(state: &ConnectionState) -> TrayIconImage {
+    match state {
+        ConnectionState::Connected => icon_connected(),
+        ConnectionState::Connecting => icon_connecting(),
+        ConnectionState::Disconnected => icon_disconnected(),
+        ConnectionState::Error(_) => icon_error(),
+    }
+}
+
+/// Return the tooltip string for a given connection state.
+const fn tooltip_for_state(state: &ConnectionState) -> &'static str {
+    match state {
+        ConnectionState::Connected => "Carnelian OS \u{2014} Connected",
+        ConnectionState::Connecting => "Carnelian OS \u{2014} Connecting\u{2026}",
+        ConnectionState::Disconnected => "Carnelian OS \u{2014} Disconnected",
+        ConnectionState::Error(_) => "Carnelian OS \u{2014} Error",
+    }
+}
+
+/// Invisible component that owns the native system tray icon.
 ///
-/// Window minimize/hide rely on the native title bar in Dioxus 0.6 desktop.
-/// The buttons here provide explicit UI affordances and log the intent;
-/// full programmatic control will be wired when Dioxus exposes stable
-/// window-handle APIs.
+/// Must be rendered inside the Dioxus tree (i.e. after the
+/// event loop is running).  It creates the tray icon once via
+/// `use_hook`, then reactively updates the icon colour whenever
+/// `connection_state` changes.
+#[component]
+pub fn SystemTray() -> Element {
+    let store = use_context::<EventStreamStore>();
+
+    // Build tray icon + menu exactly once.
+    let tray_handle: Signal<Option<TrayIcon>> = use_signal(|| None);
+
+    use_hook({
+        let mut tray_handle = tray_handle;
+        move || match build_tray() {
+            Ok(tray) => {
+                tracing::info!("Native system tray icon created");
+                tray_handle.set(Some(tray));
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to create system tray icon; falling back to in-app controls");
+            }
+        }
+    });
+
+    // Reactively update icon colour on connection-state changes.
+    let connection_state = store.connection_state.read();
+    if let Some(tray) = &*tray_handle.read() {
+        let _ = tray.set_icon(Some(icon_for_state(&connection_state)));
+        tray.set_tooltip(Some(tooltip_for_state(&connection_state)))
+            .ok();
+    }
+
+    // The component itself renders nothing visible.
+    rsx! {}
+}
+
+/// Build the native tray icon with a context menu.
+fn build_tray() -> Result<TrayIcon, Box<dyn std::error::Error>> {
+    let menu = Menu::new();
+
+    let show_item = MenuItem::with_id(MENU_SHOW, "Show Window", true, None);
+    let hide_item = MenuItem::with_id(MENU_HIDE, "Hide Window", true, None);
+    let quit_item = MenuItem::with_id(MENU_QUIT, "Quit", true, None);
+
+    menu.append(&show_item)?;
+    menu.append(&hide_item)?;
+    menu.append(&PredefinedMenuItem::separator())?;
+    menu.append(&quit_item)?;
+
+    // Store IDs for the global event handler.
+    let _ = MENU_IDS.set(MenuIds {
+        show: show_item.id().clone(),
+        hide: hide_item.id().clone(),
+        quit: quit_item.id().clone(),
+    });
+
+    let tray = TrayIconBuilder::new()
+        .with_menu(Box::new(menu))
+        .with_tooltip("Carnelian OS")
+        .with_icon(icon_disconnected())
+        .build()?;
+
+    Ok(tray)
+}
+
+// ── In-app fallback controls ────────────────────────────────
+
+/// In-app window control buttons that replicate the tray context menu.
+///
+/// Renders three actions: Minimize, Hide, Quit.
+/// These serve as a fallback when the native tray icon cannot be
+/// created, and as convenient in-window affordances regardless.
 #[component]
 pub fn WindowControls() -> Element {
     rsx! {
@@ -63,7 +200,7 @@ pub fn WindowControls() -> Element {
                 onclick: move |_| {
                     tracing::debug!("Window minimize requested");
                 },
-                "\u{2013}" // en-dash as minimize icon
+                "\u{2013}"
             }
             button {
                 class: "btn-icon btn-window-control",
@@ -71,28 +208,26 @@ pub fn WindowControls() -> Element {
                 onclick: move |_| {
                     tracing::debug!("Window hide requested");
                 },
-                "\u{2012}" // figure-dash as hide icon
+                "\u{2012}"
             }
             button {
                 class: "btn-icon btn-window-control btn-quit",
                 title: "Quit",
                 onclick: move |_| {
                     tracing::info!("Application quit requested");
-                    // Spawn exit on a separate thread to avoid the `!` return
-                    // type interfering with Dioxus event handler signatures.
                     std::thread::spawn(|| std::process::exit(0));
                 },
-                "\u{2715}" // multiplication-x as close icon
+                "\u{2715}"
             }
         }
     }
 }
 
-/// Connection-state-aware status badge mirroring a native tray icon.
+/// Connection-state-aware status badge (in-app tray mirror).
 ///
 /// Displays a colored indicator and label reflecting the current
-/// connection state: Running (green), Connecting (yellow), Stopped (red),
-/// or Error (red).
+/// connection state: Running (green), Connecting (yellow),
+/// Stopped (red), or Error (red).
 #[component]
 pub fn TrayStatusBadge() -> Element {
     let store = use_context::<EventStreamStore>();
