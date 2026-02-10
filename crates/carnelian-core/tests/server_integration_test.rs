@@ -836,8 +836,8 @@ async fn test_lz4_compression_verification() {
     {
         // Create minimal task + task_run so we can insert a run_log
         sqlx::query(
-            "INSERT INTO tasks (identity_id, task_type, payload, status) \
-             VALUES ($1, 'test', '{}'::jsonb, 'pending')",
+            "INSERT INTO tasks (created_by, title, state) \
+             VALUES ($1, 'lz4-compression-test', 'pending')",
         )
         .bind(lian_id)
         .execute(&pool)
@@ -845,7 +845,7 @@ async fn test_lz4_compression_verification() {
         .expect("Should insert test task");
 
         sqlx::query(
-            "INSERT INTO task_runs (task_id, worker_id, status) \
+            "INSERT INTO task_runs (task_id, worker_id, state) \
              SELECT t.task_id, 'test-worker', 'running' FROM tasks t LIMIT 1",
         )
         .execute(&pool)
