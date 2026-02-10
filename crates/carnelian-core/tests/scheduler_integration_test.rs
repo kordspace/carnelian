@@ -512,11 +512,15 @@ async fn test_poll_dequeues_in_priority_order() {
     .await
     .expect("poll_task_queue should succeed");
 
-    // Give the spawned task a moment to transition state
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    // The high-priority task should have left 'pending' (now 'running' or 'failed')
-    let high_state = get_task_state(&pool, high_id).await;
+    // Wait for the spawned task to transition state (retry loop for slow CI)
+    let mut high_state = String::new();
+    for _ in 0..40 {
+        high_state = get_task_state(&pool, high_id).await;
+        if high_state != "pending" {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
     assert_ne!(
         high_state, "pending",
         "Highest-priority task should have been dequeued"
@@ -534,13 +538,18 @@ async fn test_poll_dequeues_in_priority_order() {
         "Low-priority task should still be pending"
     );
 
-    // Verify exactly 1 task was spawned
-    // (it may have already completed and removed itself, so check task_runs instead)
-    let dequeued_runs: Vec<(Uuid,)> =
-        sqlx::query_as(r"SELECT task_id FROM task_runs ORDER BY started_at ASC")
+    // Verify exactly 1 task was spawned (retry loop for slow CI)
+    let mut dequeued_runs: Vec<(Uuid,)> = Vec::new();
+    for _ in 0..40 {
+        dequeued_runs = sqlx::query_as(r"SELECT task_id FROM task_runs ORDER BY started_at ASC")
             .fetch_all(&pool)
             .await
             .expect("Failed to query task_runs");
+        if !dequeued_runs.is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
 
     assert_eq!(
         dequeued_runs.len(),
@@ -613,30 +622,40 @@ async fn test_poll_respects_concurrency_limit() {
     .await
     .expect("poll_task_queue should succeed");
 
-    // Give spawned tasks a moment to transition state
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    // Count how many tasks left 'pending' state
-    let still_pending: i64 =
-        sqlx::query_scalar::<_, Option<i64>>(r"SELECT COUNT(*) FROM tasks WHERE state = 'pending'")
-            .fetch_one(&pool)
-            .await
-            .expect("Failed to count pending tasks")
-            .unwrap_or(0);
-
-    let dequeued_count = 5 - still_pending;
+    // Wait for spawned tasks to transition state (retry loop for slow CI)
+    let mut dequeued_count: i64 = 0;
+    for _ in 0..40 {
+        let still_pending: i64 = sqlx::query_scalar::<_, Option<i64>>(
+            r"SELECT COUNT(*) FROM tasks WHERE state = 'pending'",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("Failed to count pending tasks")
+        .unwrap_or(0);
+        dequeued_count = 5 - still_pending;
+        if dequeued_count >= 2 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
     assert_eq!(
         dequeued_count, 2,
         "Exactly 2 tasks should have been dequeued (max_workers=2)"
     );
 
-    // Verify exactly 2 task_runs were created
-    let run_count: i64 = sqlx::query_scalar::<_, Option<i64>>(r"SELECT COUNT(*) FROM task_runs")
-        .fetch_one(&pool)
-        .await
-        .expect("Failed to count task_runs")
-        .unwrap_or(0);
-
+    // Verify exactly 2 task_runs were created (retry loop for slow CI)
+    let mut run_count: i64 = 0;
+    for _ in 0..40 {
+        run_count = sqlx::query_scalar::<_, Option<i64>>(r"SELECT COUNT(*) FROM task_runs")
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to count task_runs")
+            .unwrap_or(0);
+        if run_count >= 2 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
     assert_eq!(
         run_count, 2,
         "Exactly 2 task_runs should exist (one per dequeued task)"
@@ -663,16 +682,22 @@ async fn test_poll_respects_concurrency_limit() {
     .await
     .expect("Second poll_task_queue should succeed");
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    let still_pending_after: i64 =
-        sqlx::query_scalar::<_, Option<i64>>(r"SELECT COUNT(*) FROM tasks WHERE state = 'pending'")
-            .fetch_one(&pool)
-            .await
-            .expect("Failed to count pending tasks")
-            .unwrap_or(0);
-
-    let total_dequeued = 5 - still_pending_after;
+    // Wait for the third task to be dequeued (retry loop for slow CI)
+    let mut total_dequeued: i64 = 0;
+    for _ in 0..40 {
+        let still_pending_after: i64 = sqlx::query_scalar::<_, Option<i64>>(
+            r"SELECT COUNT(*) FROM tasks WHERE state = 'pending'",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("Failed to count pending tasks")
+        .unwrap_or(0);
+        total_dequeued = 5 - still_pending_after;
+        if total_dequeued >= 3 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
     assert_eq!(
         total_dequeued, 3,
         "After second poll with 1 active, total dequeued should be 3"

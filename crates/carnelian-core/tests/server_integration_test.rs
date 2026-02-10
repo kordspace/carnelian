@@ -912,3 +912,398 @@ async fn test_lz4_compression_verification() {
     println!("✓ ledger_events.metadata LZ4 compression verified and writable");
     println!("✓ Full LZ4 compression verification passed (memories, run_logs, ledger_events)");
 }
+
+// =============================================================================
+// TASK LIFECYCLE ENDPOINT TESTS
+// =============================================================================
+
+/// Helper: start a server backed by a real PostgreSQL container and return (port, server_handle).
+async fn start_db_backed_server(db_url: &str) -> (u16, tokio::task::JoinHandle<()>) {
+    let port = allocate_random_port().await;
+
+    let mut config = Config::default();
+    config.bind_address = "127.0.0.1".to_string();
+    config.http_port = port;
+    config.database_url = db_url.to_string();
+    config
+        .connect_database()
+        .await
+        .expect("Config should connect to database");
+    let pool = config.pool().expect("Pool should be set").clone();
+    let config = Arc::new(config);
+
+    let event_stream = Arc::new(EventStream::new(1000, 100));
+    let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
+    let ledger = Arc::new(Ledger::new(pool.clone()));
+    let worker_manager = Arc::new(tokio::sync::Mutex::new(WorkerManager::new(
+        config.clone(),
+        event_stream.clone(),
+    )));
+    let scheduler = Arc::new(tokio::sync::Mutex::new(carnelian_core::Scheduler::new(
+        pool.clone(),
+        event_stream.clone(),
+        Duration::from_secs(3600), // long interval so heartbeats don't fire during test
+        worker_manager.clone(),
+        config.clone(),
+    )));
+
+    let server = Server::new(
+        config.clone(),
+        event_stream,
+        policy_engine,
+        ledger,
+        scheduler,
+        worker_manager,
+    );
+
+    let handle = tokio::spawn(async move {
+        server.run().await.expect("Server failed to start");
+    });
+
+    assert!(
+        wait_for_server(port, Duration::from_secs(10)).await,
+        "DB-backed server failed to start within timeout"
+    );
+
+    (port, handle)
+}
+
+/// Test: full task create → list → get → cancel lifecycle via REST endpoints.
+#[tokio::test]
+#[ignore = "Requires Docker - run with: cargo test --test server_integration_test test_task_lifecycle -- --ignored"]
+async fn test_task_lifecycle_endpoints() {
+    let container = create_postgres_container().await;
+    let db_url = get_database_url(&container).await;
+
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&db_url)
+        .await
+        .expect("Failed to connect to database");
+
+    carnelian_core::db::run_migrations(&pool)
+        .await
+        .expect("Migrations should succeed");
+
+    let (port, server_handle) = start_db_backed_server(&db_url).await;
+    let client = reqwest::Client::new();
+    let base = format!("http://127.0.0.1:{}", port);
+
+    // 1. Create a task
+    let create_resp = client
+        .post(format!("{}/v1/tasks", base))
+        .json(&serde_json::json!({
+            "title": "Integration test task",
+            "description": "Created by test_task_lifecycle_endpoints",
+            "priority": 5
+        }))
+        .send()
+        .await
+        .expect("POST /v1/tasks should succeed");
+
+    assert_eq!(
+        create_resp.status(),
+        201,
+        "Task creation should return 201 Created"
+    );
+    let create_body: serde_json::Value = create_resp.json().await.unwrap();
+    let task_id = create_body["task_id"]
+        .as_str()
+        .expect("task_id should be a string");
+    assert_eq!(create_body["state"], "pending");
+
+    // 2. List tasks — should contain the created task
+    let list_resp = client
+        .get(format!("{}/v1/tasks", base))
+        .send()
+        .await
+        .expect("GET /v1/tasks should succeed");
+
+    assert_eq!(list_resp.status(), 200);
+    let list_body: serde_json::Value = list_resp.json().await.unwrap();
+    let tasks = list_body["tasks"]
+        .as_array()
+        .expect("tasks should be an array");
+    assert!(
+        tasks.iter().any(|t| t["task_id"].as_str() == Some(task_id)),
+        "Listed tasks should contain the created task"
+    );
+
+    // 3. Get task by ID
+    let get_resp = client
+        .get(format!("{}/v1/tasks/{}", base, task_id))
+        .send()
+        .await
+        .expect("GET /v1/tasks/:id should succeed");
+
+    assert_eq!(get_resp.status(), 200);
+    let get_body: serde_json::Value = get_resp.json().await.unwrap();
+    assert_eq!(get_body["title"], "Integration test task");
+    assert_eq!(get_body["priority"], 5);
+    assert_eq!(get_body["state"], "pending");
+
+    // 4. Get non-existent task → 404
+    let missing_resp = client
+        .get(format!(
+            "{}/v1/tasks/00000000-0000-0000-0000-000000000000",
+            base
+        ))
+        .send()
+        .await
+        .expect("GET missing task should succeed");
+
+    assert_eq!(missing_resp.status(), 404);
+
+    // 5. Cancel the task
+    let cancel_resp = client
+        .post(format!("{}/v1/tasks/{}/cancel", base, task_id))
+        .json(&serde_json::json!({"reason": "integration test cleanup"}))
+        .send()
+        .await
+        .expect("POST /v1/tasks/:id/cancel should succeed");
+
+    assert_eq!(cancel_resp.status(), 200);
+    let cancel_body: serde_json::Value = cancel_resp.json().await.unwrap();
+    assert_eq!(cancel_body["state"], "canceled");
+
+    // 6. Verify task state is now canceled
+    let verify_resp = client
+        .get(format!("{}/v1/tasks/{}", base, task_id))
+        .send()
+        .await
+        .expect("GET after cancel should succeed");
+
+    assert_eq!(verify_resp.status(), 200);
+    let verify_body: serde_json::Value = verify_resp.json().await.unwrap();
+    assert_eq!(verify_body["state"], "canceled");
+
+    println!("✓ Task lifecycle (create → list → get → cancel) verified");
+    server_handle.abort();
+}
+
+/// Test: run retrieval and paginated logs (capped at 1000).
+#[tokio::test]
+#[ignore = "Requires Docker - run with: cargo test --test server_integration_test test_runs_and_paginated_logs -- --ignored"]
+async fn test_runs_and_paginated_logs() {
+    let container = create_postgres_container().await;
+    let db_url = get_database_url(&container).await;
+
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&db_url)
+        .await
+        .expect("Failed to connect to database");
+
+    carnelian_core::db::run_migrations(&pool)
+        .await
+        .expect("Migrations should succeed");
+
+    let (port, server_handle) = start_db_backed_server(&db_url).await;
+    let client = reqwest::Client::new();
+    let base = format!("http://127.0.0.1:{}", port);
+
+    // Create a task directly in DB
+    let task_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO tasks (title, state, priority) VALUES ('log-test', 'pending', 0) RETURNING task_id",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("Should insert task");
+
+    // Create a task_run
+    let run_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO task_runs (task_id, attempt, state, started_at) VALUES ($1, 1, 'running', NOW()) RETURNING run_id",
+    )
+    .bind(task_id)
+    .fetch_one(&pool)
+    .await
+    .expect("Should insert task_run");
+
+    // Insert 15 run_logs
+    for i in 0..15 {
+        sqlx::query("INSERT INTO run_logs (run_id, level, message) VALUES ($1, 'info', $2)")
+            .bind(run_id)
+            .bind(format!("Log message {}", i))
+            .execute(&pool)
+            .await
+            .expect("Should insert run_log");
+    }
+
+    // 1. GET /v1/tasks/:task_id/runs
+    let runs_resp = client
+        .get(format!("{}/v1/tasks/{}/runs", base, task_id))
+        .send()
+        .await
+        .expect("GET runs should succeed");
+
+    assert_eq!(runs_resp.status(), 200);
+    let runs_body: serde_json::Value = runs_resp.json().await.unwrap();
+    let runs = runs_body["runs"]
+        .as_array()
+        .expect("runs should be an array");
+    assert_eq!(runs.len(), 1, "Should have exactly 1 run");
+    assert_eq!(runs[0]["attempt"], 1);
+
+    // 2. GET /v1/runs/:run_id/logs — default pagination (page=1, page_size=100)
+    let logs_resp = client
+        .get(format!("{}/v1/runs/{}/logs", base, run_id))
+        .send()
+        .await
+        .expect("GET logs should succeed");
+
+    assert_eq!(logs_resp.status(), 200);
+    let logs_body: serde_json::Value = logs_resp.json().await.unwrap();
+    assert_eq!(logs_body["total"], 15);
+    assert_eq!(logs_body["page"], 1);
+    assert_eq!(logs_body["page_size"], 100);
+    let logs = logs_body["logs"]
+        .as_array()
+        .expect("logs should be an array");
+    assert_eq!(logs.len(), 15);
+
+    // 3. GET with page_size=5, page=2
+    let page2_resp = client
+        .get(format!(
+            "{}/v1/runs/{}/logs?page=2&page_size=5",
+            base, run_id
+        ))
+        .send()
+        .await
+        .expect("GET logs page 2 should succeed");
+
+    assert_eq!(page2_resp.status(), 200);
+    let page2_body: serde_json::Value = page2_resp.json().await.unwrap();
+    assert_eq!(page2_body["page"], 2);
+    assert_eq!(page2_body["page_size"], 5);
+    let page2_logs = page2_body["logs"].as_array().unwrap();
+    assert_eq!(
+        page2_logs.len(),
+        5,
+        "Page 2 with page_size=5 should have 5 logs"
+    );
+
+    // 4. page_size > 1000 should be capped
+    let capped_resp = client
+        .get(format!(
+            "{}/v1/runs/{}/logs?page=1&page_size=5000",
+            base, run_id
+        ))
+        .send()
+        .await
+        .expect("GET logs with large page_size should succeed");
+
+    assert_eq!(capped_resp.status(), 200);
+    let capped_body: serde_json::Value = capped_resp.json().await.unwrap();
+    assert_eq!(
+        capped_body["page_size"], 1000,
+        "page_size should be capped at 1000"
+    );
+
+    println!("✓ Runs retrieval and paginated logs verified");
+    server_handle.abort();
+}
+
+/// Test: skill list, enable, disable, and refresh placeholder.
+#[tokio::test]
+#[ignore = "Requires Docker - run with: cargo test --test server_integration_test test_skill_management -- --ignored"]
+async fn test_skill_management_endpoints() {
+    let container = create_postgres_container().await;
+    let db_url = get_database_url(&container).await;
+
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&db_url)
+        .await
+        .expect("Failed to connect to database");
+
+    carnelian_core::db::run_migrations(&pool)
+        .await
+        .expect("Migrations should succeed");
+
+    let (port, server_handle) = start_db_backed_server(&db_url).await;
+    let client = reqwest::Client::new();
+    let base = format!("http://127.0.0.1:{}", port);
+
+    // Insert a test skill directly
+    let skill_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO skills (name, description, runtime, enabled) VALUES ('test-skill', 'A test skill', 'node', true) RETURNING skill_id",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("Should insert skill");
+
+    // 1. GET /v1/skills — should list the skill
+    let list_resp = client
+        .get(format!("{}/v1/skills", base))
+        .send()
+        .await
+        .expect("GET /v1/skills should succeed");
+
+    assert_eq!(list_resp.status(), 200);
+    let list_body: serde_json::Value = list_resp.json().await.unwrap();
+    let skills = list_body["skills"]
+        .as_array()
+        .expect("skills should be an array");
+    assert!(
+        skills.iter().any(|s| s["name"] == "test-skill"),
+        "Should find test-skill in list"
+    );
+
+    // 2. PUT /v1/skills/:id/disable
+    let disable_resp = client
+        .put(format!("{}/v1/skills/{}/disable", base, skill_id))
+        .send()
+        .await
+        .expect("PUT disable should succeed");
+
+    assert_eq!(disable_resp.status(), 200);
+    let disable_body: serde_json::Value = disable_resp.json().await.unwrap();
+    assert_eq!(disable_body["enabled"], false);
+
+    // Verify in DB
+    let enabled: bool = sqlx::query_scalar("SELECT enabled FROM skills WHERE skill_id = $1")
+        .bind(skill_id)
+        .fetch_one(&pool)
+        .await
+        .expect("Should query skill");
+    assert!(!enabled, "Skill should be disabled in DB");
+
+    // 3. PUT /v1/skills/:id/enable
+    let enable_resp = client
+        .put(format!("{}/v1/skills/{}/enable", base, skill_id))
+        .send()
+        .await
+        .expect("PUT enable should succeed");
+
+    assert_eq!(enable_resp.status(), 200);
+    let enable_body: serde_json::Value = enable_resp.json().await.unwrap();
+    assert_eq!(enable_body["enabled"], true);
+
+    // 4. PUT on non-existent skill → 404
+    let missing_resp = client
+        .put(format!(
+            "{}/v1/skills/00000000-0000-0000-0000-000000000000/enable",
+            base
+        ))
+        .send()
+        .await
+        .expect("PUT missing skill should succeed");
+
+    assert_eq!(missing_resp.status(), 404);
+
+    // 5. POST /v1/skills/refresh — placeholder
+    let refresh_resp = client
+        .post(format!("{}/v1/skills/refresh", base))
+        .send()
+        .await
+        .expect("POST refresh should succeed");
+
+    assert_eq!(refresh_resp.status(), 200);
+    let refresh_body: serde_json::Value = refresh_resp.json().await.unwrap();
+    assert_eq!(refresh_body["discovered"], 0);
+    assert_eq!(refresh_body["updated"], 0);
+    assert_eq!(refresh_body["removed"], 0);
+
+    println!("✓ Skill management (list, enable, disable, refresh) verified");
+    server_handle.abort();
+}

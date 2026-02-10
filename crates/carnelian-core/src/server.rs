@@ -5,12 +5,18 @@
 
 use axum::{
     Json, Router,
-    extract::{State, WebSocketUpgrade, ws::Message},
+    extract::{Path, Query, State, WebSocketUpgrade, ws::Message},
+    http::StatusCode,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use carnelian_common::Result;
-use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
+use carnelian_common::types::{
+    CancelTaskRequest, CancelTaskResponse, CreateTaskRequest, CreateTaskResponse, EventEnvelope,
+    EventLevel, EventType, ListRunsResponse, ListSkillsResponse, ListTasksResponse,
+    PaginatedRunLogsResponse, RunDetail, RunLogEntry, RunLogsQuery, SkillDetail,
+    SkillRefreshResponse, SkillToggleResponse, TaskDetail,
+};
 use futures_util::{SinkExt, StreamExt};
 use http::{Method, header};
 use serde::Serialize;
@@ -95,6 +101,8 @@ pub struct AppState {
     pub ledger: Arc<Ledger>,
     /// Worker manager for process lifecycle
     pub worker_manager: Arc<tokio::sync::Mutex<WorkerManager>>,
+    /// Task scheduler for creating/cancelling tasks
+    pub scheduler: Arc<tokio::sync::Mutex<Scheduler>>,
     /// Correlation ID counter for request tracing
     correlation_counter: Arc<AtomicU64>,
 }
@@ -108,6 +116,7 @@ impl AppState {
         policy_engine: Arc<PolicyEngine>,
         ledger: Arc<Ledger>,
         worker_manager: Arc<tokio::sync::Mutex<WorkerManager>>,
+        scheduler: Arc<tokio::sync::Mutex<Scheduler>>,
     ) -> Self {
         Self {
             config,
@@ -115,6 +124,7 @@ impl AppState {
             policy_engine,
             ledger,
             worker_manager,
+            scheduler,
             correlation_counter: Arc::new(AtomicU64::new(0)),
         }
     }
@@ -212,6 +222,7 @@ impl Server {
             self.policy_engine.clone(),
             self.ledger.clone(),
             self.worker_manager.clone(),
+            self.scheduler.clone(),
         );
         let router = build_router(state.clone());
 
@@ -295,6 +306,19 @@ fn build_router(state: AppState) -> Router {
         .route("/v1/status", get(status_handler))
         .route("/v1/events", post(publish_event_handler))
         .route("/v1/events/ws", get(ws_handler))
+        // Task endpoints
+        .route("/v1/tasks", post(create_task_handler))
+        .route("/v1/tasks", get(list_tasks_handler))
+        .route("/v1/tasks/:task_id", get(get_task_handler))
+        .route("/v1/tasks/:task_id/cancel", post(cancel_task_handler))
+        .route("/v1/tasks/:task_id/runs", get(list_runs_handler))
+        // Run endpoints
+        .route("/v1/runs/:run_id/logs", get(get_run_logs_handler))
+        // Skill endpoints
+        .route("/v1/skills", get(list_skills_handler))
+        .route("/v1/skills/:skill_id/enable", put(enable_skill_handler))
+        .route("/v1/skills/:skill_id/disable", put(disable_skill_handler))
+        .route("/v1/skills/refresh", post(refresh_skills_handler))
         // 10MB request body limit
         .layer(RequestBodyLimitLayer::new(10 * 1024 * 1024))
         // 30-second timeout
@@ -419,6 +443,562 @@ async fn publish_event_handler(
 
     Json(json!({"status": "ok"}))
 }
+
+// =============================================================================
+// TASK HANDLERS
+// =============================================================================
+
+/// Create a new task via `POST /v1/tasks`.
+async fn create_task_handler(
+    State(state): State<AppState>,
+    Json(body): Json<CreateTaskRequest>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "database unavailable"})),
+            )
+                .into_response();
+        }
+    };
+
+    // Look up the default identity (Lian) for created_by
+    let identity_id: Option<Uuid> = sqlx::query_scalar(
+        r"SELECT identity_id FROM identities WHERE name = 'Lian' AND identity_type = 'core' LIMIT 1",
+    )
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten();
+
+    let row: Option<(Uuid, String, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
+        r"INSERT INTO tasks (title, description, skill_id, priority, requires_approval, created_by, state)
+          VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+          RETURNING task_id, state, created_at",
+    )
+    .bind(&body.title)
+    .bind(&body.description)
+    .bind(body.skill_id)
+    .bind(body.priority)
+    .bind(body.requires_approval)
+    .bind(identity_id)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten();
+
+    match row {
+        Some((task_id, task_state, created_at)) => {
+            state.event_stream.publish(
+                EventEnvelope::new(
+                    EventLevel::Info,
+                    EventType::TaskCreated,
+                    json!({
+                        "task_id": task_id,
+                        "title": body.title,
+                        "skill_id": body.skill_id,
+                        "priority": body.priority,
+                    }),
+                )
+                .with_actor_id(task_id.to_string()),
+            );
+
+            (
+                StatusCode::CREATED,
+                Json(
+                    serde_json::to_value(CreateTaskResponse {
+                        task_id,
+                        state: task_state,
+                        created_at,
+                    })
+                    .unwrap_or_default(),
+                ),
+            )
+                .into_response()
+        }
+        None => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "failed to create task"})),
+        )
+            .into_response(),
+    }
+}
+
+/// List all tasks via `GET /v1/tasks`.
+#[allow(clippy::type_complexity)]
+async fn list_tasks_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "database unavailable"})),
+            )
+                .into_response();
+        }
+    };
+
+    let rows: Vec<(
+        Uuid,
+        String,
+        Option<String>,
+        Option<Uuid>,
+        String,
+        i32,
+        bool,
+        chrono::DateTime<chrono::Utc>,
+        chrono::DateTime<chrono::Utc>,
+    )> = sqlx::query_as(
+        r"SELECT task_id, title, description, skill_id, state, priority, requires_approval, created_at, updated_at
+          FROM tasks ORDER BY created_at DESC LIMIT 200",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    let tasks: Vec<TaskDetail> = rows
+        .into_iter()
+        .map(
+            |(
+                task_id,
+                title,
+                description,
+                skill_id,
+                task_state,
+                priority,
+                requires_approval,
+                created_at,
+                updated_at,
+            )| {
+                TaskDetail {
+                    task_id,
+                    title,
+                    description,
+                    skill_id,
+                    state: task_state,
+                    priority,
+                    requires_approval,
+                    created_at,
+                    updated_at,
+                }
+            },
+        )
+        .collect();
+
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(ListTasksResponse { tasks }).unwrap_or_default()),
+    )
+        .into_response()
+}
+
+/// Get a single task via `GET /v1/tasks/:task_id`.
+#[allow(clippy::type_complexity)]
+async fn get_task_handler(
+    State(state): State<AppState>,
+    Path(task_id): Path<Uuid>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "database unavailable"})),
+            )
+                .into_response();
+        }
+    };
+
+    let row: Option<(
+        Uuid,
+        String,
+        Option<String>,
+        Option<Uuid>,
+        String,
+        i32,
+        bool,
+        chrono::DateTime<chrono::Utc>,
+        chrono::DateTime<chrono::Utc>,
+    )> = sqlx::query_as(
+        r"SELECT task_id, title, description, skill_id, state, priority, requires_approval, created_at, updated_at
+          FROM tasks WHERE task_id = $1",
+    )
+    .bind(task_id)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten();
+
+    match row {
+        Some((
+            task_id,
+            title,
+            description,
+            skill_id,
+            task_state,
+            priority,
+            requires_approval,
+            created_at,
+            updated_at,
+        )) => (
+            StatusCode::OK,
+            Json(
+                serde_json::to_value(TaskDetail {
+                    task_id,
+                    title,
+                    description,
+                    skill_id,
+                    state: task_state,
+                    priority,
+                    requires_approval,
+                    created_at,
+                    updated_at,
+                })
+                .unwrap_or_default(),
+            ),
+        )
+            .into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "task not found"})),
+        )
+            .into_response(),
+    }
+}
+
+/// Cancel a task via `POST /v1/tasks/:task_id/cancel`.
+async fn cancel_task_handler(
+    State(state): State<AppState>,
+    Path(task_id): Path<Uuid>,
+    Json(body): Json<CancelTaskRequest>,
+) -> impl IntoResponse {
+    let reason = if body.reason.is_empty() {
+        "cancelled via API".to_string()
+    } else {
+        body.reason
+    };
+
+    let scheduler = state.scheduler.lock().await;
+    match scheduler.cancel_task(task_id, reason).await {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(
+                serde_json::to_value(CancelTaskResponse {
+                    task_id,
+                    state: "canceled".to_string(),
+                })
+                .unwrap_or_default(),
+            ),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("{}", e)})),
+        )
+            .into_response(),
+    }
+}
+
+/// List runs for a task via `GET /v1/tasks/:task_id/runs`.
+#[allow(clippy::type_complexity)]
+async fn list_runs_handler(
+    State(state): State<AppState>,
+    Path(task_id): Path<Uuid>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "database unavailable"})),
+            )
+                .into_response();
+        }
+    };
+
+    let rows: Vec<(
+        Uuid,
+        Uuid,
+        i32,
+        Option<String>,
+        String,
+        Option<chrono::DateTime<chrono::Utc>>,
+        Option<chrono::DateTime<chrono::Utc>>,
+        Option<i32>,
+        Option<serde_json::Value>,
+        Option<String>,
+    )> = sqlx::query_as(
+        r"SELECT run_id, task_id, attempt, worker_id, state, started_at, ended_at, exit_code, result, error
+          FROM task_runs WHERE task_id = $1 ORDER BY attempt ASC",
+    )
+    .bind(task_id)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    let runs: Vec<RunDetail> = rows
+        .into_iter()
+        .map(
+            |(
+                run_id,
+                task_id,
+                attempt,
+                worker_id,
+                run_state,
+                started_at,
+                ended_at,
+                exit_code,
+                result,
+                error,
+            )| {
+                RunDetail {
+                    run_id,
+                    task_id,
+                    attempt,
+                    worker_id,
+                    state: run_state,
+                    started_at,
+                    ended_at,
+                    exit_code,
+                    result,
+                    error,
+                }
+            },
+        )
+        .collect();
+
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(ListRunsResponse { runs }).unwrap_or_default()),
+    )
+        .into_response()
+}
+
+// =============================================================================
+// RUN LOG HANDLERS
+// =============================================================================
+
+/// Get paginated logs for a run via `GET /v1/runs/:run_id/logs`.
+#[allow(clippy::type_complexity)]
+async fn get_run_logs_handler(
+    State(state): State<AppState>,
+    Path(run_id): Path<Uuid>,
+    Query(params): Query<RunLogsQuery>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "database unavailable"})),
+            )
+                .into_response();
+        }
+    };
+
+    let page = params.page.max(1);
+    let page_size = params
+        .page_size
+        .clamp(1, PaginatedRunLogsResponse::MAX_PAGE_SIZE);
+    let offset = (page - 1) * page_size;
+
+    let total: i64 =
+        sqlx::query_scalar::<_, Option<i64>>(r"SELECT COUNT(*) FROM run_logs WHERE run_id = $1")
+            .bind(run_id)
+            .fetch_one(pool)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or(0);
+
+    let rows: Vec<(
+        i64,
+        Uuid,
+        chrono::DateTime<chrono::Utc>,
+        String,
+        String,
+        Option<serde_json::Value>,
+        bool,
+    )> = sqlx::query_as(
+        r"SELECT log_id, run_id, ts, level, message, fields, truncated
+          FROM run_logs WHERE run_id = $1 ORDER BY ts ASC LIMIT $2 OFFSET $3",
+    )
+    .bind(run_id)
+    .bind(i64::from(page_size))
+    .bind(i64::from(offset))
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    let logs: Vec<RunLogEntry> = rows
+        .into_iter()
+        .map(
+            |(log_id, run_id, ts, level, message, fields, truncated)| RunLogEntry {
+                log_id,
+                run_id,
+                ts,
+                level,
+                message,
+                fields,
+                truncated,
+            },
+        )
+        .collect();
+
+    (
+        StatusCode::OK,
+        Json(
+            serde_json::to_value(PaginatedRunLogsResponse {
+                logs,
+                page,
+                page_size,
+                total,
+            })
+            .unwrap_or_default(),
+        ),
+    )
+        .into_response()
+}
+
+// =============================================================================
+// SKILL HANDLERS
+// =============================================================================
+
+/// List all skills via `GET /v1/skills`.
+#[allow(clippy::type_complexity)]
+async fn list_skills_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "database unavailable"})),
+            )
+                .into_response();
+        }
+    };
+
+    let rows: Vec<(
+        Uuid,
+        String,
+        Option<String>,
+        String,
+        bool,
+        chrono::DateTime<chrono::Utc>,
+        chrono::DateTime<chrono::Utc>,
+    )> = sqlx::query_as(
+        r"SELECT skill_id, name, description, runtime, enabled, discovered_at, updated_at
+          FROM skills ORDER BY name ASC",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    let skills: Vec<SkillDetail> = rows
+        .into_iter()
+        .map(
+            |(skill_id, name, description, runtime, enabled, discovered_at, updated_at)| {
+                SkillDetail {
+                    skill_id,
+                    name,
+                    description,
+                    runtime,
+                    enabled,
+                    discovered_at,
+                    updated_at,
+                }
+            },
+        )
+        .collect();
+
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(ListSkillsResponse { skills }).unwrap_or_default()),
+    )
+        .into_response()
+}
+
+/// Enable a skill via `PUT /v1/skills/:skill_id/enable`.
+async fn enable_skill_handler(
+    State(state): State<AppState>,
+    Path(skill_id): Path<Uuid>,
+) -> impl IntoResponse {
+    toggle_skill(state, skill_id, true).await
+}
+
+/// Disable a skill via `PUT /v1/skills/:skill_id/disable`.
+async fn disable_skill_handler(
+    State(state): State<AppState>,
+    Path(skill_id): Path<Uuid>,
+) -> impl IntoResponse {
+    toggle_skill(state, skill_id, false).await
+}
+
+/// Shared logic for enable/disable skill.
+async fn toggle_skill(state: AppState, skill_id: Uuid, enabled: bool) -> axum::response::Response {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "database unavailable"})),
+            )
+                .into_response();
+        }
+    };
+
+    let result =
+        sqlx::query(r"UPDATE skills SET enabled = $1, updated_at = NOW() WHERE skill_id = $2")
+            .bind(enabled)
+            .bind(skill_id)
+            .execute(pool)
+            .await;
+
+    match result {
+        Ok(r) if r.rows_affected() > 0 => (
+            StatusCode::OK,
+            Json(
+                serde_json::to_value(SkillToggleResponse { skill_id, enabled }).unwrap_or_default(),
+            ),
+        )
+            .into_response(),
+        Ok(_) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "skill not found"})),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("{}", e)})),
+        )
+            .into_response(),
+    }
+}
+
+/// Trigger skill refresh via `POST /v1/skills/refresh`.
+///
+/// This is a placeholder that returns zeroes. A full implementation would
+/// scan the filesystem / registry for new or updated skill manifests.
+async fn refresh_skills_handler(State(_state): State<AppState>) -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(
+            serde_json::to_value(SkillRefreshResponse {
+                discovered: 0,
+                updated: 0,
+                removed: 0,
+            })
+            .unwrap_or_default(),
+        ),
+    )
+        .into_response()
+}
+
+// =============================================================================
+// WEBSOCKET HANDLERS
+// =============================================================================
 
 /// WebSocket upgrade handler for event streaming.
 async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
@@ -565,12 +1145,26 @@ mod tests {
             .connect_lazy("postgresql://test:test@localhost:5432/test")
             .expect("Failed to create lazy pool");
         let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
-        let ledger = Arc::new(Ledger::new(pool));
+        let ledger = Arc::new(Ledger::new(pool.clone()));
         let worker_manager = Arc::new(tokio::sync::Mutex::new(WorkerManager::new(
             config.clone(),
             event_stream.clone(),
         )));
-        AppState::new(config, event_stream, policy_engine, ledger, worker_manager)
+        let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
+            pool.clone(),
+            event_stream.clone(),
+            Duration::from_secs(3600),
+            worker_manager.clone(),
+            config.clone(),
+        )));
+        AppState::new(
+            config,
+            event_stream,
+            policy_engine,
+            ledger,
+            worker_manager,
+            scheduler,
+        )
     }
 
     #[tokio::test]

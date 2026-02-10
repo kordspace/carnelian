@@ -361,6 +361,186 @@ pub struct HealthResponse {
     pub uptime_secs: u64,
 }
 
+// =============================================================================
+// REST API REQUEST / RESPONSE TYPES
+// =============================================================================
+
+/// Request body for creating a new task via `POST /v1/tasks`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateTaskRequest {
+    /// Human-readable title for the task
+    pub title: String,
+    /// Optional longer description
+    pub description: Option<String>,
+    /// Optional skill to execute
+    pub skill_id: Option<Uuid>,
+    /// Priority (higher = dequeued first, default 0)
+    #[serde(default)]
+    pub priority: i32,
+    /// Whether the task requires manual approval before execution
+    #[serde(default)]
+    pub requires_approval: bool,
+}
+
+/// Response body returned after creating a task.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateTaskResponse {
+    pub task_id: Uuid,
+    pub state: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// A single task in list / detail responses.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskDetail {
+    pub task_id: Uuid,
+    pub title: String,
+    pub description: Option<String>,
+    pub skill_id: Option<Uuid>,
+    pub state: String,
+    pub priority: i32,
+    pub requires_approval: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Response body for `GET /v1/tasks`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListTasksResponse {
+    pub tasks: Vec<TaskDetail>,
+}
+
+/// Request body for cancelling a task via `POST /v1/tasks/:id/cancel`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CancelTaskRequest {
+    /// Human-readable reason for cancellation
+    #[serde(default)]
+    pub reason: String,
+}
+
+/// Response body after cancelling a task.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CancelTaskResponse {
+    pub task_id: Uuid,
+    pub state: String,
+}
+
+/// A single task run in detail responses.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunDetail {
+    pub run_id: Uuid,
+    pub task_id: Uuid,
+    pub attempt: i32,
+    pub worker_id: Option<String>,
+    pub state: String,
+    pub started_at: Option<DateTime<Utc>>,
+    pub ended_at: Option<DateTime<Utc>>,
+    pub exit_code: Option<i32>,
+    pub result: Option<JsonValue>,
+    pub error: Option<String>,
+}
+
+/// Response body for `GET /v1/tasks/:id/runs`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListRunsResponse {
+    pub runs: Vec<RunDetail>,
+}
+
+/// A single log entry from `run_logs`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunLogEntry {
+    pub log_id: i64,
+    pub run_id: Uuid,
+    pub ts: DateTime<Utc>,
+    pub level: String,
+    pub message: String,
+    pub fields: Option<JsonValue>,
+    pub truncated: bool,
+}
+
+/// Paginated response for `GET /v1/runs/:id/logs`.
+///
+/// `page` and `page_size` mirror the query parameters; `page_size` is capped
+/// at `MAX_PAGE_SIZE` (1000).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaginatedRunLogsResponse {
+    pub logs: Vec<RunLogEntry>,
+    pub page: u32,
+    pub page_size: u32,
+    pub total: i64,
+}
+
+impl PaginatedRunLogsResponse {
+    /// Hard upper-bound on `page_size` to prevent unbounded queries.
+    pub const MAX_PAGE_SIZE: u32 = 1000;
+}
+
+/// Query parameters for paginated run-log requests.
+#[derive(Debug, Clone, Deserialize)]
+pub struct RunLogsQuery {
+    #[serde(default = "default_page")]
+    pub page: u32,
+    #[serde(default = "default_page_size")]
+    pub page_size: u32,
+}
+
+const fn default_page() -> u32 {
+    1
+}
+const fn default_page_size() -> u32 {
+    100
+}
+
+/// A single skill in list responses.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillDetail {
+    pub skill_id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub runtime: String,
+    pub enabled: bool,
+    pub discovered_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Response body for `GET /v1/skills`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListSkillsResponse {
+    pub skills: Vec<SkillDetail>,
+}
+
+/// Request body for `PUT /v1/skills/:id/enable` and `PUT /v1/skills/:id/disable`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillToggleResponse {
+    pub skill_id: Uuid,
+    pub enabled: bool,
+}
+
+/// Response body for `POST /v1/skills/refresh`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillRefreshResponse {
+    pub discovered: u32,
+    pub updated: u32,
+    pub removed: u32,
+}
+
+/// Cancellation reason enum for programmatic use.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CancellationReason {
+    /// User explicitly requested cancellation
+    UserRequested,
+    /// System timeout exceeded
+    Timeout,
+    /// Superseded by a newer task
+    Superseded,
+    /// Other / free-text reason
+    Other(String),
+}
+
+// =============================================================================
+// WORKER TRANSPORT PROTOCOL (continued)
+// =============================================================================
+
 /// Envelope for all transport messages, enabling request/response correlation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
