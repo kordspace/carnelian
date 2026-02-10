@@ -56,7 +56,7 @@
 //! All HTTP requests receive a UUID v7 correlation ID via `CorrelationIdMakeSpan`.
 //! Propagate correlation IDs through operations using spans:
 //!
-//! ```ignore
+//! ```text
 //! let span = tracing::info_span!("operation", correlation_id = %id);
 //! let _guard = span.enter();
 //! // All logs within this scope include correlation_id
@@ -74,7 +74,7 @@
 //!
 //! Use structured fields instead of string interpolation:
 //!
-//! ```ignore
+//! ```text
 //! // Good: structured fields
 //! tracing::info!(user_id = %id, action = "login", "User authenticated");
 //!
