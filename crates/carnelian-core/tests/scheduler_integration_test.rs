@@ -116,6 +116,21 @@ async fn get_task_run_count(pool: &sqlx::PgPool, task_id: Uuid) -> i64 {
         .unwrap_or(0)
 }
 
+/// Drain all handles from `active_tasks` and await them, ensuring every
+/// spawned `execute_task` has finished its DB writes before we assert.
+async fn await_active_tasks(
+    active_tasks: &Arc<tokio::sync::Mutex<HashMap<Uuid, tokio::task::JoinHandle<()>>>>,
+) {
+    let handles: Vec<tokio::task::JoinHandle<()>> = {
+        let mut at = active_tasks.lock().await;
+        at.drain().map(|(_, h)| h).collect()
+    };
+    for h in handles {
+        // Ignore JoinError (task may have panicked); we only need it to finish.
+        let _ = h.await;
+    }
+}
+
 // =============================================================================
 // TEST: Priority Ordering
 // =============================================================================
@@ -472,7 +487,9 @@ async fn test_poll_dequeues_in_priority_order() {
     let pool = setup_test_db(&database_url).await;
 
     // Config with max_workers = 1 so only the highest-priority task is dequeued
+    // Disable retries so failed tasks stay failed and don't interfere with assertions
     let mut config = Config::default();
+    config.task_max_retry_attempts = 0;
     config.custom_machine_config = Some(carnelian_core::config::MachineConfig {
         max_workers: 1,
         max_memory_mb: 8192,
@@ -512,15 +529,11 @@ async fn test_poll_dequeues_in_priority_order() {
     .await
     .expect("poll_task_queue should succeed");
 
-    // Wait for the spawned task to transition state (retry loop for slow CI)
-    let mut high_state = String::new();
-    for _ in 0..40 {
-        high_state = get_task_state(&pool, high_id).await;
-        if high_state != "pending" {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(250)).await;
-    }
+    // Await all spawned execute_task handles so their DB writes are committed
+    await_active_tasks(&active_tasks).await;
+
+    // Highest-priority task should have been dequeued (state != pending)
+    let high_state = get_task_state(&pool, high_id).await;
     assert_ne!(
         high_state, "pending",
         "Highest-priority task should have been dequeued"
@@ -538,18 +551,12 @@ async fn test_poll_dequeues_in_priority_order() {
         "Low-priority task should still be pending"
     );
 
-    // Verify exactly 1 task was spawned (retry loop for slow CI)
-    let mut dequeued_runs: Vec<(Uuid,)> = Vec::new();
-    for _ in 0..40 {
-        dequeued_runs = sqlx::query_as(r"SELECT task_id FROM task_runs ORDER BY started_at ASC")
+    // Verify exactly 1 task_run was created for the highest-priority task
+    let dequeued_runs: Vec<(Uuid,)> =
+        sqlx::query_as(r"SELECT task_id FROM task_runs ORDER BY started_at ASC")
             .fetch_all(&pool)
             .await
             .expect("Failed to query task_runs");
-        if !dequeued_runs.is_empty() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(250)).await;
-    }
 
     assert_eq!(
         dequeued_runs.len(),
@@ -580,7 +587,9 @@ async fn test_poll_respects_concurrency_limit() {
     let pool = setup_test_db(&database_url).await;
 
     // Config with max_workers = 2
+    // Disable retries so failed tasks stay failed and don't interfere with assertions
     let mut config = Config::default();
+    config.task_max_retry_attempts = 0;
     config.custom_machine_config = Some(carnelian_core::config::MachineConfig {
         max_workers: 2,
         max_memory_mb: 8192,
@@ -622,40 +631,29 @@ async fn test_poll_respects_concurrency_limit() {
     .await
     .expect("poll_task_queue should succeed");
 
-    // Wait for spawned tasks to transition state (retry loop for slow CI)
-    let mut dequeued_count: i64 = 0;
-    for _ in 0..40 {
-        let still_pending: i64 = sqlx::query_scalar::<_, Option<i64>>(
-            r"SELECT COUNT(*) FROM tasks WHERE state = 'pending'",
-        )
-        .fetch_one(&pool)
-        .await
-        .expect("Failed to count pending tasks")
-        .unwrap_or(0);
-        dequeued_count = 5 - still_pending;
-        if dequeued_count >= 2 {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(250)).await;
-    }
+    // Await all spawned execute_task handles so their DB writes are committed
+    await_active_tasks(&active_tasks).await;
+
+    let still_pending: i64 = sqlx::query_scalar::<_, Option<i64>>(
+        r"SELECT COUNT(*) FROM tasks WHERE state = 'pending'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("Failed to count pending tasks")
+    .unwrap_or(0);
+    let dequeued_count = 5 - still_pending;
     assert_eq!(
         dequeued_count, 2,
         "Exactly 2 tasks should have been dequeued (max_workers=2)"
     );
 
-    // Verify exactly 2 task_runs were created (retry loop for slow CI)
-    let mut run_count: i64 = 0;
-    for _ in 0..40 {
-        run_count = sqlx::query_scalar::<_, Option<i64>>(r"SELECT COUNT(*) FROM task_runs")
+    // Verify exactly 2 task_runs were created
+    let run_count: i64 =
+        sqlx::query_scalar::<_, Option<i64>>(r"SELECT COUNT(*) FROM task_runs")
             .fetch_one(&pool)
             .await
             .expect("Failed to count task_runs")
             .unwrap_or(0);
-        if run_count >= 2 {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(250)).await;
-    }
     assert_eq!(
         run_count, 2,
         "Exactly 2 task_runs should exist (one per dequeued task)"
@@ -663,12 +661,13 @@ async fn test_poll_respects_concurrency_limit() {
 
     // Now simulate 1 active task still running and poll again
     // First, reset active_tasks to have 1 entry (simulating a running task)
+    let dummy_id = Uuid::now_v7();
     {
         let mut at = active_tasks.lock().await;
         at.clear();
         // Insert a dummy handle to simulate 1 occupied slot
         let dummy = tokio::spawn(async { tokio::time::sleep(Duration::from_secs(60)).await });
-        at.insert(Uuid::now_v7(), dummy);
+        at.insert(dummy_id, dummy);
     }
 
     // Poll again: max_workers=2, 1 active → 1 available slot → dequeue 1 more
@@ -682,34 +681,29 @@ async fn test_poll_respects_concurrency_limit() {
     .await
     .expect("Second poll_task_queue should succeed");
 
-    // Wait for the third task to be dequeued (retry loop for slow CI)
-    let mut total_dequeued: i64 = 0;
-    for _ in 0..40 {
-        let still_pending_after: i64 = sqlx::query_scalar::<_, Option<i64>>(
-            r"SELECT COUNT(*) FROM tasks WHERE state = 'pending'",
-        )
-        .fetch_one(&pool)
-        .await
-        .expect("Failed to count pending tasks")
-        .unwrap_or(0);
-        total_dequeued = 5 - still_pending_after;
-        if total_dequeued >= 3 {
-            break;
+    // Drain handles: abort the dummy, await the real spawned task(s)
+    let handles: Vec<(Uuid, tokio::task::JoinHandle<()>)> =
+        active_tasks.lock().await.drain().collect();
+    for (id, h) in handles {
+        if id == dummy_id {
+            h.abort();
+        } else {
+            let _ = h.await;
         }
-        tokio::time::sleep(Duration::from_millis(250)).await;
     }
+
+    let still_pending_after: i64 = sqlx::query_scalar::<_, Option<i64>>(
+        r"SELECT COUNT(*) FROM tasks WHERE state = 'pending'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("Failed to count pending tasks")
+    .unwrap_or(0);
+    let total_dequeued = 5 - still_pending_after;
     assert_eq!(
         total_dequeued, 3,
         "After second poll with 1 active, total dequeued should be 3"
     );
-
-    // Clean up the dummy handle
-    {
-        let mut at = active_tasks.lock().await;
-        for (_, handle) in at.drain() {
-            handle.abort();
-        }
-    }
 
     println!("✓ poll_task_queue respects max_workers concurrency limit");
 }
