@@ -482,11 +482,11 @@ impl EventStream {
                 );
             }
             Err(_) => {
-                tracing::warn!(
+                tracing::debug!(
                     event_id = ?event_id,
                     event_level = ?event_level,
                     event_type = ?event_type,
-                    "Event broadcast failed (no subscribers)"
+                    "Event broadcast skipped (no subscribers)"
                 );
             }
         }

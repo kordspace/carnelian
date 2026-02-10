@@ -1317,12 +1317,30 @@ impl WorkerManager {
     }
 
     /// Spawn a background task to read and log worker stderr.
+    ///
+    /// Collects all stderr output and emits a single `error!` log when the
+    /// stream closes, instead of one `warn!` per line.  This keeps CI logs
+    /// readable when a worker crashes with a multi-line stack trace.
     fn spawn_stderr_handler(worker_id: String, stderr: ChildStderr) {
         tokio::spawn(async move {
             let reader = BufReader::new(stderr);
             let mut lines = reader.lines();
+            let mut collected = Vec::new();
             while let Ok(Some(line)) = lines.next_line().await {
-                tracing::warn!(worker_id = %worker_id, stream = "stderr", "{}", line);
+                if !line.is_empty() {
+                    collected.push(line);
+                }
+            }
+            if collected.is_empty() {
+                tracing::debug!(worker_id = %worker_id, "Worker stderr stream closed (no output)");
+            } else {
+                let combined = collected.join("\n");
+                tracing::error!(
+                    worker_id = %worker_id,
+                    lines = collected.len(),
+                    "Worker stderr:\n{}",
+                    combined
+                );
             }
         });
     }

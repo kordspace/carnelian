@@ -464,7 +464,7 @@ async fn test_metrics_tracking() {
 /// Since no real workers are running, the spawned execution tasks will fail
 /// (skill not found), which is expected — we verify the dequeue ordering by
 /// checking which tasks left 'pending' state.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "Requires Docker - run with: cargo test --test scheduler_integration_test -- --ignored"]
 async fn test_poll_dequeues_in_priority_order() {
     let container = create_postgres_container().await;
@@ -572,7 +572,7 @@ async fn test_poll_dequeues_in_priority_order() {
 ///
 /// Sets max_workers=2, inserts 5 equal-priority tasks, calls `poll_task_queue`,
 /// and verifies that only 2 tasks are dequeued (matching the slot limit).
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "Requires Docker - run with: cargo test --test scheduler_integration_test -- --ignored"]
 async fn test_poll_respects_concurrency_limit() {
     let container = create_postgres_container().await;
