@@ -309,16 +309,16 @@ fn build_router(state: AppState) -> Router {
         // Task endpoints
         .route("/v1/tasks", post(create_task_handler))
         .route("/v1/tasks", get(list_tasks_handler))
-        .route("/v1/tasks/:task_id", get(get_task_handler))
-        .route("/v1/tasks/:task_id/cancel", post(cancel_task_handler))
-        .route("/v1/tasks/:task_id/runs", get(list_runs_handler))
+        .route("/v1/tasks/{task_id}", get(get_task_handler))
+        .route("/v1/tasks/{task_id}/cancel", post(cancel_task_handler))
+        .route("/v1/tasks/{task_id}/runs", get(list_runs_handler))
         // Run endpoints
-        .route("/v1/runs/:run_id", get(get_run_handler))
-        .route("/v1/runs/:run_id/logs", get(get_run_logs_handler))
+        .route("/v1/runs/{run_id}", get(get_run_handler))
+        .route("/v1/runs/{run_id}/logs", get(get_run_logs_handler))
         // Skill endpoints
         .route("/v1/skills", get(list_skills_handler))
-        .route("/v1/skills/:skill_id/enable", post(enable_skill_handler))
-        .route("/v1/skills/:skill_id/disable", post(disable_skill_handler))
+        .route("/v1/skills/{skill_id}/enable", post(enable_skill_handler))
+        .route("/v1/skills/{skill_id}/disable", post(disable_skill_handler))
         .route("/v1/skills/refresh", post(refresh_skills_handler))
         // 10MB request body limit
         .layer(RequestBodyLimitLayer::new(10 * 1024 * 1024))
