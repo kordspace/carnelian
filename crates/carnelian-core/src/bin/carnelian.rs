@@ -202,13 +202,6 @@ async fn handle_start(
     // Create policy engine with database pool
     let policy_engine = PolicyEngine::new(config.pool()?.clone());
 
-    // Create scheduler with heartbeat interval from config
-    let scheduler = Scheduler::new(
-        config.pool()?.clone(),
-        event_stream.clone(),
-        Duration::from_millis(config.heartbeat_interval_ms),
-    );
-
     // Create audit ledger and verify chain integrity
     let ledger = Ledger::new(config.pool()?.clone());
     ledger.load_last_hash().await?;
@@ -237,6 +230,15 @@ async fn handle_start(
         config_arc.clone(),
         event_stream.clone(),
     )));
+
+    // Create scheduler with heartbeat interval from config, worker manager, and config
+    let scheduler = Scheduler::new(
+        config_arc.pool()?.clone(),
+        event_stream.clone(),
+        Duration::from_millis(config_arc.heartbeat_interval_ms),
+        worker_manager.clone(),
+        config_arc.clone(),
+    );
 
     // Create server
     let server = Server::new(

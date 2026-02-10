@@ -72,10 +72,17 @@ fn create_test_scheduler(event_stream: Arc<EventStream>) -> Arc<tokio::sync::Mut
         .max_connections(1)
         .connect_lazy("postgresql://test:test@localhost:5432/test")
         .expect("Failed to create lazy pool");
+    let config = Arc::new(Config::default());
+    let worker_manager = Arc::new(tokio::sync::Mutex::new(WorkerManager::new(
+        config.clone(),
+        event_stream.clone(),
+    )));
     Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool,
         event_stream,
         Duration::from_secs(3600), // Long interval for tests - won't actually tick
+        worker_manager,
+        config,
     )))
 }
 
@@ -969,13 +976,13 @@ async fn test_database_server_startup() {
         .expect("Should connect to database");
 
     // Run migrations
-    let pool = config.pool().expect("Should have pool");
-    carnelian_core::db::run_migrations(pool)
+    let pool = config.pool().expect("Should have pool").clone();
+    carnelian_core::db::run_migrations(&pool)
         .await
         .expect("Should run migrations");
 
     // Verify database health
-    let is_healthy = carnelian_core::db::check_database_health(pool)
+    let is_healthy = carnelian_core::db::check_database_health(&pool)
         .await
         .expect("Health check should succeed");
     assert!(is_healthy, "Database should be healthy");
@@ -990,16 +997,19 @@ async fn test_database_server_startup() {
     // Create PolicyEngine with the real database pool
     let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
 
+    let ledger = Arc::new(Ledger::new(pool.clone()));
+    let config = Arc::new(config);
+    let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
+
     // Create Scheduler with the real database pool
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool.clone(),
         event_stream.clone(),
         Duration::from_secs(3600),
+        worker_manager.clone(),
+        config.clone(),
     )));
 
-    let ledger = Arc::new(Ledger::new(pool.clone()));
-    let config = Arc::new(config);
-    let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
     let server = Server::new(
         config,
         event_stream,
@@ -1074,13 +1084,15 @@ async fn test_database_connection_failure() {
 
     let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
     let ledger = Arc::new(Ledger::new(pool.clone()));
+    let config = Arc::new(config);
+    let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool,
         event_stream.clone(),
         Duration::from_secs(3600),
+        worker_manager.clone(),
+        config.clone(),
     )));
-    let config = Arc::new(config);
-    let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
     let server = Server::new(
         config,
         event_stream,
@@ -1163,8 +1175,8 @@ async fn test_database_reconnection() {
         .expect("Should connect to database");
 
     // Run migrations
-    let pool = config.pool().expect("Should have pool");
-    carnelian_core::db::run_migrations(pool)
+    let pool = config.pool().expect("Should have pool").clone();
+    carnelian_core::db::run_migrations(&pool)
         .await
         .expect("Should run migrations");
 
@@ -1177,14 +1189,16 @@ async fn test_database_reconnection() {
     let event_stream_clone = event_stream.clone();
 
     let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
+    let ledger = Arc::new(Ledger::new(pool.clone()));
+    let config = Arc::new(config);
+    let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool.clone(),
         event_stream.clone(),
         Duration::from_secs(3600),
+        worker_manager.clone(),
+        config.clone(),
     )));
-    let ledger = Arc::new(Ledger::new(pool.clone()));
-    let config = Arc::new(config);
-    let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
     let server = Server::new(
         config,
         event_stream,
@@ -1321,13 +1335,15 @@ async fn test_database_reconnection_under_load() {
 
     let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
     let ledger = Arc::new(Ledger::new(pool.clone()));
+    let config = Arc::new(config);
+    let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool,
         event_stream.clone(),
         Duration::from_secs(3600),
+        worker_manager.clone(),
+        config.clone(),
     )));
-    let config = Arc::new(config);
-    let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
     let server = Server::new(
         config,
         event_stream,
@@ -1469,8 +1485,8 @@ async fn test_heartbeat_interval_timing() {
         .expect("Should connect to database");
 
     // Run migrations (creates Lian identity + seed data needed by scheduler)
-    let pool = config.pool().expect("Should have pool");
-    carnelian_core::db::run_migrations(pool)
+    let pool = config.pool().expect("Should have pool").clone();
+    carnelian_core::db::run_migrations(&pool)
         .await
         .expect("Should run migrations");
 
@@ -1486,14 +1502,15 @@ async fn test_heartbeat_interval_timing() {
 
     // Configure scheduler with a short heartbeat interval (2 seconds) for test speed
     let heartbeat_interval = Duration::from_millis(2000);
+    let config = Arc::new(config);
+    let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool.clone(),
         event_stream.clone(),
         heartbeat_interval,
+        worker_manager.clone(),
+        config.clone(),
     )));
-
-    let config = Arc::new(config);
-    let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
 
     let server = Server::new(
         config,

@@ -62,10 +62,17 @@ fn create_test_scheduler(event_stream: Arc<EventStream>) -> Arc<tokio::sync::Mut
         .max_connections(1)
         .connect_lazy("postgresql://test:test@localhost:5432/test")
         .expect("Failed to create lazy pool");
+    let config = Arc::new(Config::default());
+    let worker_manager = Arc::new(tokio::sync::Mutex::new(WorkerManager::new(
+        config.clone(),
+        event_stream.clone(),
+    )));
     Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool,
         event_stream,
         Duration::from_secs(3600),
+        worker_manager,
+        config,
     )))
 }
 
@@ -749,7 +756,7 @@ async fn test_lz4_compression_verification() {
     // Insert large memory content (>8KB)
     let large_content = "A".repeat(10_000);
     let memory_id: uuid::Uuid = sqlx::query_scalar(
-        "INSERT INTO memories (identity_id, content, source) VALUES ($1, $2, 'test') RETURNING memory_id",
+        "INSERT INTO memories (identity_id, content, source) VALUES ($1, $2, 'observation') RETURNING memory_id",
     )
     .bind(lian_id)
     .bind(&large_content)

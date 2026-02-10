@@ -171,6 +171,14 @@ pub struct Config {
     #[serde(default = "default_skill_max_log_lines")]
     pub skill_max_log_lines: usize,
 
+    /// Maximum retry attempts for failed tasks (default: 3)
+    #[serde(default = "default_task_max_retry_attempts")]
+    pub task_max_retry_attempts: u32,
+
+    /// Delay in seconds between task retry attempts (default: 5)
+    #[serde(default = "default_task_retry_delay_secs")]
+    pub task_retry_delay_secs: u64,
+
     /// Database pool (not serialized, initialized separately)
     #[serde(skip)]
     db_pool: Option<Arc<PgPool>>,
@@ -279,6 +287,14 @@ fn default_skill_max_log_lines() -> usize {
     10_000
 }
 
+fn default_task_max_retry_attempts() -> u32 {
+    3
+}
+
+fn default_task_retry_delay_secs() -> u64 {
+    5
+}
+
 /// Machine profile determining resource limits and default model
 ///
 /// # Variants
@@ -334,6 +350,8 @@ impl Default for Config {
             skill_timeout_grace_period_secs: default_skill_timeout_grace_period_secs(),
             skill_max_output_bytes: default_skill_max_output_bytes(),
             skill_max_log_lines: default_skill_max_log_lines(),
+            task_max_retry_attempts: default_task_max_retry_attempts(),
+            task_retry_delay_secs: default_task_retry_delay_secs(),
             db_pool: None,
             owner_signing_key: None,
         }
@@ -519,6 +537,24 @@ impl Config {
             self.skill_max_log_lines = val.parse().map_err(|_| {
                 Error::Config(format!(
                     "Invalid CARNELIAN_SKILL_MAX_LOG_LINES value: {}",
+                    val
+                ))
+            })?;
+        }
+
+        if let Ok(val) = std::env::var("CARNELIAN_TASK_MAX_RETRY_ATTEMPTS") {
+            self.task_max_retry_attempts = val.parse().map_err(|_| {
+                Error::Config(format!(
+                    "Invalid CARNELIAN_TASK_MAX_RETRY_ATTEMPTS value: {}",
+                    val
+                ))
+            })?;
+        }
+
+        if let Ok(val) = std::env::var("CARNELIAN_TASK_RETRY_DELAY_SECS") {
+            self.task_retry_delay_secs = val.parse().map_err(|_| {
+                Error::Config(format!(
+                    "Invalid CARNELIAN_TASK_RETRY_DELAY_SECS value: {}",
                     val
                 ))
             })?;
