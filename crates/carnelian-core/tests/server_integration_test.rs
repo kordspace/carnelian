@@ -1199,7 +1199,33 @@ async fn test_runs_and_paginated_logs() {
         "page_size should be capped at 1000"
     );
 
-    println!("✓ Runs retrieval and paginated logs verified");
+    // 5. GET /v1/runs/:run_id — single run detail
+    let run_detail_resp = client
+        .get(format!("{}/v1/runs/{}", base, run_id))
+        .send()
+        .await
+        .expect("GET single run should succeed");
+
+    assert_eq!(run_detail_resp.status(), 200);
+    let run_detail: serde_json::Value = run_detail_resp.json().await.unwrap();
+    assert_eq!(run_detail["run_id"], run_id.to_string());
+    assert_eq!(run_detail["task_id"], task_id.to_string());
+    assert_eq!(run_detail["attempt"], 1);
+    assert_eq!(run_detail["state"], "running");
+
+    // 6. GET /v1/runs/:run_id for non-existent run → 404
+    let missing_run_resp = client
+        .get(format!(
+            "{}/v1/runs/00000000-0000-0000-0000-000000000000",
+            base
+        ))
+        .send()
+        .await
+        .expect("GET missing run should succeed");
+
+    assert_eq!(missing_run_resp.status(), 404);
+
+    println!("✓ Runs retrieval, single run detail, and paginated logs verified");
     server_handle.abort();
 }
 
@@ -1249,12 +1275,12 @@ async fn test_skill_management_endpoints() {
         "Should find test-skill in list"
     );
 
-    // 2. PUT /v1/skills/:id/disable
+    // 2. POST /v1/skills/:id/disable
     let disable_resp = client
-        .put(format!("{}/v1/skills/{}/disable", base, skill_id))
+        .post(format!("{}/v1/skills/{}/disable", base, skill_id))
         .send()
         .await
-        .expect("PUT disable should succeed");
+        .expect("POST disable should succeed");
 
     assert_eq!(disable_resp.status(), 200);
     let disable_body: serde_json::Value = disable_resp.json().await.unwrap();
@@ -1268,26 +1294,26 @@ async fn test_skill_management_endpoints() {
         .expect("Should query skill");
     assert!(!enabled, "Skill should be disabled in DB");
 
-    // 3. PUT /v1/skills/:id/enable
+    // 3. POST /v1/skills/:id/enable
     let enable_resp = client
-        .put(format!("{}/v1/skills/{}/enable", base, skill_id))
+        .post(format!("{}/v1/skills/{}/enable", base, skill_id))
         .send()
         .await
-        .expect("PUT enable should succeed");
+        .expect("POST enable should succeed");
 
     assert_eq!(enable_resp.status(), 200);
     let enable_body: serde_json::Value = enable_resp.json().await.unwrap();
     assert_eq!(enable_body["enabled"], true);
 
-    // 4. PUT on non-existent skill → 404
+    // 4. POST on non-existent skill → 404
     let missing_resp = client
-        .put(format!(
+        .post(format!(
             "{}/v1/skills/00000000-0000-0000-0000-000000000000/enable",
             base
         ))
         .send()
         .await
-        .expect("PUT missing skill should succeed");
+        .expect("POST missing skill should succeed");
 
     assert_eq!(missing_resp.status(), 404);
 

@@ -8,7 +8,7 @@ use axum::{
     extract::{Path, Query, State, WebSocketUpgrade, ws::Message},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post, put},
+    routing::{get, post},
 };
 use carnelian_common::Result;
 use carnelian_common::types::{
@@ -313,11 +313,12 @@ fn build_router(state: AppState) -> Router {
         .route("/v1/tasks/:task_id/cancel", post(cancel_task_handler))
         .route("/v1/tasks/:task_id/runs", get(list_runs_handler))
         // Run endpoints
+        .route("/v1/runs/:run_id", get(get_run_handler))
         .route("/v1/runs/:run_id/logs", get(get_run_logs_handler))
         // Skill endpoints
         .route("/v1/skills", get(list_skills_handler))
-        .route("/v1/skills/:skill_id/enable", put(enable_skill_handler))
-        .route("/v1/skills/:skill_id/disable", put(disable_skill_handler))
+        .route("/v1/skills/:skill_id/enable", post(enable_skill_handler))
+        .route("/v1/skills/:skill_id/disable", post(disable_skill_handler))
         .route("/v1/skills/refresh", post(refresh_skills_handler))
         // 10MB request body limit
         .layer(RequestBodyLimitLayer::new(10 * 1024 * 1024))
@@ -776,6 +777,83 @@ async fn list_runs_handler(
         .into_response()
 }
 
+/// Get a single run by ID via `GET /v1/runs/:run_id`.
+#[allow(clippy::type_complexity)]
+async fn get_run_handler(
+    State(state): State<AppState>,
+    Path(run_id): Path<Uuid>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "database unavailable"})),
+            )
+                .into_response();
+        }
+    };
+
+    let row: Option<(
+        Uuid,
+        Uuid,
+        i32,
+        Option<String>,
+        String,
+        Option<chrono::DateTime<chrono::Utc>>,
+        Option<chrono::DateTime<chrono::Utc>>,
+        Option<i32>,
+        Option<serde_json::Value>,
+        Option<String>,
+    )> = sqlx::query_as(
+        r"SELECT run_id, task_id, attempt, worker_id, state, started_at, ended_at, exit_code, result, error
+          FROM task_runs WHERE run_id = $1",
+    )
+    .bind(run_id)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten();
+
+    match row {
+        Some((
+            run_id,
+            task_id,
+            attempt,
+            worker_id,
+            run_state,
+            started_at,
+            ended_at,
+            exit_code,
+            result,
+            error,
+        )) => {
+            let detail = RunDetail {
+                run_id,
+                task_id,
+                attempt,
+                worker_id,
+                state: run_state,
+                started_at,
+                ended_at,
+                exit_code,
+                result,
+                error,
+            };
+            (
+                StatusCode::OK,
+                Json(serde_json::to_value(detail).unwrap_or_default()),
+            )
+                .into_response()
+        }
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "run not found"})),
+        )
+            .into_response(),
+    }
+}
+
 // =============================================================================
 // RUN LOG HANDLERS
 // =============================================================================
@@ -920,7 +998,7 @@ async fn list_skills_handler(State(state): State<AppState>) -> impl IntoResponse
         .into_response()
 }
 
-/// Enable a skill via `PUT /v1/skills/:skill_id/enable`.
+/// Enable a skill via `POST /v1/skills/:skill_id/enable`.
 async fn enable_skill_handler(
     State(state): State<AppState>,
     Path(skill_id): Path<Uuid>,
@@ -928,7 +1006,7 @@ async fn enable_skill_handler(
     toggle_skill(state, skill_id, true).await
 }
 
-/// Disable a skill via `PUT /v1/skills/:skill_id/disable`.
+/// Disable a skill via `POST /v1/skills/:skill_id/disable`.
 async fn disable_skill_handler(
     State(state): State<AppState>,
     Path(skill_id): Path<Uuid>,
