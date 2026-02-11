@@ -439,14 +439,11 @@ impl Scheduler {
                         error = %e,
                         "Task execution failed with unhandled error"
                     );
-                    // Ensure task is marked as failed on unhandled errors;
-                    // persist the error message in description for diagnostics.
-                    let error_msg = format!("execute_task error: {e}");
+                    // Ensure task is marked as failed on unhandled errors
                     let _ = sqlx::query(
-                        r"UPDATE tasks SET state = 'failed', description = $2, updated_at = NOW() WHERE task_id = $1",
+                        r"UPDATE tasks SET state = 'failed', updated_at = NOW() WHERE task_id = $1",
                     )
                     .bind(task_id)
-                    .bind(&error_msg)
                     .execute(&pool)
                     .await;
                 }
@@ -486,33 +483,24 @@ impl Scheduler {
         active_tasks: &Arc<tokio::sync::Mutex<HashMap<Uuid, tokio::task::JoinHandle<()>>>>,
     ) -> Result<()> {
         let exec_start = std::time::Instant::now();
-        eprintln!("[execute_task] START task_id={task_id} skill_id={skill_id:?}");
 
         // Update task state to 'running'
         sqlx::query(r"UPDATE tasks SET state = 'running', updated_at = NOW() WHERE task_id = $1")
             .bind(task_id)
             .execute(pool)
             .await
-            .map_err(|e| {
-                eprintln!("[execute_task] FAIL at SET running: {e}");
-                Error::Database(e)
-            })?;
-        eprintln!("[execute_task] OK set running");
+            .map_err(Error::Database)?;
 
         // Determine attempt number from existing task_runs
-        let attempt: i64 = sqlx::query_scalar::<_, Option<i64>>(
+        let attempt: i64 = sqlx::query_scalar::<_, Option<i32>>(
             r"SELECT COALESCE(MAX(attempt), 0) FROM task_runs WHERE task_id = $1",
         )
         .bind(task_id)
         .fetch_one(pool)
         .await
-        .map_err(|e| {
-            eprintln!("[execute_task] FAIL at attempt query: {e}");
-            Error::Database(e)
-        })?
-        .unwrap_or(0)
+        .map_err(Error::Database)?
+        .map_or(0, i64::from)
             + 1;
-        eprintln!("[execute_task] OK attempt={attempt}");
 
         // Create task_run record (worker_id stores skill name for usage tracking)
         let run_id = RunId::new();
@@ -526,11 +514,7 @@ impl Scheduler {
         .bind(skill_id.map(|s| s.to_string()))
         .execute(pool)
         .await
-        .map_err(|e| {
-            eprintln!("[execute_task] FAIL at INSERT task_run: {e}");
-            Error::Database(e)
-        })?;
-        eprintln!("[execute_task] OK task_run inserted run_id={}", run_id.0);
+        .map_err(Error::Database)?;
 
         // Emit TaskStarted event
         event_stream.publish(
@@ -573,7 +557,6 @@ impl Scheduler {
             None
         };
 
-        eprintln!("[execute_task] skill_info={skill_info:?}");
         let (skill_name, _runtime) = match skill_info {
             Some(info) => info,
             None => {
@@ -625,7 +608,6 @@ impl Scheduler {
             }
             found_transport
         };
-        eprintln!("[execute_task] transport found={}", transport.is_some());
 
         let transport = match transport {
             Some(t) => t,
