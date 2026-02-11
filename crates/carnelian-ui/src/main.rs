@@ -4,6 +4,7 @@
 //! the Carnelian orchestrator. Features real-time event streaming
 //! via WebSocket, a glassy dark theme, and router-based navigation.
 
+mod api;
 mod components;
 mod pages;
 mod store;

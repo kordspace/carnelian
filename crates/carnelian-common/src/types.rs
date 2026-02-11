@@ -178,7 +178,7 @@ pub enum EventType {
 ///
 /// This is the primary structure for all events in the system.
 /// Events are published to the event stream and distributed to subscribers.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EventEnvelope {
     /// Unique identifier for this event
     pub event_id: EventId,
@@ -497,7 +497,7 @@ const fn default_page_size() -> u32 {
 }
 
 /// A single skill in list responses.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SkillDetail {
     pub skill_id: Uuid,
     pub name: String,

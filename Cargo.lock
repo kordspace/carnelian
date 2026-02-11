@@ -670,6 +670,7 @@ dependencies = [
  "anyhow",
  "carnelian-common",
  "carnelian-core",
+ "chrono",
  "dioxus",
  "dioxus-signals",
  "futures-util",
@@ -682,6 +683,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tray-icon",
+ "uuid",
 ]
 
 [[package]]
