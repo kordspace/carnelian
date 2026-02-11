@@ -79,8 +79,8 @@ async fn get_database_url(container: &testcontainers::ContainerAsync<GenericImag
 /// Set up a test database with migrations and return the pool.
 async fn setup_test_db(database_url: &str) -> sqlx::PgPool {
     let pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(5)
-        .acquire_timeout(Duration::from_secs(10))
+        .max_connections(20)
+        .acquire_timeout(Duration::from_secs(30))
         .connect(database_url)
         .await
         .expect("Failed to connect to test database");
