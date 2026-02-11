@@ -439,11 +439,14 @@ impl Scheduler {
                         error = %e,
                         "Task execution failed with unhandled error"
                     );
-                    // Ensure task is marked as failed on unhandled errors
+                    // Ensure task is marked as failed on unhandled errors;
+                    // persist the error message in description for diagnostics.
+                    let error_msg = format!("execute_task error: {e}");
                     let _ = sqlx::query(
-                        r"UPDATE tasks SET state = 'failed', updated_at = NOW() WHERE task_id = $1",
+                        r"UPDATE tasks SET state = 'failed', description = $2, updated_at = NOW() WHERE task_id = $1",
                     )
                     .bind(task_id)
+                    .bind(&error_msg)
                     .execute(&pool)
                     .await;
                 }
