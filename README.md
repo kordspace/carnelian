@@ -107,7 +107,7 @@ carnelian task create "Task" --skill-id <uuid> --priority 5  # With skill and pr
 Global flags: `--database-url`, `--config`, `--log-level`, `--port`.
 The `--url` flag can be used with `task` commands to specify a remote server URL (e.g., `carnelian task --url http://remote:18789 create "Task"`).
 
-See [docs/CHECKPOINT1.md](docs/CHECKPOINT1.md) for the checkpoint validation guide.
+See [docs/CHECKPOINT1.md](docs/CHECKPOINT1.md) for the checkpoint validation guide including manual steps and demo recording.
 
 ## API Endpoints
 
@@ -357,7 +357,8 @@ carnelian/
 ├── docs/                         # Documentation (development, docker, brand, logging)
 ├── scripts/
 │   ├── setup-hooks.sh            # Development environment setup
-│   └── ci-local.sh               # Local CI checks before pushing
+│   ├── ci-local.sh               # Local CI checks before pushing
+│   └── checkpoint1-validation.sh  # Checkpoint 1 automated validation
 └── .github/workflows/ci.yml      # CI pipeline (lint, build, test, integration, secrets)
 ```
 
@@ -539,6 +540,7 @@ See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 | [docs/DOCKER.md](docs/DOCKER.md) | Docker environment and troubleshooting |
 | [docs/BRAND.md](docs/BRAND.md) | Dual theme brand kit (Forge / Night Lab) |
 | [docs/LOGGING.md](docs/LOGGING.md) | Structured logging philosophy and conventions |
+| [docs/CHECKPOINT1.md](docs/CHECKPOINT1.md) | Checkpoint 1 validation steps and demo |
 | [crates/carnelian-core/tests/README.md](crates/carnelian-core/tests/README.md) | Test suite documentation |
 | [db/migrations/README.md](db/migrations/README.md) | Database migration guide |
 

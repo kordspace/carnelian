@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Carnelian OS - Checkpoint 1 Validation Script
 # Automates manual checkpoint validation steps for the 8 criteria.
 #
@@ -7,8 +7,9 @@
 #   ./scripts/checkpoint1-validation.sh --skip-build  # Skip cargo build step
 #   ./scripts/checkpoint1-validation.sh --keep-running # Don't stop Carnelian after validation
 #   ./scripts/checkpoint1-validation.sh --clean        # Remove test data after validation
+#   ./scripts/checkpoint1-validation.sh --dry-run      # Print steps without executing
 
-set -e
+set -euo pipefail
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -25,6 +26,7 @@ header() { echo -e "\n${BLUE}=== $1 ===${NC}"; }
 SKIP_BUILD=false
 KEEP_RUNNING=false
 CLEAN=false
+DRY_RUN=false
 SERVER_PID=""
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -37,6 +39,7 @@ for arg in "$@"; do
         --skip-build) SKIP_BUILD=true ;;
         --keep-running) KEEP_RUNNING=true ;;
         --clean) CLEAN=true ;;
+        --dry-run) DRY_RUN=true ;;
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -44,11 +47,20 @@ for arg in "$@"; do
             echo "  --skip-build    Skip cargo build step"
             echo "  --keep-running  Don't stop Carnelian after validation"
             echo "  --clean         Remove test data after validation"
+            echo "  --dry-run       Print steps without executing"
             echo "  --help          Show this help message"
             exit 0
             ;;
     esac
 done
+
+run_cmd() {
+    if $DRY_RUN; then
+        info "[dry-run] $*"
+        return 0
+    fi
+    "$@"
+}
 
 record_pass() { PASS_COUNT=$((PASS_COUNT + 1)); pass "$1"; }
 record_fail() { FAIL_COUNT=$((FAIL_COUNT + 1)); fail "$1"; }
@@ -95,10 +107,18 @@ else
     warn "Ollama container not healthy (non-blocking)"
 fi
 
+# Model readiness
+info "Checking for downloaded models..."
+if docker exec carnelian-ollama ollama list 2>/dev/null | grep -q "deepseek\|llama\|gemma"; then
+    record_pass "At least one model available"
+else
+    warn "No models found — download one: docker exec carnelian-ollama ollama pull deepseek-r1:7b"
+fi
+
 # Build
 if ! $SKIP_BUILD; then
     info "Building Carnelian..."
-    if cargo build --bin carnelian 2>&1; then
+    if run_cmd cargo build --bin carnelian 2>&1; then
         record_pass "cargo build succeeded"
     else
         record_fail "cargo build failed"
@@ -110,7 +130,7 @@ fi
 
 # Database migrations
 info "Running database migrations..."
-if cargo run --bin carnelian -- migrate 2>&1; then
+if run_cmd cargo run --bin carnelian -- migrate 2>&1; then
     record_pass "Database migrations applied"
 else
     record_fail "Database migrations failed"
@@ -123,18 +143,27 @@ fi
 header "Criterion 1: System Startup"
 
 info "Starting Carnelian server in background..."
-cargo run --bin carnelian -- start &
-SERVER_PID=$!
+if $DRY_RUN; then
+    info "[dry-run] cargo run --bin carnelian -- start &"
+else
+    cargo run --bin carnelian -- start &
+    SERVER_PID=$!
+fi
 
 info "Waiting for server readiness..."
 READY=false
-for i in $(seq 1 30); do
-    if curl -sf "$API_URL/v1/health" > /dev/null 2>&1; then
-        READY=true
-        break
-    fi
-    sleep 1
-done
+if $DRY_RUN; then
+    info "[dry-run] poll http://localhost:18789/v1/health (up to 30s)"
+    READY=true
+else
+    for i in $(seq 1 30); do
+        if curl -sf "$API_URL/v1/health" > /dev/null 2>&1; then
+            READY=true
+            break
+        fi
+        sleep 1
+    done
+fi
 
 if $READY; then
     record_pass "Server started and healthy"
@@ -164,9 +193,20 @@ fi
 # ─────────────────────────────────────────────
 header "Criterion 2: Skill Discovery"
 
+# Copy sample skills to configured path
+SKILLS_DIR="${HOME}/.carnelian/skills"
+info "Copying sample skills to ${SKILLS_DIR}..."
+if [ -d "skills/registry" ]; then
+    run_cmd mkdir -p "${SKILLS_DIR}"
+    run_cmd cp -r skills/registry/* "${SKILLS_DIR}/" 2>/dev/null || true
+    record_pass "Sample skills copied to ${SKILLS_DIR}"
+else
+    warn "skills/registry/ not found — skipping skill copy"
+fi
+
 info "Triggering skill refresh..."
 REFRESH_START=$(date +%s%N)
-if cargo run --bin carnelian -- skills refresh 2>&1; then
+if run_cmd cargo run --bin carnelian -- skills refresh 2>&1; then
     REFRESH_END=$(date +%s%N)
     REFRESH_MS=$(( (REFRESH_END - REFRESH_START) / 1000000 ))
     record_pass "Skill refresh completed (${REFRESH_MS}ms)"
@@ -225,7 +265,7 @@ fi
 header "Criterion 4: CLI Task Creation"
 
 info "Creating task via CLI..."
-CLI_OUTPUT=$(cargo run --bin carnelian -- task create "CLI validation task" --description "Created by checkpoint script" 2>&1 || echo "FAILED")
+CLI_OUTPUT=$(run_cmd cargo run --bin carnelian -- task create "CLI validation task" --description "Created by checkpoint script" 2>&1 || echo "FAILED")
 if echo "$CLI_OUTPUT" | grep -qi "task_id\|created\|success"; then
     record_pass "Task created via CLI"
 else
@@ -233,7 +273,7 @@ else
 fi
 
 info "Creating task via CLI with priority..."
-CLI_OUTPUT2=$(cargo run --bin carnelian -- task create "Priority task" --priority 10 2>&1 || echo "FAILED")
+CLI_OUTPUT2=$(run_cmd cargo run --bin carnelian -- task create "Priority task" --priority 10 2>&1 || echo "FAILED")
 if echo "$CLI_OUTPUT2" | grep -qi "task_id\|created\|success"; then
     record_pass "Task created via CLI with --priority"
 else
@@ -280,7 +320,7 @@ echo "  Integration test: cargo test --test checkpoint1_validation_test test_cri
 header "Criterion 8: Performance Baseline"
 
 info "Running performance baseline test..."
-if cargo test --test checkpoint1_validation_test test_criterion8_performance_baseline_metrics -- --ignored --nocapture 2>&1; then
+if run_cmd cargo test --test checkpoint1_validation_test test_criterion8_performance_baseline_metrics -- --ignored --nocapture 2>&1; then
     record_pass "Performance baseline test completed"
 else
     record_fail "Performance baseline test failed"
