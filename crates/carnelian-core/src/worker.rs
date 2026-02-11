@@ -1299,6 +1299,45 @@ impl WorkerManager {
         self.workers.read().await.len()
     }
 
+    /// Register a pre-built worker with an existing transport.
+    ///
+    /// This is primarily intended for integration tests that need to inject
+    /// mock workers without going through `spawn_worker` (which hardcodes
+    /// the worker script path).
+    ///
+    /// # Arguments
+    ///
+    /// * `worker_id` - Unique identifier for the worker
+    /// * `runtime` - The runtime type of the worker
+    /// * `transport` - A pre-built transport implementing `WorkerTransport`
+    pub async fn register_worker(
+        &mut self,
+        worker_id: String,
+        runtime: WorkerRuntime,
+        transport: Arc<dyn WorkerTransport>,
+    ) {
+        let worker = Worker {
+            id: worker_id.clone(),
+            runtime,
+            process: None,
+            status: WorkerStatus::Running,
+            current_task: None,
+            started_at: Utc::now(),
+            last_health_check: None,
+            transport: Some(transport),
+        };
+        self.workers.write().await.insert(worker_id.clone(), worker);
+
+        self.event_stream.publish(EventEnvelope::new(
+            EventLevel::Info,
+            EventType::WorkerStarted,
+            json!({
+                "worker_id": worker_id,
+                "runtime": runtime.to_string(),
+            }),
+        ));
+    }
+
     /// Get the transport for a specific worker.
     ///
     /// # Errors
