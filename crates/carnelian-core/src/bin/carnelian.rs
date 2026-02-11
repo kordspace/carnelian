@@ -19,11 +19,12 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use carnelian_common::types::{EventEnvelope, EventLevel};
+use carnelian_common::types::{CreateTaskRequest, CreateTaskResponse, EventEnvelope, EventLevel};
 use clap::{Parser, Subcommand};
 use futures_util::{SinkExt, StreamExt};
 use std::sync::Arc;
 use tokio_tungstenite::tungstenite::protocol::Message;
+use uuid::Uuid;
 
 use carnelian_core::{Config, EventStream, Ledger, PolicyEngine, Scheduler, Server, WorkerManager};
 
@@ -40,6 +41,8 @@ use carnelian_core::{Config, EventStream, Ledger, PolicyEngine, Scheduler, Serve
   carnelian migrate                  Run database migrations
   carnelian migrate --dry-run        Show pending migrations without applying
   carnelian logs                     Stream events from running instance
+  carnelian task create \"My task\"           Create a new task
+  carnelian task create \"Task\" --priority 10  Create high-priority task
   carnelian logs -f --level ERROR    Stream only ERROR events
   carnelian logs --url http://remote:18789  Connect to remote instance
   carnelian --database-url postgres://user:pass@host/db migrate  Use specific database")]
@@ -106,12 +109,43 @@ enum Commands {
         #[command(subcommand)]
         command: SkillsCommands,
     },
+
+    /// Task management commands
+    Task {
+        #[command(subcommand)]
+        command: TaskCommands,
+
+        /// URL of the Carnelian server
+        #[arg(long, env = "CARNELIAN_URL")]
+        url: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
 enum SkillsCommands {
     /// Manually refresh skill registry (scan for new/updated/removed skills)
     Refresh,
+}
+
+#[derive(Subcommand)]
+enum TaskCommands {
+    /// Create a new task
+    Create {
+        /// Title for the task
+        title: String,
+
+        /// Optional description
+        #[arg(long)]
+        description: Option<String>,
+
+        /// Optional skill ID (UUID) to execute
+        #[arg(long)]
+        skill_id: Option<String>,
+
+        /// Task priority (higher = dequeued first)
+        #[arg(long, default_value_t = 0)]
+        priority: i32,
+    },
 }
 
 #[tokio::main]
@@ -134,6 +168,7 @@ async fn main() {
         Commands::Skills { command } => {
             handle_skills(command, cli.config, cli.log_level, cli.database_url).await
         }
+        Commands::Task { command, url } => handle_task_command(command, &resolve_url(url)).await,
     };
 
     if let Err(e) = result {
@@ -630,6 +665,84 @@ async fn handle_skills(
             println!("   Discovered: {}", result.discovered);
             println!("   Updated:    {}", result.updated);
             println!("   Removed:    {}", result.removed);
+
+            Ok(())
+        }
+    }
+}
+
+/// Handle the `task` subcommands
+async fn handle_task_command(command: TaskCommands, url: &str) -> carnelian_common::Result<()> {
+    match command {
+        TaskCommands::Create {
+            title,
+            description,
+            skill_id,
+            priority,
+        } => {
+            // Parse skill_id if provided
+            let parsed_skill_id = if let Some(ref sid) = skill_id {
+                Some(Uuid::parse_str(sid).map_err(|_| {
+                    carnelian_common::Error::Config(format!(
+                        "Invalid skill ID format. Expected UUID (e.g., 550e8400-e29b-41d4-a716-446655440000), got: {}",
+                        sid
+                    ))
+                })?)
+            } else {
+                None
+            };
+
+            let request = CreateTaskRequest {
+                title,
+                description,
+                skill_id: parsed_skill_id,
+                priority,
+                requires_approval: false,
+            };
+
+            let client = reqwest::Client::builder()
+                .timeout(Duration::from_secs(10))
+                .build()
+                .map_err(|e| {
+                    carnelian_common::Error::Config(format!("Failed to create HTTP client: {}", e))
+                })?;
+
+            let resp = client
+                .post(format!("{}/v1/tasks", url.trim_end_matches('/')))
+                .json(&request)
+                .send()
+                .await
+                .map_err(|e| {
+                    if e.is_connect() {
+                        carnelian_common::Error::Connection(format!(
+                            "Failed to connect to Carnelian at {}. Is it running?",
+                            url
+                        ))
+                    } else {
+                        carnelian_common::Error::Connection(format!(
+                            "Request to {} failed: {}",
+                            url, e
+                        ))
+                    }
+                })?;
+
+            if resp.status() == reqwest::StatusCode::CREATED {
+                let body: CreateTaskResponse = resp.json().await.map_err(|e| {
+                    carnelian_common::Error::Config(format!("Failed to parse response: {}", e))
+                })?;
+                println!("\u{2713} Task created successfully");
+                println!("   Task ID:     {}", body.task_id);
+                println!("   State:       {}", body.state);
+                println!("   Created At:  {}", body.created_at);
+            } else {
+                let status = resp.status();
+                let body: serde_json::Value = resp.json().await.unwrap_or_default();
+                let error_msg = body["error"].as_str().unwrap_or("unknown error");
+                return Err(carnelian_common::Error::Config(format!(
+                    "Failed to create task (HTTP {}): {}",
+                    status, error_msg
+                )));
+            }
 
             Ok(())
         }

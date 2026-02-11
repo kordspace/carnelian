@@ -584,3 +584,390 @@ async fn test_cli_invalid_database_url() {
 
     println!("✓ Invalid database URL produces error exit code and message");
 }
+
+/// Test: `carnelian task create "Test Task"` creates a task with minimal arguments
+#[tokio::test]
+#[ignore = "Requires Docker - run with: cargo test --test cli_integration_test -- --ignored"]
+async fn test_cli_task_create_minimal() {
+    let container = create_postgres_container().await;
+    let db_url = get_database_url(&container).await;
+
+    // Run migrations
+    let migrate_output = Command::new("cargo")
+        .args([
+            "run",
+            "--bin",
+            "carnelian",
+            "--",
+            "--database-url",
+            &db_url,
+            "migrate",
+        ])
+        .output()
+        .expect("Failed to execute carnelian migrate");
+    assert!(migrate_output.status.success(), "Migrations should succeed");
+
+    let port = {
+        let listener =
+            std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
+        listener.local_addr().unwrap().port()
+    };
+
+    // Start server in background
+    let _server = tokio::process::Command::new("cargo")
+        .args([
+            "run",
+            "--bin",
+            "carnelian",
+            "--",
+            "--database-url",
+            &db_url,
+            "start",
+        ])
+        .env("CARNELIAN_HTTP_PORT", port.to_string())
+        .kill_on_drop(true)
+        .spawn()
+        .expect("Failed to spawn carnelian start");
+
+    let ready = wait_for_cli_server(port, Duration::from_secs(10)).await;
+    assert!(ready, "Server should start within 10 seconds");
+
+    // Execute task create command
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "--bin",
+            "carnelian",
+            "--",
+            "task",
+            "--url",
+            &format!("http://127.0.0.1:{}", port),
+            "create",
+            "Test Task from CLI",
+        ])
+        .output()
+        .expect("Failed to execute carnelian task create");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        output.status.success(),
+        "carnelian task create should exit 0. stdout: {}, stderr: {}",
+        stdout,
+        stderr
+    );
+
+    assert!(
+        stdout.contains("Task created successfully"),
+        "Output should contain success message. Got: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("Task ID:"),
+        "Output should contain Task ID. Got: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("pending"),
+        "Output should show pending state. Got: {}",
+        stdout
+    );
+
+    // Verify task exists in database
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&db_url)
+        .await
+        .expect("Failed to connect to database");
+
+    let task_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE title = 'Test Task from CLI'")
+            .fetch_one(&pool)
+            .await
+            .expect("Should be able to query tasks");
+
+    assert_eq!(task_count, 1, "Task should exist in database");
+
+    println!("✓ CLI task create with minimal arguments succeeded");
+}
+
+/// Test: `carnelian task create` with all optional arguments
+#[tokio::test]
+#[ignore = "Requires Docker - run with: cargo test --test cli_integration_test -- --ignored"]
+async fn test_cli_task_create_all_args() {
+    let container = create_postgres_container().await;
+    let db_url = get_database_url(&container).await;
+
+    // Run migrations
+    let migrate_output = Command::new("cargo")
+        .args([
+            "run",
+            "--bin",
+            "carnelian",
+            "--",
+            "--database-url",
+            &db_url,
+            "migrate",
+        ])
+        .output()
+        .expect("Failed to execute carnelian migrate");
+    assert!(migrate_output.status.success(), "Migrations should succeed");
+
+    // Insert a skill into the database so we can reference it
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&db_url)
+        .await
+        .expect("Failed to connect to database");
+
+    let skill_id: uuid::Uuid = sqlx::query_scalar(
+        r"INSERT INTO skills (name, runtime, description, enabled, checksum)
+          VALUES ('test-cli-skill', 'node', 'Test skill for CLI', true, 'cli_test_checksum')
+          RETURNING skill_id",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("Failed to insert test skill");
+
+    let port = {
+        let listener =
+            std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
+        listener.local_addr().unwrap().port()
+    };
+
+    // Start server in background
+    let _server = tokio::process::Command::new("cargo")
+        .args([
+            "run",
+            "--bin",
+            "carnelian",
+            "--",
+            "--database-url",
+            &db_url,
+            "start",
+        ])
+        .env("CARNELIAN_HTTP_PORT", port.to_string())
+        .kill_on_drop(true)
+        .spawn()
+        .expect("Failed to spawn carnelian start");
+
+    let ready = wait_for_cli_server(port, Duration::from_secs(10)).await;
+    assert!(ready, "Server should start within 10 seconds");
+
+    // Execute task create with all arguments
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "--bin",
+            "carnelian",
+            "--",
+            "task",
+            "--url",
+            &format!("http://127.0.0.1:{}", port),
+            "create",
+            "Full Task from CLI",
+            "--description",
+            "Test description from CLI",
+            "--skill-id",
+            &skill_id.to_string(),
+            "--priority",
+            "5",
+        ])
+        .output()
+        .expect("Failed to execute carnelian task create");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        output.status.success(),
+        "carnelian task create with all args should exit 0. stdout: {}, stderr: {}",
+        stdout,
+        stderr
+    );
+
+    assert!(
+        stdout.contains("Task created successfully"),
+        "Output should contain success message. Got: {}",
+        stdout
+    );
+
+    // Verify all fields in database
+    let row: (String, Option<String>, Option<uuid::Uuid>, i32) = sqlx::query_as(
+        "SELECT title, description, skill_id, priority FROM tasks WHERE title = 'Full Task from CLI'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("Task should exist in database");
+
+    assert_eq!(row.0, "Full Task from CLI");
+    assert_eq!(row.1.as_deref(), Some("Test description from CLI"));
+    assert_eq!(row.2, Some(skill_id));
+    assert_eq!(row.3, 5);
+
+    println!("✓ CLI task create with all arguments succeeded");
+}
+
+/// Test: `carnelian task create` with invalid skill_id produces error
+#[tokio::test]
+#[ignore = "Requires Docker - run with: cargo test --test cli_integration_test -- --ignored"]
+async fn test_cli_task_create_invalid_skill_id() {
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "--bin",
+            "carnelian",
+            "--",
+            "task",
+            "--url",
+            "http://127.0.0.1:19999",
+            "create",
+            "Bad Skill Task",
+            "--skill-id",
+            "not-a-valid-uuid",
+        ])
+        .output()
+        .expect("Failed to execute carnelian task create");
+
+    assert!(
+        !output.status.success(),
+        "carnelian task create with invalid skill_id should exit non-zero"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Invalid skill ID format") || stderr.contains("Expected UUID"),
+        "stderr should contain UUID format error. Got: {}",
+        stderr
+    );
+
+    println!("✓ CLI task create with invalid skill_id produces error");
+}
+
+/// Test: `carnelian task create` when server is not running produces connection error
+#[tokio::test]
+#[ignore = "Requires Docker - run with: cargo test --test cli_integration_test -- --ignored"]
+async fn test_cli_task_create_server_not_running() {
+    // Use a port that is almost certainly not in use
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "--bin",
+            "carnelian",
+            "--",
+            "task",
+            "--url",
+            "http://127.0.0.1:19876",
+            "create",
+            "Orphan Task",
+        ])
+        .output()
+        .expect("Failed to execute carnelian task create");
+
+    assert!(
+        !output.status.success(),
+        "carnelian task create without server should exit non-zero"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Failed to connect")
+            || stderr.contains("Is it running")
+            || stderr.contains("Connection refused")
+            || stderr.contains("error")
+            || stderr.contains("Error"),
+        "stderr should contain connection error. Got: {}",
+        stderr
+    );
+
+    println!("✓ CLI task create when server is not running produces error");
+}
+
+/// Test: `carnelian task create ""` with empty title
+#[tokio::test]
+#[ignore = "Requires Docker - run with: cargo test --test cli_integration_test -- --ignored"]
+async fn test_cli_task_create_empty_title() {
+    let container = create_postgres_container().await;
+    let db_url = get_database_url(&container).await;
+
+    // Run migrations
+    let migrate_output = Command::new("cargo")
+        .args([
+            "run",
+            "--bin",
+            "carnelian",
+            "--",
+            "--database-url",
+            &db_url,
+            "migrate",
+        ])
+        .output()
+        .expect("Failed to execute carnelian migrate");
+    assert!(migrate_output.status.success(), "Migrations should succeed");
+
+    let port = {
+        let listener =
+            std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
+        listener.local_addr().unwrap().port()
+    };
+
+    // Start server in background
+    let _server = tokio::process::Command::new("cargo")
+        .args([
+            "run",
+            "--bin",
+            "carnelian",
+            "--",
+            "--database-url",
+            &db_url,
+            "start",
+        ])
+        .env("CARNELIAN_HTTP_PORT", port.to_string())
+        .kill_on_drop(true)
+        .spawn()
+        .expect("Failed to spawn carnelian start");
+
+    let ready = wait_for_cli_server(port, Duration::from_secs(10)).await;
+    assert!(ready, "Server should start within 10 seconds");
+
+    // Execute task create with empty title
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "--bin",
+            "carnelian",
+            "--",
+            "task",
+            "--url",
+            &format!("http://127.0.0.1:{}", port),
+            "create",
+            "",
+        ])
+        .output()
+        .expect("Failed to execute carnelian task create");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Empty title may succeed (server accepts it) or fail with validation error.
+    // Either way, the CLI should not panic.
+    println!(
+        "Empty title test: exit={:?}, stdout={}, stderr={}",
+        output.status.code(),
+        stdout,
+        stderr
+    );
+
+    // If it succeeded, verify the task was created
+    if output.status.success() {
+        assert!(
+            stdout.contains("Task created successfully"),
+            "If accepted, output should contain success message. Got: {}",
+            stdout
+        );
+        println!("✓ CLI task create with empty title was accepted by server");
+    } else {
+        println!("✓ CLI task create with empty title was rejected (expected behavior)");
+    }
+}

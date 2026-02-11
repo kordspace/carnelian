@@ -99,9 +99,13 @@ carnelian migrate --dry-run        # Show pending migrations
 carnelian logs                     # Stream events from running instance
 carnelian logs -f --level ERROR    # Stream only ERROR events
 carnelian skills refresh           # Scan registry and sync skills to database
+carnelian task create "Task title"                           # Create a task
+carnelian task create "Task" --description "Details"         # With description
+carnelian task create "Task" --skill-id <uuid> --priority 5  # With skill and priority
 ```
 
 Global flags: `--database-url`, `--config`, `--log-level`, `--port`.
+The `--url` flag can be used with `task` commands to specify a remote server URL (e.g., `carnelian task --url http://remote:18789 create "Task"`).
 
 ## API Endpoints
 
