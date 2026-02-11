@@ -21,7 +21,7 @@ pub fn Events() -> Element {
     let mut show_debug = use_signal(|| true);
     let mut show_trace = use_signal(|| true);
     let mut source_filter = use_signal(|| "All".to_string());
-    let mut search_text = use_signal(|| String::new());
+    let mut search_text = use_signal(String::new);
     let mut auto_scroll = use_signal(|| true);
     let mut selected_event = use_signal(|| Option::<usize>::None);
 
@@ -120,7 +120,7 @@ pub fn Events() -> Element {
             } else {
                 div { class: "event-list",
                     for (idx, evt) in visible {
-                        {render_event_row(idx, evt, &mut selected_event)}
+                        {render_event_row(idx, evt, &selected_event)}
                     }
                 }
             }
@@ -231,7 +231,7 @@ fn EventDetailModal(event: EventEnvelope, on_close: EventHandler) -> Element {
 
 // ── Helpers ─────────────────────────────────────────────────
 
-fn event_category(et: &EventType) -> &'static str {
+const fn event_category(et: &EventType) -> &'static str {
     match et {
         EventType::TaskCreated
         | EventType::TaskStarted
@@ -271,13 +271,9 @@ fn event_category(et: &EventType) -> &'static str {
         | EventType::CapabilityDenied
         | EventType::CapabilityRevoked => "Security",
 
-        EventType::RuntimeStart
-        | EventType::RuntimeReady
-        | EventType::RuntimeShutdown
-        | EventType::ConfigLoaded
-        | EventType::HeartbeatTick => "System",
-
-        EventType::Custom(_) => "System",
+        // System: RuntimeStart, RuntimeReady, RuntimeShutdown, ConfigLoaded,
+        // HeartbeatTick, Custom(_), and any future variants.
+        _ => "System",
     }
 }
 

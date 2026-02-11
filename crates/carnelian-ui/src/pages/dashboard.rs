@@ -30,15 +30,12 @@ pub fn Dashboard() -> Element {
     });
 
     let tasks_read = tasks.read();
-    let (active, pending, completed, failed) = match &*tasks_read {
-        Some(list) => (
-            list.iter().filter(|t| t.state == "running").count(),
-            list.iter().filter(|t| t.state == "pending").count(),
-            list.iter().filter(|t| t.state == "completed").count(),
-            list.iter().filter(|t| t.state == "failed").count(),
-        ),
-        None => (0, 0, 0, 0),
-    };
+    let (active, pending, completed, failed) = (*tasks_read).as_ref().map_or((0, 0, 0, 0), |list| (
+        list.iter().filter(|t| t.state == "running").count(),
+        list.iter().filter(|t| t.state == "pending").count(),
+        list.iter().filter(|t| t.state == "completed").count(),
+        list.iter().filter(|t| t.state == "failed").count(),
+    ));
 
     rsx! {
         div { class: "page-panel panel-page",
@@ -140,7 +137,7 @@ fn Gauge(pct: f64, label: &'static str, color: &'static str) -> Element {
     let radius: f64 = 40.0;
     let circumference = 2.0 * std::f64::consts::PI * radius;
     let offset = circumference * (1.0 - pct / 100.0);
-    let display_pct = format!("{:.0}%", pct);
+    let display_pct = format!("{pct:.0}%");
 
     rsx! {
         div { class: "gauge-container",
