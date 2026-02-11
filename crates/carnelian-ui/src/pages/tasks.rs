@@ -59,7 +59,9 @@ pub fn Tasks() -> Element {
 
     // ── Derived: filtered + sorted + paginated ──────────────
     let tasks_read = tasks_resource.read();
-    let all_tasks: Vec<TaskDetail> = (*tasks_read).as_ref().map_or_else(Vec::new, std::clone::Clone::clone);
+    let all_tasks: Vec<TaskDetail> = (*tasks_read)
+        .as_ref()
+        .map_or_else(Vec::new, std::clone::Clone::clone);
 
     let filtered = filter_tasks(&all_tasks, &filter_status.read(), &filter_search.read());
     let sorted = sort_tasks(filtered, &sort_col.read(), *sort_asc.read());

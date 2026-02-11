@@ -54,7 +54,9 @@ pub fn Skills() -> Element {
 
     // ── Derived: filtered + sorted ──────────────────────────
     let skills_read = skills_resource.read();
-    let all_skills: Vec<SkillDetail> = (*skills_read).as_ref().map_or_else(Vec::new, std::clone::Clone::clone);
+    let all_skills: Vec<SkillDetail> = (*skills_read)
+        .as_ref()
+        .map_or_else(Vec::new, std::clone::Clone::clone);
 
     let filtered = filter_skills(
         &all_skills,

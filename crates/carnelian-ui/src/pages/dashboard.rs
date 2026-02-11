@@ -30,12 +30,15 @@ pub fn Dashboard() -> Element {
     });
 
     let tasks_read = tasks.read();
-    let (active, pending, completed, failed) = (*tasks_read).as_ref().map_or((0, 0, 0, 0), |list| (
-        list.iter().filter(|t| t.state == "running").count(),
-        list.iter().filter(|t| t.state == "pending").count(),
-        list.iter().filter(|t| t.state == "completed").count(),
-        list.iter().filter(|t| t.state == "failed").count(),
-    ));
+    let (active, pending, completed, failed) =
+        (*tasks_read).as_ref().map_or((0, 0, 0, 0), |list| {
+            (
+                list.iter().filter(|t| t.state == "running").count(),
+                list.iter().filter(|t| t.state == "pending").count(),
+                list.iter().filter(|t| t.state == "completed").count(),
+                list.iter().filter(|t| t.state == "failed").count(),
+            )
+        });
 
     rsx! {
         div { class: "page-panel panel-page",
