@@ -107,6 +107,8 @@ carnelian task create "Task" --skill-id <uuid> --priority 5  # With skill and pr
 Global flags: `--database-url`, `--config`, `--log-level`, `--port`.
 The `--url` flag can be used with `task` commands to specify a remote server URL (e.g., `carnelian task --url http://remote:18789 create "Task"`).
 
+See [docs/CHECKPOINT1.md](docs/CHECKPOINT1.md) for the checkpoint validation guide.
+
 ## API Endpoints
 
 All endpoints are prefixed with `/v1`.
