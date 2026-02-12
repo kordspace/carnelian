@@ -30,7 +30,9 @@ use std::time::Duration;
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
 use carnelian_core::worker::{ProcessJsonlTransport, WorkerRuntime, WorkerTransport};
-use carnelian_core::{Config, EventStream, Ledger, PolicyEngine, Scheduler, Server, WorkerManager};
+use carnelian_core::{
+    Config, EventStream, Ledger, MetricsCollector, PolicyEngine, Scheduler, Server, WorkerManager,
+};
 use futures_util::StreamExt;
 use serde_json::json;
 use std::process::Stdio;
@@ -828,9 +830,17 @@ async fn test_criterion3_task_creation_and_execution_lifecycle() {
     // 3. Trigger the scheduler to dispatch the task
     {
         let active = scheduler.lock().await.active_tasks.clone();
-        Scheduler::poll_task_queue(&pool, &event_stream, &worker_manager, &config, &active)
-            .await
-            .expect("Scheduler poll should succeed");
+        let metrics = Arc::new(MetricsCollector::new());
+        Scheduler::poll_task_queue(
+            &pool,
+            &event_stream,
+            &worker_manager,
+            &config,
+            &active,
+            &metrics,
+        )
+        .await
+        .expect("Scheduler poll should succeed");
     }
 
     // 4. Wait for task to reach 'completed' state (mock worker echoes instantly)
@@ -1073,12 +1083,14 @@ async fn test_criterion5_concurrent_task_execution() {
     assert_eq!(config.machine_config().max_workers, 3);
 
     // First poll: should dequeue exactly 3 (max_workers=3, 0 active)
+    let metrics = Arc::new(MetricsCollector::new());
     Scheduler::poll_task_queue(
         &pool,
         &event_stream,
         &worker_manager,
         &config,
         &active_tasks,
+        &metrics,
     )
     .await
     .expect("poll_task_queue should succeed");
@@ -1135,6 +1147,7 @@ async fn test_criterion5_concurrent_task_execution() {
             &worker_manager,
             &config,
             &active_tasks,
+            &metrics,
         )
         .await
         .expect("poll_task_queue should succeed");
@@ -1300,12 +1313,14 @@ async fn test_criterion6a_invalid_skill_error_handling() {
         Arc::new(tokio::sync::Mutex::new(HashMap::new()));
 
     // Poll — task should be dequeued and fail because skill doesn't exist
+    let metrics = Arc::new(MetricsCollector::new());
     Scheduler::poll_task_queue(
         &pool,
         &event_stream,
         &worker_manager,
         &config,
         &active_tasks,
+        &metrics,
     )
     .await
     .expect("poll_task_queue should succeed");
@@ -1526,12 +1541,14 @@ async fn test_criterion6d_timeout_error_handling() {
     assert_eq!(get_task_state(&pool, task_id).await, "pending");
 
     // Dispatch the task
+    let metrics = Arc::new(MetricsCollector::new());
     Scheduler::poll_task_queue(
         &pool,
         &event_stream,
         &worker_manager,
         &config,
         &active_tasks,
+        &metrics,
     )
     .await
     .expect("poll_task_queue should succeed");
@@ -1665,12 +1682,14 @@ async fn test_criterion6e_crash_error_handling() {
     assert_eq!(get_task_state(&pool, task_id).await, "pending");
 
     // Dispatch — the transport should fail because the worker is dead
+    let metrics = Arc::new(MetricsCollector::new());
     Scheduler::poll_task_queue(
         &pool,
         &event_stream,
         &worker_manager,
         &config,
         &active_tasks,
+        &metrics,
     )
     .await
     .expect("poll_task_queue should succeed");
@@ -2137,6 +2156,57 @@ async fn test_criterion8_performance_baseline_metrics() {
         list_latency < Duration::from_secs(1),
         "Task list response should be < 1s, got {:?}",
         list_latency
+    );
+
+    // ── Metrics Endpoint ──────────────────────────────────────
+    let metrics_resp = client
+        .get(format!("{}/v1/metrics", base))
+        .send()
+        .await
+        .expect("GET /v1/metrics should succeed");
+    assert_eq!(metrics_resp.status(), 200);
+
+    let metrics_body: serde_json::Value = metrics_resp.json().await.unwrap();
+    println!("=== /v1/metrics Endpoint ===");
+    println!(
+        "  Task Latency P99:  {} ms",
+        metrics_body["task_latency"]["p99_ms"]
+    );
+    println!(
+        "  Event Throughput:  {} events/sec",
+        metrics_body["event_throughput_per_sec"]
+    );
+    println!(
+        "  Buffer Fill:       {}%",
+        metrics_body["event_stream_fill_percentage"]
+    );
+
+    // Assert metrics endpoint returns sane values
+    let p99_from_endpoint = metrics_body["task_latency"]["p99_ms"]
+        .as_f64()
+        .expect("p99_ms should be a number");
+    assert!(
+        p99_from_endpoint < 2000.0,
+        "Task latency P99 should be < 2000ms, got {:.1}",
+        p99_from_endpoint
+    );
+
+    let throughput_from_endpoint = metrics_body["event_throughput_per_sec"]
+        .as_f64()
+        .expect("event_throughput_per_sec should be a number");
+    assert!(
+        throughput_from_endpoint > 100.0,
+        "Event throughput should be > 100 events/sec, got {:.1}",
+        throughput_from_endpoint
+    );
+
+    let fill_pct = metrics_body["event_stream_fill_percentage"]
+        .as_f64()
+        .expect("event_stream_fill_percentage should be a number");
+    assert!(
+        fill_pct >= 0.0,
+        "Event stream fill percentage should be >= 0.0, got {:.4}",
+        fill_pct
     );
 
     // ── Summary Table ────────────────────────────────────────

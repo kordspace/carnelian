@@ -5,7 +5,7 @@
 
 use carnelian_common::types::{
     CancelTaskRequest, CancelTaskResponse, CreateTaskRequest, CreateTaskResponse,
-    ListSkillsResponse, ListTasksResponse, PaginatedRunLogsResponse, RunDetail,
+    ListSkillsResponse, ListTasksResponse, MetricsSnapshot, PaginatedRunLogsResponse, RunDetail,
     SkillRefreshResponse, SkillToggleResponse, TaskDetail,
 };
 use uuid::Uuid;
@@ -164,6 +164,20 @@ pub async fn refresh_skills() -> Result<SkillRefreshResponse, String> {
         .await
         .map_err(|e| format!("Request failed: {e}"))?
         .json::<SkillRefreshResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+// ── Metrics Operations ────────────────────────────────────
+
+/// Fetch aggregated performance metrics.
+pub async fn get_metrics() -> Result<MetricsSnapshot, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/metrics"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<MetricsSnapshot>()
         .await
         .map_err(|e| format!("Parse failed: {e}"))
 }

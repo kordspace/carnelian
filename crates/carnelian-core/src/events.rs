@@ -70,6 +70,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use tokio::sync::broadcast;
 
+use crate::metrics::MetricsCollector;
+
 /// Sampling counter for deterministic sampling
 static SAMPLE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -380,6 +382,8 @@ pub struct EventStream {
     buffer: Arc<RwLock<PriorityRingBuffer>>,
     /// Broadcast sender for event distribution
     sender: broadcast::Sender<EventEnvelope>,
+    /// Optional metrics collector for throughput tracking
+    metrics: RwLock<Option<Arc<MetricsCollector>>>,
 }
 
 impl EventStream {
@@ -424,7 +428,14 @@ impl EventStream {
                 max_payload_bytes,
             ))),
             sender,
+            metrics: RwLock::new(None),
         }
+    }
+
+    /// Set a shared metrics collector for throughput tracking.
+    pub fn set_metrics(&self, metrics: Arc<MetricsCollector>) {
+        let mut guard = self.metrics.write().unwrap();
+        *guard = Some(metrics);
     }
 
     /// Subscribe to the event stream.
@@ -465,6 +476,11 @@ impl EventStream {
             let mut buffer = self.buffer.write().unwrap();
             buffer.push(event.clone())
         };
+
+        // Record event throughput metric
+        if let Some(ref metrics) = *self.metrics.read().unwrap() {
+            metrics.record_event_batch(1, chrono::Utc::now());
+        }
 
         // Always attempt to broadcast, even if not stored in buffer
         // This allows real-time subscribers to see all events

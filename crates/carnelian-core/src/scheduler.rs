@@ -59,6 +59,7 @@
 
 use crate::config::Config;
 use crate::events::EventStream;
+use crate::metrics::MetricsCollector;
 use crate::worker::WorkerManager;
 use carnelian_common::types::{
     EventEnvelope, EventLevel, EventType, InvokeRequest, InvokeStatus, RunId,
@@ -102,6 +103,8 @@ pub struct Scheduler {
     config: Arc<Config>,
     /// Active task execution handles keyed by task_id for cancellation support
     pub active_tasks: Arc<tokio::sync::Mutex<HashMap<Uuid, tokio::task::JoinHandle<()>>>>,
+    /// Performance metrics collector
+    metrics: Arc<MetricsCollector>,
 }
 
 impl Scheduler {
@@ -139,7 +142,13 @@ impl Scheduler {
             worker_manager,
             config,
             active_tasks: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+            metrics: Arc::new(MetricsCollector::new()),
         }
+    }
+
+    /// Set a shared metrics collector (called from server to share with AppState).
+    pub fn set_metrics(&mut self, metrics: Arc<MetricsCollector>) {
+        self.metrics = metrics;
     }
 
     /// Start the scheduler background task.
@@ -166,6 +175,7 @@ impl Scheduler {
         let worker_manager = self.worker_manager.clone();
         let config = self.config.clone();
         let active_tasks = self.active_tasks.clone();
+        let metrics = self.metrics.clone();
 
         tokio::spawn(async move {
             Self::run_heartbeat_loop(
@@ -176,6 +186,7 @@ impl Scheduler {
                 worker_manager,
                 config,
                 active_tasks,
+                metrics,
             )
             .await;
         });
@@ -209,6 +220,7 @@ impl Scheduler {
         worker_manager: Arc<tokio::sync::Mutex<WorkerManager>>,
         config: Arc<Config>,
         active_tasks: Arc<tokio::sync::Mutex<HashMap<Uuid, tokio::task::JoinHandle<()>>>>,
+        metrics: Arc<MetricsCollector>,
     ) {
         let mut ticker = tokio::time::interval(interval);
         // Skip the first immediate tick
@@ -227,6 +239,7 @@ impl Scheduler {
                         &worker_manager,
                         &config,
                         &active_tasks,
+                        &metrics,
                     ).await {
                         tracing::warn!(error = %e, "Task queue polling failed");
                     }
@@ -376,6 +389,7 @@ impl Scheduler {
         worker_manager: &Arc<tokio::sync::Mutex<WorkerManager>>,
         config: &Arc<Config>,
         active_tasks: &Arc<tokio::sync::Mutex<HashMap<Uuid, tokio::task::JoinHandle<()>>>>,
+        metrics: &Arc<MetricsCollector>,
     ) -> Result<()> {
         // Check concurrency: count active tasks
         let active_count = active_tasks.lock().await.len();
@@ -421,6 +435,7 @@ impl Scheduler {
             let worker_manager = worker_manager.clone();
             let config = config.clone();
             let active_tasks_clone = active_tasks.clone();
+            let metrics = metrics.clone();
 
             let handle = tokio::spawn(async move {
                 if let Err(e) = Self::execute_task(
@@ -431,6 +446,7 @@ impl Scheduler {
                     &worker_manager,
                     &config,
                     &active_tasks_clone,
+                    &metrics,
                 )
                 .await
                 {
@@ -481,6 +497,7 @@ impl Scheduler {
         worker_manager: &Arc<tokio::sync::Mutex<WorkerManager>>,
         config: &Arc<Config>,
         active_tasks: &Arc<tokio::sync::Mutex<HashMap<Uuid, tokio::task::JoinHandle<()>>>>,
+        metrics: &Arc<MetricsCollector>,
     ) -> Result<()> {
         let exec_start = std::time::Instant::now();
 
@@ -538,6 +555,18 @@ impl Scheduler {
             run_id = %run_id.0,
             "Task execution started"
         );
+
+        // Record task latency metric (created_at → started_at)
+        let created_at: Option<chrono::DateTime<chrono::Utc>> =
+            sqlx::query_scalar(r"SELECT created_at FROM tasks WHERE task_id = $1")
+                .bind(task_id)
+                .fetch_optional(pool)
+                .await
+                .ok()
+                .flatten();
+        if let Some(created_at) = created_at {
+            metrics.record_task_latency(task_id, created_at, chrono::Utc::now());
+        }
 
         // TODO: Phase 4 - Implement capability checking
         // For now, all skills are allowed to execute

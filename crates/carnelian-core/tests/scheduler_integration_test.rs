@@ -28,7 +28,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use carnelian_core::{Config, EventStream, Scheduler, WorkerManager};
+use carnelian_core::{Config, EventStream, MetricsCollector, Scheduler, WorkerManager};
 use serde_json::json;
 use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
 use uuid::Uuid;
@@ -504,12 +504,14 @@ async fn test_poll_dequeues_in_priority_order() {
     assert_eq!(get_task_state(&pool, high_id).await, "pending");
 
     // Poll with max_workers=1: only the highest-priority task should be dequeued
+    let metrics = Arc::new(MetricsCollector::new());
     Scheduler::poll_task_queue(
         &pool,
         &event_stream,
         &worker_manager,
         &config,
         &active_tasks,
+        &metrics,
     )
     .await
     .expect("poll_task_queue should succeed");
@@ -594,12 +596,14 @@ async fn test_poll_respects_concurrency_limit() {
     }
 
     // Poll: should dequeue exactly 2 (max_workers=2, 0 active)
+    let metrics = Arc::new(MetricsCollector::new());
     Scheduler::poll_task_queue(
         &pool,
         &event_stream,
         &worker_manager,
         &config,
         &active_tasks,
+        &metrics,
     )
     .await
     .expect("poll_task_queue should succeed");
@@ -642,6 +646,7 @@ async fn test_poll_respects_concurrency_limit() {
         &worker_manager,
         &config,
         &active_tasks,
+        &metrics,
     )
     .await
     .expect("Second poll_task_queue should succeed");

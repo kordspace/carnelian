@@ -140,6 +140,11 @@ pub enum EventType {
     MemoryCompressEnd,
     MemoryWriteStart,
     MemoryWriteEnd,
+    MemoryCreated,
+    MemoryUpdated,
+    MemoryDeleted,
+    MemorySearchPerformed,
+    MemoryEmbeddingAdded,
 
     // Gateway operations
     GatewayRequestStart,
@@ -162,6 +167,10 @@ pub enum EventType {
     SkillDiscovered,
     SkillUpdated,
     SkillRemoved,
+
+    // Soul management
+    SoulUpdated,
+    SoulLoadFailed,
 
     // System events
     RuntimeStart,
@@ -577,4 +586,36 @@ pub enum TransportMessage {
         message_id: Uuid,
         payload: HealthResponse,
     },
+}
+
+// =============================================================================
+// METRICS RESPONSE TYPES
+// =============================================================================
+
+/// Aggregated task latency statistics returned by `/v1/metrics`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LatencyStats {
+    pub mean_ms: f64,
+    pub median_ms: f64,
+    pub p50_ms: f64,
+    pub p95_ms: f64,
+    pub p99_ms: f64,
+    pub sample_count: usize,
+}
+
+/// Full metrics snapshot returned by `GET /v1/metrics`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetricsSnapshot {
+    pub task_latency: LatencyStats,
+    pub event_throughput_per_sec: f64,
+    pub event_stream_buffer_len: usize,
+    pub event_stream_buffer_capacity: usize,
+    pub event_stream_fill_percentage: f64,
+    pub event_stream_total_received: usize,
+    pub event_stream_total_stored: usize,
+    pub event_stream_subscriber_count: usize,
+    /// Average UI render duration in milliseconds (reported by the UI client).
+    #[serde(default)]
+    pub render_time_ms: f64,
+    pub timestamp: DateTime<Utc>,
 }

@@ -86,10 +86,14 @@ pub mod config;
 pub mod db;
 pub mod events;
 pub mod ledger;
+pub mod memory;
+pub mod metrics;
 pub mod policy;
 pub mod scheduler;
 pub mod server;
+pub mod session;
 pub mod skills;
+pub mod soul;
 pub mod worker;
 
 use std::env;
@@ -104,10 +108,14 @@ pub use carnelian_common::{Error, Result};
 pub use config::Config;
 pub use events::{EventStream, EventStreamStats, PriorityRingBuffer};
 pub use ledger::{Ledger, LedgerEvent};
+pub use memory::{Memory, MemoryManager, MemoryQuery, MemorySource};
+pub use metrics::MetricsCollector;
 pub use policy::{CapabilityGrant, PolicyEngine};
 pub use scheduler::Scheduler;
 pub use server::{AppState, Server};
+pub use session::{Session, SessionKey, SessionManager, SessionMessage, TokenCounters};
 pub use skills::{SkillDiscovery, SkillManifest};
+pub use soul::SoulManager;
 pub use worker::WorkerManager;
 
 /// Core orchestrator version

@@ -39,6 +39,15 @@ pub enum Error {
 
     #[error("Broadcast channel error: {0}")]
     Broadcast(String),
+
+    #[error("Soul error: {0}")]
+    Soul(String),
+
+    #[error("Session error: {0}")]
+    Session(String),
+
+    #[error("Memory error: {0}")]
+    Memory(String),
 }
 
 impl<T> From<tokio::sync::broadcast::error::SendError<T>> for Error {

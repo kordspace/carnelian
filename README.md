@@ -119,6 +119,7 @@ All endpoints are prefixed with `/v1`.
 |--------|------|-------------|
 | `GET` | `/v1/health` | Health check (database connectivity, version) |
 | `GET` | `/v1/status` | System status |
+| `GET` | `/v1/metrics` | Performance metrics (latency percentiles, throughput) |
 | `POST` | `/v1/events` | Publish an event |
 | `GET` | `/v1/events/ws` | WebSocket event stream |
 

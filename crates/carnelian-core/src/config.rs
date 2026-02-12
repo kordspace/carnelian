@@ -175,6 +175,22 @@ pub struct Config {
     #[serde(default = "default_skills_registry_path")]
     pub skills_registry_path: PathBuf,
 
+    /// Path to soul files directory (default: ./souls)
+    #[serde(default = "default_souls_path")]
+    pub souls_path: PathBuf,
+
+    /// Default session expiry in hours (default: 24, 0 = never expires)
+    #[serde(default = "default_session_expiry_hours")]
+    pub session_default_expiry_hours: u32,
+
+    /// Optional path for file-backed session transcripts (default: None)
+    #[serde(default)]
+    pub session_transcripts_path: Option<PathBuf>,
+
+    /// Enable automatic file-backed transcript writing (default: false)
+    #[serde(default)]
+    pub session_enable_file_backup: bool,
+
     /// Maximum retry attempts for failed tasks (default: 3)
     #[serde(default = "default_task_max_retry_attempts")]
     pub task_max_retry_attempts: u32,
@@ -303,6 +319,14 @@ fn default_skills_registry_path() -> PathBuf {
     PathBuf::from("./skills/registry")
 }
 
+fn default_souls_path() -> PathBuf {
+    PathBuf::from("./souls")
+}
+
+fn default_session_expiry_hours() -> u32 {
+    24
+}
+
 /// Machine profile determining resource limits and default model
 ///
 /// # Variants
@@ -359,6 +383,10 @@ impl Default for Config {
             skill_max_output_bytes: default_skill_max_output_bytes(),
             skill_max_log_lines: default_skill_max_log_lines(),
             skills_registry_path: default_skills_registry_path(),
+            souls_path: default_souls_path(),
+            session_default_expiry_hours: default_session_expiry_hours(),
+            session_transcripts_path: None,
+            session_enable_file_backup: false,
             task_max_retry_attempts: default_task_max_retry_attempts(),
             task_retry_delay_secs: default_task_retry_delay_secs(),
             db_pool: None,
@@ -567,6 +595,26 @@ impl Config {
                     val
                 ))
             })?;
+        }
+
+        // CARNELIAN_SOULS_PATH — override path to soul files directory
+        if let Ok(path) = std::env::var("CARNELIAN_SOULS_PATH") {
+            self.souls_path = PathBuf::from(path);
+        }
+
+        // SESSION_EXPIRY_HOURS — default session TTL in hours (0 = never)
+        if let Ok(val) = std::env::var("SESSION_EXPIRY_HOURS") {
+            self.session_default_expiry_hours = val.parse().map_err(|_| {
+                Error::Config(format!(
+                    "Invalid SESSION_EXPIRY_HOURS value: {}",
+                    val
+                ))
+            })?;
+        }
+
+        // SESSION_TRANSCRIPTS_PATH — directory for file-backed session transcripts
+        if let Ok(path) = std::env::var("SESSION_TRANSCRIPTS_PATH") {
+            self.session_transcripts_path = Some(PathBuf::from(path));
         }
 
         Ok(())

@@ -1,6 +1,6 @@
 //! Dashboard page — task queue summary, system health, and recent events.
 
-use carnelian_common::types::{EventEnvelope, EventLevel};
+use carnelian_common::types::{EventEnvelope, EventLevel, MetricsSnapshot};
 use dioxus::prelude::*;
 
 use crate::store::EventStreamStore;
@@ -53,6 +53,7 @@ pub fn Dashboard() -> Element {
 
             SystemHealth {}
             ResourceGauges {}
+            PerformanceMetrics {}
             RecentEvents {}
         }
     }
@@ -122,15 +123,36 @@ fn SystemHealth() -> Element {
 
 #[component]
 fn ResourceGauges() -> Element {
-    // Placeholder values until a metrics endpoint is available.
-    let cpu: f64 = 0.0;
-    let mem: f64 = 0.0;
+    let mut refresh = use_signal(|| 0_u64);
+
+    let metrics = use_resource(move || async move {
+        let _ = refresh();
+        crate::api::get_metrics().await.ok()
+    });
+
+    // Auto-refresh every 5 seconds.
+    use_future(move || async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            refresh += 1;
+        }
+    });
+
+    let metrics_read = metrics.read();
+    let snapshot: Option<&MetricsSnapshot> = (*metrics_read).as_ref().and_then(|o| o.as_ref());
+
+    // Event throughput gauge: scale to 0-100% based on 1000 events/sec = 100%
+    let throughput_pct = snapshot.map_or(0.0, |m| {
+        (m.event_throughput_per_sec / 1000.0 * 100.0).min(100.0)
+    });
+    // Task latency P95 gauge: scale to 0-100% based on 2000ms = 100%
+    let latency_pct = snapshot.map_or(0.0, |m| (m.task_latency.p95_ms / 2000.0 * 100.0).min(100.0));
 
     rsx! {
         div { class: "section-header", h2 { "Resource Usage" } }
         div { class: "gauges-row",
-            Gauge { pct: cpu, label: "CPU", color: "#4A90E2" }
-            Gauge { pct: mem, label: "Memory", color: "#9B59B6" }
+            Gauge { pct: throughput_pct, label: "Throughput", color: "#4A90E2" }
+            Gauge { pct: latency_pct, label: "Latency P95", color: "#9B59B6" }
         }
     }
 }
@@ -168,6 +190,111 @@ fn Gauge(pct: f64, label: &'static str, color: &'static str) -> Element {
                 // Percentage text (not rotated — sits on top of the rotated SVG)
             }
             span { class: "gauge-label", "{label}: {display_pct}" }
+        }
+    }
+}
+
+// ── Performance Metrics ─────────────────────────────────────
+
+#[component]
+fn PerformanceMetrics() -> Element {
+    let mut refresh = use_signal(|| 0_u64);
+    let mut render_time = use_signal(|| 0.0_f64);
+
+    // Measure render duration: capture start time, then update signal in use_effect.
+    let render_start = std::time::Instant::now();
+    use_effect(move || {
+        let elapsed = render_start.elapsed().as_secs_f64() * 1000.0;
+        render_time.set(elapsed);
+    });
+
+    let metrics = use_resource(move || async move {
+        let _ = refresh();
+        crate::api::get_metrics().await.ok()
+    });
+
+    use_future(move || async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            refresh += 1;
+        }
+    });
+
+    let metrics_read = metrics.read();
+    let snapshot: Option<&MetricsSnapshot> = (*metrics_read).as_ref().and_then(|o| o.as_ref());
+
+    let throughput_str = snapshot.map_or_else(String::new, |m| {
+        format!("{:.1}", m.event_throughput_per_sec)
+    });
+    let samples_str =
+        snapshot.map_or_else(String::new, |m| format!("{}", m.task_latency.sample_count));
+    let received_str = snapshot.map_or_else(String::new, |m| {
+        format!("{}", m.event_stream_total_received)
+    });
+    let subs_str = snapshot.map_or_else(String::new, |m| {
+        format!("{}", m.event_stream_subscriber_count)
+    });
+    let fill_str = snapshot.map_or_else(String::new, |m| {
+        format!("{:.1}%", m.event_stream_fill_percentage * 100.0)
+    });
+    let render_str = format!("{:.1}ms", render_time());
+
+    rsx! {
+        div { class: "section-header", h2 { "Performance Metrics" } }
+        if let Some(m) = snapshot {
+            div { class: "metrics-grid",
+                LatencyCard { value: m.task_latency.p50_ms, label: "P50 Latency" }
+                LatencyCard { value: m.task_latency.p95_ms, label: "P95 Latency" }
+                LatencyCard { value: m.task_latency.p99_ms, label: "P99 Latency" }
+                div { class: "metric-card",
+                    span { class: "metric-value", "{throughput_str}" }
+                    span { class: "metric-label", "Events/sec" }
+                }
+            }
+            div { class: "metrics-grid",
+                div { class: "metric-card",
+                    span { class: "metric-value", "{samples_str}" }
+                    span { class: "metric-label", "Samples" }
+                }
+                div { class: "metric-card",
+                    span { class: "metric-value", "{received_str}" }
+                    span { class: "metric-label", "Events Received" }
+                }
+                div { class: "metric-card",
+                    span { class: "metric-value", "{subs_str}" }
+                    span { class: "metric-label", "Subscribers" }
+                }
+                div { class: "metric-card",
+                    span { class: "metric-value", "{fill_str}" }
+                    span { class: "metric-label", "Buffer Fill" }
+                }
+                div { class: "metric-card",
+                    span { class: "metric-value", "{render_str}" }
+                    span { class: "metric-label", "Render Time" }
+                }
+            }
+        } else {
+            div { class: "state-message",
+                span { "Metrics unavailable — server may be offline." }
+            }
+        }
+    }
+}
+
+#[component]
+fn LatencyCard(value: f64, label: &'static str) -> Element {
+    let color_class = if value < 500.0 {
+        "metric-completed"
+    } else if value < 1000.0 {
+        "metric-pending"
+    } else {
+        "metric-failed"
+    };
+    let card_class = format!("metric-card {color_class}");
+    rsx! {
+        div { class: "{card_class}",
+            span { class: "metric-value", "{value:.0}ms" }
+            span { class: "metric-label", "{label}" }
         }
     }
 }

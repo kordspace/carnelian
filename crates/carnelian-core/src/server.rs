@@ -36,6 +36,7 @@ use tracing::{Level, Span};
 use uuid::Uuid;
 
 use crate::ledger::Ledger;
+use crate::metrics::MetricsCollector;
 use crate::worker::WorkerManager;
 use crate::{Config, EventStream, Scheduler, db, policy::PolicyEngine};
 
@@ -103,6 +104,8 @@ pub struct AppState {
     pub worker_manager: Arc<tokio::sync::Mutex<WorkerManager>>,
     /// Task scheduler for creating/cancelling tasks
     pub scheduler: Arc<tokio::sync::Mutex<Scheduler>>,
+    /// Performance metrics collector
+    pub metrics: Arc<MetricsCollector>,
     /// Correlation ID counter for request tracing
     correlation_counter: Arc<AtomicU64>,
 }
@@ -125,6 +128,7 @@ impl AppState {
             ledger,
             worker_manager,
             scheduler,
+            metrics: Arc::new(MetricsCollector::new()),
             correlation_counter: Arc::new(AtomicU64::new(0)),
         }
     }
@@ -212,6 +216,7 @@ impl Server {
     ///
     /// This method is useful for testing graceful shutdown behavior
     /// without relying on OS signals.
+    #[allow(clippy::too_many_lines)]
     pub async fn run_with_shutdown<F>(&self, shutdown: F) -> Result<()>
     where
         F: std::future::Future<Output = ()> + Send + 'static,
@@ -224,6 +229,14 @@ impl Server {
             self.worker_manager.clone(),
             self.scheduler.clone(),
         );
+
+        // Share the metrics collector with the scheduler and event stream
+        {
+            let mut scheduler = self.scheduler.lock().await;
+            scheduler.set_metrics(state.metrics.clone());
+        }
+        state.event_stream.set_metrics(state.metrics.clone());
+
         let router = build_router(state.clone());
 
         // Start the scheduler background task
@@ -278,6 +291,30 @@ impl Server {
             },
         );
 
+        // Initial soul file sync
+        if let Ok(pool) = self.config.pool() {
+            let soul_manager = crate::soul::SoulManager::new(
+                pool.clone(),
+                Some(self.event_stream.clone()),
+                self.config.souls_path.clone(),
+            );
+            if let Err(e) = soul_manager.watch().await {
+                tracing::warn!(error = %e, "Initial soul file sync failed, continuing");
+            }
+        }
+
+        // Start file watcher for automatic soul file sync
+        let soul_watcher_handle = self.config.pool().map_or_else(
+            |_| None,
+            |pool| {
+                Some(crate::soul::start_soul_watcher(
+                    pool.clone(),
+                    self.event_stream.clone(),
+                    self.config.souls_path.clone(),
+                ))
+            },
+        );
+
         let addr = format!("{}:{}", self.config.bind_address, self.config.http_port);
         let listener = TcpListener::bind(&addr).await.map_err(|e| {
             carnelian_common::Error::Connection(format!("Failed to bind to {}: {}", addr, e))
@@ -298,10 +335,14 @@ impl Server {
             .await
             .map_err(|e| carnelian_common::Error::Connection(format!("Server error: {}", e)))?;
 
-        // Stop skill file watcher
+        // Stop file watchers
         if let Some(handle) = skill_watcher_handle {
             handle.abort();
             tracing::debug!("Skill file watcher stopped");
+        }
+        if let Some(handle) = soul_watcher_handle {
+            handle.abort();
+            tracing::debug!("Soul file watcher stopped");
         }
 
         // Stop workers before scheduler shutdown
@@ -362,6 +403,8 @@ fn build_router(state: AppState) -> Router {
         .route("/v1/skills/{skill_id}/enable", post(enable_skill_handler))
         .route("/v1/skills/{skill_id}/disable", post(disable_skill_handler))
         .route("/v1/skills/refresh", post(refresh_skills_handler))
+        // Metrics endpoint
+        .route("/v1/metrics", get(metrics_handler))
         // 10MB request body limit
         .layer(RequestBodyLimitLayer::new(10 * 1024 * 1024))
         // 30-second timeout
@@ -485,6 +528,41 @@ async fn publish_event_handler(
         .publish(EventEnvelope::new(level, event_type, data));
 
     Json(json!({"status": "ok"}))
+}
+
+// =============================================================================
+// METRICS HANDLER
+// =============================================================================
+
+/// Metrics endpoint handler — returns aggregated performance metrics.
+///
+/// Returns task latency percentiles, event throughput, and stream stats.
+async fn metrics_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let event_stats = state.event_stream.stats();
+    let snapshot = state.metrics.get_snapshot(&event_stats);
+
+    // Convert to the common type for serialization
+    let response = carnelian_common::types::MetricsSnapshot {
+        task_latency: carnelian_common::types::LatencyStats {
+            mean_ms: snapshot.task_latency.mean_ms,
+            median_ms: snapshot.task_latency.median_ms,
+            p50_ms: snapshot.task_latency.p50_ms,
+            p95_ms: snapshot.task_latency.p95_ms,
+            p99_ms: snapshot.task_latency.p99_ms,
+            sample_count: snapshot.task_latency.sample_count,
+        },
+        event_throughput_per_sec: snapshot.event_throughput_per_sec,
+        event_stream_buffer_len: snapshot.event_stream_buffer_len,
+        event_stream_buffer_capacity: snapshot.event_stream_buffer_capacity,
+        event_stream_fill_percentage: snapshot.event_stream_fill_percentage,
+        event_stream_total_received: snapshot.event_stream_total_received,
+        event_stream_total_stored: snapshot.event_stream_total_stored,
+        event_stream_subscriber_count: snapshot.event_stream_subscriber_count,
+        render_time_ms: snapshot.render_time_ms,
+        timestamp: snapshot.timestamp,
+    };
+
+    Json(serde_json::to_value(response).unwrap_or_default())
 }
 
 // =============================================================================
