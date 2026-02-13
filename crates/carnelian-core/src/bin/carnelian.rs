@@ -26,7 +26,9 @@ use std::sync::Arc;
 use tokio_tungstenite::tungstenite::protocol::Message;
 use uuid::Uuid;
 
-use carnelian_core::{Config, EventStream, Ledger, PolicyEngine, Scheduler, Server, WorkerManager};
+use carnelian_core::{
+    Config, EventStream, Ledger, ModelRouter, PolicyEngine, Scheduler, Server, WorkerManager,
+};
 
 /// 🔥 Carnelian OS - Local-first AI agent mainframe
 #[derive(Parser)]
@@ -281,6 +283,15 @@ async fn handle_start(
         event_stream.clone(),
     )));
 
+    // Create model router for LLM calls
+    let policy_engine = Arc::new(policy_engine);
+    let model_router = Arc::new(ModelRouter::new(
+        config_arc.pool()?.clone(),
+        config_arc.gateway_url.clone(),
+        policy_engine.clone(),
+        ledger.clone(),
+    ));
+
     // Create scheduler with heartbeat interval from config, worker manager, and config
     let scheduler = Scheduler::new(
         config_arc.pool()?.clone(),
@@ -288,13 +299,15 @@ async fn handle_start(
         Duration::from_millis(config_arc.heartbeat_interval_ms),
         worker_manager.clone(),
         config_arc.clone(),
+        model_router,
+        ledger.clone(),
     );
 
     // Create server
     let server = Server::new(
         config_arc,
         event_stream,
-        Arc::new(policy_engine),
+        policy_engine,
         ledger,
         Arc::new(tokio::sync::Mutex::new(scheduler)),
         worker_manager,

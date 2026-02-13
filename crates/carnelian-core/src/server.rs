@@ -19,7 +19,7 @@ use carnelian_common::types::{
 };
 use futures_util::{SinkExt, StreamExt};
 use http::{Method, header};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -37,6 +37,7 @@ use uuid::Uuid;
 
 use crate::ledger::Ledger;
 use crate::metrics::MetricsCollector;
+use crate::model_router::ModelRouter;
 use crate::worker::WorkerManager;
 use crate::{Config, EventStream, Scheduler, db, policy::PolicyEngine};
 
@@ -67,6 +68,8 @@ pub struct StatusResponse {
 pub struct WorkerInfo {
     /// Worker identifier
     pub id: String,
+    /// Worker runtime type (e.g., "node", "python", "shell")
+    pub runtime: String,
     /// Worker status
     pub status: String,
     /// Currently executing task, if any
@@ -106,6 +109,8 @@ pub struct AppState {
     pub scheduler: Arc<tokio::sync::Mutex<Scheduler>>,
     /// Performance metrics collector
     pub metrics: Arc<MetricsCollector>,
+    /// Model router for LLM completion requests via the gateway
+    pub model_router: Arc<ModelRouter>,
     /// Correlation ID counter for request tracing
     correlation_counter: Arc<AtomicU64>,
 }
@@ -120,6 +125,7 @@ impl AppState {
         ledger: Arc<Ledger>,
         worker_manager: Arc<tokio::sync::Mutex<WorkerManager>>,
         scheduler: Arc<tokio::sync::Mutex<Scheduler>>,
+        model_router: Arc<ModelRouter>,
     ) -> Self {
         Self {
             config,
@@ -129,6 +135,7 @@ impl AppState {
             worker_manager,
             scheduler,
             metrics: Arc::new(MetricsCollector::new()),
+            model_router,
             correlation_counter: Arc::new(AtomicU64::new(0)),
         }
     }
@@ -221,6 +228,19 @@ impl Server {
     where
         F: std::future::Future<Output = ()> + Send + 'static,
     {
+        let model_router = {
+            let pool = self.config.pool().expect("Database pool required for ModelRouter");
+            Arc::new(
+                ModelRouter::new(
+                    pool.clone(),
+                    self.config.gateway_url.clone(),
+                    self.policy_engine.clone(),
+                    self.ledger.clone(),
+                )
+                .with_event_stream(self.event_stream.clone()),
+            )
+        };
+
         let state = AppState::new(
             self.config.clone(),
             self.event_stream.clone(),
@@ -228,6 +248,7 @@ impl Server {
             self.ledger.clone(),
             self.worker_manager.clone(),
             self.scheduler.clone(),
+            model_router,
         );
 
         // Share the metrics collector with the scheduler and event stream
@@ -405,6 +426,8 @@ fn build_router(state: AppState) -> Router {
         .route("/v1/skills/refresh", post(refresh_skills_handler))
         // Metrics endpoint
         .route("/v1/metrics", get(metrics_handler))
+        // Gateway usage ingestion
+        .route("/api/usage", post(ingest_usage_handler))
         // 10MB request body limit
         .layer(RequestBodyLimitLayer::new(10 * 1024 * 1024))
         // 30-second timeout
@@ -1216,6 +1239,157 @@ async fn refresh_skills_handler(State(state): State<AppState>) -> impl IntoRespo
 }
 
 // =============================================================================
+// USAGE INGESTION HANDLER
+// =============================================================================
+
+/// A single usage record sent by the gateway.
+#[derive(Debug, Deserialize)]
+struct UsageRecord {
+    /// Provider name (must match `model_providers.name`).
+    provider: String,
+    /// ISO-8601 timestamp.
+    #[serde(default)]
+    timestamp: Option<String>,
+    /// Model used (deserialized for logging; not stored in `usage_costs`).
+    #[serde(default)]
+    #[allow(dead_code)]
+    model: String,
+    /// Prompt / input tokens.
+    #[serde(default)]
+    tokens_in: i32,
+    /// Completion / output tokens.
+    #[serde(default)]
+    tokens_out: i32,
+    /// Estimated cost in USD.
+    #[serde(default)]
+    estimated_cost: f64,
+    /// Optional correlation ID from the originating request.
+    #[serde(default)]
+    correlation_id: Option<String>,
+}
+
+/// Request body for `POST /api/usage`.
+#[derive(Debug, Deserialize)]
+struct IngestUsageRequest {
+    records: Vec<UsageRecord>,
+}
+
+/// Ingest usage records from the gateway via `POST /api/usage`.
+///
+/// Resolves each record's `provider` name to a `provider_id` in `model_providers`,
+/// then inserts a row into `usage_costs`. Unknown providers are skipped with a warning.
+async fn ingest_usage_handler(
+    State(state): State<AppState>,
+    Json(body): Json<IngestUsageRequest>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "database unavailable"})),
+            )
+                .into_response();
+        }
+    };
+
+    if body.records.is_empty() {
+        return (StatusCode::OK, Json(json!({"inserted": 0}))).into_response();
+    }
+
+    let mut inserted: u64 = 0;
+    let mut skipped: u64 = 0;
+
+    for record in &body.records {
+        // Resolve provider name → provider_id
+        let provider_id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT provider_id FROM model_providers WHERE name = $1 LIMIT 1",
+        )
+        .bind(&record.provider)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
+
+        let Some(provider_id) = provider_id else {
+            tracing::warn!(
+                provider = %record.provider,
+                "Usage record skipped: unknown provider"
+            );
+            skipped += 1;
+            continue;
+        };
+
+        // Parse the optional correlation_id as UUID
+        let correlation_id: Option<Uuid> = record
+            .correlation_id
+            .as_deref()
+            .and_then(|s| s.parse().ok());
+
+        // Parse timestamp or default to now (handled by DB default)
+        let ts: Option<chrono::DateTime<chrono::Utc>> = record
+            .timestamp
+            .as_deref()
+            .and_then(|s| s.parse().ok());
+
+        let result = if let Some(ts) = ts {
+            sqlx::query(
+                r"INSERT INTO usage_costs (provider_id, ts, tokens_in, tokens_out, cost_estimate, correlation_id)
+                  VALUES ($1, $2, $3, $4, $5, $6)",
+            )
+            .bind(provider_id)
+            .bind(ts)
+            .bind(record.tokens_in)
+            .bind(record.tokens_out)
+            .bind(record.estimated_cost)
+            .bind(correlation_id)
+            .execute(pool)
+            .await
+        } else {
+            sqlx::query(
+                r"INSERT INTO usage_costs (provider_id, tokens_in, tokens_out, cost_estimate, correlation_id)
+                  VALUES ($1, $2, $3, $4, $5)",
+            )
+            .bind(provider_id)
+            .bind(record.tokens_in)
+            .bind(record.tokens_out)
+            .bind(record.estimated_cost)
+            .bind(correlation_id)
+            .execute(pool)
+            .await
+        };
+
+        match result {
+            Ok(_) => inserted += 1,
+            Err(e) => {
+                tracing::warn!(
+                    provider = %record.provider,
+                    error = %e,
+                    "Failed to insert usage record"
+                );
+                skipped += 1;
+            }
+        }
+    }
+
+    tracing::debug!(
+        inserted = inserted,
+        skipped = skipped,
+        total = body.records.len(),
+        "Usage ingestion complete"
+    );
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "inserted": inserted,
+            "skipped": skipped,
+        })),
+    )
+        .into_response()
+}
+
+// =============================================================================
 // WEBSOCKET HANDLERS
 // =============================================================================
 
@@ -1369,12 +1543,20 @@ mod tests {
             config.clone(),
             event_stream.clone(),
         )));
+        let model_router = Arc::new(ModelRouter::new(
+            pool.clone(),
+            "http://localhost:18790".to_string(),
+            policy_engine.clone(),
+            ledger.clone(),
+        ));
         let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
             pool.clone(),
             event_stream.clone(),
             Duration::from_secs(3600),
             worker_manager.clone(),
             config.clone(),
+            model_router.clone(),
+            ledger.clone(),
         )));
         AppState::new(
             config,
@@ -1383,6 +1565,7 @@ mod tests {
             ledger,
             worker_manager,
             scheduler,
+            model_router,
         )
     }
 

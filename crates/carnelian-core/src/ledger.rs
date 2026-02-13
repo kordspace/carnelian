@@ -364,6 +364,40 @@ impl Ledger {
         .await
     }
 
+    /// Log a session compaction event to the audit ledger.
+    ///
+    /// Records the trigger reason, full compaction outcome metrics, and
+    /// optional correlation ID for tracing.
+    pub async fn log_session_compaction(
+        &self,
+        session_id: Uuid,
+        agent_id: Uuid,
+        trigger: crate::session::CompactionTrigger,
+        outcome: &crate::session::CompactionOutcome,
+        correlation_id: Option<Uuid>,
+    ) -> Result<i64> {
+        self.append_event(
+            Some(agent_id),
+            "session.compacted",
+            serde_json::json!({
+                "session_id": session_id,
+                "trigger": trigger.to_string(),
+                "tokens_before": outcome.tokens_before,
+                "tokens_after": outcome.tokens_after,
+                "messages_pruned": outcome.messages_pruned,
+                "messages_summarized": outcome.messages_summarized,
+                "memories_flushed": outcome.memories_flushed,
+                "tool_results_trimmed": outcome.tool_results_trimmed,
+                "tool_results_cleared": outcome.tool_results_cleared,
+                "duration_ms": outcome.duration_ms,
+                "nothing_to_store": outcome.nothing_to_store,
+                "flush_failed": outcome.flush_failed,
+            }),
+            correlation_id,
+        )
+        .await
+    }
+
     /// Log a database migration to the audit ledger.
     pub async fn log_migration(&self, migration_version: &str) -> Result<i64> {
         self.append_event(

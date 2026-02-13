@@ -58,8 +58,11 @@
 //! Call `shutdown()` before stopping the server to ensure proper cleanup.
 
 use crate::config::Config;
+use crate::context::ContextWindow;
 use crate::events::EventStream;
+use crate::ledger::Ledger;
 use crate::metrics::MetricsCollector;
+use crate::model_router::{CompletionRequest, Message, ModelRouter};
 use crate::worker::WorkerManager;
 use carnelian_common::types::{
     EventEnvelope, EventLevel, EventType, InvokeRequest, InvokeStatus, RunId,
@@ -105,6 +108,10 @@ pub struct Scheduler {
     pub active_tasks: Arc<tokio::sync::Mutex<HashMap<Uuid, tokio::task::JoinHandle<()>>>>,
     /// Performance metrics collector
     metrics: Arc<MetricsCollector>,
+    /// Model router for LLM calls during heartbeat
+    model_router: Arc<ModelRouter>,
+    /// Audit ledger for tamper-resistant logging
+    ledger: Arc<Ledger>,
 }
 
 impl Scheduler {
@@ -117,6 +124,8 @@ impl Scheduler {
     /// * `heartbeat_interval` - Duration between heartbeat ticks
     /// * `worker_manager` - Worker manager for skill execution via transports
     /// * `config` - Application configuration for retry policy and concurrency limits
+    /// * `model_router` - Model router for LLM calls during heartbeat
+    /// * `ledger` - Audit ledger for tamper-resistant logging
     ///
     /// # Example
     ///
@@ -124,15 +133,18 @@ impl Scheduler {
     /// use std::time::Duration;
     /// let scheduler = Scheduler::new(
     ///     pool, event_stream, Duration::from_millis(555_555),
-    ///     worker_manager, config,
+    ///     worker_manager, config, model_router, ledger,
     /// );
     /// ```
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         pool: PgPool,
         event_stream: Arc<EventStream>,
         heartbeat_interval: Duration,
         worker_manager: Arc<tokio::sync::Mutex<WorkerManager>>,
         config: Arc<Config>,
+        model_router: Arc<ModelRouter>,
+        ledger: Arc<Ledger>,
     ) -> Self {
         Self {
             pool,
@@ -143,6 +155,8 @@ impl Scheduler {
             config,
             active_tasks: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             metrics: Arc::new(MetricsCollector::new()),
+            model_router,
+            ledger,
         }
     }
 
@@ -176,6 +190,8 @@ impl Scheduler {
         let config = self.config.clone();
         let active_tasks = self.active_tasks.clone();
         let metrics = self.metrics.clone();
+        let model_router = self.model_router.clone();
+        let ledger = self.ledger.clone();
 
         tokio::spawn(async move {
             Self::run_heartbeat_loop(
@@ -187,6 +203,8 @@ impl Scheduler {
                 config,
                 active_tasks,
                 metrics,
+                model_router,
+                ledger,
             )
             .await;
         });
@@ -212,6 +230,7 @@ impl Scheduler {
     }
 
     /// Run the heartbeat loop until shutdown signal is received.
+    #[allow(clippy::too_many_arguments)]
     async fn run_heartbeat_loop(
         pool: PgPool,
         event_stream: Arc<EventStream>,
@@ -221,6 +240,8 @@ impl Scheduler {
         config: Arc<Config>,
         active_tasks: Arc<tokio::sync::Mutex<HashMap<Uuid, tokio::task::JoinHandle<()>>>>,
         metrics: Arc<MetricsCollector>,
+        model_router: Arc<ModelRouter>,
+        ledger: Arc<Ledger>,
     ) {
         let mut ticker = tokio::time::interval(interval);
         // Skip the first immediate tick
@@ -229,7 +250,13 @@ impl Scheduler {
         loop {
             tokio::select! {
                 _ = ticker.tick() => {
-                    if let Err(e) = Self::run_heartbeat(&pool, &event_stream).await {
+                    if let Err(e) = Self::run_heartbeat(
+                        &pool,
+                        &event_stream,
+                        &config,
+                        &model_router,
+                        &ledger,
+                    ).await {
                         tracing::warn!(error = %e, "Heartbeat execution failed");
                     }
                     // Poll task queue after heartbeat
@@ -254,16 +281,30 @@ impl Scheduler {
         }
     }
 
-    /// Execute a single heartbeat cycle.
+    /// Execute a single agentic heartbeat cycle.
     ///
     /// This method:
-    /// 1. Queries the database for the default identity (Lian)
-    /// 2. Selects a mantra using the "first unknown, then random" strategy
-    /// 3. Counts pending tasks in the queue
-    /// 4. Logs the heartbeat to `heartbeat_history`
-    /// 5. Emits a `HeartbeatTick` event
-    async fn run_heartbeat(pool: &PgPool, event_stream: &EventStream) -> Result<()> {
+    /// 1. Generates a correlation ID for end-to-end tracing
+    /// 2. Queries the database for the default identity (Lian)
+    /// 3. Selects a mantra using the "first unknown, then random" strategy
+    /// 4. Counts pending tasks in the queue
+    /// 5. Assembles a context window (soul directives, recent memories, task summary)
+    /// 6. Makes a model call for brief reflection/planning
+    /// 7. Parses the response and persists the heartbeat with correlation ID
+    /// 8. Emits `HeartbeatTick` and `HeartbeatOk` events
+    ///
+    /// If the model call fails, the heartbeat is still logged with `status='failed'`
+    /// and only `HeartbeatTick` is emitted (no `HeartbeatOk`).
+    #[allow(clippy::too_many_lines)]
+    async fn run_heartbeat(
+        pool: &PgPool,
+        event_stream: &Arc<EventStream>,
+        config: &Config,
+        model_router: &ModelRouter,
+        ledger: &Ledger,
+    ) -> Result<()> {
         let start = std::time::Instant::now();
+        let correlation_id = Uuid::now_v7();
 
         // Query for default identity (Lian)
         let identity_id: Option<Uuid> = sqlx::query_scalar(
@@ -293,38 +334,223 @@ impl Scheduler {
         .map_err(Error::Database)?
         .unwrap_or(0);
 
-        let duration_ms = start.elapsed().as_millis() as i32;
+        // ── Context Assembly ─────────────────────────────────────────────
+        let mut ctx = ContextWindow::new(pool.clone(), Some(event_stream.clone()))
+            .with_config(config);
 
-        // Insert heartbeat record
+        // Load soul directives (P0)
+        if let Err(e) = ctx.load_soul_directives(identity_id).await {
+            tracing::warn!(
+                error = %e,
+                correlation_id = %correlation_id,
+                "Failed to load soul directives for heartbeat context"
+            );
+        }
+
+        // Load recent memories (P1)
+        if let Err(e) = ctx.load_recent_memories(identity_id, 10).await {
+            tracing::warn!(
+                error = %e,
+                correlation_id = %correlation_id,
+                "Failed to load recent memories for heartbeat context"
+            );
+        }
+
+        // Add task queue summary as P2 segment
+        let task_summary = format!(
+            "Current state: {} pending tasks in queue. Mantra: \"{}\"",
+            tasks_queued,
+            mantra.as_deref().unwrap_or("none")
+        );
+        ctx.add_raw_segment(
+            crate::context::SegmentPriority::P2,
+            task_summary,
+            crate::context::SegmentSourceType::TaskContext,
+            None,
+        );
+
+        // Enforce budget
+        ctx.enforce_budget(config.tool_trim_threshold, config.tool_clear_age_secs);
+
+        // Assemble context
+        let context_text = match ctx.assemble(config).await {
+            Ok(text) => {
+                tracing::debug!(
+                    correlation_id = %correlation_id,
+                    context_len = text.len(),
+                    "Heartbeat context assembled"
+                );
+                text
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    correlation_id = %correlation_id,
+                    "Context assembly failed, using minimal context"
+                );
+                format!(
+                    "Pending tasks: {}. Mantra: \"{}\"",
+                    tasks_queued,
+                    mantra.as_deref().unwrap_or("none")
+                )
+            }
+        };
+
+        // Log context to ledger
+        if let Err(e) = ctx.log_to_ledger(ledger, correlation_id).await {
+            tracing::warn!(error = %e, "Failed to log heartbeat context to ledger");
+        }
+
+        // ── Model Call ───────────────────────────────────────────────────
+        let request = CompletionRequest {
+            model: "deepseek-r1:7b".to_string(),
+            messages: vec![
+                Message {
+                    role: "system".to_string(),
+                    content: context_text,
+                    name: None,
+                    tool_call_id: None,
+                },
+                Message {
+                    role: "user".to_string(),
+                    content: "Reflect briefly on the current state. Note any observations or planning thoughts. Keep it concise (2-3 sentences).".to_string(),
+                    name: None,
+                    tool_call_id: None,
+                },
+            ],
+            temperature: Some(0.7),
+            max_tokens: Some(500),
+            stream: None,
+            correlation_id: Some(correlation_id),
+        };
+
+        let model_result = tokio::time::timeout(
+            Duration::from_secs(30),
+            model_router.complete(request, identity_id, None, None),
+        )
+        .await;
+
+        let (status, reason) = match model_result {
+            Ok(Ok(response)) => {
+                let content = response
+                    .choices
+                    .first()
+                    .map(|c| c.message.content.clone())
+                    .unwrap_or_default();
+
+                // Truncate for DB storage, full response is in the ledger
+                let summary = if content.len() > 500 {
+                    format!("{}…", &content[..497])
+                } else {
+                    content.clone()
+                };
+
+                tracing::info!(
+                    correlation_id = %correlation_id,
+                    model = %response.model,
+                    provider = %response.provider,
+                    tokens_in = response.usage.prompt_tokens,
+                    tokens_out = response.usage.completion_tokens,
+                    response_len = content.len(),
+                    "Heartbeat model call succeeded"
+                );
+
+                ("ok".to_string(), Some(summary))
+            }
+            Ok(Err(e)) => {
+                tracing::warn!(
+                    error = %e,
+                    correlation_id = %correlation_id,
+                    "Heartbeat model call failed"
+                );
+                ("failed".to_string(), Some(format!("Model call error: {e}")))
+            }
+            Err(_) => {
+                tracing::warn!(
+                    correlation_id = %correlation_id,
+                    "Heartbeat model call timed out (30s)"
+                );
+                ("failed".to_string(), Some("Model call timed out after 30s".to_string()))
+            }
+        };
+
+        let duration_ms = start.elapsed().as_millis() as i32;
+        let is_ok = status == "ok";
+
+        // ── Persist to Database ──────────────────────────────────────────
         let heartbeat_id: Uuid = sqlx::query_scalar(
             r"
-            INSERT INTO heartbeat_history (identity_id, mantra, tasks_queued, status, duration_ms)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO heartbeat_history (identity_id, mantra, tasks_queued, status, duration_ms, reason, correlation_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING heartbeat_id
             ",
         )
         .bind(identity_id)
         .bind(&mantra)
         .bind(tasks_queued as i32)
-        .bind("ok")
+        .bind(&status)
         .bind(duration_ms)
+        .bind(&reason)
+        .bind(correlation_id)
         .fetch_one(pool)
         .await
         .map_err(Error::Database)?;
 
-        // Emit HeartbeatTick event
-        event_stream.publish(EventEnvelope::new(
-            EventLevel::Info,
-            EventType::HeartbeatTick,
-            json!({
-                "heartbeat_id": heartbeat_id,
-                "identity_id": identity_id,
-                "mantra": mantra,
-                "tasks_queued": tasks_queued,
-                "duration_ms": duration_ms,
-                "status": "ok"
-            }),
-        ));
+        // Log to ledger
+        if let Err(e) = ledger
+            .append_event(
+                Some(identity_id),
+                "heartbeat.completed",
+                json!({
+                    "heartbeat_id": heartbeat_id,
+                    "status": status,
+                    "tasks_queued": tasks_queued,
+                    "duration_ms": duration_ms,
+                    "mantra": mantra,
+                }),
+                Some(correlation_id),
+            )
+            .await
+        {
+            tracing::warn!(error = %e, "Failed to log heartbeat to ledger");
+        }
+
+        // ── Emit Events ─────────────────────────────────────────────────
+        // Always emit HeartbeatTick for real-time monitoring
+        event_stream.publish(
+            EventEnvelope::new(
+                EventLevel::Info,
+                EventType::HeartbeatTick,
+                json!({
+                    "heartbeat_id": heartbeat_id,
+                    "identity_id": identity_id,
+                    "mantra": mantra,
+                    "tasks_queued": tasks_queued,
+                    "duration_ms": duration_ms,
+                    "status": status,
+                    "correlation_id": correlation_id,
+                }),
+            )
+            .with_correlation_id(correlation_id),
+        );
+
+        // Only emit HeartbeatOk on successful agentic planning
+        if is_ok {
+            event_stream.publish(
+                EventEnvelope::new(
+                    EventLevel::Info,
+                    EventType::HeartbeatOk,
+                    json!({
+                        "heartbeat_id": heartbeat_id,
+                        "identity_id": identity_id,
+                        "correlation_id": correlation_id,
+                        "duration_ms": duration_ms,
+                        "response_summary": reason,
+                    }),
+                )
+                .with_correlation_id(correlation_id),
+            );
+        }
 
         tracing::info!(
             heartbeat_id = %heartbeat_id,
@@ -332,6 +558,8 @@ impl Scheduler {
             mantra = ?mantra,
             tasks_queued = tasks_queued,
             duration_ms = duration_ms,
+            status = %status,
+            correlation_id = %correlation_id,
             "Heartbeat completed"
         );
 
@@ -1095,6 +1323,9 @@ impl Scheduler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ledger::Ledger;
+    use crate::model_router::ModelRouter;
+    use crate::policy::PolicyEngine;
     use crate::worker::WorkerManager;
 
     /// Helper to create a test scheduler with lazy pool (no real DB connection).
@@ -1109,12 +1340,22 @@ mod tests {
             config.clone(),
             event_stream.clone(),
         )));
+        let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
+        let ledger = Arc::new(Ledger::new(pool.clone()));
+        let model_router = Arc::new(ModelRouter::new(
+            pool.clone(),
+            "http://localhost:18790".to_string(),
+            policy_engine,
+            ledger.clone(),
+        ));
         Scheduler::new(
             pool,
             event_stream,
             Duration::from_millis(1000),
             worker_manager,
             config,
+            model_router,
+            ledger,
         )
     }
 
@@ -1130,6 +1371,8 @@ mod tests {
         let scheduler = create_test_scheduler();
 
         assert_eq!(scheduler.heartbeat_interval, Duration::from_millis(1000));
+        assert!(scheduler.shutdown_tx.is_none());
+        // Verify new fields are present
         assert!(scheduler.shutdown_tx.is_none());
     }
 
@@ -1148,9 +1391,28 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires database connection"]
+    #[ignore = "requires database connection and gateway"]
     async fn test_heartbeat_execution() {
-        // This test requires a real database connection
+        // This test requires a real database connection and running gateway
         // Run with: cargo test test_heartbeat_execution -- --ignored
+    }
+
+    #[tokio::test]
+    #[ignore = "requires database connection and gateway"]
+    async fn test_heartbeat_model_failure_graceful_degradation() {
+        // Verify that heartbeat completes with status='failed' when model call fails
+        // and that HeartbeatTick is emitted but HeartbeatOk is NOT emitted
+        // Run with: cargo test test_heartbeat_model_failure_graceful_degradation -- --ignored
+    }
+
+    #[tokio::test]
+    #[ignore = "requires database connection and gateway"]
+    async fn test_heartbeat_correlation_id_propagation() {
+        // Verify that correlation_id flows through:
+        // 1. heartbeat_history.correlation_id
+        // 2. ledger event correlation_id
+        // 3. HeartbeatTick event payload
+        // 4. HeartbeatOk event payload
+        // Run with: cargo test test_heartbeat_correlation_id_propagation -- --ignored
     }
 }

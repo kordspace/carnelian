@@ -1288,6 +1288,7 @@ impl WorkerManager {
             .values()
             .map(|w| WorkerInfo {
                 id: w.id.clone(),
+                runtime: w.runtime.to_string(),
                 status: w.status.to_string(),
                 current_task: w.current_task.map(|t| t.to_string()),
             })
