@@ -12,7 +12,9 @@
 //! Integration tests for the HTTP/WebSocket server
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
-use carnelian_core::{Config, EventStream, Ledger, PolicyEngine, Scheduler, Server, WorkerManager};
+use carnelian_core::{
+    Config, EventStream, Ledger, ModelRouter, PolicyEngine, Scheduler, Server, WorkerManager,
+};
 use futures_util::{SinkExt, StreamExt};
 use memory_stats::memory_stats;
 use serde_json::json;
@@ -67,12 +69,17 @@ fn create_test_scheduler(event_stream: Arc<EventStream>) -> Arc<tokio::sync::Mut
         config.clone(),
         event_stream.clone(),
     )));
+    let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
+    let ledger = Arc::new(Ledger::new(pool.clone()));
+    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine, ledger.clone()));
     Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool,
         event_stream,
         Duration::from_secs(3600),
         worker_manager,
         config,
+        model_router,
+        ledger,
     )))
 }
 
@@ -939,12 +946,15 @@ async fn start_db_backed_server(db_url: &str) -> (u16, tokio::task::JoinHandle<(
         config.clone(),
         event_stream.clone(),
     )));
+    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine.clone(), ledger.clone()));
     let scheduler = Arc::new(tokio::sync::Mutex::new(carnelian_core::Scheduler::new(
         pool.clone(),
         event_stream.clone(),
         Duration::from_secs(3600), // long interval so heartbeats don't fire during test
         worker_manager.clone(),
         config.clone(),
+        model_router,
+        ledger.clone(),
     )));
 
     let server = Server::new(

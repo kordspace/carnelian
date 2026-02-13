@@ -43,7 +43,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
-use carnelian_core::{Config, EventStream, Ledger, PolicyEngine, Scheduler, Server, WorkerManager};
+use carnelian_core::{
+    Config, EventStream, Ledger, ModelRouter, PolicyEngine, Scheduler, Server, WorkerManager,
+};
 use futures_util::StreamExt;
 use memory_stats::memory_stats;
 use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
@@ -77,12 +79,22 @@ fn create_test_scheduler(event_stream: Arc<EventStream>) -> Arc<tokio::sync::Mut
         config.clone(),
         event_stream.clone(),
     )));
+    let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
+    let ledger = Arc::new(Ledger::new(pool.clone()));
+    let model_router = Arc::new(ModelRouter::new(
+        pool.clone(),
+        "http://localhost:18790".to_string(),
+        policy_engine,
+        ledger.clone(),
+    ));
     Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool,
         event_stream,
         Duration::from_secs(3600), // Long interval for tests - won't actually tick
         worker_manager,
         config,
+        model_router,
+        ledger,
     )))
 }
 
@@ -1000,6 +1012,12 @@ async fn test_database_server_startup() {
     let ledger = Arc::new(Ledger::new(pool.clone()));
     let config = Arc::new(config);
     let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
+    let model_router = Arc::new(ModelRouter::new(
+        pool.clone(),
+        "http://localhost:18790".to_string(),
+        policy_engine.clone(),
+        ledger.clone(),
+    ));
 
     // Create Scheduler with the real database pool
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
@@ -1008,6 +1026,8 @@ async fn test_database_server_startup() {
         Duration::from_secs(3600),
         worker_manager.clone(),
         config.clone(),
+        model_router,
+        ledger.clone(),
     )));
 
     let server = Server::new(
@@ -1086,12 +1106,15 @@ async fn test_database_connection_failure() {
     let ledger = Arc::new(Ledger::new(pool.clone()));
     let config = Arc::new(config);
     let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
+    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine.clone(), ledger.clone()));
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool,
         event_stream.clone(),
         Duration::from_secs(3600),
         worker_manager.clone(),
         config.clone(),
+        model_router,
+        ledger.clone(),
     )));
     let server = Server::new(
         config,
@@ -1192,12 +1215,15 @@ async fn test_database_reconnection() {
     let ledger = Arc::new(Ledger::new(pool.clone()));
     let config = Arc::new(config);
     let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
+    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine.clone(), ledger.clone()));
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool.clone(),
         event_stream.clone(),
         Duration::from_secs(3600),
         worker_manager.clone(),
         config.clone(),
+        model_router,
+        ledger.clone(),
     )));
     let server = Server::new(
         config,
@@ -1337,12 +1363,15 @@ async fn test_database_reconnection_under_load() {
     let ledger = Arc::new(Ledger::new(pool.clone()));
     let config = Arc::new(config);
     let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
+    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine.clone(), ledger.clone()));
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool,
         event_stream.clone(),
         Duration::from_secs(3600),
         worker_manager.clone(),
         config.clone(),
+        model_router,
+        ledger.clone(),
     )));
     let server = Server::new(
         config,
@@ -1504,12 +1533,15 @@ async fn test_heartbeat_interval_timing() {
     let heartbeat_interval = Duration::from_millis(2000);
     let config = Arc::new(config);
     let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
+    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine.clone(), ledger.clone()));
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool.clone(),
         event_stream.clone(),
         heartbeat_interval,
         worker_manager.clone(),
         config.clone(),
+        model_router,
+        ledger.clone(),
     )));
 
     let server = Server::new(

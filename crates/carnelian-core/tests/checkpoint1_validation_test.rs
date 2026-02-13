@@ -31,7 +31,8 @@ use std::time::Duration;
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
 use carnelian_core::worker::{ProcessJsonlTransport, WorkerRuntime, WorkerTransport};
 use carnelian_core::{
-    Config, EventStream, Ledger, MetricsCollector, PolicyEngine, Scheduler, Server, WorkerManager,
+    Config, EventStream, Ledger, MetricsCollector, ModelRouter, PolicyEngine, Scheduler, Server,
+    WorkerManager,
 };
 use futures_util::StreamExt;
 use serde_json::json;
@@ -136,12 +137,17 @@ fn create_test_scheduler(event_stream: Arc<EventStream>) -> Arc<tokio::sync::Mut
         config.clone(),
         event_stream.clone(),
     )));
+    let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
+    let ledger = Arc::new(Ledger::new(pool.clone()));
+    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine, ledger.clone()));
     Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool,
         event_stream,
         Duration::from_secs(3600),
         worker_manager,
         config,
+        model_router,
+        ledger,
     )))
 }
 
@@ -337,12 +343,15 @@ async fn start_full_server(db_url: &str) -> (u16, tokio::task::JoinHandle<()>, s
         config.clone(),
         event_stream.clone(),
     )));
+    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine.clone(), ledger.clone()));
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool.clone(),
         event_stream.clone(),
         Duration::from_secs(3600),
         worker_manager.clone(),
         config.clone(),
+        model_router,
+        ledger.clone(),
     )));
 
     let server = Server::new(
@@ -765,12 +774,15 @@ async fn test_criterion3_task_creation_and_execution_lifecycle() {
     assert!(health.healthy, "Mock worker should report healthy");
     drop(test_transport);
 
+    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine.clone(), ledger.clone()));
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool.clone(),
         event_stream.clone(),
         Duration::from_secs(3600),
         worker_manager.clone(),
         config.clone(),
+        model_router,
+        ledger.clone(),
     )));
 
     // Start server
@@ -1368,6 +1380,9 @@ async fn test_criterion6b_task_cancellation_handling() {
         config.clone(),
         event_stream.clone(),
     )));
+    let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
+    let ledger = Arc::new(Ledger::new(pool.clone()));
+    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine, ledger.clone()));
 
     let scheduler = Scheduler::new(
         pool.clone(),
@@ -1375,6 +1390,8 @@ async fn test_criterion6b_task_cancellation_handling() {
         Duration::from_secs(3600),
         worker_manager,
         config,
+        model_router,
+        ledger,
     );
 
     // Insert a pending task

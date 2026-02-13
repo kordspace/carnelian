@@ -28,7 +28,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use carnelian_core::{Config, EventStream, MetricsCollector, Scheduler, WorkerManager};
+use carnelian_core::{
+    Config, EventStream, Ledger, MetricsCollector, ModelRouter, PolicyEngine, Scheduler,
+    WorkerManager,
+};
 use serde_json::json;
 use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
 use uuid::Uuid;
@@ -201,12 +204,17 @@ async fn test_concurrency_limits() {
         event_stream.clone(),
     )));
 
+    let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
+    let ledger = Arc::new(Ledger::new(pool.clone()));
+    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine, ledger.clone()));
     let scheduler = Scheduler::new(
         pool.clone(),
         event_stream,
         Duration::from_secs(3600),
         worker_manager,
         config.clone(),
+        model_router,
+        ledger,
     );
 
     // Insert 5 tasks
@@ -258,12 +266,17 @@ async fn test_retry_policy() {
         event_stream.clone(),
     )));
 
+    let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
+    let ledger = Arc::new(Ledger::new(pool.clone()));
+    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine, ledger.clone()));
     let _scheduler = Scheduler::new(
         pool.clone(),
         event_stream,
         Duration::from_secs(3600),
         worker_manager,
         config.clone(),
+        model_router,
+        ledger,
     );
 
     // Insert a task
@@ -337,12 +350,17 @@ async fn test_task_cancellation() {
         event_stream.clone(),
     )));
 
+    let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
+    let ledger = Arc::new(Ledger::new(pool.clone()));
+    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine, ledger.clone()));
     let scheduler = Scheduler::new(
         pool.clone(),
         event_stream.clone(),
         Duration::from_secs(3600),
         worker_manager,
         config,
+        model_router,
+        ledger,
     );
 
     // Insert a pending task
