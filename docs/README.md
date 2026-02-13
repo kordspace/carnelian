@@ -25,6 +25,7 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for installation and configuration instruct
 | [DOCKER.md](DOCKER.md) | Docker environment and troubleshooting |
 | [BRAND.md](BRAND.md) | 🔥 Dual theme brand kit (Forge / Night Lab) |
 | [LOGGING.md](LOGGING.md) | 🔥 Logging philosophy and conventions |
+| [PHASE3.md](PHASE3.md) | Phase 3 agentic execution engine architecture |
 
 ## Machine Profiles
 

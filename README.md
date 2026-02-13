@@ -24,6 +24,19 @@ See [docs/BRAND.md](docs/BRAND.md) for the complete dual-theme brand kit (Forge/
 
 The core value proposition is reliable AI agent orchestration with strong containment guarantees, local-first execution via Ollama, and tamper-resistant auditability. Carnelian provides a foundation for autonomous task execution with proper resource controls, capability-based security, and event-stream architecture that prevents UI freezes under load.
 
+## Phase Status
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| **Phase 1** | ✅ Complete | Core orchestrator, CLI, HTTP API, scheduler, worker transport, policy engine, ledger |
+| **Phase 2** | ✅ Complete | Skill discovery, XP system, config store, schema refinements |
+| **Phase 3** | ✅ Complete | Agentic execution pipeline — soul management, session lifecycle, memory retrieval, context assembly, model routing, heartbeat agentic turn, compaction pipeline |
+| **Phase 4** | 🔲 Planned | Desktop UI (Dioxus), advanced tool orchestration |
+
+Phase 3 did not introduce new HTTP endpoints; the agentic pipeline is invoked internally by the scheduler and will be exposed via the existing `/v1/events/ws` WebSocket stream in Phase 4.
+
+See [docs/PHASE3.md](docs/PHASE3.md) for the Phase 3 architecture deep-dive.
+
 ## Why 🔥 Carnelian?
 
 **What's Preserved from Thummim:**
@@ -428,6 +441,7 @@ The policy engine (`crates/carnelian-core/src/policy.rs`) and ledger manager (`c
 - **Setup Guide:** [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 - **Docker Guide:** [docs/DOCKER.md](docs/DOCKER.md)
 - **Logging Guide:** [docs/LOGGING.md](docs/LOGGING.md)
+- **Phase 3 Architecture:** [docs/PHASE3.md](docs/PHASE3.md)
 
 Pre-commit hooks (prek) run automatically on commit. CI enforces formatting (rustfmt), linting (clippy), and secret scanning.
 
@@ -459,7 +473,7 @@ Run the local CI script before pushing to catch issues early:
 
 ### Testing
 
-The project has **80+ tests** across 9 test suites:
+The project has **120+ tests** across 10 test suites:
 
 | Suite | Tests | Docker | Description |
 |-------|-------|--------|-------------|
@@ -473,6 +487,7 @@ The project has **80+ tests** across 9 test suites:
 | Scheduler tests | 7 | Yes | Priority scheduling, concurrency, retries |
 | Server tests | 8 | Yes | HTTP API, WebSocket, compression |
 | Worker transport tests | 7 | Yes | JSONL protocol, timeouts, cancellation |
+| Phase 3 agentic tests | 40+ | Mixed | Soul/session/memory/context/compaction/routing/heartbeat/restart |
 
 ```bash
 # Unit tests only (no Docker)
@@ -509,6 +524,8 @@ PostgreSQL 16 with pgvector extension. Schema managed via SQLx migrations in `db
 | `00000000000003_schema_fixes.sql` | Schema refinements (pronouns, subject_id TEXT, LZ4 compression) |
 | `00000000000004_xp_curve_retune.sql` | XP curve rebalancing |
 | `00000000000005_config_store_value_blob.sql` | Config store value column |
+| `00000000000006_memories_created_at_index.sql` | Memory retrieval index |
+| `00000000000007_heartbeat_correlation.sql` | Heartbeat correlation ID tracking |
 
 ## Configuration
 

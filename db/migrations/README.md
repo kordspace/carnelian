@@ -115,6 +115,15 @@ Verification: `Ledger::verify_chain()` replays the entire chain and recomputes h
 
 Note: The ledger and policy engine shipped in Phase 1 (originally planned for Phase 4).
 
+## Phase 3 Migrations
+
+| Migration | Description |
+|-----------|-------------|
+| `00000000000006_memories_created_at_index.sql` | Index on `memories.created_at` for efficient 48-hour window retrieval |
+| `00000000000007_heartbeat_correlation.sql` | Adds `correlation_id` column to `heartbeat_history` for end-to-end tracing |
+
+These migrations support the Phase 3 agentic execution engine. See [docs/PHASE3.md](../../docs/PHASE3.md) for architecture details.
+
 ## Environment Variables
 
 | Variable | Description | Default |
