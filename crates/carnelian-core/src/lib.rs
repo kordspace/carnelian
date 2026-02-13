@@ -82,12 +82,15 @@
 //! tracing::info!("User {} authenticated with action login", id);
 //! ```
 
+pub mod agentic;
 pub mod config;
+pub mod context;
 pub mod db;
 pub mod events;
 pub mod ledger;
 pub mod memory;
 pub mod metrics;
+pub mod model_router;
 pub mod policy;
 pub mod scheduler;
 pub mod server;
@@ -106,9 +109,11 @@ use tracing_subscriber::{
 
 pub use carnelian_common::{Error, Result};
 pub use config::Config;
+pub use context::{ContextProvenance, ContextSegment, ContextWindow, SegmentPriority, SegmentSourceType};
 pub use events::{EventStream, EventStreamStats, PriorityRingBuffer};
 pub use ledger::{Ledger, LedgerEvent};
 pub use memory::{Memory, MemoryManager, MemoryQuery, MemorySource};
+pub use model_router::{CompletionRequest, CompletionResponse, Message, ModelRouter, UsageStats};
 pub use metrics::MetricsCollector;
 pub use policy::{CapabilityGrant, PolicyEngine};
 pub use scheduler::Scheduler;
@@ -117,6 +122,11 @@ pub use session::{Session, SessionKey, SessionManager, SessionMessage, TokenCoun
 pub use skills::{SkillDiscovery, SkillManifest};
 pub use soul::SoulManager;
 pub use worker::WorkerManager;
+pub use agentic::{
+    AgenticEngine, AgenticRequest, AgenticResponse,
+    ToolCall, ToolCallResult, ToolCallStatus,
+    DeclarativePlan, PlanStep, PlanStepResult, PlanStepStatus,
+};
 
 /// Core orchestrator version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

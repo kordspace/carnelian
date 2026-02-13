@@ -26,6 +26,7 @@ ed25519-dalek.workspace = true
 blake3.workspace = true
 hex.workspace = true
 reqwest.workspace = true
+bytes.workspace = true
 tokio-tungstenite.workspace = true
 futures-util.workspace = true
 http.workspace = true
@@ -37,6 +38,7 @@ notify-debouncer-mini.workspace = true
 globset.workspace = true
 pgvector.workspace = true
 async-trait.workspace = true
+tiktoken-rs.workspace = true
 tokio-util.workspace = true
 rand = "0.8"
 

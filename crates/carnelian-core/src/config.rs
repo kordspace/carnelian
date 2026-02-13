@@ -98,10 +98,12 @@ pub struct Config {
     ///
     /// This port serves both HTTP REST API and WebSocket connections.
     /// WebSocket endpoint: ws://host:port/v1/events/ws
-    ///
-    /// Port 18790 is reserved for future LLM Gateway Service.
     #[serde(default = "default_http_port")]
     pub http_port: u16,
+
+    /// URL of the LLM Gateway service (default: "http://localhost:18790")
+    #[serde(default = "default_gateway_url")]
+    pub gateway_url: String,
 
     /// Ollama API endpoint URL
     #[serde(default = "default_ollama_url")]
@@ -191,6 +193,22 @@ pub struct Config {
     #[serde(default)]
     pub session_enable_file_backup: bool,
 
+    /// Default context window tokens (default: 32000)
+    #[serde(default = "default_context_window_tokens")]
+    pub context_window_tokens: usize,
+
+    /// Context budget reserve percentage (default: 10)
+    #[serde(default = "default_context_reserve_percent")]
+    pub context_reserve_percent: u8,
+
+    /// Tool result soft-trim threshold tokens (default: 2000)
+    #[serde(default = "default_tool_trim_threshold")]
+    pub tool_trim_threshold: usize,
+
+    /// Tool result hard-clear age seconds (default: 3600)
+    #[serde(default = "default_tool_clear_age_secs")]
+    pub tool_clear_age_secs: i64,
+
     /// Maximum retry attempts for failed tasks (default: 3)
     #[serde(default = "default_task_max_retry_attempts")]
     pub task_max_retry_attempts: u32,
@@ -253,6 +271,10 @@ fn default_bind_address() -> String {
 
 fn default_http_port() -> u16 {
     18789
+}
+
+fn default_gateway_url() -> String {
+    "http://localhost:18790".to_string()
 }
 
 fn default_ollama_url() -> String {
@@ -327,6 +349,22 @@ fn default_session_expiry_hours() -> u32 {
     24
 }
 
+fn default_context_window_tokens() -> usize {
+    32_000
+}
+
+fn default_context_reserve_percent() -> u8 {
+    10
+}
+
+fn default_tool_trim_threshold() -> usize {
+    2000
+}
+
+fn default_tool_clear_age_secs() -> i64 {
+    3600
+}
+
 /// Machine profile determining resource limits and default model
 ///
 /// # Variants
@@ -365,6 +403,7 @@ impl Default for Config {
             database_url: default_database_url(),
             bind_address: default_bind_address(),
             http_port: default_http_port(),
+            gateway_url: default_gateway_url(),
             ollama_url: default_ollama_url(),
             machine_profile: MachineProfile::default(),
             log_level: default_log_level(),
@@ -387,6 +426,10 @@ impl Default for Config {
             session_default_expiry_hours: default_session_expiry_hours(),
             session_transcripts_path: None,
             session_enable_file_backup: false,
+            context_window_tokens: default_context_window_tokens(),
+            context_reserve_percent: default_context_reserve_percent(),
+            tool_trim_threshold: default_tool_trim_threshold(),
+            tool_clear_age_secs: default_tool_clear_age_secs(),
             task_max_retry_attempts: default_task_max_retry_attempts(),
             task_retry_delay_secs: default_task_retry_delay_secs(),
             db_pool: None,
@@ -499,6 +542,7 @@ impl Config {
     /// # Errors
     ///
     /// Returns an error if an environment variable has an invalid value.
+    #[allow(clippy::too_many_lines)]
     pub fn apply_env_overrides(&mut self) -> Result<()> {
         dotenvy::dotenv().ok();
 
@@ -528,6 +572,10 @@ impl Config {
 
         if let Ok(url) = std::env::var("CARNELIAN_OLLAMA_URL") {
             self.ollama_url = url;
+        }
+
+        if let Ok(url) = std::env::var("CARNELIAN_GATEWAY_URL") {
+            self.gateway_url = url;
         }
 
         if let Ok(path) = std::env::var("CARNELIAN_OWNER_KEYPAIR_PATH") {
@@ -615,6 +663,46 @@ impl Config {
         // SESSION_TRANSCRIPTS_PATH — directory for file-backed session transcripts
         if let Ok(path) = std::env::var("SESSION_TRANSCRIPTS_PATH") {
             self.session_transcripts_path = Some(PathBuf::from(path));
+        }
+
+        // CARNELIAN_CONTEXT_WINDOW_TOKENS — default context window size
+        if let Ok(val) = std::env::var("CARNELIAN_CONTEXT_WINDOW_TOKENS") {
+            self.context_window_tokens = val.parse().map_err(|_| {
+                Error::Config(format!(
+                    "Invalid CARNELIAN_CONTEXT_WINDOW_TOKENS value: {}",
+                    val
+                ))
+            })?;
+        }
+
+        // CARNELIAN_CONTEXT_RESERVE_PERCENT — budget reserve percentage
+        if let Ok(val) = std::env::var("CARNELIAN_CONTEXT_RESERVE_PERCENT") {
+            self.context_reserve_percent = val.parse().map_err(|_| {
+                Error::Config(format!(
+                    "Invalid CARNELIAN_CONTEXT_RESERVE_PERCENT value: {}",
+                    val
+                ))
+            })?;
+        }
+
+        // CARNELIAN_TOOL_TRIM_THRESHOLD — soft-trim threshold for tool results
+        if let Ok(val) = std::env::var("CARNELIAN_TOOL_TRIM_THRESHOLD") {
+            self.tool_trim_threshold = val.parse().map_err(|_| {
+                Error::Config(format!(
+                    "Invalid CARNELIAN_TOOL_TRIM_THRESHOLD value: {}",
+                    val
+                ))
+            })?;
+        }
+
+        // CARNELIAN_TOOL_CLEAR_AGE_SECS — hard-clear age threshold for tool results
+        if let Ok(val) = std::env::var("CARNELIAN_TOOL_CLEAR_AGE_SECS") {
+            self.tool_clear_age_secs = val.parse().map_err(|_| {
+                Error::Config(format!(
+                    "Invalid CARNELIAN_TOOL_CLEAR_AGE_SECS value: {}",
+                    val
+                ))
+            })?;
         }
 
         Ok(())
@@ -712,6 +800,28 @@ impl Config {
             return Err(Error::Config(format!(
                 "event_broadcast_capacity must be between 10 and 10,000, got {}",
                 self.event_broadcast_capacity
+            )));
+        }
+
+        // Context window / compaction validation
+        if self.context_reserve_percent < 1 || self.context_reserve_percent > 50 {
+            return Err(Error::Config(format!(
+                "context_reserve_percent must be between 1 and 50, got {}",
+                self.context_reserve_percent
+            )));
+        }
+
+        if self.tool_trim_threshold == 0 || self.tool_trim_threshold >= self.context_window_tokens {
+            return Err(Error::Config(format!(
+                "tool_trim_threshold must be > 0 and < context_window_tokens ({}), got {}",
+                self.context_window_tokens, self.tool_trim_threshold
+            )));
+        }
+
+        if self.tool_clear_age_secs <= 0 {
+            return Err(Error::Config(format!(
+                "tool_clear_age_secs must be > 0, got {}",
+                self.tool_clear_age_secs
             )));
         }
 

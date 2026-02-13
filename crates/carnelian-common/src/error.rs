@@ -48,6 +48,18 @@ pub enum Error {
 
     #[error("Memory error: {0}")]
     Memory(String),
+
+    #[error("Model routing error: {0}")]
+    ModelRouting(String),
+
+    #[error("Gateway unavailable: {0}")]
+    GatewayUnavailable(String),
+
+    #[error("Budget exceeded: {0}")]
+    BudgetExceeded(String),
+
+    #[error("Agentic error: {0}")]
+    Agentic(String),
 }
 
 impl<T> From<tokio::sync::broadcast::error::SendError<T>> for Error {

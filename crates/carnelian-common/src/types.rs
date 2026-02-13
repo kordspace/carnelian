@@ -168,6 +168,11 @@ pub enum EventType {
     SkillUpdated,
     SkillRemoved,
 
+    // Context assembly
+    ContextAssembled,
+    ContextPruned,
+    ContextBudgetExceeded,
+
     // Soul management
     SoulUpdated,
     SoulLoadFailed,
@@ -178,6 +183,7 @@ pub enum EventType {
     RuntimeShutdown,
     ConfigLoaded,
     HeartbeatTick,
+    HeartbeatOk,
 
     // Custom event type for extensibility
     Custom(String),
