@@ -171,6 +171,49 @@ Phase 3 adds these `Config` fields (all with sensible defaults):
 | `tool_clear_age_secs` | 3600 | Hard-clear age for old tool results |
 | `session_default_expiry_hours` | 24 | Session TTL |
 
+## Context Integrity Auditing
+
+Every model call is preceded by a `"model.context.assembled"` ledger event that records full provenance metadata, creating an auditable chain from context assembly through model response.
+
+### Event Flow
+
+```
+correlation_id = UUID v7
+  ├─ "model.context.assembled"  (context hash, memory IDs, run IDs, message IDs)
+  ├─ "model.call.request"       (model, provider)
+  └─ "model.call.response"      (tokens_in, tokens_out, provider)
+```
+
+### Querying the Audit Trail
+
+```sql
+-- Find all events for a specific model call
+SELECT event_id, action_type, ts, payload_hash
+FROM ledger_events
+WHERE correlation_id = '<correlation_id>'
+ORDER BY event_id ASC;
+```
+
+### Provenance Metadata Structure
+
+The `"model.context.assembled"` event payload contains:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `context_bundle_hash` | string | blake3 hash of concatenated segment contents |
+| `memory_ids` | UUID[] | Memory IDs included in context |
+| `run_ids` | UUID[] | Task run IDs included in context |
+| `message_ids` | i64[] | Session message IDs included in context |
+| `total_tokens` | integer | Estimated token count |
+| `segment_counts` | object | Count of segments by source type |
+| `session_id` | UUID? | Session associated with the context |
+| `task_id` | UUID? | Task associated with the context |
+
+### Call Sites
+
+- **`agentic.rs`**: Calls `ctx.log_to_ledger(&ledger, correlation_id)` after `ctx.assemble()` and before `model_router.complete()`
+- **`scheduler.rs`**: Calls `ctx.log_to_ledger(ledger, correlation_id)` before heartbeat model calls
+
 ## Key Design Decisions
 
 1. **Priority-based context assembly**: Ensures soul directives (P0) are never pruned while tool results (P4) are sacrificed first under budget pressure.
