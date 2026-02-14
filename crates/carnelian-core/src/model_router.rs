@@ -22,6 +22,43 @@
 //!              ├→ usage_costs  (budget check)
 //!              └→ Ledger       (audit trail)
 //! ```
+//!
+//! # Context Integrity
+//!
+//! **Important**: The model router receives pre-assembled messages and does not
+//! perform context assembly itself. Callers **must** log context integrity to the
+//! ledger *before* invoking [`ModelRouter::complete`] or [`ModelRouter::complete_stream`].
+//!
+//! The expected correlation ID flow is:
+//!
+//! 1. **Context assembly**: `ContextWindow::log_to_ledger(&ledger, correlation_id)` logs
+//!    a `"model.context.assembled"` event with full provenance (memory IDs, run IDs,
+//!    message IDs, blake3 hash).
+//! 2. **Model call**: `ModelRouter::complete(request, ...)` logs `"model.call.request"`
+//!    and `"model.call.response"` events with the same `correlation_id`.
+//! 3. **Audit trail**: All three events are linked by `correlation_id`, enabling
+//!    post-hoc verification that the exact context was used for a given model response.
+//!
+//! ## Example
+//!
+//! ```ignore
+//! // 1. Assemble context and log integrity
+//! let assembled = ctx.assemble(&config).await?;
+//! ctx.log_to_ledger(&ledger, correlation_id).await?;
+//!
+//! // 2. Build messages and call model router
+//! let request = CompletionRequest {
+//!     model: "deepseek-r1:7b".to_string(),
+//!     messages,
+//!     correlation_id: Some(correlation_id),
+//!     ..Default::default()
+//! };
+//! let provenance = ctx.compute_provenance();
+//! let response = model_router.complete(request, identity_id, task_id, run_id, Some(&provenance)).await?;
+//!
+//! // Ledger now contains (linked by correlation_id):
+//! //   "model.context.assembled" → "model.call.request" → "model.call.response"
+//! ```
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -35,9 +72,10 @@ use serde_json::{Value as JsonValue, json};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::EventStream;
+use crate::context::ContextProvenance;
 use crate::ledger::Ledger;
 use crate::policy::PolicyEngine;
-use crate::EventStream;
 
 // =============================================================================
 // REQUEST / RESPONSE TYPES
@@ -181,6 +219,8 @@ pub struct ModelRouter {
     policy_engine: Arc<PolicyEngine>,
     ledger: Arc<Ledger>,
     event_stream: Option<Arc<EventStream>>,
+    /// Safe mode guard for blocking remote model calls
+    safe_mode_guard: Option<Arc<crate::safe_mode::SafeModeGuard>>,
 }
 
 impl ModelRouter {
@@ -211,12 +251,19 @@ impl ModelRouter {
             policy_engine,
             ledger,
             event_stream: None,
+            safe_mode_guard: None,
         }
     }
 
     /// Attach an optional event stream for publishing routing events.
     pub fn with_event_stream(mut self, event_stream: Arc<EventStream>) -> Self {
         self.event_stream = Some(event_stream);
+        self
+    }
+
+    /// Attach a safe mode guard for blocking remote model calls.
+    pub fn with_safe_mode_guard(mut self, guard: Arc<crate::safe_mode::SafeModeGuard>) -> Self {
+        self.safe_mode_guard = Some(guard);
         self
     }
 
@@ -239,13 +286,15 @@ impl ModelRouter {
         Ok(rows
             .into_iter()
             .map(
-                |(provider_id, provider_type, name, enabled, config, budget_limits)| ModelProvider {
-                    provider_id,
-                    provider_type,
-                    name,
-                    enabled,
-                    config,
-                    budget_limits,
+                |(provider_id, provider_type, name, enabled, config, budget_limits)| {
+                    ModelProvider {
+                        provider_id,
+                        provider_type,
+                        name,
+                        enabled,
+                        config,
+                        budget_limits,
+                    }
                 },
             )
             .collect())
@@ -357,11 +406,7 @@ impl ModelRouter {
     /// 1. **Local-first** – If a local provider has the model, use it.
     /// 2. **Pattern match** – Route by model name prefix to the canonical remote provider.
     /// 3. **Fallback** – Try any available remote provider with valid capability and budget.
-    async fn select_provider(
-        &self,
-        model: &str,
-        identity_id: Uuid,
-    ) -> Result<ModelProvider> {
+    async fn select_provider(&self, model: &str, identity_id: Uuid) -> Result<ModelProvider> {
         let providers = self.load_providers().await?;
 
         if providers.is_empty() {
@@ -376,11 +421,11 @@ impl ModelRouter {
             .filter(|p| p.provider_type == "local")
             .collect();
 
-        if !local_providers.is_empty() {
-            if let Ok(true) = self.model_available_locally(model).await {
-                // Return the first local provider
-                return Ok(local_providers[0].clone());
-            }
+        if !local_providers.is_empty()
+            && matches!(self.model_available_locally(model).await, Ok(true))
+        {
+            // Return the first local provider
+            return Ok(local_providers[0].clone());
         }
 
         // Step 2: Pattern-match model name to canonical remote provider
@@ -388,7 +433,10 @@ impl ModelRouter {
 
         if let Some(name) = target_name {
             if let Some(provider) = providers.iter().find(|p| p.name == name) {
-                if self.check_provider_capability(provider, identity_id).await? {
+                if self
+                    .check_provider_capability(provider, identity_id)
+                    .await?
+                {
                     if self.check_budget(provider).await? {
                         return Ok(provider.clone());
                     }
@@ -425,10 +473,7 @@ impl ModelRouter {
         let lower = model.to_lowercase();
         if lower.starts_with("claude") {
             Some("anthropic")
-        } else if lower.starts_with("gpt-")
-            || lower.starts_with("o1")
-            || lower.starts_with("o3")
-        {
+        } else if lower.starts_with("gpt-") || lower.starts_with("o1") || lower.starts_with("o3") {
             Some("openai")
         } else if lower.starts_with("accounts/fireworks") {
             Some("fireworks")
@@ -484,6 +529,10 @@ impl ModelRouter {
     /// * `identity_id` – Identity performing the request (for capability checks).
     /// * `task_id` – Optional task association for usage tracking.
     /// * `run_id` – Optional run association for usage tracking.
+    /// * `provenance` – Optional context provenance from `ContextWindow::compute_provenance()`.
+    ///   When provided, a `model.context.assembled` ledger event is emitted **before**
+    ///   the `model.call.request` event, ensuring the correlation chain is
+    ///   context → call → response.
     ///
     /// # Errors
     ///
@@ -496,12 +545,53 @@ impl ModelRouter {
         identity_id: Uuid,
         task_id: Option<Uuid>,
         run_id: Option<Uuid>,
+        provenance: Option<&ContextProvenance>,
     ) -> Result<CompletionResponse> {
         let correlation_id = request.correlation_id.unwrap_or_else(Uuid::now_v7);
         request.correlation_id = Some(correlation_id);
 
         // Select provider (capability + budget checks)
         let provider = self.select_provider(&request.model, identity_id).await?;
+
+        // Block remote model calls when safe mode is active
+        if provider.provider_type == "remote" {
+            if let Some(ref guard) = self.safe_mode_guard {
+                guard.check_or_block("remote_model_call").await?;
+            }
+        }
+
+        // Audit: log context integrity (before model call)
+        if let Some(prov) = provenance {
+            if let Err(e) = self
+                .ledger
+                .append_event(
+                    None,
+                    "model.context.assembled",
+                    json!({
+                        "action": "model.context.assembled",
+                        "context_bundle_hash": prov.context_bundle_hash,
+                        "total_tokens": prov.total_tokens,
+                        "segment_counts": prov.segment_counts,
+                        "memory_ids": prov.memory_ids,
+                        "run_ids": prov.run_ids,
+                        "message_ids": prov.message_ids,
+                    }),
+                    Some(correlation_id),
+                    None,
+                    Some(json!({
+                        "context_bundle_hash": prov.context_bundle_hash,
+                        "memory_ids": prov.memory_ids,
+                        "run_ids": prov.run_ids,
+                        "message_ids": prov.message_ids,
+                        "total_tokens": prov.total_tokens,
+                        "segment_counts": prov.segment_counts,
+                    })),
+                )
+                .await
+            {
+                tracing::warn!(error = %e, "Failed to log context integrity to ledger");
+            }
+        }
 
         // Audit: log request
         if let Err(e) = self
@@ -515,6 +605,8 @@ impl ModelRouter {
                     "correlation_id": correlation_id,
                 }),
                 Some(correlation_id),
+                None,
+                None,
             )
             .await
         {
@@ -576,6 +668,8 @@ impl ModelRouter {
                     "correlation_id": correlation_id,
                 }),
                 Some(correlation_id),
+                None,
+                None,
             )
             .await
         {
@@ -609,6 +703,7 @@ impl ModelRouter {
         identity_id: Uuid,
         task_id: Option<Uuid>,
         run_id: Option<Uuid>,
+        provenance: Option<&ContextProvenance>,
     ) -> Result<impl Stream<Item = Result<CompletionChunk>>> {
         let correlation_id = request.correlation_id.unwrap_or_else(Uuid::now_v7);
         request.correlation_id = Some(correlation_id);
@@ -616,6 +711,46 @@ impl ModelRouter {
 
         // Select provider (capability + budget checks)
         let provider = self.select_provider(&request.model, identity_id).await?;
+
+        // Block remote model calls when safe mode is active
+        if provider.provider_type == "remote" {
+            if let Some(ref guard) = self.safe_mode_guard {
+                guard.check_or_block("remote_model_call").await?;
+            }
+        }
+
+        // Audit: log context integrity (before model call)
+        if let Some(prov) = provenance {
+            if let Err(e) = self
+                .ledger
+                .append_event(
+                    None,
+                    "model.context.assembled",
+                    json!({
+                        "action": "model.context.assembled",
+                        "context_bundle_hash": prov.context_bundle_hash,
+                        "total_tokens": prov.total_tokens,
+                        "segment_counts": prov.segment_counts,
+                        "memory_ids": prov.memory_ids,
+                        "run_ids": prov.run_ids,
+                        "message_ids": prov.message_ids,
+                    }),
+                    Some(correlation_id),
+                    None,
+                    Some(json!({
+                        "context_bundle_hash": prov.context_bundle_hash,
+                        "memory_ids": prov.memory_ids,
+                        "run_ids": prov.run_ids,
+                        "message_ids": prov.message_ids,
+                        "total_tokens": prov.total_tokens,
+                        "segment_counts": prov.segment_counts,
+                    })),
+                )
+                .await
+            {
+                tracing::warn!(error = %e, "Failed to log context integrity to ledger");
+            }
+        }
 
         // Audit: log request
         if let Err(e) = self
@@ -629,6 +764,8 @@ impl ModelRouter {
                     "correlation_id": correlation_id,
                 }),
                 Some(correlation_id),
+                None,
+                None,
             )
             .await
         {
@@ -644,7 +781,9 @@ impl ModelRouter {
             .timeout(Duration::from_secs(300))
             .send()
             .await
-            .map_err(|e| Error::GatewayUnavailable(format!("Gateway stream request failed: {e}")))?;
+            .map_err(|e| {
+                Error::GatewayUnavailable(format!("Gateway stream request failed: {e}"))
+            })?;
 
         if !resp.status().is_success() {
             let status = resp.status();
@@ -671,72 +810,75 @@ impl ModelRouter {
         // Accumulate content for usage estimation after stream ends
         let sse_stream = SseParser::new(byte_stream, prompt_chars);
 
-        let mapped = sse_stream.then(move |chunk_result| {
-            let model = model.clone();
-            let provider_name = provider_name.clone();
-            let pool = pool.clone();
-            let ledger = ledger.clone();
-            async move {
-                match chunk_result {
-                    Ok(SseEvent::Chunk(chunk)) => Ok(chunk),
-                    Ok(SseEvent::Done {
-                        total_content,
-                        model: _,
-                        prompt_chars,
-                    }) => {
-                        // Stream finished — persist estimated usage
-                        let est_prompt = (prompt_chars as i32 + 3) / 4;
-                        let est_completion = (total_content.len() as i32 + 3) / 4;
-                        let usage = UsageStats {
-                            prompt_tokens: est_prompt,
-                            completion_tokens: est_completion,
-                            total_tokens: est_prompt + est_completion,
-                        };
-                        let cost = Self::estimate_cost(&provider_name, &usage);
+        let mapped = sse_stream
+            .then(move |chunk_result| {
+                let model = model.clone();
+                let provider_name = provider_name.clone();
+                let pool = pool.clone();
+                let ledger = ledger.clone();
+                async move {
+                    match chunk_result {
+                        Ok(SseEvent::Chunk(chunk)) => Ok(chunk),
+                        Ok(SseEvent::Done {
+                            total_content,
+                            model: _,
+                            prompt_chars,
+                        }) => {
+                            // Stream finished — persist estimated usage
+                            let est_prompt = (prompt_chars as i32 + 3) / 4;
+                            let est_completion = (total_content.len() as i32 + 3) / 4;
+                            let usage = UsageStats {
+                                prompt_tokens: est_prompt,
+                                completion_tokens: est_completion,
+                                total_tokens: est_prompt + est_completion,
+                            };
+                            let cost = Self::estimate_cost(&provider_name, &usage);
 
-                        // Best-effort persist
-                        let _ = Self::persist_usage_static(
-                            &pool,
-                            &provider_name,
-                            &model,
-                            &usage,
-                            cost,
-                            task_id,
-                            run_id,
-                            Some(correlation_id),
-                        )
-                        .await;
-
-                        // Best-effort ledger
-                        let _ = ledger
-                            .append_event(
-                                Some(identity_id),
-                                "model.call.stream_response",
-                                json!({
-                                    "model": model,
-                                    "provider": provider_name,
-                                    "est_tokens_in": est_prompt,
-                                    "est_tokens_out": est_completion,
-                                    "correlation_id": correlation_id,
-                                }),
+                            // Best-effort persist
+                            let _ = Self::persist_usage_static(
+                                &pool,
+                                &provider_name,
+                                &model,
+                                &usage,
+                                cost,
+                                task_id,
+                                run_id,
                                 Some(correlation_id),
                             )
                             .await;
 
-                        // Return a synthetic final chunk so the caller knows the stream ended
-                        Err(Error::ModelRouting("stream_done".to_string()))
+                            // Best-effort ledger
+                            let _ = ledger
+                                .append_event(
+                                    Some(identity_id),
+                                    "model.call.stream_response",
+                                    json!({
+                                        "model": model,
+                                        "provider": provider_name,
+                                        "est_tokens_in": est_prompt,
+                                        "est_tokens_out": est_completion,
+                                        "correlation_id": correlation_id,
+                                    }),
+                                    Some(correlation_id),
+                                    None,
+                                    None,
+                                )
+                                .await;
+
+                            // Return a synthetic final chunk so the caller knows the stream ended
+                            Err(Error::ModelRouting("stream_done".to_string()))
+                        }
+                        Err(e) => Err(e),
                     }
-                    Err(e) => Err(e),
                 }
-            }
-        })
-        // Filter out the synthetic "stream_done" sentinel
-        .filter_map(|r| async move {
-            match r {
-                Err(ref e) if e.to_string().contains("stream_done") => None,
-                other => Some(other),
-            }
-        });
+            })
+            // Filter out the synthetic "stream_done" sentinel
+            .filter_map(|r| async move {
+                match r {
+                    Err(ref e) if e.to_string().contains("stream_done") => None,
+                    other => Some(other),
+                }
+            });
 
         Ok(mapped)
     }
@@ -782,16 +924,17 @@ impl ModelRouter {
         correlation_id: Option<Uuid>,
     ) -> Result<Uuid> {
         // Resolve provider_id
-        let provider_id: Option<Uuid> = sqlx::query_scalar(
-            "SELECT provider_id FROM model_providers WHERE name = $1 LIMIT 1",
-        )
-        .bind(provider_name)
-        .fetch_optional(pool)
-        .await
-        .map_err(Error::Database)?;
+        let provider_id: Option<Uuid> =
+            sqlx::query_scalar("SELECT provider_id FROM model_providers WHERE name = $1 LIMIT 1")
+                .bind(provider_name)
+                .fetch_optional(pool)
+                .await
+                .map_err(Error::Database)?;
 
         let provider_id = provider_id.ok_or_else(|| {
-            Error::ModelRouting(format!("Unknown provider '{provider_name}' for usage persistence"))
+            Error::ModelRouting(format!(
+                "Unknown provider '{provider_name}' for usage persistence"
+            ))
         })?;
 
         let usage_id: Uuid = sqlx::query_scalar(
@@ -829,10 +972,10 @@ impl ModelRouter {
     /// provider's billing; this is for budget enforcement only.
     fn estimate_cost(provider_name: &str, usage: &UsageStats) -> f64 {
         let (input_per_m, output_per_m) = match provider_name {
-            "openai" => (2.50, 10.00),       // GPT-4o approximate
-            "anthropic" => (3.00, 15.00),     // Claude 3.5 Sonnet approximate
-            "fireworks" => (0.20, 0.20),      // Fireworks serverless approximate
-            _ => (0.0, 0.0),                  // Local (Ollama) — free
+            "openai" => (2.50, 10.00),    // GPT-4o approximate
+            "anthropic" => (3.00, 15.00), // Claude 3.5 Sonnet approximate
+            "fireworks" => (0.20, 0.20),  // Fireworks serverless approximate
+            _ => (0.0, 0.0),              // Local (Ollama) — free
         };
 
         let input_cost = f64::from(usage.prompt_tokens) * input_per_m / 1_000_000.0;
@@ -933,13 +1076,12 @@ where
             // Need more data from the underlying stream
             match std::pin::Pin::new(&mut this.inner).poll_next(cx) {
                 std::task::Poll::Ready(Some(Ok(bytes))) => {
-                    this.buffer
-                        .push_str(&String::from_utf8_lossy(&bytes));
+                    this.buffer.push_str(&String::from_utf8_lossy(&bytes));
                 }
                 std::task::Poll::Ready(Some(Err(e))) => {
-                    return std::task::Poll::Ready(Some(Err(Error::GatewayUnavailable(
-                        format!("SSE stream error: {e}"),
-                    ))));
+                    return std::task::Poll::Ready(Some(Err(Error::GatewayUnavailable(format!(
+                        "SSE stream error: {e}"
+                    )))));
                 }
                 std::task::Poll::Ready(None) => {
                     // Stream ended without [DONE] — emit Done with what we have
@@ -973,15 +1115,27 @@ mod tests {
 
     #[test]
     fn test_match_provider_name_claude() {
-        assert_eq!(ModelRouter::match_provider_name("claude-3-5-sonnet-20241022"), Some("anthropic"));
-        assert_eq!(ModelRouter::match_provider_name("Claude-3-Opus"), Some("anthropic"));
+        assert_eq!(
+            ModelRouter::match_provider_name("claude-3-5-sonnet-20241022"),
+            Some("anthropic")
+        );
+        assert_eq!(
+            ModelRouter::match_provider_name("Claude-3-Opus"),
+            Some("anthropic")
+        );
     }
 
     #[test]
     fn test_match_provider_name_openai() {
         assert_eq!(ModelRouter::match_provider_name("gpt-4o"), Some("openai"));
-        assert_eq!(ModelRouter::match_provider_name("gpt-4o-mini"), Some("openai"));
-        assert_eq!(ModelRouter::match_provider_name("o1-preview"), Some("openai"));
+        assert_eq!(
+            ModelRouter::match_provider_name("gpt-4o-mini"),
+            Some("openai")
+        );
+        assert_eq!(
+            ModelRouter::match_provider_name("o1-preview"),
+            Some("openai")
+        );
         assert_eq!(ModelRouter::match_provider_name("o3-mini"), Some("openai"));
     }
 

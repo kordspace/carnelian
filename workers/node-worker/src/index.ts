@@ -8,6 +8,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { JsonLinesReader, JsonLinesWriter } from "./protocol.js";
 import { SkillLoader } from "./loader.js";
 import { SandboxExecutor } from "./sandbox.js";
@@ -140,10 +141,16 @@ function handleCancel(_messageId: string, request: CancelRequest): void {
 }
 
 /**
- * Handle a Health message: report worker status.
+ * Handle a Health message: report worker status with attestation data.
  */
 function handleHealth(messageId: string): void {
   const uptimeSecs = Math.floor((Date.now() - startTime) / 1000);
+
+  const attestation = {
+    last_ledger_head: process.env.CARNELIAN_LEDGER_HEAD ?? "genesis",
+    build_checksum: computeBuildChecksum(),
+    config_version: process.env.CARNELIAN_CONFIG_VERSION ?? "v1",
+  };
 
   writer.write({
     type: "HealthResult",
@@ -152,8 +159,27 @@ function handleHealth(messageId: string): void {
       healthy: !shuttingDown,
       worker_id: `node-worker-${process.pid}`,
       uptime_secs: uptimeSecs,
+      attestation,
     },
   });
+}
+
+/** Compute build checksum for this worker.
+ *  Uses CARNELIAN_BUILD_CHECKSUM env var if set (provided by orchestrator),
+ *  otherwise falls back to reading package.json version. */
+function computeBuildChecksum(): string {
+  const envChecksum = process.env.CARNELIAN_BUILD_CHECKSUM;
+  if (envChecksum) {
+    return envChecksum;
+  }
+  try {
+    const packageJson = JSON.parse(
+      readFileSync(new URL("../package.json", import.meta.url), "utf-8")
+    );
+    return `v${packageJson.version}`;
+  } catch {
+    return `v${VERSION}`;
+  }
 }
 
 // =============================================================================

@@ -653,10 +653,7 @@ impl Config {
         // SESSION_EXPIRY_HOURS — default session TTL in hours (0 = never)
         if let Ok(val) = std::env::var("SESSION_EXPIRY_HOURS") {
             self.session_default_expiry_hours = val.parse().map_err(|_| {
-                Error::Config(format!(
-                    "Invalid SESSION_EXPIRY_HOURS value: {}",
-                    val
-                ))
+                Error::Config(format!("Invalid SESSION_EXPIRY_HOURS value: {}", val))
             })?;
         }
 
@@ -885,10 +882,18 @@ impl Config {
         Ok(())
     }
 
-    /// Load owner keypair from database config_store table.
+    /// Load owner keypair from database `config_store` table.
     ///
     /// This should be called after database connection is established.
     /// Looks for key `owner_keypair` in the `config_store` table.
+    ///
+    /// For non-encrypted keys, delegates to [`crypto::load_keypair_from_db`]
+    /// which reads the raw 32-byte seed directly. Encrypted keys are decrypted
+    /// in-place using `CARNELIAN_KEYPAIR_PASSPHRASE` before parsing.
+    ///
+    /// If no keypair is found in the database (and none was loaded from file),
+    /// a new keypair is generated and persisted automatically so that the owner
+    /// key is always available after first-run initialization.
     ///
     /// # Errors
     ///
@@ -899,40 +904,61 @@ impl Config {
         }
 
         let pool = match self.pool() {
-            Ok(p) => p,
+            Ok(p) => p.clone(),
             Err(_) => {
-                tracing::warn!(
-                    "Owner keypair not configured. Some features requiring signed authority will be unavailable."
-                );
+                tracing::warn!("Database not connected; cannot load or generate owner keypair.");
                 return Ok(());
             }
         };
 
-        // Query config_store for owner_keypair
-        let row: Option<(Vec<u8>, bool)> = sqlx::query_as(
-            "SELECT value_blob, encrypted FROM config_store WHERE key = 'owner_keypair'",
-        )
-        .fetch_optional(pool)
-        .await
-        .map_err(|e| Error::Database(e))?;
+        // Check if the stored keypair is encrypted — if so, use the decrypt path
+        let encrypted_flag: Option<bool> =
+            sqlx::query_scalar("SELECT encrypted FROM config_store WHERE key = 'owner_keypair'")
+                .fetch_optional(&pool)
+                .await
+                .map_err(Error::Database)?;
 
-        if let Some((key_data, encrypted)) = row {
-            let key_bytes = if encrypted {
-                // Decrypt using passphrase from environment
-                Self::decrypt_keypair(&key_data)?
-            } else {
-                key_data
-            };
+        match encrypted_flag {
+            Some(true) => {
+                // Encrypted path: fetch blob, decrypt, parse
+                let (key_data,): (Vec<u8>,) = sqlx::query_as(
+                    "SELECT value_blob FROM config_store WHERE key = 'owner_keypair'",
+                )
+                .fetch_one(&pool)
+                .await
+                .map_err(Error::Database)?;
 
-            if let Some(signing_key) = Self::parse_ed25519_key(&key_bytes)? {
-                let verifying_key = signing_key.verifying_key();
-                self.owner_public_key = Some(hex::encode(verifying_key.as_bytes()));
-                self.owner_signing_key = Some(signing_key);
-
+                let key_bytes = Self::decrypt_keypair(&key_data)?;
+                if let Some(signing_key) = Self::parse_ed25519_key(&key_bytes)? {
+                    let public_hex = crate::crypto::public_key_from_signing_key(&signing_key);
+                    tracing::info!(
+                        public_key = %public_hex,
+                        "Owner keypair loaded from database (encrypted)"
+                    );
+                    self.owner_public_key = Some(public_hex);
+                    self.owner_signing_key = Some(signing_key);
+                    return Ok(());
+                }
+            }
+            Some(false) => {
+                // Non-encrypted path: delegate to crypto module
+                if let Some(signing_key) = crate::crypto::load_keypair_from_db(&pool).await? {
+                    let public_hex = crate::crypto::public_key_from_signing_key(&signing_key);
+                    tracing::info!(
+                        public_key = %public_hex,
+                        "Owner keypair loaded from database"
+                    );
+                    self.owner_public_key = Some(public_hex);
+                    self.owner_signing_key = Some(signing_key);
+                    return Ok(());
+                }
+            }
+            None => {
+                // No keypair row exists — generate and store on first run
                 tracing::info!(
-                    "Owner keypair loaded from database. Public key: {}",
-                    self.owner_public_key.as_ref().unwrap()
+                    "No owner keypair found in file or database; generating new keypair on first run"
                 );
+                self.generate_and_store_owner_keypair(None).await?;
                 return Ok(());
             }
         }
@@ -1070,6 +1096,65 @@ impl Config {
         self.owner_signing_key.is_some()
     }
 
+    /// Get a reference to the owner signing key, if loaded.
+    #[must_use]
+    pub fn owner_signing_key(&self) -> Option<&SigningKey> {
+        self.owner_signing_key.as_ref()
+    }
+
+    /// Generate a new Ed25519 owner keypair, store it in the database, and
+    /// update the in-memory config fields.
+    ///
+    /// This is intended for first-run initialization when no keypair exists.
+    /// The keypair is stored unencrypted by default; set `CARNELIAN_KEYPAIR_PASSPHRASE`
+    /// and use the encrypted path for production deployments.
+    ///
+    /// If a `ledger` is provided, a `"keypair.generated"` event is logged.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database pool is not connected or the store fails.
+    pub async fn generate_and_store_owner_keypair(
+        &mut self,
+        ledger: Option<&crate::ledger::Ledger>,
+    ) -> Result<()> {
+        let pool = self.pool()?.clone();
+
+        let (signing_key, _verifying_key) = crate::crypto::generate_ed25519_keypair();
+        crate::crypto::store_keypair_in_db(&pool, &signing_key, false).await?;
+
+        let public_hex = crate::crypto::public_key_from_signing_key(&signing_key);
+        tracing::info!(
+            public_key = %public_hex,
+            "Generated and stored new owner keypair"
+        );
+
+        self.owner_public_key = Some(public_hex);
+        self.owner_signing_key = Some(signing_key);
+
+        // Log keypair generation to ledger (not a privileged action itself,
+        // but useful for audit trail)
+        if let Some(ledger) = ledger {
+            if let Err(e) = ledger
+                .append_event(
+                    None,
+                    "keypair.generated",
+                    serde_json::json!({
+                        "public_key": self.owner_public_key,
+                    }),
+                    None,
+                    None,
+                    None,
+                )
+                .await
+            {
+                tracing::warn!(error = %e, "Failed to log keypair generation to ledger");
+            }
+        }
+
+        Ok(())
+    }
+
     /// Sign a message with the owner's Ed25519 key.
     ///
     /// # Arguments
@@ -1192,6 +1277,281 @@ impl Config {
     #[must_use]
     pub const fn is_connected(&self) -> bool {
         self.db_pool.is_some()
+    }
+
+    /// Read a config value from `config_store`, transparently decrypting if needed.
+    ///
+    /// Fetches `encrypted`, `value_blob`, `value_text`, and `key_version` for the
+    /// given key. When `encrypted` is `true`, decrypts `value_blob` using the
+    /// provided `EncryptionHelper` and parses the result as JSON. When `false`,
+    /// parses `value_text` as JSON. Returns `Ok(None)` if the key does not exist.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Database connection pool
+    /// * `config_key` - The config key to look up
+    /// * `encryption_helper` - Optional helper for decrypting encrypted entries
+    ///
+    /// # Returns
+    ///
+    /// `(serde_json::Value, key_version)` on success, or `None` if the key is absent.
+    pub async fn read_config_value(
+        pool: &PgPool,
+        config_key: &str,
+        encryption_helper: Option<&crate::encryption::EncryptionHelper>,
+    ) -> Result<Option<(serde_json::Value, i32)>> {
+        let row: Option<(bool, Option<Vec<u8>>, Option<String>, i32)> = sqlx::query_as(
+            "SELECT encrypted, value_blob, value_text, key_version FROM config_store WHERE key = $1",
+        )
+        .bind(config_key)
+        .fetch_optional(pool)
+        .await
+        .map_err(Error::Database)?;
+
+        let Some((encrypted, value_blob, value_text, key_version)) = row else {
+            return Ok(None);
+        };
+
+        let json_str = if encrypted {
+            // Encrypted path: decrypt value_blob
+            let blob = value_blob.ok_or_else(|| {
+                Error::Config(format!(
+                    "Config key '{}' is marked encrypted but value_blob is NULL",
+                    config_key
+                ))
+            })?;
+            let helper = encryption_helper.ok_or_else(|| {
+                Error::Config(format!(
+                    "Config key '{}' is encrypted but no EncryptionHelper provided",
+                    config_key
+                ))
+            })?;
+            helper.decrypt_text(&blob).await?
+        } else {
+            // Plaintext path: use value_text
+            value_text.ok_or_else(|| {
+                Error::Config(format!(
+                    "Config key '{}' has encrypted=false but value_text is NULL",
+                    config_key
+                ))
+            })?
+        };
+
+        let parsed: serde_json::Value = serde_json::from_str(&json_str).map_err(|e| {
+            Error::Config(format!(
+                "Config key '{}': failed to parse JSON: {}",
+                config_key, e
+            ))
+        })?;
+
+        Ok(Some((parsed, key_version)))
+    }
+
+    /// Update a value in the `config_store` table.
+    ///
+    /// When an `approval_queue` is provided, the change is queued for approval
+    /// and `Error::ApprovalRequired` is returned with the approval ID. When
+    /// `None`, the change is applied immediately and logged to the ledger.
+    pub async fn update_config_value(
+        pool: &PgPool,
+        config_key: &str,
+        old_value: Option<&serde_json::Value>,
+        new_value: &serde_json::Value,
+        requested_by: Option<uuid::Uuid>,
+        ledger: Option<&crate::ledger::Ledger>,
+        owner_signing_key: Option<&ed25519_dalek::SigningKey>,
+        approval_queue: Option<&crate::approvals::ApprovalQueue>,
+    ) -> Result<()> {
+        Self::update_config_value_encrypted(
+            pool,
+            config_key,
+            old_value,
+            new_value,
+            requested_by,
+            ledger,
+            owner_signing_key,
+            approval_queue,
+            None,
+            1,
+        )
+        .await
+    }
+
+    /// Update a value in the `config_store` table with optional encryption.
+    ///
+    /// When `encryption_helper` is `Some`, the serialized value is encrypted
+    /// and stored in `value_blob` with `encrypted=true` and the supplied
+    /// `key_version`. When `None`, behaves identically to `update_config_value`.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_version` - Version of the encryption key used. Callers performing
+    ///   key rotation should increment this value. Defaults to `1` when called
+    ///   via `update_config_value`.
+    pub async fn update_config_value_encrypted(
+        pool: &PgPool,
+        config_key: &str,
+        old_value: Option<&serde_json::Value>,
+        new_value: &serde_json::Value,
+        requested_by: Option<uuid::Uuid>,
+        ledger: Option<&crate::ledger::Ledger>,
+        owner_signing_key: Option<&ed25519_dalek::SigningKey>,
+        approval_queue: Option<&crate::approvals::ApprovalQueue>,
+        encryption_helper: Option<&crate::encryption::EncryptionHelper>,
+        key_version: i32,
+    ) -> Result<()> {
+        if let Some(queue) = approval_queue {
+            let correlation_id = Some(uuid::Uuid::now_v7());
+            let approval_id = Self::queue_config_change(
+                queue,
+                config_key,
+                old_value,
+                new_value,
+                requested_by,
+                correlation_id,
+            )
+            .await?;
+            return Err(Error::ApprovalRequired(approval_id));
+        }
+
+        // Direct write — no approval required
+        let value_text = serde_json::to_string(new_value)
+            .map_err(|e| Error::Config(format!("Failed to serialize config value: {}", e)))?;
+
+        if let Some(helper) = encryption_helper {
+            // Encrypted path: encrypt value_text into value_blob
+            let encrypted_blob = helper.encrypt_text(&value_text).await?;
+            sqlx::query(
+                r"INSERT INTO config_store (key, value_text, value_blob, encrypted, key_version, updated_at)
+                  VALUES ($1, NULL, $2, true, $3, NOW())
+                  ON CONFLICT (key) DO UPDATE SET value_text = NULL, value_blob = $2, encrypted = true, key_version = $3, updated_at = NOW()",
+            )
+            .bind(config_key)
+            .bind(&encrypted_blob)
+            .bind(key_version)
+            .execute(pool)
+            .await
+            .map_err(Error::Database)?;
+        } else {
+            // Plaintext path — still persist key_version for consistency
+            sqlx::query(
+                r"INSERT INTO config_store (key, value_text, key_version, updated_at)
+                  VALUES ($1, $2, $3, NOW())
+                  ON CONFLICT (key) DO UPDATE SET value_text = $2, key_version = $3, updated_at = NOW()",
+            )
+            .bind(config_key)
+            .bind(&value_text)
+            .bind(key_version)
+            .execute(pool)
+            .await
+            .map_err(Error::Database)?;
+        }
+
+        tracing::info!(
+            config_key = %config_key,
+            encrypted = encryption_helper.is_some(),
+            key_version = key_version,
+            "Config value updated"
+        );
+
+        if let Some(ledger) = ledger {
+            if let Err(e) = ledger
+                .log_config_change(
+                    config_key,
+                    old_value,
+                    new_value,
+                    requested_by,
+                    owner_signing_key,
+                )
+                .await
+            {
+                tracing::warn!(error = %e, "Failed to log config change to ledger");
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Queue a config change for approval before execution.
+    ///
+    /// Creates an approval request containing the config key, old value, and
+    /// new value. Returns the approval ID for tracking.
+    pub async fn queue_config_change(
+        approval_queue: &crate::approvals::ApprovalQueue,
+        config_key: &str,
+        old_value: Option<&serde_json::Value>,
+        new_value: &serde_json::Value,
+        requested_by: Option<uuid::Uuid>,
+        correlation_id: Option<uuid::Uuid>,
+    ) -> Result<uuid::Uuid> {
+        let payload = serde_json::json!({
+            "config_key": config_key,
+            "old_value": old_value,
+            "new_value": new_value,
+        });
+        approval_queue
+            .queue_action("config.change", payload, requested_by, correlation_id)
+            .await
+    }
+
+    /// Execute a previously approved config change.
+    ///
+    /// Fetches the approval request, verifies it is approved, extracts the
+    /// config key and new value, updates `config_store`, and logs to the ledger.
+    pub async fn execute_approved_config_change(
+        pool: &PgPool,
+        approval_id: uuid::Uuid,
+        approval_queue: &crate::approvals::ApprovalQueue,
+        ledger: &crate::ledger::Ledger,
+        owner_signing_key: Option<&ed25519_dalek::SigningKey>,
+    ) -> Result<()> {
+        let request = approval_queue.get(approval_id).await?.ok_or_else(|| {
+            Error::Security(format!("Approval request not found: {}", approval_id))
+        })?;
+
+        if request.status != "approved" {
+            return Err(Error::Security(format!(
+                "Approval request {} is not approved (status: {})",
+                approval_id, request.status
+            )));
+        }
+
+        let payload = &request.payload;
+        let config_key = payload["config_key"]
+            .as_str()
+            .ok_or_else(|| Error::Security("Missing config_key in approval payload".to_string()))?;
+        let new_value = &payload["new_value"];
+
+        // Serialize new_value to string for config_store
+        let value_text = serde_json::to_string(new_value)
+            .map_err(|e| Error::Config(format!("Failed to serialize config value: {}", e)))?;
+
+        sqlx::query(
+            r"INSERT INTO config_store (key, value_text, updated_at)
+              VALUES ($1, $2, NOW())
+              ON CONFLICT (key) DO UPDATE SET value_text = $2, updated_at = NOW()",
+        )
+        .bind(config_key)
+        .bind(&value_text)
+        .execute(pool)
+        .await
+        .map_err(Error::Database)?;
+
+        tracing::info!(
+            config_key = %config_key,
+            approval_id = %approval_id,
+            "Approved config change applied"
+        );
+
+        let old_value = payload
+            .get("old_value")
+            .and_then(|v| if v.is_null() { None } else { Some(v) });
+
+        ledger
+            .log_config_change(config_key, old_value, new_value, None, owner_signing_key)
+            .await?;
+
+        Ok(())
     }
 }
 

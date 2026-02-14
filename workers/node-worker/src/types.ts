@@ -82,6 +82,16 @@ export interface StreamEvent {
 // HEALTH CHECK
 // =============================================================================
 
+/** Attestation data reported by a worker during health checks */
+export interface WorkerAttestationData {
+  /** blake3 hash of the most recent ledger event the worker has seen */
+  last_ledger_head: string;
+  /** Hash of the worker binary/script */
+  build_checksum: string;
+  /** Configuration state identifier */
+  config_version: string;
+}
+
 /** Health check response from a worker transport */
 export interface HealthResponse {
   /** Whether the worker is healthy */
@@ -90,6 +100,8 @@ export interface HealthResponse {
   worker_id: string;
   /** Uptime in seconds */
   uptime_secs: number;
+  /** Attestation data (optional) */
+  attestation?: WorkerAttestationData;
 }
 
 // =============================================================================

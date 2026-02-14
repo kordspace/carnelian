@@ -112,6 +112,8 @@ pub struct Scheduler {
     model_router: Arc<ModelRouter>,
     /// Audit ledger for tamper-resistant logging
     ledger: Arc<Ledger>,
+    /// Safe mode guard for blocking side-effect operations
+    safe_mode_guard: Arc<crate::safe_mode::SafeModeGuard>,
 }
 
 impl Scheduler {
@@ -145,6 +147,7 @@ impl Scheduler {
         config: Arc<Config>,
         model_router: Arc<ModelRouter>,
         ledger: Arc<Ledger>,
+        safe_mode_guard: Arc<crate::safe_mode::SafeModeGuard>,
     ) -> Self {
         Self {
             pool,
@@ -157,6 +160,7 @@ impl Scheduler {
             metrics: Arc::new(MetricsCollector::new()),
             model_router,
             ledger,
+            safe_mode_guard,
         }
     }
 
@@ -192,6 +196,7 @@ impl Scheduler {
         let metrics = self.metrics.clone();
         let model_router = self.model_router.clone();
         let ledger = self.ledger.clone();
+        let safe_mode_guard = self.safe_mode_guard.clone();
 
         tokio::spawn(async move {
             Self::run_heartbeat_loop(
@@ -205,6 +210,7 @@ impl Scheduler {
                 metrics,
                 model_router,
                 ledger,
+                safe_mode_guard,
             )
             .await;
         });
@@ -242,6 +248,7 @@ impl Scheduler {
         metrics: Arc<MetricsCollector>,
         model_router: Arc<ModelRouter>,
         ledger: Arc<Ledger>,
+        safe_mode_guard: Arc<crate::safe_mode::SafeModeGuard>,
     ) {
         let mut ticker = tokio::time::interval(interval);
         // Skip the first immediate tick
@@ -267,6 +274,7 @@ impl Scheduler {
                         &config,
                         &active_tasks,
                         &metrics,
+                        &safe_mode_guard,
                     ).await {
                         tracing::warn!(error = %e, "Task queue polling failed");
                     }
@@ -335,8 +343,8 @@ impl Scheduler {
         .unwrap_or(0);
 
         // ── Context Assembly ─────────────────────────────────────────────
-        let mut ctx = ContextWindow::new(pool.clone(), Some(event_stream.clone()))
-            .with_config(config);
+        let mut ctx =
+            ContextWindow::new(pool.clone(), Some(event_stream.clone())).with_config(config);
 
         // Load soul directives (P0)
         if let Err(e) = ctx.load_soul_directives(identity_id).await {
@@ -426,7 +434,7 @@ impl Scheduler {
 
         let model_result = tokio::time::timeout(
             Duration::from_secs(30),
-            model_router.complete(request, identity_id, None, None),
+            model_router.complete(request, identity_id, None, None, None),
         )
         .await;
 
@@ -470,7 +478,10 @@ impl Scheduler {
                     correlation_id = %correlation_id,
                     "Heartbeat model call timed out (30s)"
                 );
-                ("failed".to_string(), Some("Model call timed out after 30s".to_string()))
+                (
+                    "failed".to_string(),
+                    Some("Model call timed out after 30s".to_string()),
+                )
             }
         };
 
@@ -509,6 +520,8 @@ impl Scheduler {
                     "mantra": mantra,
                 }),
                 Some(correlation_id),
+                None,
+                None,
             )
             .await
         {
@@ -618,7 +631,14 @@ impl Scheduler {
         config: &Arc<Config>,
         active_tasks: &Arc<tokio::sync::Mutex<HashMap<Uuid, tokio::task::JoinHandle<()>>>>,
         metrics: &Arc<MetricsCollector>,
+        safe_mode_guard: &Arc<crate::safe_mode::SafeModeGuard>,
     ) -> Result<()> {
+        // If safe mode is active, skip dequeuing entirely — tasks stay pending
+        if safe_mode_guard.is_enabled().await.unwrap_or(false) {
+            tracing::debug!("Safe mode active, skipping task dequeue");
+            return Ok(());
+        }
+
         // Check concurrency: count active tasks
         let active_count = active_tasks.lock().await.len();
         let max_workers = config.machine_config().max_workers as usize;
@@ -664,6 +684,7 @@ impl Scheduler {
             let config = config.clone();
             let active_tasks_clone = active_tasks.clone();
             let metrics = metrics.clone();
+            let safe_mode_guard = safe_mode_guard.clone();
 
             let handle = tokio::spawn(async move {
                 if let Err(e) = Self::execute_task(
@@ -675,21 +696,32 @@ impl Scheduler {
                     &config,
                     &active_tasks_clone,
                     &metrics,
+                    &safe_mode_guard,
                 )
                 .await
                 {
-                    tracing::error!(
-                        task_id = %task_id,
-                        error = %e,
-                        "Task execution failed with unhandled error"
-                    );
-                    // Ensure task is marked as failed on unhandled errors
-                    let _ = sqlx::query(
-                        r"UPDATE tasks SET state = 'failed', updated_at = NOW() WHERE task_id = $1",
-                    )
-                    .bind(task_id)
-                    .execute(&pool)
-                    .await;
+                    // If safe mode blocked the operation, leave the task in its
+                    // current state (pending) so it can be retried once safe mode
+                    // is disabled.  Do NOT mark it as failed.
+                    if matches!(e, Error::SafeModeActive(_)) {
+                        tracing::warn!(
+                            task_id = %task_id,
+                            "Task execution blocked by safe mode, leaving task pending"
+                        );
+                    } else {
+                        tracing::error!(
+                            task_id = %task_id,
+                            error = %e,
+                            "Task execution failed with unhandled error"
+                        );
+                        // Ensure task is marked as failed on unhandled errors
+                        let _ = sqlx::query(
+                            r"UPDATE tasks SET state = 'failed', updated_at = NOW() WHERE task_id = $1",
+                        )
+                        .bind(task_id)
+                        .execute(&pool)
+                        .await;
+                    }
                 }
 
                 // Remove from active_tasks on completion
@@ -726,7 +758,13 @@ impl Scheduler {
         config: &Arc<Config>,
         active_tasks: &Arc<tokio::sync::Mutex<HashMap<Uuid, tokio::task::JoinHandle<()>>>>,
         metrics: &Arc<MetricsCollector>,
+        safe_mode_guard: &Arc<crate::safe_mode::SafeModeGuard>,
     ) -> Result<()> {
+        // Safe mode is checked in poll_task_queue before dequeuing, but
+        // re-check here as a defence-in-depth measure in case the flag was
+        // toggled between dequeue and execution.
+        safe_mode_guard.check_or_block("task_execution").await?;
+
         let exec_start = std::time::Instant::now();
 
         // Update task state to 'running'
@@ -847,13 +885,22 @@ impl Scheduler {
 
         let input = task_description.map_or_else(|| json!({}), |desc| json!({"description": desc}));
 
-        // Get a running worker's transport
+        // Get a running, non-quarantined worker's transport
         let transport = {
             let wm = worker_manager.lock().await;
             let workers = wm.get_worker_status().await;
             let mut found_transport = None;
             for w in &workers {
                 if w.status == "running" {
+                    // Skip quarantined workers
+                    if !wm.can_assign_task(&w.id).await.unwrap_or(false) {
+                        tracing::debug!(
+                            worker_id = %w.id,
+                            task_id = %task_id,
+                            "Skipping quarantined worker for task assignment"
+                        );
+                        continue;
+                    }
                     match wm.get_transport(&w.id).await {
                         Ok(t) => {
                             found_transport = Some(t);
@@ -1348,6 +1395,10 @@ mod tests {
             policy_engine,
             ledger.clone(),
         ));
+        let safe_mode_guard = Arc::new(crate::safe_mode::SafeModeGuard::new(
+            pool.clone(),
+            ledger.clone(),
+        ));
         Scheduler::new(
             pool,
             event_stream,
@@ -1356,6 +1407,7 @@ mod tests {
             config,
             model_router,
             ledger,
+            safe_mode_guard,
         )
     }
 

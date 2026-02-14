@@ -7,12 +7,14 @@
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
 use carnelian_common::{Error, Result};
 use chrono::{DateTime, Utc};
+use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value as JsonValue, json};
 use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
 use crate::EventStream;
+use crate::approvals::ApprovalQueue;
 use crate::ledger::Ledger;
 
 /// Represents a capability grant from the database
@@ -104,7 +106,11 @@ impl PolicyEngine {
         Ok(granted)
     }
 
-    /// Grant a capability to a subject
+    /// Grant a capability to a subject.
+    ///
+    /// If an `approval_queue` is provided, the action is queued for approval
+    /// instead of being executed immediately. Returns `Error::ApprovalRequired`
+    /// with the approval ID so the caller can track the request.
     ///
     /// Returns the generated `grant_id` UUID on success.
     pub async fn grant_capability(
@@ -118,7 +124,27 @@ impl PolicyEngine {
         expires_at: Option<DateTime<Utc>>,
         event_stream: Option<&EventStream>,
         ledger: Option<&Ledger>,
+        owner_signing_key: Option<&SigningKey>,
+        approval_queue: Option<&ApprovalQueue>,
     ) -> Result<Uuid> {
+        // If approval queue is provided, queue instead of executing
+        if let Some(queue) = approval_queue {
+            let payload = json!({
+                "subject_type": subject_type,
+                "subject_id": subject_id,
+                "capability_key": capability_key,
+                "scope": scope,
+                "constraints": constraints,
+                "approved_by": approved_by,
+                "expires_at": expires_at,
+            });
+            let correlation_id = Some(Uuid::now_v7());
+            let approval_id = queue
+                .queue_action("capability.grant", payload, approved_by, correlation_id)
+                .await?;
+            return Err(Error::ApprovalRequired(approval_id));
+        }
+
         let grant_id: Uuid = sqlx::query_scalar::<_, Uuid>(
             r"
             INSERT INTO capability_grants 
@@ -176,6 +202,7 @@ impl PolicyEngine {
                     subject_id,
                     capability_key,
                     approved_by,
+                    owner_signing_key,
                 )
                 .await
             {
@@ -186,7 +213,11 @@ impl PolicyEngine {
         Ok(grant_id)
     }
 
-    /// Revoke a capability grant
+    /// Revoke a capability grant.
+    ///
+    /// If an `approval_queue` is provided, the action is queued for approval
+    /// instead of being executed immediately. Returns `Error::ApprovalRequired`
+    /// with the approval ID.
     ///
     /// Returns `Ok(true)` if a grant was deleted, `Ok(false)` if the grant_id didn't exist.
     pub async fn revoke_capability(
@@ -195,7 +226,22 @@ impl PolicyEngine {
         revoked_by: Option<Uuid>,
         event_stream: Option<&EventStream>,
         ledger: Option<&Ledger>,
+        owner_signing_key: Option<&SigningKey>,
+        approval_queue: Option<&ApprovalQueue>,
     ) -> Result<bool> {
+        // If approval queue is provided, queue instead of executing
+        if let Some(queue) = approval_queue {
+            let payload = json!({
+                "grant_id": grant_id,
+                "revoked_by": revoked_by,
+            });
+            let correlation_id = Some(Uuid::now_v7());
+            let approval_id = queue
+                .queue_action("capability.revoke", payload, revoked_by, correlation_id)
+                .await?;
+            return Err(Error::ApprovalRequired(approval_id));
+        }
+
         let result = sqlx::query!(
             r#"DELETE FROM capability_grants WHERE grant_id = $1"#,
             grant_id,
@@ -222,7 +268,10 @@ impl PolicyEngine {
         // Log to audit ledger
         if revoked {
             if let Some(ledger) = ledger {
-                if let Err(e) = ledger.log_capability_revoke(grant_id, revoked_by).await {
+                if let Err(e) = ledger
+                    .log_capability_revoke(grant_id, revoked_by, owner_signing_key)
+                    .await
+                {
                     tracing::warn!(error = %e, "Failed to log capability revoke to ledger");
                 }
             }
@@ -262,6 +311,114 @@ impl PolicyEngine {
         .map_err(Error::Database)?;
 
         Ok(rows)
+    }
+
+    /// Execute a previously approved capability grant.
+    ///
+    /// Fetches the approval request, verifies it is approved, extracts the
+    /// payload fields, and executes the original grant logic.
+    pub async fn execute_approved_grant(
+        &self,
+        approval_id: Uuid,
+        approval_queue: &ApprovalQueue,
+        event_stream: Option<&EventStream>,
+        ledger: Option<&Ledger>,
+        owner_signing_key: Option<&SigningKey>,
+    ) -> Result<Uuid> {
+        let request = approval_queue.get(approval_id).await?.ok_or_else(|| {
+            Error::Security(format!("Approval request not found: {}", approval_id))
+        })?;
+
+        if request.status != "approved" {
+            return Err(Error::Security(format!(
+                "Approval request {} is not approved (status: {})",
+                approval_id, request.status
+            )));
+        }
+
+        let payload = &request.payload;
+        let subject_type = payload["subject_type"].as_str().ok_or_else(|| {
+            Error::Security("Missing subject_type in approval payload".to_string())
+        })?;
+        let subject_id = payload["subject_id"]
+            .as_str()
+            .ok_or_else(|| Error::Security("Missing subject_id in approval payload".to_string()))?;
+        let capability_key = payload["capability_key"].as_str().ok_or_else(|| {
+            Error::Security("Missing capability_key in approval payload".to_string())
+        })?;
+        let scope = payload
+            .get("scope")
+            .and_then(|v| if v.is_null() { None } else { Some(v.clone()) });
+        let constraints = payload
+            .get("constraints")
+            .and_then(|v| if v.is_null() { None } else { Some(v.clone()) });
+        let approved_by = payload["approved_by"]
+            .as_str()
+            .and_then(|s| Uuid::parse_str(s).ok());
+        let expires_at = payload["expires_at"]
+            .as_str()
+            .and_then(|s| s.parse::<DateTime<Utc>>().ok());
+
+        // Execute without approval_queue to avoid recursion
+        self.grant_capability(
+            subject_type,
+            subject_id,
+            capability_key,
+            scope,
+            constraints,
+            approved_by,
+            expires_at,
+            event_stream,
+            ledger,
+            owner_signing_key,
+            None,
+        )
+        .await
+    }
+
+    /// Execute a previously approved capability revocation.
+    ///
+    /// Fetches the approval request, verifies it is approved, extracts the
+    /// grant_id, and executes the original revoke logic.
+    pub async fn execute_approved_revoke(
+        &self,
+        approval_id: Uuid,
+        approval_queue: &ApprovalQueue,
+        event_stream: Option<&EventStream>,
+        ledger: Option<&Ledger>,
+        owner_signing_key: Option<&SigningKey>,
+    ) -> Result<bool> {
+        let request = approval_queue.get(approval_id).await?.ok_or_else(|| {
+            Error::Security(format!("Approval request not found: {}", approval_id))
+        })?;
+
+        if request.status != "approved" {
+            return Err(Error::Security(format!(
+                "Approval request {} is not approved (status: {})",
+                approval_id, request.status
+            )));
+        }
+
+        let payload = &request.payload;
+        let grant_id_str = payload["grant_id"]
+            .as_str()
+            .ok_or_else(|| Error::Security("Missing grant_id in approval payload".to_string()))?;
+        let grant_id = Uuid::parse_str(grant_id_str)
+            .map_err(|e| Error::Security(format!("Invalid grant_id in approval payload: {}", e)))?;
+        let revoked_by = payload["revoked_by"]
+            .as_str()
+            .and_then(|s| Uuid::parse_str(s).ok());
+
+        // Execute without approval_queue to avoid recursion
+        self.revoke_capability(
+            grant_id,
+            revoked_by,
+            event_stream,
+            ledger,
+            owner_signing_key,
+            None,
+        )
+        .await
     }
 
     /// Check if an identity can execute a task with a specific skill
@@ -383,6 +540,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .expect("Grant should succeed");
@@ -396,7 +555,7 @@ mod tests {
 
         // Revoke and verify
         let revoked = engine
-            .revoke_capability(grant_id, None, None, None)
+            .revoke_capability(grant_id, None, None, None, None, None)
             .await
             .expect("Revoke should not error");
         assert!(revoked, "Should have revoked the grant");
@@ -434,6 +593,8 @@ mod tests {
                 None,
                 None,
                 Some(past),
+                None,
+                None,
                 None,
                 None,
             )
@@ -474,6 +635,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .expect("Grant should succeed");
@@ -482,6 +645,8 @@ mod tests {
                 "identity",
                 &subject_id,
                 "fs.write",
+                None,
+                None,
                 None,
                 None,
                 None,

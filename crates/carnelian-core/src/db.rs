@@ -4,9 +4,11 @@
 //! and reconnection logic with exponential backoff.
 
 use carnelian_common::{Error, Result};
+use serde_json::json;
 use sqlx::PgPool;
 use std::time::Duration;
 use tokio::time::sleep;
+use uuid::Uuid;
 
 /// Re-export PgPool for convenience
 pub use sqlx::PgPool as Pool;
@@ -138,26 +140,184 @@ pub async fn ensure_database_connection(config: &mut crate::config::Config) -> R
 ///
 /// Applies all pending migrations from the `db/migrations` directory.
 ///
+/// When an `approval_queue` is provided, pending migrations are **not** executed
+/// directly. Instead the latest pending version is queued for approval and
+/// `Error::ApprovalRequired` is returned so the caller can track the request.
+/// Pass `None` to run migrations immediately (original behaviour).
+///
 /// # Arguments
 /// * `pool` - Reference to the database connection pool
+/// * `approval_queue` - Optional approval queue; when `Some`, migrations require approval
 ///
 /// # Returns
-/// * `Ok(())` if migrations complete successfully
+/// * `Ok(())` if migrations complete successfully (or no pending migrations)
+/// * `Err(Error::ApprovalRequired(id))` if migrations were queued for approval
 /// * `Err` if migration fails
-///
-/// # Example
-/// ```ignore
-/// run_migrations(&pool).await?;
-/// ```
-pub async fn run_migrations(pool: &PgPool) -> Result<()> {
+pub async fn run_migrations(
+    pool: &PgPool,
+    approval_queue: Option<&crate::approvals::ApprovalQueue>,
+) -> Result<()> {
+    let migrator = sqlx::migrate!("../../db/migrations");
+
+    if let Some(queue) = approval_queue {
+        // Determine pending migrations
+        let applied_versions: std::collections::HashSet<i64> =
+            sqlx::query_scalar("SELECT version FROM _sqlx_migrations")
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .collect();
+
+        let latest_pending = migrator
+            .iter()
+            .filter(|m| !m.migration_type.is_down_migration())
+            .filter(|m| !applied_versions.contains(&m.version))
+            .map(|m| m.version)
+            .max();
+
+        if let Some(version) = latest_pending {
+            let approval_id = queue_migration(queue, &version.to_string(), None).await?;
+            return Err(carnelian_common::Error::ApprovalRequired(approval_id));
+        }
+
+        // No pending migrations — nothing to approve
+        tracing::info!("No pending migrations, database is up to date");
+        return Ok(());
+    }
+
     tracing::info!(
         migrations_path = "db/migrations",
         "Running database migrations"
     );
 
-    sqlx::migrate!("../../db/migrations").run(pool).await?;
+    migrator.run(pool).await?;
 
     tracing::info!("Database migrations completed successfully");
+    Ok(())
+}
+
+/// Queue a database migration for approval before execution.
+///
+/// Creates an approval request containing the migration version string.
+/// Returns the approval ID for tracking.
+pub async fn queue_migration(
+    approval_queue: &crate::approvals::ApprovalQueue,
+    migration_version: &str,
+    correlation_id: Option<Uuid>,
+) -> Result<Uuid> {
+    let payload = json!({
+        "migration_version": migration_version,
+    });
+    approval_queue
+        .queue_action("db.migration", payload, None, correlation_id)
+        .await
+}
+
+/// Execute a previously approved database migration.
+///
+/// Fetches the approval request, verifies it is approved, parses the
+/// approved `migration_version` as an `i64`, validates that no pending
+/// migration exceeds the approved version, and runs migrations only up
+/// to that version using `Migrator::run_to`. Logs exactly the approved
+/// version to the ledger on success.
+pub async fn execute_approved_migration(
+    pool: &PgPool,
+    approval_id: Uuid,
+    approval_queue: &crate::approvals::ApprovalQueue,
+    ledger: &crate::ledger::Ledger,
+    owner_signing_key: Option<&ed25519_dalek::SigningKey>,
+) -> Result<()> {
+    let request = approval_queue
+        .get(approval_id)
+        .await?
+        .ok_or_else(|| Error::Security(format!("Approval request not found: {}", approval_id)))?;
+
+    if request.status != "approved" {
+        return Err(Error::Security(format!(
+            "Approval request {} is not approved (status: {})",
+            approval_id, request.status
+        )));
+    }
+
+    let payload = &request.payload;
+    let migration_version_str = payload["migration_version"].as_str().ok_or_else(|| {
+        Error::Security("Missing migration_version in approval payload".to_string())
+    })?;
+
+    let approved_version: i64 = migration_version_str.parse().map_err(|e| {
+        Error::Security(format!(
+            "Invalid migration_version '{}': {}",
+            migration_version_str, e
+        ))
+    })?;
+
+    let migrator = sqlx::migrate!("../../db/migrations");
+
+    // Collect applied versions from the database
+    let applied_versions: std::collections::HashSet<i64> =
+        sqlx::query_scalar("SELECT version FROM _sqlx_migrations")
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
+
+    // Determine pending migrations
+    let pending: Vec<_> = migrator
+        .iter()
+        .filter(|m| !m.migration_type.is_down_migration())
+        .filter(|m| !applied_versions.contains(&m.version))
+        .collect();
+
+    // Verify no pending migration exceeds the approved version
+    for m in &pending {
+        if m.version > approved_version {
+            return Err(Error::Security(format!(
+                "Pending migration V{} ('{}') exceeds approved version V{}; \
+                 queue a separate approval for that version",
+                m.version, m.description, approved_version
+            )));
+        }
+    }
+
+    // Build a filtered migrator containing only migrations up to the approved version.
+    // The Migrator fields are doc(hidden) but pub for macro use; this is the only way
+    // to construct a version-bounded migrator in sqlx 0.8.x which lacks run_to().
+    let filtered_migrations: Vec<_> = migrator
+        .iter()
+        .filter(|m| m.version <= approved_version)
+        .cloned()
+        .collect();
+
+    let filtered_migrator = sqlx::migrate::Migrator {
+        migrations: std::borrow::Cow::Owned(filtered_migrations),
+        ignore_missing: migrator.ignore_missing,
+        locking: migrator.locking,
+        no_tx: migrator.no_tx,
+    };
+
+    tracing::info!(
+        approved_version = approved_version,
+        pending_count = pending.len(),
+        "Running approved migrations up to version"
+    );
+
+    filtered_migrator
+        .run(pool)
+        .await
+        .map_err(|e| Error::Migration(e))?;
+
+    tracing::info!(
+        migration_version = %migration_version_str,
+        approval_id = %approval_id,
+        "Approved migration executed"
+    );
+
+    ledger
+        .log_migration(migration_version_str, owner_signing_key)
+        .await?;
+
     Ok(())
 }
 

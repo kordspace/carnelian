@@ -98,15 +98,15 @@ use tokio::io::AsyncWriteExt;
 
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value as JsonValue};
+use serde_json::{Value as JsonValue, json};
 use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
-use carnelian_common::{Error, Result};
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
+use carnelian_common::{Error, Result};
 
 use crate::config::Config;
-use crate::context::{estimate_tokens, ContextWindow};
+use crate::context::{ContextWindow, estimate_tokens};
 use crate::events::EventStream;
 use crate::ledger::Ledger;
 use crate::memory::{MemoryManager, MemorySource};
@@ -190,18 +190,14 @@ impl FromStr for SessionKey {
 
         let channel = parts[2].to_string();
         if channel.is_empty() {
-            return Err(Error::Session(
-                "Empty channel in session key".to_string(),
-            ));
+            return Err(Error::Session("Empty channel in session key".to_string()));
         }
 
         // Optional group: parts[3] == "group", parts[4] == id
         let group_id = if parts.len() >= 5 && parts[3] == "group" {
             let gid = parts[4..].join(":");
             if gid.is_empty() {
-                return Err(Error::Session(
-                    "Empty group ID in session key".to_string(),
-                ));
+                return Err(Error::Session("Empty group ID in session key".to_string()));
             }
             Some(gid)
         } else if parts.len() > 3 && parts[3] != "group" {
@@ -342,8 +338,7 @@ impl Session {
     /// Returns true if this session has expired.
     #[must_use]
     pub fn is_expired(&self) -> bool {
-        self.expires_at
-            .is_some_and(|exp| exp < Utc::now())
+        self.expires_at.is_some_and(|exp| exp < Utc::now())
     }
 
     /// Returns true if the session should be compacted based on token usage.
@@ -523,6 +518,8 @@ pub struct SessionManager {
     transcripts_path: Option<PathBuf>,
     /// Default session expiry in hours (0 = never expires)
     default_expiry_hours: u32,
+    /// Safe mode guard for blocking filesystem writes
+    safe_mode_guard: Option<Arc<crate::safe_mode::SafeModeGuard>>,
 }
 
 impl SessionManager {
@@ -545,6 +542,7 @@ impl SessionManager {
             event_stream,
             transcripts_path,
             default_expiry_hours,
+            safe_mode_guard: None,
         }
     }
 
@@ -558,7 +556,26 @@ impl SessionManager {
             event_stream: None,
             transcripts_path: None,
             default_expiry_hours: 24,
+            safe_mode_guard: None,
         }
+    }
+
+    /// Set the safe mode guard for blocking filesystem writes when safe mode is active.
+    pub fn set_safe_mode_guard(&mut self, guard: Arc<crate::safe_mode::SafeModeGuard>) {
+        self.safe_mode_guard = Some(guard);
+    }
+
+    /// Builder-style setter for the safe mode guard.
+    #[must_use]
+    pub fn with_safe_mode_guard(mut self, guard: Arc<crate::safe_mode::SafeModeGuard>) -> Self {
+        self.safe_mode_guard = Some(guard);
+        self
+    }
+
+    /// Returns `true` if a `SafeModeGuard` has been wired into this manager.
+    #[must_use]
+    pub fn has_safe_mode_guard(&self) -> bool {
+        self.safe_mode_guard.is_some()
     }
 
     // =========================================================================
@@ -632,12 +649,11 @@ impl SessionManager {
     /// Updates `last_activity_at` on successful load.
     /// Returns `None` for expired sessions (does not delete them).
     pub async fn load_session(&self, session_key: &str) -> Result<Option<Session>> {
-        let session: Option<Session> = sqlx::query_as(
-            "SELECT * FROM sessions WHERE session_key = $1",
-        )
-        .bind(session_key)
-        .fetch_optional(&self.pool)
-        .await?;
+        let session: Option<Session> =
+            sqlx::query_as("SELECT * FROM sessions WHERE session_key = $1")
+                .bind(session_key)
+                .fetch_optional(&self.pool)
+                .await?;
 
         let Some(session) = session else {
             return Ok(None);
@@ -917,13 +933,11 @@ impl SessionManager {
         session_id: Uuid,
         before_ts: DateTime<Utc>,
     ) -> Result<u64> {
-        let result = sqlx::query(
-            "DELETE FROM session_messages WHERE session_id = $1 AND ts < $2",
-        )
-        .bind(session_id)
-        .bind(before_ts)
-        .execute(&self.pool)
-        .await?;
+        let result = sqlx::query("DELETE FROM session_messages WHERE session_id = $1 AND ts < $2")
+            .bind(session_id)
+            .bind(before_ts)
+            .execute(&self.pool)
+            .await?;
 
         let deleted = result.rows_affected();
 
@@ -940,11 +954,7 @@ impl SessionManager {
     // =========================================================================
 
     /// Replace the token counters for a session.
-    pub async fn update_counters(
-        &self,
-        session_id: Uuid,
-        counters: &TokenCounters,
-    ) -> Result<()> {
+    pub async fn update_counters(&self, session_id: Uuid, counters: &TokenCounters) -> Result<()> {
         let counters_json = serde_json::to_value(counters)?;
 
         sqlx::query(
@@ -994,8 +1004,7 @@ impl SessionManager {
         .fetch_one(&mut **tx)
         .await?;
 
-        let mut counters: TokenCounters =
-            serde_json::from_value(counters_json).unwrap_or_default();
+        let mut counters: TokenCounters = serde_json::from_value(counters_json).unwrap_or_default();
         counters.increment_by(role, i64::from(tokens));
 
         let updated_json = serde_json::to_value(&counters)?;
@@ -1012,12 +1021,11 @@ impl SessionManager {
 
     /// Get the current token counters for a session.
     pub async fn get_counters(&self, session_id: Uuid) -> Result<TokenCounters> {
-        let counters_json: JsonValue = sqlx::query_scalar(
-            "SELECT token_counters FROM sessions WHERE session_id = $1",
-        )
-        .bind(session_id)
-        .fetch_one(&self.pool)
-        .await?;
+        let counters_json: JsonValue =
+            sqlx::query_scalar("SELECT token_counters FROM sessions WHERE session_id = $1")
+                .bind(session_id)
+                .fetch_one(&self.pool)
+                .await?;
 
         let counters: TokenCounters = serde_json::from_value(counters_json)?;
         Ok(counters)
@@ -1053,11 +1061,10 @@ impl SessionManager {
     /// Returns the number of sessions deleted. Cascade constraints
     /// automatically remove associated messages.
     pub async fn cleanup_expired_sessions(&self) -> Result<u32> {
-        let result = sqlx::query(
-            "DELETE FROM sessions WHERE expires_at IS NOT NULL AND expires_at < NOW()",
-        )
-        .execute(&self.pool)
-        .await?;
+        let result =
+            sqlx::query("DELETE FROM sessions WHERE expires_at IS NOT NULL AND expires_at < NOW()")
+                .execute(&self.pool)
+                .await?;
 
         let count = u32::try_from(result.rows_affected()).unwrap_or(u32::MAX);
 
@@ -1074,11 +1081,7 @@ impl SessionManager {
     }
 
     /// Extend a session's expiry by additional hours.
-    pub async fn extend_session(
-        &self,
-        session_id: Uuid,
-        additional_hours: u32,
-    ) -> Result<()> {
+    pub async fn extend_session(&self, session_id: Uuid, additional_hours: u32) -> Result<()> {
         sqlx::query(
             r"UPDATE sessions
               SET expires_at = COALESCE(expires_at, NOW()) + ($1 || ' hours')::interval,
@@ -1114,9 +1117,14 @@ impl SessionManager {
     ///
     /// Returns the path to the written file.
     pub async fn write_transcript_to_file(&self, session: &Session) -> Result<PathBuf> {
-        let transcripts_dir = self.transcripts_path.as_ref().ok_or_else(|| {
-            Error::Session("Transcripts path not configured".to_string())
-        })?;
+        if let Some(ref guard) = self.safe_mode_guard {
+            guard.check_or_block("filesystem_write").await?;
+        }
+
+        let transcripts_dir = self
+            .transcripts_path
+            .as_ref()
+            .ok_or_else(|| Error::Session("Transcripts path not configured".to_string()))?;
 
         // Load all messages in chronological order
         let messages: Vec<SessionMessage> = sqlx::query_as(
@@ -1173,12 +1181,14 @@ impl SessionManager {
         &self,
         transcript_path: &str,
     ) -> Result<Vec<SessionMessage>> {
-        let content = tokio::fs::read_to_string(transcript_path).await.map_err(|e| {
-            Error::Session(format!(
-                "Failed to read transcript file '{}': {}",
-                transcript_path, e
-            ))
-        })?;
+        let content = tokio::fs::read_to_string(transcript_path)
+            .await
+            .map_err(|e| {
+                Error::Session(format!(
+                    "Failed to read transcript file '{}': {}",
+                    transcript_path, e
+                ))
+            })?;
 
         let mut messages = Vec::new();
         for (i, line) in content.lines().enumerate() {
@@ -1204,34 +1214,34 @@ impl SessionManager {
     /// Reads the existing file to determine the last synced message, then
     /// appends any newer messages.
     pub async fn sync_transcript(&self, session_id: Uuid) -> Result<()> {
-        let session: Session = sqlx::query_as(
-            "SELECT * FROM sessions WHERE session_id = $1",
-        )
-        .bind(session_id)
-        .fetch_one(&self.pool)
-        .await?;
+        if let Some(ref guard) = self.safe_mode_guard {
+            guard.check_or_block("filesystem_write").await?;
+        }
+
+        let session: Session = sqlx::query_as("SELECT * FROM sessions WHERE session_id = $1")
+            .bind(session_id)
+            .fetch_one(&self.pool)
+            .await?;
 
         let transcript_path = session.transcript_path.as_ref().ok_or_else(|| {
-            Error::Session(format!(
-                "Session {} has no transcript_path set",
-                session_id
-            ))
+            Error::Session(format!("Session {} has no transcript_path set", session_id))
         })?;
 
         // Load existing transcript to find last timestamp
-        let existing = self.load_transcript_from_file(transcript_path).await.unwrap_or_default();
+        let existing = self
+            .load_transcript_from_file(transcript_path)
+            .await
+            .unwrap_or_default();
         let last_ts = existing.last().map(|m| m.ts);
 
         // Load new messages from database
         let new_messages: Vec<SessionMessage> = if let Some(since) = last_ts {
             self.load_messages_since(session_id, since).await?
         } else {
-            sqlx::query_as(
-                "SELECT * FROM session_messages WHERE session_id = $1 ORDER BY ts ASC",
-            )
-            .bind(session_id)
-            .fetch_all(&self.pool)
-            .await?
+            sqlx::query_as("SELECT * FROM session_messages WHERE session_id = $1 ORDER BY ts ASC")
+                .bind(session_id)
+                .fetch_all(&self.pool)
+                .await?
         };
 
         if new_messages.is_empty() {
@@ -1321,12 +1331,11 @@ impl SessionManager {
         }
 
         // Resolve agent_id from the session
-        let agent_id: Uuid = sqlx::query_scalar(
-            "SELECT agent_id FROM sessions WHERE session_id = $1",
-        )
-        .bind(session_id)
-        .fetch_one(&self.pool)
-        .await?;
+        let agent_id: Uuid =
+            sqlx::query_scalar("SELECT agent_id FROM sessions WHERE session_id = $1")
+                .bind(session_id)
+                .fetch_one(&self.pool)
+                .await?;
 
         let memory_mgr = MemoryManager::new(self.pool.clone(), self.event_stream.clone());
 
@@ -1348,8 +1357,7 @@ impl SessionManager {
                     let combined_len = msg.content.len() + reply.content.len();
                     // Only persist exchanges with meaningful content (> 100 chars combined)
                     if combined_len > 100 {
-                        let importance = (0.6 + (combined_len as f32 / 5000.0).min(0.2))
-                            .min(0.8);
+                        let importance = (0.6 + (combined_len as f32 / 5000.0).min(0.2)).min(0.8);
                         let content = format!(
                             "User asked: {}\nAssistant replied: {}",
                             truncate_for_memory(&msg.content, 500),
@@ -1467,8 +1475,14 @@ impl SessionManager {
             return Ok((0, 0, 0));
         }
 
-        let first_ts = messages.first().map(|m| m.ts.to_rfc3339()).unwrap_or_default();
-        let last_ts = messages.last().map(|m| m.ts.to_rfc3339()).unwrap_or_default();
+        let first_ts = messages
+            .first()
+            .map(|m| m.ts.to_rfc3339())
+            .unwrap_or_default();
+        let last_ts = messages
+            .last()
+            .map(|m| m.ts.to_rfc3339())
+            .unwrap_or_default();
 
         let summary_content = format!(
             "Summary of conversation from {} to {}:\n{}",
@@ -1638,13 +1652,11 @@ impl SessionManager {
         let start = Instant::now();
 
         // Load session and verify it exists
-        let session: Session = sqlx::query_as(
-            "SELECT * FROM sessions WHERE session_id = $1",
-        )
-        .bind(session_id)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|_| Error::Session(format!("Session {} not found", session_id)))?;
+        let session: Session = sqlx::query_as("SELECT * FROM sessions WHERE session_id = $1")
+            .bind(session_id)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|_| Error::Session(format!("Session {} not found", session_id)))?;
 
         let counters_before = session.counters();
         let tokens_before = counters_before.total;
@@ -1707,9 +1719,8 @@ impl SessionManager {
         }
 
         // Step 3: Prune tool results
-        let (tool_results_trimmed, tool_results_cleared) = self
-            .prune_tool_results(session_id, config)
-            .await?;
+        let (tool_results_trimmed, tool_results_cleared) =
+            self.prune_tool_results(session_id, config).await?;
 
         // Step 4: Delete compacted original messages to reclaim space
         let delete_result = sqlx::query(
@@ -1810,12 +1821,10 @@ impl SessionManager {
         config: &Config,
         ledger: Option<&Ledger>,
     ) -> Result<Option<CompactionOutcome>> {
-        let session: Session = sqlx::query_as(
-            "SELECT * FROM sessions WHERE session_id = $1",
-        )
-        .bind(session_id)
-        .fetch_one(&self.pool)
-        .await?;
+        let session: Session = sqlx::query_as("SELECT * FROM sessions WHERE session_id = $1")
+            .bind(session_id)
+            .fetch_one(&self.pool)
+            .await?;
 
         let limit = session
             .context_window_limit
@@ -1864,10 +1873,7 @@ impl SessionManager {
     }
 
     /// List active (non-expired) sessions, optionally filtered by agent_id.
-    pub async fn list_active_sessions(
-        &self,
-        agent_id: Option<Uuid>,
-    ) -> Result<Vec<Session>> {
+    pub async fn list_active_sessions(&self, agent_id: Option<Uuid>) -> Result<Vec<Session>> {
         let sessions = if let Some(aid) = agent_id {
             sqlx::query_as(
                 r"SELECT * FROM sessions
@@ -1923,12 +1929,10 @@ impl SessionManager {
 
         let counters = self.get_counters(session_id).await?;
 
-        let session: Session = sqlx::query_as(
-            "SELECT * FROM sessions WHERE session_id = $1",
-        )
-        .bind(session_id)
-        .fetch_one(&self.pool)
-        .await?;
+        let session: Session = sqlx::query_as("SELECT * FROM sessions WHERE session_id = $1")
+            .bind(session_id)
+            .fetch_one(&self.pool)
+            .await?;
 
         let duration_seconds = (Utc::now() - session.created_at).num_seconds();
 
@@ -1964,6 +1968,8 @@ impl SessionManager {
                     "channel": session.channel,
                 }),
                 correlation_id,
+                None,
+                None,
             )
             .await
     }
@@ -1989,6 +1995,8 @@ impl SessionManager {
                     "message_count": message_count,
                 }),
                 None,
+                None,
+                None,
             )
             .await
     }
@@ -2013,6 +2021,8 @@ impl SessionManager {
                     "after_counters": after_counters,
                     "messages_removed": messages_removed,
                 }),
+                None,
+                None,
                 None,
             )
             .await
@@ -2199,8 +2209,7 @@ mod tests {
     #[test]
     fn test_token_counters_deserialize_from_db_default() {
         let db_json: JsonValue =
-            serde_json::from_str(r#"{"total": 0, "user": 0, "assistant": 0, "tool": 0}"#)
-                .unwrap();
+            serde_json::from_str(r#"{"total": 0, "user": 0, "assistant": 0, "tool": 0}"#).unwrap();
         let c: TokenCounters = serde_json::from_value(db_json).unwrap();
         assert_eq!(c, TokenCounters::default());
     }
@@ -2459,7 +2468,10 @@ mod tests {
         let memories_flushed = 0usize;
         let nothing_to_store = !flush_failed && memories_flushed == 0;
 
-        assert!(!nothing_to_store, "nothing_to_store must be false when flush_failed is true");
+        assert!(
+            !nothing_to_store,
+            "nothing_to_store must be false when flush_failed is true"
+        );
         assert!(flush_failed);
 
         let outcome = CompactionOutcome {
@@ -2646,7 +2658,7 @@ mod tests {
 
     #[test]
     fn test_soft_trim_reduces_token_count() {
-        use crate::context::{estimate_tokens, ContextWindow};
+        use crate::context::{ContextWindow, estimate_tokens};
 
         // Generate a large tool result
         let large_content = "word ".repeat(2000); // ~2000 tokens
@@ -2654,25 +2666,36 @@ mod tests {
         assert!(original_tokens > 500, "Test content should be large enough");
 
         let max_tokens = 200;
-        let trimmed = ContextWindow::soft_trim_tool_result(&large_content, max_tokens, "deepseek-r1:7b");
+        let trimmed =
+            ContextWindow::soft_trim_tool_result(&large_content, max_tokens, "deepseek-r1:7b");
         let trimmed_tokens = estimate_tokens(&trimmed, "deepseek-r1:7b");
 
         // Trimmed result should have fewer tokens than original
-        assert!(trimmed_tokens < original_tokens, "Trimmed should have fewer tokens");
+        assert!(
+            trimmed_tokens < original_tokens,
+            "Trimmed should have fewer tokens"
+        );
         // Trimmed result should contain the ellipsis separator
-        assert!(trimmed.contains("[..."), "Trimmed should contain omission marker");
-        assert!(trimmed.contains("tokens omitted"), "Trimmed should indicate omitted tokens");
+        assert!(
+            trimmed.contains("[..."),
+            "Trimmed should contain omission marker"
+        );
+        assert!(
+            trimmed.contains("tokens omitted"),
+            "Trimmed should indicate omitted tokens"
+        );
     }
 
     #[test]
     fn test_soft_trim_no_op_when_under_threshold() {
-        use crate::context::{estimate_tokens, ContextWindow};
+        use crate::context::{ContextWindow, estimate_tokens};
 
         let small_content = "Hello, this is a short tool result.";
         let original_tokens = estimate_tokens(small_content, "deepseek-r1:7b");
 
         let max_tokens = 1000;
-        let result = ContextWindow::soft_trim_tool_result(small_content, max_tokens, "deepseek-r1:7b");
+        let result =
+            ContextWindow::soft_trim_tool_result(small_content, max_tokens, "deepseek-r1:7b");
 
         // Should return content unchanged
         assert_eq!(result, small_content);
@@ -2683,26 +2706,27 @@ mod tests {
     fn test_soft_trim_preserves_head_and_tail() {
         use crate::context::ContextWindow;
 
-        let content = format!(
-            "HEAD_MARKER {}TAIL_MARKER",
-            "x ".repeat(2000),
-        );
+        let content = format!("HEAD_MARKER {}TAIL_MARKER", "x ".repeat(2000),);
         let trimmed = ContextWindow::soft_trim_tool_result(&content, 100, "deepseek-r1:7b");
 
-        assert!(trimmed.starts_with("HEAD_MARKER"), "Head should be preserved");
+        assert!(
+            trimmed.starts_with("HEAD_MARKER"),
+            "Head should be preserved"
+        );
         assert!(trimmed.ends_with("TAIL_MARKER"), "Tail should be preserved");
     }
 
     #[test]
     fn test_soft_trim_token_delta_for_counter_adjustment() {
-        use crate::context::{estimate_tokens, ContextWindow};
+        use crate::context::{ContextWindow, estimate_tokens};
 
         let large_content = "token ".repeat(3000);
         #[allow(clippy::cast_possible_wrap)]
         let original_tokens = estimate_tokens(&large_content, "deepseek-r1:7b") as i32;
 
         let max_tokens = 300;
-        let trimmed = ContextWindow::soft_trim_tool_result(&large_content, max_tokens, "deepseek-r1:7b");
+        let trimmed =
+            ContextWindow::soft_trim_tool_result(&large_content, max_tokens, "deepseek-r1:7b");
         #[allow(clippy::cast_possible_wrap)]
         let new_tokens = estimate_tokens(&trimmed, "deepseek-r1:7b") as i32;
 
@@ -2908,7 +2932,9 @@ mod tests {
     async fn test_memory_flush_zero_returns_nothing_to_store() {
         // Verifies that when trigger_memory_flush returns Ok(0),
         // the outcome has nothing_to_store=true and flush_failed=false
-        unimplemented!("Run with: cargo test -- --ignored test_memory_flush_zero_returns_nothing_to_store");
+        unimplemented!(
+            "Run with: cargo test -- --ignored test_memory_flush_zero_returns_nothing_to_store"
+        );
     }
 
     #[tokio::test]
@@ -2916,7 +2942,9 @@ mod tests {
     async fn test_memory_flush_error_sets_flush_failed() {
         // Verifies that when trigger_memory_flush returns Err,
         // the outcome has flush_failed=true and nothing_to_store=false
-        unimplemented!("Run with: cargo test -- --ignored test_memory_flush_error_sets_flush_failed");
+        unimplemented!(
+            "Run with: cargo test -- --ignored test_memory_flush_error_sets_flush_failed"
+        );
     }
 
     #[tokio::test]
@@ -2949,7 +2977,9 @@ mod tests {
         // 2. Run summarize_conversation_segment()
         // 3. Assert a system summary message was inserted
         // 4. Assert original messages have {"compacted": true} metadata
-        unimplemented!("Run with: cargo test -- --ignored test_summarization_creates_summary_and_flags_originals");
+        unimplemented!(
+            "Run with: cargo test -- --ignored test_summarization_creates_summary_and_flags_originals"
+        );
     }
 
     #[tokio::test]
@@ -2960,7 +2990,9 @@ mod tests {
         // 2. Run compact_session()
         // 3. Assert compaction_count = 1
         // 4. Assert token_counters recalculated from remaining messages
-        unimplemented!("Run with: cargo test -- --ignored test_compaction_increments_count_and_recalculates_counters");
+        unimplemented!(
+            "Run with: cargo test -- --ignored test_compaction_increments_count_and_recalculates_counters"
+        );
     }
 
     #[tokio::test]

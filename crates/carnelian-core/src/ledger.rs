@@ -1,4 +1,4 @@
-//! Tamper-resistant audit ledger with blake3 hash-chaining
+//! Tamper-resistant audit ledger with blake3 hash-chaining and Ed25519 signatures
 //!
 //! The `Ledger` provides an append-only audit trail where each event's hash depends
 //! on the previous event's hash, creating an immutable chain. Any modification to a
@@ -10,20 +10,31 @@
 //! - `payload_hash`: blake3 hash of the canonical JSON payload
 //! - `prev_hash`: the `event_hash` of the immediately preceding event (NULL for the first)
 //! - `event_hash`: blake3 hash of `timestamp || actor_id || action_type || payload_hash || prev_hash`
+//! - `core_signature`: Ed25519 signature of `event_hash` for privileged actions
 //!
 //! This creates a linked chain: modifying any event invalidates all subsequent hashes.
+//!
+//! # Privileged Action Signatures
+//!
+//! Actions such as `capability.grant`, `capability.revoke`, `config.change`, and
+//! `db.migration` are considered privileged. When an owner signing key is available,
+//! these events are signed with Ed25519, and the hex-encoded signature is stored in
+//! `core_signature`. On verification, the signature is checked against the owner's
+//! public key, providing cryptographic proof of authorization.
 //!
 //! # Verification
 //!
 //! On startup, `verify_chain()` replays the entire ledger and recomputes every hash,
-//! ensuring no tampering has occurred. If verification fails, the server refuses to start.
+//! ensuring no tampering has occurred. If an owner public key is provided, Ed25519
+//! signatures on privileged actions are also verified. If verification fails, the
+//! server refuses to start.
 //!
 //! # Security Considerations
 //!
-//! - Phase 1 does not include digital signatures (`core_signature` is NULL).
-//!   A future phase will sign each event with the owner's Ed25519 key.
 //! - The hash chain protects against silent modification of stored events but does
 //!   not prevent a privileged database admin from rewriting the entire chain.
+//! - Ed25519 signatures on privileged actions add cryptographic non-repudiation:
+//!   even a database admin cannot forge a valid signature without the owner's key.
 //!
 //! # Example
 //!
@@ -36,19 +47,42 @@
 //!     "capability.grant",
 //!     json!({"grant_id": grant_id}),
 //!     None,
+//!     config.owner_signing_key.as_ref(),
+//!     None, // metadata
 //! ).await?;
 //!
-//! assert!(ledger.verify_chain().await?);
+//! assert!(ledger.verify_chain(config.owner_public_key.as_deref()).await?);
 //! ```
 
 use carnelian_common::{Error, Result};
 use chrono::{DateTime, Timelike, Utc};
+use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use sqlx::{FromRow, PgPool};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
+
+/// Check whether an action type is considered privileged and requires Ed25519 signing.
+///
+/// Privileged actions are those that modify security-critical state (capabilities,
+/// configuration, database schema) or approval workflows. When an owner signing key
+/// is available, these actions are signed to provide cryptographic non-repudiation.
+fn is_privileged_action(action_type: &str) -> bool {
+    matches!(
+        action_type,
+        "capability.grant"
+            | "capability.revoke"
+            | "config.change"
+            | "db.migration"
+            | "approval.granted"
+            | "approval.denied"
+            | "safe_mode.enabled"
+            | "safe_mode.disabled"
+            | "worker.quarantined"
+    )
+}
 
 /// A single event from the ledger, matching the `ledger_events` table schema.
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -160,12 +194,17 @@ impl Ledger {
     /// computed inside the transaction, the new row is inserted, and the
     /// in-memory chain head is updated only after a successful commit.
     ///
+    /// If the action is privileged and an owner signing key is provided, the
+    /// event hash is signed with Ed25519 and stored in `core_signature`.
+    ///
     /// # Arguments
     ///
     /// * `actor_id` - Identity performing the action (None for system actions)
     /// * `action_type` - Category of action (e.g., "capability.grant")
     /// * `payload` - Structured data describing the action
     /// * `correlation_id` - Optional correlation ID for tracing
+    /// * `owner_signing_key` - Optional Ed25519 key for signing privileged actions
+    /// * `metadata` - Optional JSONB metadata persisted alongside the event (e.g., provenance details)
     ///
     /// # Returns
     ///
@@ -176,6 +215,8 @@ impl Ledger {
         action_type: &str,
         payload: JsonValue,
         correlation_id: Option<Uuid>,
+        owner_signing_key: Option<&SigningKey>,
+        metadata: Option<JsonValue>,
     ) -> Result<i64> {
         let payload_hash = Self::compute_payload_hash(&payload);
         // Truncate to microsecond precision to match PostgreSQL TIMESTAMPTZ storage.
@@ -205,10 +246,32 @@ impl Ledger {
             prev_hash.as_deref(),
         );
 
+        // Sign privileged actions with the owner's Ed25519 key
+        let core_signature: Option<String> = if is_privileged_action(action_type) {
+            if let Some(signing_key) = owner_signing_key {
+                let sig = crate::crypto::sign_bytes(signing_key, event_hash.as_bytes());
+                tracing::info!(
+                    action_type = %action_type,
+                    "Privileged ledger event signed with owner key"
+                );
+                Some(sig)
+            } else {
+                tracing::debug!(
+                    action_type = %action_type,
+                    "Privileged action appended without signature (no owner key)"
+                );
+                None
+            }
+        } else {
+            None
+        };
+
+        let metadata_value = metadata.unwrap_or_else(|| serde_json::json!({}));
+
         let event_id: i64 = sqlx::query_scalar(
             r"
-            INSERT INTO ledger_events (ts, actor_id, action_type, payload_hash, prev_hash, event_hash, correlation_id, metadata)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, '{}'::jsonb)
+            INSERT INTO ledger_events (ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING event_id
             ",
         )
@@ -218,7 +281,9 @@ impl Ledger {
         .bind(&payload_hash)
         .bind(&prev_hash)
         .bind(&event_hash)
+        .bind(&core_signature)
         .bind(correlation_id)
+        .bind(&metadata_value)
         .fetch_one(&mut *tx)
         .await
         .map_err(Error::Database)?;
@@ -232,6 +297,7 @@ impl Ledger {
             event_id = event_id,
             action_type = %action_type,
             actor_id = ?actor_id,
+            signed = core_signature.is_some(),
             "Ledger event appended"
         );
 
@@ -243,11 +309,17 @@ impl Ledger {
     /// Replays all events in order and recomputes each hash, verifying:
     /// 1. Each event's `prev_hash` matches the preceding event's `event_hash`
     /// 2. Each event's `event_hash` matches the recomputed hash from its fields
+    /// 3. If `owner_public_key` is provided, Ed25519 signatures on privileged
+    ///    actions are verified against the owner's public key
+    ///
+    /// # Arguments
+    ///
+    /// * `owner_public_key` - Optional hex-encoded Ed25519 public key for signature verification
     ///
     /// # Returns
     ///
     /// `Ok(true)` if the chain is intact, `Ok(false)` if tampering is detected.
-    pub async fn verify_chain(&self) -> Result<bool> {
+    pub async fn verify_chain(&self, owner_public_key: Option<&str>) -> Result<bool> {
         let rows: Vec<LedgerEvent> = sqlx::query_as(
             "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata FROM ledger_events ORDER BY event_id ASC",
         )
@@ -293,6 +365,47 @@ impl Ledger {
                 return Ok(false);
             }
 
+            // Verify Ed25519 signature if present
+            if let Some(ref signature) = event.core_signature {
+                if let Some(pub_key) = owner_public_key {
+                    match crate::crypto::verify_signature(
+                        pub_key,
+                        event.event_hash.as_bytes(),
+                        signature,
+                    ) {
+                        Ok(true) => { /* signature valid */ }
+                        Ok(false) => {
+                            tracing::error!(
+                                event_id = event.event_id,
+                                action_type = %event.action_type,
+                                "Ledger chain break: invalid Ed25519 signature on event"
+                            );
+                            return Ok(false);
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                event_id = event.event_id,
+                                error = %e,
+                                "Ledger chain break: signature verification error"
+                            );
+                            return Ok(false);
+                        }
+                    }
+                } else {
+                    tracing::warn!(
+                        event_id = event.event_id,
+                        action_type = %event.action_type,
+                        "Signed event cannot be verified: owner public key not loaded"
+                    );
+                }
+            } else if is_privileged_action(&event.action_type) {
+                tracing::warn!(
+                    event_id = event.event_id,
+                    action_type = %event.action_type,
+                    "Unsigned privileged action detected (backward compatibility)"
+                );
+            }
+
             expected_prev_hash = Some(event.event_hash.clone());
         }
 
@@ -311,6 +424,7 @@ impl Ledger {
         subject_id: &str,
         capability_key: &str,
         approved_by: Option<Uuid>,
+        owner_signing_key: Option<&SigningKey>,
     ) -> Result<i64> {
         self.append_event(
             approved_by,
@@ -322,6 +436,8 @@ impl Ledger {
                 "capability_key": capability_key,
             }),
             None,
+            owner_signing_key,
+            None,
         )
         .await
     }
@@ -331,6 +447,7 @@ impl Ledger {
         &self,
         grant_id: Uuid,
         revoked_by: Option<Uuid>,
+        owner_signing_key: Option<&SigningKey>,
     ) -> Result<i64> {
         self.append_event(
             revoked_by,
@@ -338,6 +455,8 @@ impl Ledger {
             serde_json::json!({
                 "grant_id": grant_id,
             }),
+            None,
+            owner_signing_key,
             None,
         )
         .await
@@ -350,6 +469,7 @@ impl Ledger {
         old_value: Option<&JsonValue>,
         new_value: &JsonValue,
         changed_by: Option<Uuid>,
+        owner_signing_key: Option<&SigningKey>,
     ) -> Result<i64> {
         self.append_event(
             changed_by,
@@ -359,6 +479,8 @@ impl Ledger {
                 "old_value": old_value,
                 "new_value": new_value,
             }),
+            None,
+            owner_signing_key,
             None,
         )
         .await
@@ -394,18 +516,26 @@ impl Ledger {
                 "flush_failed": outcome.flush_failed,
             }),
             correlation_id,
+            None, // session.compacted is not a privileged action
+            None,
         )
         .await
     }
 
     /// Log a database migration to the audit ledger.
-    pub async fn log_migration(&self, migration_version: &str) -> Result<i64> {
+    pub async fn log_migration(
+        &self,
+        migration_version: &str,
+        owner_signing_key: Option<&SigningKey>,
+    ) -> Result<i64> {
         self.append_event(
             None,
             "db.migration",
             serde_json::json!({
                 "migration_version": migration_version,
             }),
+            None,
+            owner_signing_key,
             None,
         )
         .await
@@ -556,7 +686,14 @@ mod tests {
             .expect("load_last_hash failed");
 
         let event_id = ledger
-            .append_event(None, "test.append", serde_json::json!({"test": true}), None)
+            .append_event(
+                None,
+                "test.append",
+                serde_json::json!({"test": true}),
+                None,
+                None,
+                None,
+            )
             .await
             .expect("append_event failed");
 
@@ -583,7 +720,10 @@ mod tests {
             .expect("Failed to truncate ledger_events");
 
         let ledger = Ledger::new(pool);
-        let result = ledger.verify_chain().await.expect("verify_chain failed");
+        let result = ledger
+            .verify_chain(None)
+            .await
+            .expect("verify_chain failed");
         assert!(result, "Chain should verify (empty or valid)");
     }
 
@@ -618,12 +758,208 @@ mod tests {
                     "test.chain",
                     serde_json::json!({"iteration": i}),
                     None,
+                    None,
+                    None,
                 )
                 .await
                 .expect("append_event failed");
         }
 
-        let result = ledger.verify_chain().await.expect("verify_chain failed");
+        let result = ledger
+            .verify_chain(None)
+            .await
+            .expect("verify_chain failed");
         assert!(result, "Chain should verify after multiple appends");
+    }
+
+    #[test]
+    fn test_is_privileged_action() {
+        assert!(is_privileged_action("capability.grant"));
+        assert!(is_privileged_action("capability.revoke"));
+        assert!(is_privileged_action("config.change"));
+        assert!(is_privileged_action("db.migration"));
+        assert!(is_privileged_action("approval.granted"));
+        assert!(is_privileged_action("approval.denied"));
+        assert!(is_privileged_action("safe_mode.enabled"));
+        assert!(is_privileged_action("safe_mode.disabled"));
+
+        assert!(!is_privileged_action("test.action"));
+        assert!(!is_privileged_action("session.compacted"));
+        assert!(!is_privileged_action("heartbeat.tick"));
+    }
+
+    #[tokio::test]
+    #[ignore = "requires database connection"]
+    async fn test_append_privileged_event_with_signature() {
+        let db_url = std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian".into());
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .connect(&db_url)
+            .await
+            .expect("Failed to connect to database");
+
+        sqlx::query("TRUNCATE ledger_events")
+            .execute(&pool)
+            .await
+            .expect("Failed to truncate ledger_events");
+
+        let (signing_key, _) = crate::crypto::generate_ed25519_keypair();
+        let ledger = Ledger::new(pool.clone());
+        ledger
+            .load_last_hash()
+            .await
+            .expect("load_last_hash failed");
+
+        // Privileged action with signing key should produce a signature
+        let event_id = ledger
+            .append_event(
+                None,
+                "capability.grant",
+                serde_json::json!({"test": true}),
+                None,
+                Some(&signing_key),
+                None,
+            )
+            .await
+            .expect("append_event failed");
+
+        let event: LedgerEvent = sqlx::query_as(
+            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata FROM ledger_events WHERE event_id = $1",
+        )
+        .bind(event_id)
+        .fetch_one(&pool)
+        .await
+        .expect("Failed to fetch event");
+
+        assert!(
+            event.core_signature.is_some(),
+            "Privileged event should have signature"
+        );
+        assert_eq!(
+            event.core_signature.as_ref().unwrap().len(),
+            128,
+            "Hex signature should be 128 chars"
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "requires database connection"]
+    async fn test_verify_chain_with_signatures() {
+        let db_url = std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian".into());
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .connect(&db_url)
+            .await
+            .expect("Failed to connect to database");
+
+        sqlx::query("TRUNCATE ledger_events")
+            .execute(&pool)
+            .await
+            .expect("Failed to truncate ledger_events");
+
+        let (signing_key, _) = crate::crypto::generate_ed25519_keypair();
+        let public_key_hex = crate::crypto::public_key_from_signing_key(&signing_key);
+
+        let ledger = Ledger::new(pool.clone());
+        ledger
+            .load_last_hash()
+            .await
+            .expect("load_last_hash failed");
+
+        // Mix of signed privileged and unsigned non-privileged events
+        ledger
+            .append_event(None, "test.action", serde_json::json!({}), None, None, None)
+            .await
+            .expect("append failed");
+        ledger
+            .append_event(
+                None,
+                "capability.grant",
+                serde_json::json!({"g": 1}),
+                None,
+                Some(&signing_key),
+                None,
+            )
+            .await
+            .expect("append failed");
+        ledger
+            .append_event(
+                None,
+                "config.change",
+                serde_json::json!({"k": "v"}),
+                None,
+                Some(&signing_key),
+                None,
+            )
+            .await
+            .expect("append failed");
+        ledger
+            .append_event(None, "test.other", serde_json::json!({}), None, None, None)
+            .await
+            .expect("append failed");
+
+        let result = ledger
+            .verify_chain(Some(&public_key_hex))
+            .await
+            .expect("verify_chain failed");
+        assert!(result, "Chain with valid signatures should verify");
+    }
+
+    #[tokio::test]
+    #[ignore = "requires database connection"]
+    async fn test_verify_chain_rejects_invalid_signature() {
+        let db_url = std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian".into());
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .connect(&db_url)
+            .await
+            .expect("Failed to connect to database");
+
+        sqlx::query("TRUNCATE ledger_events")
+            .execute(&pool)
+            .await
+            .expect("Failed to truncate ledger_events");
+
+        let (signing_key, _) = crate::crypto::generate_ed25519_keypair();
+        let public_key_hex = crate::crypto::public_key_from_signing_key(&signing_key);
+
+        let ledger = Ledger::new(pool.clone());
+        ledger
+            .load_last_hash()
+            .await
+            .expect("load_last_hash failed");
+
+        // Append a signed privileged event
+        let event_id = ledger
+            .append_event(
+                None,
+                "capability.grant",
+                serde_json::json!({"test": true}),
+                None,
+                Some(&signing_key),
+                None,
+            )
+            .await
+            .expect("append failed");
+
+        // Tamper with the signature in the database
+        sqlx::query("UPDATE ledger_events SET core_signature = $1 WHERE event_id = $2")
+            .bind("00".repeat(64)) // 128 hex chars = 64 bytes, but wrong signature
+            .bind(event_id)
+            .execute(&pool)
+            .await
+            .expect("Failed to tamper signature");
+
+        let result = ledger
+            .verify_chain(Some(&public_key_hex))
+            .await
+            .expect("verify_chain failed");
+        assert!(
+            !result,
+            "Chain with tampered signature should fail verification"
+        );
     }
 }

@@ -86,9 +86,10 @@ use serde_json::json;
 use sqlx::{FromRow, PgPool, Row};
 use uuid::Uuid;
 
-use carnelian_common::{Error, Result};
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
+use carnelian_common::{Error, Result};
 
+use crate::encryption::EncryptionHelper;
 use crate::events::EventStream;
 
 // =============================================================================
@@ -404,11 +405,17 @@ pub trait EmbeddingService: Send + Sync {
 ///
 /// Follows the established manager pattern (see `SoulManager`, `SessionManager`)
 /// with database-backed persistence and optional event stream integration.
+///
+/// When an `EncryptionHelper` is provided, memory content is encrypted at rest
+/// using AES-256 via PostgreSQL's pgcrypto extension. Embeddings remain
+/// unencrypted to preserve pgvector similarity search.
 pub struct MemoryManager {
     /// Database connection pool
     pool: PgPool,
     /// Optional event stream for audit trail
     event_stream: Option<Arc<EventStream>>,
+    /// Optional encryption helper for content encryption at rest
+    encryption: Option<EncryptionHelper>,
 }
 
 impl MemoryManager {
@@ -419,7 +426,41 @@ impl MemoryManager {
     /// * `pool` - PostgreSQL connection pool
     /// * `event_stream` - Optional event stream for audit events
     pub fn new(pool: PgPool, event_stream: Option<Arc<EventStream>>) -> Self {
-        Self { pool, event_stream }
+        Self {
+            pool,
+            event_stream,
+            encryption: None,
+        }
+    }
+
+    /// Builder-style setter to enable encryption at rest for memory content.
+    ///
+    /// When set, `create_memory` encrypts content before INSERT and all
+    /// retrieval methods decrypt content after SELECT. Embeddings are
+    /// never encrypted.
+    #[must_use]
+    pub fn with_encryption(mut self, helper: EncryptionHelper) -> Self {
+        self.encryption = Some(helper);
+        self
+    }
+
+    /// Encrypt content bytes if an encryption helper is configured, otherwise
+    /// store as raw UTF-8 bytes (for backward compatibility with unencrypted DBs).
+    async fn encrypt_content(&self, content: &str) -> Result<Vec<u8>> {
+        match &self.encryption {
+            Some(helper) => helper.encrypt_text(content).await,
+            None => Ok(content.as_bytes().to_vec()),
+        }
+    }
+
+    /// Decrypt content bytes if an encryption helper is configured, otherwise
+    /// interpret as raw UTF-8.
+    async fn decrypt_content(&self, bytes: &[u8]) -> Result<String> {
+        match &self.encryption {
+            Some(helper) => helper.decrypt_text(bytes).await,
+            None => String::from_utf8(bytes.to_vec())
+                .map_err(|e| Error::Memory(format!("Invalid UTF-8 in memory content: {}", e))),
+        }
     }
 
     // =========================================================================
@@ -463,6 +504,9 @@ impl MemoryManager {
         let source_str = source.to_string();
         let pg_embedding = embedding.as_ref().map(|e| Vector::from(e.clone()));
 
+        // Encrypt content if encryption is configured; otherwise store raw UTF-8 bytes
+        let content_bytes = self.encrypt_content(content).await?;
+
         let row = sqlx::query(
             r"INSERT INTO memories (memory_id, identity_id, content, summary, source, embedding, importance)
               VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -470,7 +514,7 @@ impl MemoryManager {
         )
         .bind(memory_id)
         .bind(identity_id)
-        .bind(content)
+        .bind(&content_bytes)
         .bind(&summary)
         .bind(&source_str)
         .bind(pg_embedding)
@@ -478,10 +522,14 @@ impl MemoryManager {
         .fetch_one(&self.pool)
         .await?;
 
+        // Decrypt content from BYTEA
+        let content_raw: Vec<u8> = row.get("content");
+        let decrypted_content = self.decrypt_content(&content_raw).await?;
+
         let memory = Memory {
             memory_id: row.get("memory_id"),
             identity_id: row.get("identity_id"),
-            content: row.get("content"),
+            content: decrypted_content,
             summary: row.get("summary"),
             source: row.get("source"),
             embedding,
@@ -533,10 +581,13 @@ impl MemoryManager {
             return Ok(None);
         };
 
+        let content_raw: Vec<u8> = row.get("content");
+        let decrypted_content = self.decrypt_content(&content_raw).await?;
+
         Ok(Some(Memory {
             memory_id: row.get("memory_id"),
             identity_id: row.get("identity_id"),
-            content: row.get("content"),
+            content: decrypted_content,
             summary: row.get("summary"),
             source: row.get("source"),
             embedding: None,
@@ -588,9 +639,10 @@ impl MemoryManager {
 
         if set_parts.is_empty() {
             // Nothing to update, just fetch the current state
-            return self.get_memory(memory_id).await?.ok_or_else(|| {
-                Error::Memory(format!("Memory {} not found", memory_id))
-            });
+            return self
+                .get_memory(memory_id)
+                .await?
+                .ok_or_else(|| Error::Memory(format!("Memory {} not found", memory_id)));
         }
 
         let sql = format!(
@@ -600,8 +652,15 @@ impl MemoryManager {
 
         let mut query = sqlx::query(&sql).bind(memory_id);
 
-        if let Some(c) = content {
-            query = query.bind(c);
+        // Encrypt content if provided (column is BYTEA)
+        let encrypted_content = if let Some(c) = content {
+            Some(self.encrypt_content(c).await?)
+        } else {
+            None
+        };
+
+        if let Some(ref ec) = encrypted_content {
+            query = query.bind(ec);
         }
         if let Some(s) = &summary {
             query = query.bind(s);
@@ -610,14 +669,18 @@ impl MemoryManager {
             query = query.bind(i);
         }
 
-        let row = query.fetch_optional(&self.pool).await?.ok_or_else(|| {
-            Error::Memory(format!("Memory {} not found", memory_id))
-        })?;
+        let row = query
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or_else(|| Error::Memory(format!("Memory {} not found", memory_id)))?;
+
+        let content_raw: Vec<u8> = row.get("content");
+        let decrypted_content = self.decrypt_content(&content_raw).await?;
 
         let memory = Memory {
             memory_id: row.get("memory_id"),
             identity_id: row.get("identity_id"),
-            content: row.get("content"),
+            content: decrypted_content,
             summary: row.get("summary"),
             source: row.get("source"),
             embedding: None,
@@ -654,10 +717,7 @@ impl MemoryManager {
         } else {
             tracing::info!(memory_id = %memory_id, "Memory deleted");
 
-            self.emit_event(
-                EventType::MemoryDeleted,
-                json!({"memory_id": memory_id}),
-            );
+            self.emit_event(EventType::MemoryDeleted, json!({"memory_id": memory_id}));
         }
 
         Ok(())
@@ -677,11 +737,7 @@ impl MemoryManager {
     ///
     /// * `identity_id` - Agent identity to load memories for
     /// * `limit` - Maximum number of memories to return
-    pub async fn load_recent_memories(
-        &self,
-        identity_id: Uuid,
-        limit: i64,
-    ) -> Result<Vec<Memory>> {
+    pub async fn load_recent_memories(&self, identity_id: Uuid, limit: i64) -> Result<Vec<Memory>> {
         let since = Utc::now() - Duration::days(2);
 
         let rows = sqlx::query(
@@ -701,12 +757,14 @@ impl MemoryManager {
         .fetch_all(&self.pool)
         .await?;
 
-        let mut memories: Vec<Memory> = rows
-            .iter()
-            .map(|row| Memory {
+        let mut memories = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let content_raw: Vec<u8> = row.get("content");
+            let decrypted_content = self.decrypt_content(&content_raw).await?;
+            memories.push(Memory {
                 memory_id: row.get("memory_id"),
                 identity_id: row.get("identity_id"),
-                content: row.get("content"),
+                content: decrypted_content,
                 summary: row.get("summary"),
                 source: row.get("source"),
                 embedding: None,
@@ -714,8 +772,8 @@ impl MemoryManager {
                 created_at: row.get("created_at"),
                 accessed_at: row.get("accessed_at"),
                 access_count: row.get("access_count"),
-            })
-            .collect();
+            });
+        }
 
         // UPDATE...RETURNING does not preserve subquery ORDER BY
         memories.sort_by(|a, b| b.created_at.cmp(&a.created_at));
@@ -756,12 +814,14 @@ impl MemoryManager {
         .fetch_all(&self.pool)
         .await?;
 
-        let mut memories: Vec<Memory> = rows
-            .iter()
-            .map(|row| Memory {
+        let mut memories = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let content_raw: Vec<u8> = row.get("content");
+            let decrypted_content = self.decrypt_content(&content_raw).await?;
+            memories.push(Memory {
                 memory_id: row.get("memory_id"),
                 identity_id: row.get("identity_id"),
-                content: row.get("content"),
+                content: decrypted_content,
                 summary: row.get("summary"),
                 source: row.get("source"),
                 embedding: None,
@@ -769,12 +829,13 @@ impl MemoryManager {
                 created_at: row.get("created_at"),
                 accessed_at: row.get("accessed_at"),
                 access_count: row.get("access_count"),
-            })
-            .collect();
+            });
+        }
 
         // UPDATE...RETURNING does not preserve subquery ORDER BY
         memories.sort_by(|a, b| {
-            b.importance.partial_cmp(&a.importance)
+            b.importance
+                .partial_cmp(&a.importance)
                 .unwrap_or(std::cmp::Ordering::Equal)
                 .then_with(|| b.created_at.cmp(&a.created_at))
         });
@@ -869,12 +930,14 @@ impl MemoryManager {
 
         let rows = db_query.fetch_all(&self.pool).await?;
 
-        let memories: Vec<Memory> = rows
-            .iter()
-            .map(|row| Memory {
+        let mut memories = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let content_raw: Vec<u8> = row.get("content");
+            let decrypted_content = self.decrypt_content(&content_raw).await?;
+            memories.push(Memory {
                 memory_id: row.get("memory_id"),
                 identity_id: row.get("identity_id"),
-                content: row.get("content"),
+                content: decrypted_content,
                 summary: row.get("summary"),
                 source: row.get("source"),
                 embedding: None,
@@ -882,8 +945,8 @@ impl MemoryManager {
                 created_at: row.get("created_at"),
                 accessed_at: row.get("accessed_at"),
                 access_count: row.get("access_count"),
-            })
-            .collect();
+            });
+        }
 
         Ok(memories)
     }
@@ -988,11 +1051,14 @@ impl MemoryManager {
             let memory_id: Uuid = row.get("memory_id");
             memory_ids.push(memory_id);
 
+            let content_raw: Vec<u8> = row.get("content");
+            let decrypted_content = self.decrypt_content(&content_raw).await?;
+
             results.push((
                 Memory {
                     memory_id,
                     identity_id: row.get("identity_id"),
-                    content: row.get("content"),
+                    content: decrypted_content,
                     summary: row.get("summary"),
                     source: row.get("source"),
                     embedding: None,
@@ -1134,13 +1200,12 @@ impl MemoryManager {
         .fetch_optional(&self.pool)
         .await?;
 
-        let (most_accessed_id, most_accessed_count) = most_accessed.map_or(
-            (None, None),
-            |row| (
+        let (most_accessed_id, most_accessed_count) = most_accessed.map_or((None, None), |row| {
+            (
                 Some(row.get::<Uuid, _>("memory_id")),
                 Some(row.get::<i32, _>("access_count")),
-            ),
-        );
+            )
+        });
 
         Ok(MemoryStats {
             total_count,
@@ -1192,10 +1257,7 @@ mod tests {
             MemorySource::from_str("conversation").unwrap(),
             MemorySource::Conversation
         );
-        assert_eq!(
-            MemorySource::from_str("task").unwrap(),
-            MemorySource::Task
-        );
+        assert_eq!(MemorySource::from_str("task").unwrap(), MemorySource::Task);
         assert_eq!(
             MemorySource::from_str("observation").unwrap(),
             MemorySource::Observation
@@ -1212,10 +1274,7 @@ mod tests {
             MemorySource::from_str("CONVERSATION").unwrap(),
             MemorySource::Conversation
         );
-        assert_eq!(
-            MemorySource::from_str("Task").unwrap(),
-            MemorySource::Task
-        );
+        assert_eq!(MemorySource::from_str("Task").unwrap(), MemorySource::Task);
     }
 
     #[test]

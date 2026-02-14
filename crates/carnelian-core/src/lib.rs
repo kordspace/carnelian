@@ -83,15 +83,20 @@
 //! ```
 
 pub mod agentic;
+pub mod approvals;
+pub mod attestation;
 pub mod config;
 pub mod context;
+pub mod crypto;
 pub mod db;
+pub mod encryption;
 pub mod events;
 pub mod ledger;
 pub mod memory;
 pub mod metrics;
 pub mod model_router;
 pub mod policy;
+pub mod safe_mode;
 pub mod scheduler;
 pub mod server;
 pub mod session;
@@ -107,26 +112,31 @@ use tracing_subscriber::{
     util::SubscriberInitExt,
 };
 
+pub use agentic::{
+    AgenticEngine, AgenticRequest, AgenticResponse, DeclarativePlan, PlanStep, PlanStepResult,
+    PlanStepStatus, ToolCall, ToolCallResult, ToolCallStatus,
+};
+pub use approvals::{ApprovalQueue, ApprovalRequest};
 pub use carnelian_common::{Error, Result};
 pub use config::Config;
-pub use context::{ContextProvenance, ContextSegment, ContextWindow, SegmentPriority, SegmentSourceType};
+pub use context::{
+    ContextProvenance, ContextSegment, ContextWindow, SegmentPriority, SegmentSourceType,
+};
+pub use crypto::{generate_ed25519_keypair, sign_bytes, verify_signature};
+pub use encryption::EncryptionHelper;
 pub use events::{EventStream, EventStreamStats, PriorityRingBuffer};
 pub use ledger::{Ledger, LedgerEvent};
 pub use memory::{Memory, MemoryManager, MemoryQuery, MemorySource};
-pub use model_router::{CompletionRequest, CompletionResponse, Message, ModelRouter, UsageStats};
 pub use metrics::MetricsCollector;
+pub use model_router::{CompletionRequest, CompletionResponse, Message, ModelRouter, UsageStats};
 pub use policy::{CapabilityGrant, PolicyEngine};
+pub use safe_mode::SafeModeGuard;
 pub use scheduler::Scheduler;
 pub use server::{AppState, Server};
 pub use session::{Session, SessionKey, SessionManager, SessionMessage, TokenCounters};
 pub use skills::{SkillDiscovery, SkillManifest};
 pub use soul::SoulManager;
 pub use worker::WorkerManager;
-pub use agentic::{
-    AgenticEngine, AgenticRequest, AgenticResponse,
-    ToolCall, ToolCallResult, ToolCallStatus,
-    DeclarativePlan, PlanStep, PlanStepResult, PlanStepStatus,
-};
 
 /// Core orchestrator version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

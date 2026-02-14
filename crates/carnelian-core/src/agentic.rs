@@ -133,7 +133,7 @@ use carnelian_common::types::{EventEnvelope, EventLevel, EventType, InvokeReques
 use carnelian_common::{Error, Result};
 
 use crate::config::Config;
-use crate::context::{ContextWindow, estimate_tokens};
+use crate::context::{ContextProvenance, ContextWindow, estimate_tokens};
 use crate::events::EventStream;
 use crate::ledger::Ledger;
 use crate::memory::{MemoryManager, MemorySource};
@@ -422,7 +422,8 @@ impl AgenticEngine {
                 "correlation_id": correlation_id,
             }),
             Some(correlation_id),
-        ).await;
+        )
+        .await;
 
         // ── Event: request start ──────────────────────────────────────────
         self.emit_event(
@@ -440,7 +441,9 @@ impl AgenticEngine {
             Ok(Some(s)) => s,
             Ok(None) => {
                 // Session not found or expired — create a new one
-                self.session_manager.create_session(&session_key_str).await?
+                self.session_manager
+                    .create_session(&session_key_str)
+                    .await?
             }
             Err(e) => {
                 tracing::warn!(
@@ -449,7 +452,9 @@ impl AgenticEngine {
                     correlation_id = %correlation_id,
                     "Failed to load session, creating new one"
                 );
-                self.session_manager.create_session(&session_key_str).await?
+                self.session_manager
+                    .create_session(&session_key_str)
+                    .await?
             }
         };
 
@@ -457,27 +462,33 @@ impl AgenticEngine {
 
         // Append user message
         let user_tokens = estimate_tokens(&request.user_message, "default");
-        self.session_manager.append_message(
-            session_id,
-            "user",
-            request.user_message.clone(),
-            Some(user_tokens as i32),
-            None,
-            None,
-            Some(correlation_id),
-            None,
-            None,
-        ).await?;
+        self.session_manager
+            .append_message(
+                session_id,
+                "user",
+                request.user_message.clone(),
+                Some(user_tokens as i32),
+                None,
+                None,
+                Some(correlation_id),
+                None,
+                None,
+            )
+            .await?;
 
         // Check compaction threshold
         let mut memories_created: usize = 0;
         let counters = session.counters();
         let reserve_fraction = f64::from(self.config.context_reserve_percent) / 100.0;
-        let effective_limit = (self.config.context_window_tokens as f64 * (1.0 - reserve_fraction)) as i64;
+        let effective_limit =
+            (self.config.context_window_tokens as f64 * (1.0 - reserve_fraction)) as i64;
 
         if counters.total + user_tokens as i64 > effective_limit {
             // Trigger memory flush before compaction
-            match self.trigger_memory_flush(session_id, request.identity_id, correlation_id).await {
+            match self
+                .trigger_memory_flush(session_id, request.identity_id, correlation_id)
+                .await
+            {
                 Ok(count) => memories_created = count,
                 Err(e) => {
                     tracing::warn!(
@@ -490,14 +501,18 @@ impl AgenticEngine {
             }
 
             // Compact session (skip internal flush since we already flushed above)
-            if let Err(e) = self.session_manager.compact_session(
-                session_id,
-                CompactionTrigger::TokenLimitExceeded,
-                None,
-                &self.config,
-                Some(&self.ledger),
-                true,
-            ).await {
+            if let Err(e) = self
+                .session_manager
+                .compact_session(
+                    session_id,
+                    CompactionTrigger::TokenLimitExceeded,
+                    None,
+                    &self.config,
+                    Some(&self.ledger),
+                    true,
+                )
+                .await
+            {
                 tracing::warn!(
                     error = %e,
                     session_id = %session_id,
@@ -508,13 +523,16 @@ impl AgenticEngine {
         }
 
         // ── Step 2: Context Assembly ──────────────────────────────────────
-        let context_messages = match self.assemble_context(
-            session_id,
-            request.identity_id,
-            request.task_id,
-            correlation_id,
-        ).await {
-            Ok(msgs) => msgs,
+        let (context_messages, context_provenance) = match self
+            .assemble_context(
+                session_id,
+                request.identity_id,
+                request.task_id,
+                correlation_id,
+            )
+            .await
+        {
+            Ok(result) => result,
             Err(e) => {
                 tracing::warn!(
                     error = %e,
@@ -523,12 +541,21 @@ impl AgenticEngine {
                     "Context assembly failed, using minimal context"
                 );
                 // Fallback: minimal context with just the user message
-                vec![Message {
+                let msgs = vec![Message {
                     role: "user".to_string(),
                     content: request.user_message.clone(),
                     name: None,
                     tool_call_id: None,
-                }]
+                }];
+                let empty_prov = ContextProvenance {
+                    context_bundle_hash: String::new(),
+                    total_tokens: 0,
+                    segment_counts: std::collections::HashMap::new(),
+                    memory_ids: vec![],
+                    run_ids: vec![],
+                    message_ids: vec![],
+                };
+                (msgs, empty_prov)
             }
         };
 
@@ -542,14 +569,19 @@ impl AgenticEngine {
             correlation_id: Some(correlation_id),
         };
 
-        let completion = self.model_router.complete(
-            completion_request,
-            request.identity_id,
-            request.task_id,
-            request.run_id,
-        ).await?;
+        let completion = self
+            .model_router
+            .complete(
+                completion_request,
+                request.identity_id,
+                request.task_id,
+                request.run_id,
+                Some(&context_provenance),
+            )
+            .await?;
 
-        let assistant_content = completion.choices
+        let assistant_content = completion
+            .choices
             .first()
             .map(|c| c.message.content.clone())
             .unwrap_or_default();
@@ -560,35 +592,31 @@ impl AgenticEngine {
 
         if let Ok(tool_calls) = Self::parse_tool_calls(&assistant_content) {
             // ── Step 5a: Tool Call Execution ───────────────────────────────
-            tool_calls_executed = self.execute_tool_calls(
-                tool_calls,
-                request.identity_id,
-                session_id,
-                correlation_id,
-            ).await?;
+            tool_calls_executed = self
+                .execute_tool_calls(tool_calls, request.identity_id, session_id, correlation_id)
+                .await?;
         } else if let Ok(plan) = Self::parse_declarative_plan(&assistant_content) {
             // ── Step 5b: Declarative Plan Execution ───────────────────────
-            plan_steps_executed = self.execute_declarative_plan(
-                plan,
-                request.identity_id,
-                session_id,
-                correlation_id,
-            ).await?;
+            plan_steps_executed = self
+                .execute_declarative_plan(plan, request.identity_id, session_id, correlation_id)
+                .await?;
         }
 
         // ── Step 6: Persistence ───────────────────────────────────────────
         let assistant_tokens = estimate_tokens(&assistant_content, "default");
-        self.session_manager.append_message(
-            session_id,
-            "assistant",
-            assistant_content.clone(),
-            Some(assistant_tokens as i32),
-            None,
-            None,
-            Some(correlation_id),
-            None,
-            None,
-        ).await?;
+        self.session_manager
+            .append_message(
+                session_id,
+                "assistant",
+                assistant_content.clone(),
+                Some(assistant_tokens as i32),
+                None,
+                None,
+                Some(correlation_id),
+                None,
+                None,
+            )
+            .await?;
 
         // ── Ledger: response completed ────────────────────────────────────
         let duration_ms = start.elapsed().as_millis() as u64;
@@ -605,7 +633,8 @@ impl AgenticEngine {
                 "duration_ms": duration_ms,
             }),
             Some(correlation_id),
-        ).await;
+        )
+        .await;
 
         // ── Event: response complete ──────────────────────────────────────
         self.emit_event(
@@ -650,14 +679,15 @@ impl AgenticEngine {
         identity_id: Uuid,
         task_id: Option<Uuid>,
         correlation_id: Uuid,
-    ) -> Result<Vec<Message>> {
+    ) -> Result<(Vec<Message>, ContextProvenance)> {
         let mut ctx = ContextWindow::build_for_session(
             self.pool.clone(),
             self.event_stream.clone(),
             session_id,
             task_id,
             &self.config,
-        ).await?;
+        )
+        .await?;
 
         // Load soul directives (P0)
         if let Err(e) = ctx.load_soul_directives(identity_id).await {
@@ -678,23 +708,22 @@ impl AgenticEngine {
         }
 
         // Enforce budget
-        ctx.enforce_budget(self.config.tool_trim_threshold, self.config.tool_clear_age_secs);
+        ctx.enforce_budget(
+            self.config.tool_trim_threshold,
+            self.config.tool_clear_age_secs,
+        );
 
         // Assemble into messages
         let assembled = ctx.assemble(&self.config).await?;
 
-        // Log context assembly to ledger
-        let context_hash = Ledger::compute_payload_hash(&json!({"context": &assembled}));
-        self.log_to_ledger(
-            None,
-            "agentic.context_assembled",
-            json!({
-                "session_id": session_id,
-                "correlation_id": correlation_id,
-                "context_hash": context_hash,
-            }),
-            Some(correlation_id),
-        ).await;
+        // Log context assembly to ledger with full provenance tracking
+        if let Err(e) = ctx.log_to_ledger(&self.ledger, correlation_id).await {
+            tracing::warn!(
+                error = %e,
+                correlation_id = %correlation_id,
+                "Failed to log context assembly to ledger"
+            );
+        }
 
         self.emit_event(
             EventType::ContextAssembled,
@@ -708,8 +737,11 @@ impl AgenticEngine {
         // Convert assembled string into a messages array
         // The assembled context is a single string; wrap it as a system message
         // followed by conversation history from the session
-        let messages = self.build_messages_from_context(assembled, session_id).await?;
-        Ok(messages)
+        let provenance = ctx.compute_provenance();
+        let messages = self
+            .build_messages_from_context(assembled, session_id)
+            .await?;
+        Ok((messages, provenance))
     }
 
     /// Build a message array from assembled context and session history.
@@ -734,7 +766,10 @@ impl AgenticEngine {
         }
 
         // Load recent session messages for conversation history
-        let session_messages = self.session_manager.load_messages(session_id, Some(50), None).await?;
+        let session_messages = self
+            .session_manager
+            .load_messages(session_id, Some(50), None)
+            .await?;
 
         // Session messages come newest-first; reverse for chronological order
         for msg in session_messages.into_iter().rev() {
@@ -769,30 +804,34 @@ impl AgenticEngine {
         let value: JsonValue = serde_json::from_str(json_str)
             .map_err(|e| Error::Agentic(format!("Invalid JSON in tool calls: {e}")))?;
 
-        let calls_array = value.get("tool_calls")
+        let calls_array = value
+            .get("tool_calls")
             .and_then(|v| v.as_array())
             .ok_or_else(|| Error::Agentic("No 'tool_calls' array found".to_string()))?;
 
         let mut tool_calls = Vec::with_capacity(calls_array.len());
 
         for (i, call) in calls_array.iter().enumerate() {
-            let tool_id = call.get("tool_id")
+            let tool_id = call
+                .get("tool_id")
                 .or_else(|| call.get("id"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
 
-            let tool_name = call.get("tool_name")
+            let tool_name = call
+                .get("tool_name")
                 .or_else(|| call.get("name"))
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| Error::Agentic(format!(
-                    "Tool call at index {} missing 'tool_name' or 'name'", i
-                )))?
+                .ok_or_else(|| {
+                    Error::Agentic(format!(
+                        "Tool call at index {} missing 'tool_name' or 'name'",
+                        i
+                    ))
+                })?
                 .to_string();
 
-            let arguments = call.get("arguments")
-                .cloned()
-                .unwrap_or(json!({}));
+            let arguments = call.get("arguments").cloned().unwrap_or(json!({}));
 
             let call_id = if tool_id.is_empty() {
                 format!("call_{}", Uuid::now_v7())
@@ -832,15 +871,18 @@ impl AgenticEngine {
         let value: JsonValue = serde_json::from_str(json_str)
             .map_err(|e| Error::Agentic(format!("Invalid JSON in plan: {e}")))?;
 
-        let plan_obj = value.get("plan")
+        let plan_obj = value
+            .get("plan")
             .ok_or_else(|| Error::Agentic("No 'plan' key found".to_string()))?;
 
-        let description = plan_obj.get("description")
+        let description = plan_obj
+            .get("description")
             .and_then(|v| v.as_str())
             .unwrap_or("Unnamed plan")
             .to_string();
 
-        let steps_array = plan_obj.get("steps")
+        let steps_array = plan_obj
+            .get("steps")
             .and_then(|v| v.as_array())
             .ok_or_else(|| Error::Agentic("No 'steps' array found in plan".to_string()))?;
 
@@ -860,22 +902,23 @@ impl AgenticEngine {
             let step_key = format!("step_{}", i + 1);
             let step_id = step_id_map[&step_key];
 
-            let action = step_val.get("action")
+            let action = step_val
+                .get("action")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| Error::Agentic(format!(
-                    "Plan step at index {} missing 'action'", i
-                )))?
+                .ok_or_else(|| {
+                    Error::Agentic(format!("Plan step at index {} missing 'action'", i))
+                })?
                 .to_string();
 
-            let skill_name = step_val.get("skill")
+            let skill_name = step_val
+                .get("skill")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
 
-            let parameters = step_val.get("parameters")
-                .cloned()
-                .unwrap_or(json!({}));
+            let parameters = step_val.get("parameters").cloned().unwrap_or(json!({}));
 
-            let dependencies = step_val.get("dependencies")
+            let dependencies = step_val
+                .get("dependencies")
                 .and_then(|v| v.as_array())
                 .map(|deps| {
                     deps.iter()
@@ -930,7 +973,7 @@ impl AgenticEngine {
                 '}' if !in_string => {
                     depth -= 1;
                     if depth == 0 {
-                        return Some(&content[start..start + i + 1]);
+                        return Some(&content[start..=(start + i)]);
                     }
                 }
                 _ => {}
@@ -976,7 +1019,8 @@ impl AgenticEngine {
             }
         }
 
-        let mut queue: VecDeque<Uuid> = in_degree.iter()
+        let mut queue: VecDeque<Uuid> = in_degree
+            .iter()
             .filter(|&(_, &deg)| deg == 0)
             .map(|(&id, _)| id)
             .collect();
@@ -999,7 +1043,7 @@ impl AgenticEngine {
 
         if visited != plan.steps.len() {
             return Err(Error::Agentic(
-                "Circular dependency detected in declarative plan".to_string()
+                "Circular dependency detected in declarative plan".to_string(),
             ));
         }
 
@@ -1053,12 +1097,16 @@ impl AgenticEngine {
             // Capability check
             let capability_key = format!("tool.{}", tool_call.tool_name);
             let es_ref = self.event_stream.as_ref().map(|es| es.as_ref());
-            let has_capability = match self.policy_engine.check_capability(
-                "identity",
-                &identity_id.to_string(),
-                &capability_key,
-                es_ref,
-            ).await {
+            let has_capability = match self
+                .policy_engine
+                .check_capability(
+                    "identity",
+                    &identity_id.to_string(),
+                    &capability_key,
+                    es_ref,
+                )
+                .await
+            {
                 Ok(granted) => granted,
                 Err(e) => {
                     tracing::warn!(
@@ -1082,7 +1130,8 @@ impl AgenticEngine {
                         "correlation_id": correlation_id,
                     }),
                     Some(correlation_id),
-                ).await;
+                )
+                .await;
 
                 ToolCallResult {
                     call_id: tool_call.call_id.clone(),
@@ -1175,7 +1224,9 @@ impl AgenticEngine {
                             },
                             Err(e) => {
                                 let error_msg = format!("{e}");
-                                let status = if error_msg.contains("timeout") || error_msg.contains("Timeout") {
+                                let status = if error_msg.contains("timeout")
+                                    || error_msg.contains("Timeout")
+                                {
                                     ToolCallStatus::Timeout
                                 } else {
                                     ToolCallStatus::Failed
@@ -1201,19 +1252,24 @@ impl AgenticEngine {
                 "result": result.result,
                 "error": result.error,
                 "duration_ms": result.duration_ms,
-            })).unwrap_or_else(|_| "{}".to_string());
+            }))
+            .unwrap_or_else(|_| "{}".to_string());
             let persist_tokens = estimate_tokens(&persist_content, "default");
-            if let Err(e) = self.session_manager.append_message(
-                session_id,
-                "tool",
-                persist_content,
-                Some(persist_tokens as i32),
-                Some(tool_call.tool_name.clone()),
-                Some(tool_call.call_id.clone()),
-                Some(correlation_id),
-                None,
-                None,
-            ).await {
+            if let Err(e) = self
+                .session_manager
+                .append_message(
+                    session_id,
+                    "tool",
+                    persist_content,
+                    Some(persist_tokens as i32),
+                    Some(tool_call.tool_name.clone()),
+                    Some(tool_call.call_id.clone()),
+                    Some(correlation_id),
+                    None,
+                    None,
+                )
+                .await
+            {
                 tracing::warn!(error = %e, "Failed to persist tool call result to session");
             }
 
@@ -1230,7 +1286,8 @@ impl AgenticEngine {
                     "correlation_id": correlation_id,
                 }),
                 Some(correlation_id),
-            ).await;
+            )
+            .await;
 
             self.emit_event(
                 EventType::Custom("agentic.tool_call_end".to_string()),
@@ -1278,9 +1335,8 @@ impl AgenticEngine {
         let execution_order = Self::topological_sort(&plan)?;
 
         let mut results: HashMap<Uuid, PlanStepResult> = HashMap::new();
-        let step_map: HashMap<Uuid, &PlanStep> = plan.steps.iter()
-            .map(|s| (s.step_id, s))
-            .collect();
+        let step_map: HashMap<Uuid, &PlanStep> =
+            plan.steps.iter().map(|s| (s.step_id, s)).collect();
 
         for step_id in &execution_order {
             let step = step_map[step_id];
@@ -1299,9 +1355,9 @@ impl AgenticEngine {
 
             // Check if all dependencies succeeded
             let deps_ok = step.dependencies.iter().all(|dep_id| {
-                results.get(dep_id)
-                    .map(|r| r.status == PlanStepStatus::Success)
-                    .unwrap_or(false)
+                results
+                    .get(dep_id)
+                    .is_some_and(|r| r.status == PlanStepStatus::Success)
             });
 
             if !deps_ok && !step.dependencies.is_empty() {
@@ -1319,19 +1375,24 @@ impl AgenticEngine {
                     "status": result.status,
                     "error": result.error,
                     "duration_ms": result.duration_ms,
-                })).unwrap_or_else(|_| "{}".to_string());
+                }))
+                .unwrap_or_else(|_| "{}".to_string());
                 let skip_tokens = estimate_tokens(&skip_content, "default");
-                if let Err(e) = self.session_manager.append_message(
-                    session_id,
-                    "tool",
-                    skip_content,
-                    Some(skip_tokens as i32),
-                    step.skill_name.clone(),
-                    Some(step.step_id.to_string()),
-                    Some(correlation_id),
-                    None,
-                    None,
-                ).await {
+                if let Err(e) = self
+                    .session_manager
+                    .append_message(
+                        session_id,
+                        "tool",
+                        skip_content,
+                        Some(skip_tokens as i32),
+                        step.skill_name.clone(),
+                        Some(step.step_id.to_string()),
+                        Some(correlation_id),
+                        None,
+                        None,
+                    )
+                    .await
+                {
                     tracing::warn!(error = %e, "Failed to persist skipped plan step to session");
                 }
 
@@ -1370,12 +1431,16 @@ impl AgenticEngine {
                         // Capability check
                         let capability_key = format!("tool.{}", skill_name);
                         let es_ref = self.event_stream.as_ref().map(|es| es.as_ref());
-                        let has_capability = self.policy_engine.check_capability(
-                            "identity",
-                            &identity_id.to_string(),
-                            &capability_key,
-                            es_ref,
-                        ).await.unwrap_or(false);
+                        let has_capability = self
+                            .policy_engine
+                            .check_capability(
+                                "identity",
+                                &identity_id.to_string(),
+                                &capability_key,
+                                es_ref,
+                            )
+                            .await
+                            .unwrap_or(false);
 
                         if !has_capability {
                             PlanStepResult {
@@ -1457,19 +1522,24 @@ impl AgenticEngine {
                 "result": result.result,
                 "error": result.error,
                 "duration_ms": result.duration_ms,
-            })).unwrap_or_else(|_| "{}".to_string());
+            }))
+            .unwrap_or_else(|_| "{}".to_string());
             let step_tokens = estimate_tokens(&step_content, "default");
-            if let Err(e) = self.session_manager.append_message(
-                session_id,
-                "tool",
-                step_content,
-                Some(step_tokens as i32),
-                step.skill_name.clone(),
-                Some(step.step_id.to_string()),
-                Some(correlation_id),
-                None,
-                None,
-            ).await {
+            if let Err(e) = self
+                .session_manager
+                .append_message(
+                    session_id,
+                    "tool",
+                    step_content,
+                    Some(step_tokens as i32),
+                    step.skill_name.clone(),
+                    Some(step.step_id.to_string()),
+                    Some(correlation_id),
+                    None,
+                    None,
+                )
+                .await
+            {
                 tracing::warn!(error = %e, "Failed to persist plan step result to session");
             }
 
@@ -1488,32 +1558,47 @@ impl AgenticEngine {
         }
 
         // Aggregate results
-        let all_results: Vec<PlanStepResult> = execution_order.iter()
+        let all_results: Vec<PlanStepResult> = execution_order
+            .iter()
             .filter_map(|id| results.remove(id))
             .collect();
 
-        let successful = all_results.iter().filter(|r| r.status == PlanStepStatus::Success).count();
-        let failed = all_results.iter().filter(|r| r.status == PlanStepStatus::Failed).count();
+        let successful = all_results
+            .iter()
+            .filter(|r| r.status == PlanStepStatus::Success)
+            .count();
+        let failed = all_results
+            .iter()
+            .filter(|r| r.status == PlanStepStatus::Failed)
+            .count();
 
         let plan_duration_ms = plan_start.elapsed().as_millis() as u64;
 
         // Persist plan summary to session
         let plan_summary = format!(
             "Plan '{}' executed: {}/{} steps succeeded, {} failed. Duration: {}ms",
-            plan.description, successful, plan.steps.len(), failed, plan_duration_ms
+            plan.description,
+            successful,
+            plan.steps.len(),
+            failed,
+            plan_duration_ms
         );
         let summary_tokens = estimate_tokens(&plan_summary, "default");
-        if let Err(e) = self.session_manager.append_message(
-            session_id,
-            "assistant",
-            plan_summary,
-            Some(summary_tokens as i32),
-            None,
-            None,
-            Some(correlation_id),
-            Some(json!({"plan_id": plan.plan_id})),
-            None,
-        ).await {
+        if let Err(e) = self
+            .session_manager
+            .append_message(
+                session_id,
+                "assistant",
+                plan_summary,
+                Some(summary_tokens as i32),
+                None,
+                None,
+                Some(correlation_id),
+                Some(json!({"plan_id": plan.plan_id})),
+                None,
+            )
+            .await
+        {
             tracing::warn!(error = %e, "Failed to persist plan summary");
         }
 
@@ -1529,7 +1614,8 @@ impl AgenticEngine {
                 "correlation_id": correlation_id,
             }),
             Some(correlation_id),
-        ).await;
+        )
+        .await;
 
         Ok(all_results)
     }
@@ -1555,7 +1641,8 @@ impl AgenticEngine {
             }
         }
 
-        let mut queue: VecDeque<Uuid> = in_degree.iter()
+        let mut queue: VecDeque<Uuid> = in_degree
+            .iter()
             .filter(|&(_, &deg)| deg == 0)
             .map(|(&id, _)| id)
             .collect();
@@ -1578,7 +1665,7 @@ impl AgenticEngine {
 
         if order.len() != plan.steps.len() {
             return Err(Error::Agentic(
-                "Circular dependency detected during topological sort".to_string()
+                "Circular dependency detected during topological sort".to_string(),
             ));
         }
 
@@ -1627,7 +1714,10 @@ impl AgenticEngine {
         );
 
         // Load recent conversation history
-        let recent_messages = self.session_manager.load_messages(session_id, Some(30), None).await?;
+        let recent_messages = self
+            .session_manager
+            .load_messages(session_id, Some(30), None)
+            .await?;
 
         if recent_messages.is_empty() {
             self.log_to_ledger(
@@ -1641,7 +1731,8 @@ impl AgenticEngine {
                     "correlation_id": correlation_id,
                 }),
                 Some(correlation_id),
-            ).await;
+            )
+            .await;
 
             self.emit_event(
                 EventType::MemoryWriteEnd,
@@ -1690,14 +1781,13 @@ impl AgenticEngine {
             correlation_id: Some(correlation_id),
         };
 
-        let flush_response = self.model_router.complete(
-            flush_request,
-            identity_id,
-            None,
-            None,
-        ).await?;
+        let flush_response = self
+            .model_router
+            .complete(flush_request, identity_id, None, None, None)
+            .await?;
 
-        let flush_content = flush_response.choices
+        let flush_content = flush_response
+            .choices
             .first()
             .map(|c| c.message.content.clone())
             .unwrap_or_default();
@@ -1716,7 +1806,8 @@ impl AgenticEngine {
                     "correlation_id": correlation_id,
                 }),
                 Some(correlation_id),
-            ).await;
+            )
+            .await;
 
             self.emit_event(
                 EventType::MemoryWriteEnd,
@@ -1735,7 +1826,8 @@ impl AgenticEngine {
         let mut created_count = 0usize;
 
         for entry in &memory_entries {
-            let content = entry.get("content")
+            let content = entry
+                .get("content")
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
@@ -1744,14 +1836,16 @@ impl AgenticEngine {
                 continue;
             }
 
-            let importance = entry.get("importance")
+            let importance = entry
+                .get("importance")
                 .and_then(|v| v.as_f64())
                 .unwrap_or(0.5) as f32;
 
             // Clamp importance to valid range
             let importance = importance.clamp(0.0, 1.0);
 
-            let source_str = entry.get("source")
+            let source_str = entry
+                .get("source")
                 .and_then(|v| v.as_str())
                 .unwrap_or("conversation");
 
@@ -1762,14 +1856,11 @@ impl AgenticEngine {
                 _ => MemorySource::Conversation,
             };
 
-            match self.memory_manager.create_memory(
-                identity_id,
-                &content,
-                None,
-                source,
-                None,
-                importance,
-            ).await {
+            match self
+                .memory_manager
+                .create_memory(identity_id, &content, None, source, None, importance)
+                .await
+            {
                 Ok(_) => created_count += 1,
                 Err(e) => {
                     tracing::warn!(
@@ -1791,7 +1882,8 @@ impl AgenticEngine {
                 "correlation_id": correlation_id,
             }),
             Some(correlation_id),
-        ).await;
+        )
+        .await;
 
         self.emit_event(
             EventType::MemoryWriteEnd,
@@ -1845,12 +1937,11 @@ impl AgenticEngine {
         payload: JsonValue,
         correlation_id: Option<Uuid>,
     ) {
-        if let Err(e) = self.ledger.append_event(
-            actor_id,
-            action_type,
-            payload,
-            correlation_id,
-        ).await {
+        if let Err(e) = self
+            .ledger
+            .append_event(actor_id, action_type, payload, correlation_id, None, None)
+            .await
+        {
             tracing::warn!(
                 error = %e,
                 action_type = %action_type,
@@ -1863,18 +1954,9 @@ impl AgenticEngine {
     ///
     /// No-op if no event stream is attached. Errors are silently ignored
     /// since events are best-effort.
-    fn emit_event(
-        &self,
-        event_type: EventType,
-        payload: JsonValue,
-        correlation_id: Option<Uuid>,
-    ) {
+    fn emit_event(&self, event_type: EventType, payload: JsonValue, correlation_id: Option<Uuid>) {
         if let Some(ref stream) = self.event_stream {
-            let mut envelope = EventEnvelope::new(
-                EventLevel::Info,
-                event_type,
-                payload,
-            );
+            let mut envelope = EventEnvelope::new(EventLevel::Info, event_type, payload);
             if let Some(cid) = correlation_id {
                 envelope = envelope.with_correlation_id(cid);
             }
@@ -2020,7 +2102,12 @@ mod tests {
 
         let result = AgenticEngine::validate_plan_dependencies(&plan);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Circular dependency"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Circular dependency")
+        );
     }
 
     #[test]

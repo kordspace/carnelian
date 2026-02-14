@@ -39,6 +39,27 @@
 //! token budget is allocated to the head (beginning) and 40% to the tail (end),
 //! with an ellipsis separator indicating the omitted middle section.
 //!
+//! ## Context Integrity Auditing
+//!
+//! Every model call should be preceded by a `"model.context.assembled"` ledger event
+//! that records full provenance metadata. This creates an auditable chain:
+//!
+//! 1. **Context assembly**: `log_to_ledger()` or `log_context_integrity()` records
+//!    the blake3 hash, memory IDs, run IDs, and message IDs that contributed to the
+//!    context bundle.
+//! 2. **Model call**: The model router logs `"model.call.request"` and
+//!    `"model.call.response"` events with the same `correlation_id`.
+//! 3. **Audit trail**: Query `ledger_events` by `correlation_id` to reconstruct
+//!    exactly what context was sent to the model and what response was received.
+//!
+//! The `ContextProvenance` struct captures:
+//! - **`memory_ids`**: Which memories were included (source attribution)
+//! - **`run_ids`**: Which task runs contributed context (task lineage)
+//! - **`message_ids`**: Which conversation messages were included (session history)
+//! - **`context_bundle_hash`**: blake3 hash for tamper detection
+//! - **`total_tokens`**: Estimated token count for budget verification
+//! - **`segment_counts`**: Breakdown by source type for observability
+//!
 //! ## Example
 //!
 //! ```ignore
@@ -47,7 +68,12 @@
 //! ).await?;
 //!
 //! let assembled = ctx.assemble(&config).await?;
+//!
+//! // Log context integrity before model call (links via correlation_id)
 //! ctx.log_to_ledger(&ledger, correlation_id).await?;
+//!
+//! // Or use the convenience method to get provenance back:
+//! let (event_id, provenance) = ctx.log_context_integrity(&ledger, correlation_id).await?;
 //! ```
 
 use std::collections::HashMap;
@@ -60,8 +86,8 @@ use sqlx::{PgPool, Row};
 use tiktoken_rs::CoreBPE;
 use uuid::Uuid;
 
-use carnelian_common::{Error, Result};
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
+use carnelian_common::{Error, Result};
 
 use crate::config::Config;
 use crate::events::EventStream;
@@ -331,6 +357,18 @@ impl ContextWindow {
         self
     }
 
+    /// Add a pre-built segment to the context window.
+    ///
+    /// Use this when you need full control over the segment metadata (e.g.,
+    /// setting `message_id` or `run_id` in metadata for provenance tracking).
+    /// The segment's `insertion_order` is set to the current segment count and
+    /// `total_tokens` is updated automatically.
+    pub fn add_segment(&mut self, mut segment: ContextSegment) {
+        segment.insertion_order = self.segments.len();
+        self.total_tokens += segment.token_estimate;
+        self.segments.push(segment);
+    }
+
     /// Add a raw segment with the given priority, content, source type, and optional source ID.
     ///
     /// Token estimation is computed automatically using the configured model tokenizer.
@@ -364,12 +402,10 @@ impl ContextWindow {
     /// Queries the `identities.directives` JSONB column, deserializes into
     /// `Vec<SoulDirective>`, sorts by priority, and adds each as a P0 segment.
     pub async fn load_soul_directives(&mut self, identity_id: Uuid) -> Result<()> {
-        let row = sqlx::query(
-            "SELECT directives FROM identities WHERE identity_id = $1",
-        )
-        .bind(identity_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let row = sqlx::query("SELECT directives FROM identities WHERE identity_id = $1")
+            .bind(identity_id)
+            .fetch_optional(&self.pool)
+            .await?;
 
         let Some(row) = row else {
             tracing::warn!(identity_id = %identity_id, "No identity found for soul directives");
@@ -421,19 +457,13 @@ impl ContextWindow {
     /// Combines the "today + yesterday" (48hr) window with high-importance
     /// memories (importance > 0.8), deduplicates by memory_id, and takes
     /// the top `limit` results sorted by importance then access time.
-    pub async fn load_recent_memories(
-        &mut self,
-        identity_id: Uuid,
-        limit: usize,
-    ) -> Result<()> {
+    pub async fn load_recent_memories(&mut self, identity_id: Uuid, limit: usize) -> Result<()> {
         let manager = MemoryManager::new(self.pool.clone(), None);
 
         // Load both recent (48hr) and high-importance memories
         #[allow(clippy::cast_possible_wrap)]
         let limit_i64 = limit as i64;
-        let recent = manager
-            .load_recent_memories(identity_id, limit_i64)
-            .await?;
+        let recent = manager.load_recent_memories(identity_id, limit_i64).await?;
         let important = manager
             .load_high_importance_memories(identity_id, 0.8, limit_i64)
             .await?;
@@ -460,10 +490,9 @@ impl ContextWindow {
         combined.truncate(limit);
 
         for mem in &combined {
-            let source_label = mem.source_type().map_or_else(
-                || mem.source.clone(),
-                |s| s.to_string(),
-            );
+            let source_label = mem
+                .source_type()
+                .map_or_else(|| mem.source.clone(), |s| s.to_string());
             let content = format!("[Memory from {}] {}", source_label, mem.content);
             let tokens = estimate_tokens(&content, &self.model);
 
@@ -503,12 +532,11 @@ impl ContextWindow {
     /// most recent run, formatting them as structured context.
     pub async fn load_task_context(&mut self, task_id: Uuid) -> Result<()> {
         // Load task details
-        let task_row = sqlx::query(
-            "SELECT task_id, title, description, state FROM tasks WHERE task_id = $1",
-        )
-        .bind(task_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let task_row =
+            sqlx::query("SELECT task_id, title, description, state FROM tasks WHERE task_id = $1")
+                .bind(task_id)
+                .fetch_optional(&self.pool)
+                .await?;
 
         let Some(task_row) = task_row else {
             tracing::warn!(task_id = %task_id, "No task found for context loading");
@@ -611,10 +639,7 @@ impl ContextWindow {
             // Use stored token_estimate if available, otherwise estimate
             let tokens = msg
                 .token_estimate
-                .map_or_else(
-                    || estimate_message_tokens(msg, &self.model),
-                    |t| t as usize,
-                );
+                .map_or_else(|| estimate_message_tokens(msg, &self.model), |t| t as usize);
 
             // Store message_id as i64 in metadata (not as UUID source_id)
             let idx = self.segments.len();
@@ -650,11 +675,7 @@ impl ContextWindow {
     /// Load tool results for the given session (P4 — lowest priority, prunable).
     ///
     /// Queries `session_messages` for tool-role messages, ordered newest first.
-    pub async fn load_tool_results(
-        &mut self,
-        session_id: Uuid,
-        limit: usize,
-    ) -> Result<()> {
+    pub async fn load_tool_results(&mut self, session_id: Uuid, limit: usize) -> Result<()> {
         let messages: Vec<SessionMessage> = sqlx::query_as(
             r"SELECT * FROM session_messages
               WHERE session_id = $1 AND role = 'tool'
@@ -742,10 +763,7 @@ impl ContextWindow {
             .map_or(content.len(), |(i, _)| i);
 
         let trimmed_tokens = current_tokens.saturating_sub(max_tokens);
-        let separator = format!(
-            "\n\n[... {} tokens omitted ...]\n\n",
-            trimmed_tokens
-        );
+        let separator = format!("\n\n[... {} tokens omitted ...]\n\n", trimmed_tokens);
 
         format!(
             "{}{}{}",
@@ -902,7 +920,9 @@ impl ContextWindow {
                         .get("importance")
                         .and_then(|v| v.as_f64())
                         .unwrap_or(0.0);
-                    imp_a.partial_cmp(&imp_b).unwrap_or(std::cmp::Ordering::Equal)
+                    imp_a
+                        .partial_cmp(&imp_b)
+                        .unwrap_or(std::cmp::Ordering::Equal)
                 })
                 .map(|(i, _)| i);
 
@@ -1061,7 +1081,8 @@ impl ContextWindow {
         self.enforce_budget(config.tool_trim_threshold, config.tool_clear_age_secs);
 
         // 7. Sort by (priority, insertion_order) for deterministic chronological order within groups
-        self.segments.sort_by_key(|s| (s.priority, s.insertion_order));
+        self.segments
+            .sort_by_key(|s| (s.priority, s.insertion_order));
 
         // 8. Concatenate with separators
         let mut output = String::new();
@@ -1101,15 +1122,20 @@ impl ContextWindow {
     ///
     /// Records provenance metadata (memory IDs, run IDs, message IDs, bundle hash)
     /// as a ledger event for post-hoc auditing of model inputs.
-    pub async fn log_to_ledger(
-        &self,
-        ledger: &Ledger,
-        correlation_id: Uuid,
-    ) -> Result<i64> {
+    pub async fn log_to_ledger(&self, ledger: &Ledger, correlation_id: Uuid) -> Result<i64> {
+        tracing::debug!(
+            segments = self.segments.len(),
+            total_tokens = self.total_tokens,
+            correlation_id = %correlation_id,
+            "Computing context provenance for ledger"
+        );
+
         let provenance = self.compute_provenance();
 
         let payload = json!({
-            "action": "context.assembled",
+            "action": "model.context.assembled",
+            "session_id": self.session_id.map(|id| id.to_string()),
+            "task_id": self.task_id.map(|id| id.to_string()),
             "context_bundle_hash": provenance.context_bundle_hash,
             "total_tokens": provenance.total_tokens,
             "segment_counts": provenance.segment_counts,
@@ -1118,8 +1144,25 @@ impl ContextWindow {
             "message_ids": provenance.message_ids,
         });
 
+        let metadata = json!({
+            "context_bundle_hash": provenance.context_bundle_hash,
+            "memory_ids": provenance.memory_ids,
+            "run_ids": provenance.run_ids,
+            "message_ids": provenance.message_ids,
+            "session_id": self.session_id.map(|id| id.to_string()),
+            "total_tokens": provenance.total_tokens,
+            "segment_counts": provenance.segment_counts,
+        });
+
         let event_id = ledger
-            .append_event(None, "context.assembled", payload, Some(correlation_id))
+            .append_event(
+                None,
+                "model.context.assembled",
+                payload,
+                Some(correlation_id),
+                None,
+                Some(metadata),
+            )
             .await?;
 
         tracing::info!(
@@ -1130,6 +1173,87 @@ impl ContextWindow {
         );
 
         Ok(event_id)
+    }
+
+    /// Compute provenance and log context integrity to the ledger in one step.
+    ///
+    /// This is a convenience wrapper around [`compute_provenance`] and
+    /// [`log_to_ledger`] that returns both the ledger `event_id` and the
+    /// full [`ContextProvenance`] record. Use this when the caller needs
+    /// the provenance metadata (e.g., for correlation with downstream events)
+    /// in addition to the ledger audit trail.
+    ///
+    /// # Arguments
+    ///
+    /// * `ledger` - Tamper-resistant audit ledger
+    /// * `correlation_id` - UUID linking this event to subsequent model call events
+    ///
+    /// # Returns
+    ///
+    /// `(event_id, ContextProvenance)` on success.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let (event_id, provenance) = ctx.log_context_integrity(&ledger, correlation_id).await?;
+    /// println!("Logged event {} with hash {}", event_id, provenance.context_bundle_hash);
+    /// ```
+    pub async fn log_context_integrity(
+        &self,
+        ledger: &Ledger,
+        correlation_id: Uuid,
+    ) -> Result<(i64, ContextProvenance)> {
+        tracing::debug!(
+            segments = self.segments.len(),
+            total_tokens = self.total_tokens,
+            correlation_id = %correlation_id,
+            "Computing context provenance for integrity log"
+        );
+
+        let provenance = self.compute_provenance();
+
+        let payload = json!({
+            "action": "model.context.assembled",
+            "session_id": self.session_id.map(|id| id.to_string()),
+            "task_id": self.task_id.map(|id| id.to_string()),
+            "context_bundle_hash": provenance.context_bundle_hash,
+            "total_tokens": provenance.total_tokens,
+            "segment_counts": provenance.segment_counts,
+            "memory_ids": provenance.memory_ids,
+            "run_ids": provenance.run_ids,
+            "message_ids": provenance.message_ids,
+        });
+
+        let metadata = json!({
+            "context_bundle_hash": provenance.context_bundle_hash,
+            "memory_ids": provenance.memory_ids,
+            "run_ids": provenance.run_ids,
+            "message_ids": provenance.message_ids,
+            "session_id": self.session_id.map(|id| id.to_string()),
+            "total_tokens": provenance.total_tokens,
+            "segment_counts": provenance.segment_counts,
+        });
+
+        let event_id = ledger
+            .append_event(
+                None,
+                "model.context.assembled",
+                payload,
+                Some(correlation_id),
+                None,
+                Some(metadata),
+            )
+            .await?;
+
+        tracing::info!(
+            event_id,
+            correlation_id = %correlation_id,
+            context_bundle_hash = %provenance.context_bundle_hash,
+            total_tokens = provenance.total_tokens,
+            "Context integrity logged to ledger"
+        );
+
+        Ok((event_id, provenance))
     }
 
     // =========================================================================
@@ -1145,12 +1269,11 @@ impl ContextWindow {
     /// 4. Hard-coded default: 32000 tokens
     pub async fn resolve_context_window_limit(&self, session_id: Uuid) -> Result<usize> {
         // 1. Check session-specific limit
-        let session_row = sqlx::query(
-            "SELECT context_window_limit FROM sessions WHERE session_id = $1",
-        )
-        .bind(session_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let session_row =
+            sqlx::query("SELECT context_window_limit FROM sessions WHERE session_id = $1")
+                .bind(session_id)
+                .fetch_optional(&self.pool)
+                .await?;
 
         if let Some(row) = session_row {
             let limit: Option<i32> = row.get("context_window_limit");
@@ -1219,10 +1342,7 @@ impl ContextWindow {
         .await?;
 
         let Some(session_row) = session_row else {
-            return Err(Error::Session(format!(
-                "Session {} not found",
-                session_id
-            )));
+            return Err(Error::Session(format!("Session {} not found", session_id)));
         };
 
         let agent_id: Uuid = session_row.get("agent_id");
@@ -1535,9 +1655,15 @@ mod tests {
         ctx.budget_tokens = 99;
         ctx.enforce_budget(2000, 3600);
 
-        assert_eq!(ctx.segments.len(), 2, "P3 should be pruned, P0 and P1 remain");
+        assert_eq!(
+            ctx.segments.len(),
+            2,
+            "P3 should be pruned, P0 and P1 remain"
+        );
         assert!(
-            ctx.segments.iter().all(|s| s.priority != SegmentPriority::P3),
+            ctx.segments
+                .iter()
+                .all(|s| s.priority != SegmentPriority::P3),
             "No P3 segments should remain"
         );
     }
@@ -1587,10 +1713,20 @@ mod tests {
         assert_eq!(prov.memory_ids, vec![mem_id]);
         assert_eq!(prov.message_ids, vec![42]);
         assert_eq!(prov.total_tokens, 20);
-        assert_eq!(prov.context_bundle_hash.len(), 64, "blake3 hex should be 64 chars");
+        assert_eq!(
+            prov.context_bundle_hash.len(),
+            64,
+            "blake3 hex should be 64 chars"
+        );
         assert_eq!(*prov.segment_counts.get("soul_directive").unwrap_or(&0), 1);
         assert_eq!(*prov.segment_counts.get("memory").unwrap_or(&0), 1);
-        assert_eq!(*prov.segment_counts.get("conversation_message").unwrap_or(&0), 1);
+        assert_eq!(
+            *prov
+                .segment_counts
+                .get("conversation_message")
+                .unwrap_or(&0),
+            1
+        );
     }
 
     #[tokio::test]
@@ -1694,7 +1830,8 @@ mod tests {
         });
 
         // Sort by (priority, insertion_order)
-        ctx.segments.sort_by_key(|s| (s.priority, s.insertion_order));
+        ctx.segments
+            .sort_by_key(|s| (s.priority, s.insertion_order));
 
         // P0 should come first, then P3 in original chronological order
         assert_eq!(ctx.segments[0].content, "soul");
@@ -1728,6 +1865,70 @@ mod tests {
     #[tokio::test]
     #[ignore = "Requires database connection"]
     async fn test_log_to_ledger_integration() {
-        unimplemented!("Run with: cargo test --test context -- --ignored");
+        unimplemented!("Run with: cargo test --test context_integrity_test -- --ignored");
+    }
+
+    #[tokio::test]
+    #[ignore = "Requires database connection"]
+    async fn test_log_context_integrity_integration() {
+        unimplemented!("Run with: cargo test --test context_integrity_test -- --ignored");
+    }
+
+    #[tokio::test]
+    async fn test_add_segment_updates_tokens_and_order() {
+        let pool = PgPool::connect_lazy("postgresql://localhost/test").unwrap();
+        let mut ctx = ContextWindow::new(pool, None);
+
+        assert_eq!(ctx.total_tokens, 0);
+        assert_eq!(ctx.segments.len(), 0);
+
+        ctx.add_segment(ContextSegment {
+            priority: SegmentPriority::P0,
+            content: "soul directive".to_string(),
+            token_estimate: 10,
+            source_type: SegmentSourceType::SoulDirective,
+            source_id: None,
+            metadata: json!({}),
+            insertion_order: 999, // should be overwritten to 0
+        });
+
+        assert_eq!(ctx.segments.len(), 1);
+        assert_eq!(ctx.total_tokens, 10);
+        assert_eq!(ctx.segments[0].insertion_order, 0);
+
+        ctx.add_segment(ContextSegment {
+            priority: SegmentPriority::P1,
+            content: "memory".to_string(),
+            token_estimate: 5,
+            source_type: SegmentSourceType::Memory,
+            source_id: Some(Uuid::new_v4()),
+            metadata: json!({}),
+            insertion_order: 999, // should be overwritten to 1
+        });
+
+        assert_eq!(ctx.segments.len(), 2);
+        assert_eq!(ctx.total_tokens, 15);
+        assert_eq!(ctx.segments[1].insertion_order, 1);
+    }
+
+    #[tokio::test]
+    async fn test_add_segment_preserves_metadata() {
+        let pool = PgPool::connect_lazy("postgresql://localhost/test").unwrap();
+        let mut ctx = ContextWindow::new(pool, None);
+        let run_id = Uuid::new_v4();
+
+        ctx.add_segment(ContextSegment {
+            priority: SegmentPriority::P2,
+            content: "task context".to_string(),
+            token_estimate: 8,
+            source_type: SegmentSourceType::TaskContext,
+            source_id: None,
+            metadata: json!({"run_id": run_id.to_string()}),
+            insertion_order: 0,
+        });
+
+        let prov = ctx.compute_provenance();
+        assert_eq!(prov.run_ids.len(), 1);
+        assert_eq!(prov.run_ids[0], run_id);
     }
 }

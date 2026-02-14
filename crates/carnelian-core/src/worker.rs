@@ -60,6 +60,7 @@
 
 use crate::config::Config;
 use crate::events::EventStream;
+use crate::ledger::Ledger;
 use crate::server::WorkerInfo;
 use carnelian_common::types::{
     CancelRequest, EventEnvelope, EventLevel, EventType, HealthResponse, InvokeRequest,
@@ -68,6 +69,7 @@ use carnelian_common::types::{
 use carnelian_common::{Error, Result};
 use chrono::{DateTime, Utc};
 use serde_json::json;
+use sqlx::PgPool;
 use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -147,6 +149,12 @@ pub struct Worker {
     pub last_health_check: Option<DateTime<Utc>>,
     /// Transport for skill invocation (created after spawn)
     pub transport: Option<Arc<dyn WorkerTransport>>,
+    /// Last attestation data reported by this worker
+    pub last_attestation: Option<crate::attestation::WorkerAttestation>,
+    /// Whether this worker has been quarantined due to attestation mismatch
+    pub quarantined: bool,
+    /// When attestation was last verified (for 5-min cadence gating)
+    pub last_attestation_verified: Option<DateTime<Utc>>,
 }
 
 // =============================================================================
@@ -230,6 +238,8 @@ pub struct ProcessJsonlTransport {
     created_at: Instant,
     /// Process handle for health checks and shutdown
     process: Arc<tokio::sync::Mutex<Child>>,
+    /// Pending health check response senders keyed by message_id
+    pending_health: Arc<RwLock<HashMap<Uuid, oneshot::Sender<HealthResponse>>>>,
 }
 
 impl ProcessJsonlTransport {
@@ -255,13 +265,23 @@ impl ProcessJsonlTransport {
 
         let active_runs: Arc<RwLock<HashMap<RunId, RunContext>>> =
             Arc::new(RwLock::new(HashMap::new()));
+        let pending_health: Arc<RwLock<HashMap<Uuid, oneshot::Sender<HealthResponse>>>> =
+            Arc::new(RwLock::new(HashMap::new()));
 
         // Spawn background stdout reader that demuxes responses to per-run oneshot senders
         let reader_runs = active_runs.clone();
         let reader_worker_id = worker_id.clone();
         let reader_config = config.clone();
+        let reader_pending_health = pending_health.clone();
         tokio::spawn(async move {
-            Self::read_stdout_loop(stdout, reader_worker_id, reader_runs, reader_config).await;
+            Self::read_stdout_loop(
+                stdout,
+                reader_worker_id,
+                reader_runs,
+                reader_config,
+                reader_pending_health,
+            )
+            .await;
         });
 
         Ok((
@@ -273,6 +293,7 @@ impl ProcessJsonlTransport {
                 active_runs,
                 created_at: Instant::now(),
                 process: Arc::new(tokio::sync::Mutex::new(process)),
+                pending_health,
             },
             stderr,
         ))
@@ -289,6 +310,7 @@ impl ProcessJsonlTransport {
         worker_id: String,
         active_runs: Arc<RwLock<HashMap<RunId, RunContext>>>,
         config: Arc<Config>,
+        pending_health: Arc<RwLock<HashMap<Uuid, oneshot::Sender<HealthResponse>>>>,
     ) {
         let reader = BufReader::new(stdout);
         let mut lines = reader.lines();
@@ -341,12 +363,27 @@ impl ProcessJsonlTransport {
                         let _ = ctx.event_tx.try_send(payload.clone());
                     }
                 }
+                Ok(TransportMessage::HealthResult {
+                    message_id,
+                    payload,
+                }) => {
+                    let mut pending = pending_health.write().await;
+                    if let Some(tx) = pending.remove(&message_id) {
+                        let _ = tx.send(payload);
+                    } else {
+                        tracing::debug!(
+                            worker_id = %worker_id,
+                            message_id = %message_id,
+                            "Received HealthResult with no pending request"
+                        );
+                    }
+                }
                 Ok(msg) => {
-                    // Other message types (HealthResult, etc.) — log and discard
+                    // Other message types — log and discard
                     tracing::debug!(
                         worker_id = %worker_id,
                         msg_type = ?std::mem::discriminant(&msg),
-                        "Received non-invoke/stream message from worker"
+                        "Received unexpected message type from worker"
                     );
                 }
                 Err(e) => {
@@ -630,17 +667,69 @@ impl WorkerTransport for ProcessJsonlTransport {
     }
 
     async fn health(&self) -> Result<HealthResponse> {
+        // First check if the process is still alive
         let wait_result = self.process.lock().await.try_wait();
-        let healthy = match wait_result {
+        let alive = match wait_result {
             Ok(Some(_)) | Err(_) => false,
             Ok(None) => true,
         };
 
-        Ok(HealthResponse {
-            healthy,
-            worker_id: self.worker_id.clone(),
-            uptime_secs: self.created_at.elapsed().as_secs(),
-        })
+        if !alive {
+            return Ok(HealthResponse {
+                healthy: false,
+                worker_id: self.worker_id.clone(),
+                uptime_secs: self.created_at.elapsed().as_secs(),
+                attestation: None,
+            });
+        }
+
+        // Send a Health request over stdin and wait for the HealthResult
+        let message_id = Uuid::now_v7();
+        let (tx, rx) = oneshot::channel::<HealthResponse>();
+
+        // Register the pending health response
+        self.pending_health.write().await.insert(message_id, tx);
+
+        // Serialize and send the Health message
+        let msg = TransportMessage::Health { message_id };
+        let mut line = serde_json::to_string(&msg)
+            .map_err(|e| Error::Connection(format!("Failed to serialize Health request: {e}")))?;
+        line.push('\n');
+
+        if let Err(e) = self.write_to_stdin(line.as_bytes()).await {
+            // Clean up pending entry on write failure
+            self.pending_health.write().await.remove(&message_id);
+            return Err(e);
+        }
+
+        // Wait for the response with a 10-second timeout
+        match tokio::time::timeout(std::time::Duration::from_secs(10), rx).await {
+            Ok(Ok(resp)) => Ok(resp),
+            Ok(Err(_)) => {
+                // Oneshot sender dropped (stdout reader ended)
+                self.pending_health.write().await.remove(&message_id);
+                Ok(HealthResponse {
+                    healthy: false,
+                    worker_id: self.worker_id.clone(),
+                    uptime_secs: self.created_at.elapsed().as_secs(),
+                    attestation: None,
+                })
+            }
+            Err(_) => {
+                // Timeout waiting for health response
+                self.pending_health.write().await.remove(&message_id);
+                tracing::warn!(
+                    worker_id = %self.worker_id,
+                    "Health check timed out waiting for worker response"
+                );
+                Ok(HealthResponse {
+                    healthy: false,
+                    worker_id: self.worker_id.clone(),
+                    uptime_secs: self.created_at.elapsed().as_secs(),
+                    attestation: None,
+                })
+            }
+        }
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -676,6 +765,41 @@ struct HealthCheckResult {
     /// Exit code if the worker has exited (Some(Some(code)) or Some(None) for signal)
     #[allow(clippy::option_option)]
     exit_code: Option<Option<i32>>,
+    /// Attestation data from the health response (if any)
+    attestation: Option<carnelian_common::types::WorkerAttestationData>,
+    /// When attestation was last verified (from worker registry)
+    last_attestation_verified: Option<DateTime<Utc>>,
+}
+
+/// Compute the expected build checksum for a worker runtime, matching the
+/// algorithm each worker uses to report its own checksum.
+///
+/// - **Node**: reads `workers/node-worker/package.json` → `v{version}` (matches `computeBuildChecksum()` in index.ts)
+/// - **Python**: SHA-256 of `workers/python-worker/worker.py` (matches `compute_build_checksum()` in worker.py)
+/// - **Shell/Wasm**: placeholder version string
+fn compute_expected_checksum(_config: &Config, runtime: WorkerRuntime, path: &str) -> String {
+    match runtime {
+        WorkerRuntime::Node => {
+            // Match the Node worker's computeBuildChecksum(): reads package.json version
+            let pkg_path = format!("{}/package.json", path);
+            match std::fs::read_to_string(&pkg_path) {
+                Ok(contents) => {
+                    if let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&contents) {
+                        if let Some(version) = pkg.get("version").and_then(|v| v.as_str()) {
+                            return format!("v{}", version);
+                        }
+                    }
+                    "v0.1.0".to_string()
+                }
+                Err(_) => "v0.1.0".to_string(),
+            }
+        }
+        WorkerRuntime::Python => {
+            // Match the Python worker's compute_build_checksum(): returns "v{VERSION}"
+            "v0.1.0".to_string()
+        }
+        _ => format!("v0.1.0-{}", path),
+    }
 }
 
 /// Perform a health check on a single worker, updating its status and emitting events.
@@ -693,28 +817,38 @@ async fn perform_single_health_check(
     event_stream: &EventStream,
     worker_id: &str,
 ) -> Result<HealthCheckResult> {
-    let (healthy, runtime, exit_code) = {
+    let (healthy, runtime, exit_code, attestation, last_attestation_verified) = {
         let mut w = workers.write().await;
         let worker = w
             .get_mut(worker_id)
             .ok_or_else(|| Error::Config(format!("Worker not found: {}", worker_id)))?;
 
         let runtime = worker.runtime;
+        let last_att_verified = worker.last_attestation_verified;
 
         // If the worker has a transport, use it for health checks
         if let Some(ref transport) = worker.transport {
             match transport.health().await {
                 Ok(resp) if resp.healthy => {
                     worker.last_health_check = Some(Utc::now());
-                    (true, runtime, None)
+                    // Store attestation on the worker struct
+                    if let Some(ref att) = resp.attestation {
+                        worker.last_attestation = Some(crate::attestation::WorkerAttestation {
+                            worker_id: worker_id.to_string(),
+                            last_ledger_head: att.last_ledger_head.clone(),
+                            build_checksum: att.build_checksum.clone(),
+                            config_version: att.config_version.clone(),
+                        });
+                    }
+                    (true, runtime, None, resp.attestation, last_att_verified)
                 }
-                Ok(_) => {
+                Ok(resp) => {
                     tracing::error!(
                         worker_id = %worker_id,
                         "Worker process exited unexpectedly (transport health check)"
                     );
                     worker.status = WorkerStatus::Failed;
-                    (false, runtime, None)
+                    (false, runtime, None, resp.attestation, last_att_verified)
                 }
                 Err(e) => {
                     tracing::warn!(
@@ -722,7 +856,7 @@ async fn perform_single_health_check(
                         error = %e,
                         "Failed to check worker health via transport"
                     );
-                    (false, runtime, None)
+                    (false, runtime, None, None, last_att_verified)
                 }
             }
         } else if let Some(ref mut process) = worker.process {
@@ -734,11 +868,11 @@ async fn perform_single_health_check(
                         "Worker process exited unexpectedly"
                     );
                     worker.status = WorkerStatus::Failed;
-                    (false, runtime, Some(status.code()))
+                    (false, runtime, Some(status.code()), None, last_att_verified)
                 }
                 Ok(None) => {
                     worker.last_health_check = Some(Utc::now());
-                    (true, runtime, None)
+                    (true, runtime, None, None, last_att_verified)
                 }
                 Err(e) => {
                     tracing::warn!(
@@ -746,13 +880,13 @@ async fn perform_single_health_check(
                         error = %e,
                         "Failed to check worker health"
                     );
-                    (false, runtime, None)
+                    (false, runtime, None, None, last_att_verified)
                 }
             }
         } else {
             // No process and no transport — mark as failed
             worker.status = WorkerStatus::Failed;
-            (false, runtime, None)
+            (false, runtime, None, None, last_att_verified)
         }
     };
 
@@ -805,6 +939,8 @@ async fn perform_single_health_check(
         healthy,
         runtime,
         exit_code,
+        attestation,
+        last_attestation_verified,
     })
 }
 
@@ -823,6 +959,12 @@ pub struct WorkerManager {
     shutdown_tx: Option<watch::Sender<bool>>,
     /// Counter for generating unique worker IDs per runtime
     id_counters: HashMap<String, u32>,
+    /// Safe mode guard for blocking side-effect operations
+    safe_mode_guard: Option<Arc<crate::safe_mode::SafeModeGuard>>,
+    /// Database pool for attestation queries
+    pool: Option<PgPool>,
+    /// Ledger for logging quarantine events
+    ledger: Option<Arc<Ledger>>,
 }
 
 impl WorkerManager {
@@ -839,7 +981,25 @@ impl WorkerManager {
             event_stream,
             shutdown_tx: None,
             id_counters: HashMap::new(),
+            safe_mode_guard: None,
+            pool: None,
+            ledger: None,
         }
+    }
+
+    /// Set the database pool for attestation verification.
+    pub fn set_pool(&mut self, pool: PgPool) {
+        self.pool = Some(pool);
+    }
+
+    /// Set the ledger for logging quarantine events.
+    pub fn set_ledger(&mut self, ledger: Arc<Ledger>) {
+        self.ledger = Some(ledger);
+    }
+
+    /// Set the safe mode guard for blocking worker spawns when safe mode is active.
+    pub fn set_safe_mode_guard(&mut self, guard: Arc<crate::safe_mode::SafeModeGuard>) {
+        self.safe_mode_guard = Some(guard);
     }
 
     /// Generate a unique worker ID for the given runtime.
@@ -868,6 +1028,10 @@ impl WorkerManager {
     /// - The max_workers limit has been reached
     /// - The process fails to spawn
     pub async fn spawn_worker(&mut self, runtime: WorkerRuntime) -> Result<String> {
+        if let Some(ref guard) = self.safe_mode_guard {
+            guard.check_or_block("worker_spawn").await?;
+        }
+
         let max_workers = self.config.machine_config().max_workers;
         let current_count = self.workers.read().await.len();
 
@@ -902,8 +1066,22 @@ impl WorkerManager {
             }
         };
 
+        // Compute attestation env vars for the worker
+        let ledger_head = self
+            .get_expected_ledger_head()
+            .await
+            .unwrap_or_else(|_| "genesis".to_string());
+        let config_version = self
+            .get_expected_config_version()
+            .await
+            .unwrap_or_else(|_| "v1".to_string());
+        let build_checksum = self.get_expected_build_checksum(runtime);
+
         cmd.env("WORKER_ID", &worker_id)
             .env("CARNELIAN_API_URL", &api_url)
+            .env("CARNELIAN_LEDGER_HEAD", &ledger_head)
+            .env("CARNELIAN_CONFIG_VERSION", &config_version)
+            .env("CARNELIAN_BUILD_CHECKSUM", &build_checksum)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -936,6 +1114,9 @@ impl WorkerManager {
             started_at: Utc::now(),
             last_health_check: None,
             transport: Some(transport),
+            last_attestation: None,
+            quarantined: false,
+            last_attestation_verified: None,
         };
 
         self.workers.write().await.insert(worker_id.clone(), worker);
@@ -1221,6 +1402,8 @@ impl WorkerManager {
     /// Spawns a tokio task that runs health checks every 30 seconds using the
     /// shared `perform_single_health_check` function. Failed workers are automatically
     /// removed from the registry and have `WorkerStopped` events emitted.
+    /// After each healthy check, attestation data (if present) is verified and
+    /// mismatched workers are quarantined.
     /// The loop responds to the shutdown signal for graceful termination.
     fn start_health_check_loop(&mut self) {
         let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
@@ -1228,6 +1411,9 @@ impl WorkerManager {
 
         let workers = self.workers.clone();
         let event_stream = self.event_stream.clone();
+        let pool = self.pool.clone();
+        let ledger = self.ledger.clone();
+        let config = self.config.clone();
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
@@ -1246,6 +1432,115 @@ impl WorkerManager {
                                 Ok(result) => {
                                     if result.healthy {
                                         healthy += 1;
+
+                                        // Process attestation if present and due (every 5 minutes)
+                                        let attestation_due = result.last_attestation_verified.is_none_or(|t| Utc::now().signed_duration_since(t).num_seconds() > 300); // Always due if never verified
+
+                                        if attestation_due {
+                                        if let (Some(att_data), Some(db_pool)) = (&result.attestation, &pool) {
+                                            let attestation = crate::attestation::WorkerAttestation {
+                                                worker_id: worker_id.clone(),
+                                                last_ledger_head: att_data.last_ledger_head.clone(),
+                                                build_checksum: att_data.build_checksum.clone(),
+                                                config_version: att_data.config_version.clone(),
+                                            };
+
+                                            // Compute expected values
+                                            let expected_ledger_head = if let Some(ref l) = ledger {
+                                                l.load_last_hash().await.unwrap_or(None).unwrap_or_else(|| "genesis".to_string())
+                                            } else {
+                                                "genesis".to_string()
+                                            };
+
+                                            let expected_build_checksum = {
+                                                let runtime = result.runtime;
+                                                let path = match runtime {
+                                                    WorkerRuntime::Node => "workers/node-worker",
+                                                    WorkerRuntime::Python => "workers/python-worker",
+                                                    WorkerRuntime::Shell => "workers/shell-worker",
+                                                    WorkerRuntime::Wasm => "workers/wasm-worker",
+                                                };
+                                                compute_expected_checksum(&config, runtime, path)
+                                            };
+
+                                            let expected_config_version = {
+                                                let version: Option<String> = sqlx::query_scalar(
+                                                    "SELECT value_text FROM config_store WHERE key = 'config_version'"
+                                                )
+                                                .fetch_optional(db_pool)
+                                                .await
+                                                .unwrap_or(None);
+                                                version.unwrap_or_else(|| "v1".to_string())
+                                            };
+
+                                            match crate::attestation::verify_attestation(
+                                                db_pool,
+                                                &attestation,
+                                                &expected_ledger_head,
+                                                &expected_build_checksum,
+                                                &expected_config_version,
+                                            ).await {
+                                                Ok(att_result) if !att_result.verified => {
+                                                    // Quarantine the worker
+                                                    let reason = att_result.mismatch_reason.as_deref().unwrap_or("unknown");
+                                                    if let Err(e) = crate::attestation::quarantine_worker(db_pool, worker_id, reason).await {
+                                                        tracing::warn!(worker_id = %worker_id, error = %e, "Failed to quarantine worker in DB");
+                                                    }
+
+                                                    // Mark quarantined in registry
+                                                    {
+                                                        let mut w = workers.write().await;
+                                                        if let Some(worker) = w.get_mut(worker_id.as_str()) {
+                                                            worker.quarantined = true;
+                                                            worker.status = WorkerStatus::Failed;
+                                                        }
+                                                    }
+
+                                                    // Log to ledger
+                                                    if let Some(ref l) = ledger {
+                                                        if let Err(e) = l.append_event(
+                                                            None,
+                                                            "worker.quarantined",
+                                                            json!({
+                                                                "worker_id": worker_id,
+                                                                "reason": att_result.mismatch_reason,
+                                                                "attestation": attestation,
+                                                            }),
+                                                            None,
+                                                            None,
+                                                            None,
+                                                        ).await {
+                                                            tracing::warn!(worker_id = %worker_id, error = %e, "Failed to log quarantine to ledger");
+                                                        }
+                                                    }
+
+                                                    tracing::error!(
+                                                        worker_id = %worker_id,
+                                                        reason = ?att_result.mismatch_reason,
+                                                        "Worker quarantined due to attestation mismatch"
+                                                    );
+                                                    failed += 1;
+                                                    healthy -= 1;
+                                                }
+                                                Ok(_) => {
+                                                    // Record successful attestation
+                                                    if let Err(e) = crate::attestation::record_attestation(db_pool, &attestation).await {
+                                                        tracing::warn!(worker_id = %worker_id, error = %e, "Failed to record attestation");
+                                                    }
+                                                    // Update last_attestation_verified timestamp
+                                                    {
+                                                        let mut w = workers.write().await;
+                                                        if let Some(worker) = w.get_mut(worker_id.as_str()) {
+                                                            worker.last_attestation_verified = Some(Utc::now());
+                                                        }
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    tracing::warn!(worker_id = %worker_id, error = %e, "Attestation verification error");
+                                                }
+                                            }
+                                        }
+                                        } // end if attestation_due
                                     } else {
                                         failed += 1;
                                     }
@@ -1277,6 +1572,173 @@ impl WorkerManager {
                 }
             }
         });
+    }
+
+    /// Check if a worker is quarantined before assigning tasks.
+    ///
+    /// First checks the in-memory `worker.quarantined` flag (fast path),
+    /// then falls back to the database `worker_attestations` table.
+    pub async fn can_assign_task(&self, worker_id: &str) -> Result<bool> {
+        // Fast path: check in-memory quarantine flag
+        {
+            let workers = self.workers.read().await;
+            if let Some(worker) = workers.get(worker_id) {
+                if worker.quarantined {
+                    return Ok(false);
+                }
+            }
+        }
+
+        // Slow path: check database
+        if let Some(ref pool) = self.pool {
+            let quarantined = crate::attestation::is_worker_quarantined(pool, worker_id).await?;
+            Ok(!quarantined)
+        } else {
+            Ok(true)
+        }
+    }
+
+    /// Get the expected ledger head hash from the ledger.
+    ///
+    /// Returns the last hash from the ledger, or "genesis" if no ledger is
+    /// configured or no events have been recorded.
+    pub async fn get_expected_ledger_head(&self) -> Result<String> {
+        if let Some(ref ledger) = self.ledger {
+            let last_hash = ledger.load_last_hash().await?;
+            Ok(last_hash.unwrap_or_else(|| "genesis".to_string()))
+        } else {
+            Ok("genesis".to_string())
+        }
+    }
+
+    /// Get the expected config version from the `config_store` table.
+    ///
+    /// Returns the value of the `config_version` key, or "v1" if not found
+    /// or no database pool is configured.
+    pub async fn get_expected_config_version(&self) -> Result<String> {
+        if let Some(ref pool) = self.pool {
+            let version: Option<String> = sqlx::query_scalar(
+                "SELECT value_text FROM config_store WHERE key = 'config_version'",
+            )
+            .fetch_optional(pool)
+            .await
+            .map_err(Error::Database)?;
+
+            Ok(version.unwrap_or_else(|| "v1".to_string()))
+        } else {
+            Ok("v1".to_string())
+        }
+    }
+
+    /// Get the expected build checksum for a worker runtime.
+    ///
+    /// Delegates to `compute_expected_checksum()` which matches each worker's
+    /// own checksum computation algorithm.
+    pub fn get_expected_build_checksum(&self, runtime: WorkerRuntime) -> String {
+        let path = match runtime {
+            WorkerRuntime::Node => "workers/node-worker",
+            WorkerRuntime::Python => "workers/python-worker",
+            WorkerRuntime::Shell => "workers/shell-worker",
+            WorkerRuntime::Wasm => "workers/wasm-worker",
+        };
+        compute_expected_checksum(&self.config, runtime, path)
+    }
+
+    /// Process attestation data from a health check response.
+    ///
+    /// Verifies the attestation against expected values and quarantines the worker
+    /// if there is a mismatch. Records successful attestations in the database.
+    /// Updates `worker.last_attestation_verified` timestamp on success.
+    ///
+    /// Returns `true` if attestation passed, `false` if quarantined.
+    pub async fn process_attestation(
+        &self,
+        worker_id: &str,
+        runtime: WorkerRuntime,
+        attestation_data: &crate::attestation::WorkerAttestation,
+    ) -> Result<bool> {
+        let pool = match self.pool {
+            Some(ref p) => p,
+            None => return Ok(true), // No pool, skip attestation
+        };
+
+        let expected_ledger_head = self.get_expected_ledger_head().await?;
+        let expected_build_checksum = self.get_expected_build_checksum(runtime);
+        let expected_config_version = self.get_expected_config_version().await?;
+
+        let result = crate::attestation::verify_attestation(
+            pool,
+            attestation_data,
+            &expected_ledger_head,
+            &expected_build_checksum,
+            &expected_config_version,
+        )
+        .await?;
+
+        if !result.verified {
+            // Quarantine worker in DB
+            crate::attestation::quarantine_worker(
+                pool,
+                worker_id,
+                result.mismatch_reason.as_deref().unwrap_or("unknown"),
+            )
+            .await?;
+
+            // Mark quarantined in registry
+            {
+                let mut workers = self.workers.write().await;
+                if let Some(worker) = workers.get_mut(worker_id) {
+                    worker.quarantined = true;
+                    worker.status = WorkerStatus::Failed;
+                }
+            }
+
+            // Log to ledger
+            if let Some(ref ledger) = self.ledger {
+                if let Err(e) = ledger
+                    .append_event(
+                        None,
+                        "worker.quarantined",
+                        json!({
+                            "worker_id": worker_id,
+                            "reason": result.mismatch_reason,
+                            "attestation": attestation_data,
+                        }),
+                        None,
+                        None,
+                        None,
+                    )
+                    .await
+                {
+                    tracing::warn!(
+                        worker_id = %worker_id,
+                        error = %e,
+                        "Failed to log worker quarantine to ledger"
+                    );
+                }
+            }
+
+            tracing::error!(
+                worker_id = %worker_id,
+                reason = ?result.mismatch_reason,
+                "Worker quarantined due to attestation mismatch"
+            );
+
+            Ok(false)
+        } else {
+            // Record successful attestation
+            crate::attestation::record_attestation(pool, attestation_data).await?;
+
+            // Update last_attestation_verified timestamp
+            {
+                let mut workers = self.workers.write().await;
+                if let Some(worker) = workers.get_mut(worker_id) {
+                    worker.last_attestation_verified = Some(Utc::now());
+                }
+            }
+
+            Ok(true)
+        }
     }
 
     /// Get worker status information for the status endpoint.
@@ -1326,6 +1788,9 @@ impl WorkerManager {
             started_at: Utc::now(),
             last_health_check: None,
             transport: Some(transport),
+            last_attestation: None,
+            quarantined: false,
+            last_attestation_verified: None,
         };
         self.workers.write().await.insert(worker_id.clone(), worker);
 

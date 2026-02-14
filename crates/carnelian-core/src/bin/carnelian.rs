@@ -237,7 +237,7 @@ async fn handle_start(
     // Run migrations
     if let Ok(pool) = config.pool() {
         tracing::info!("Running database migrations...");
-        carnelian_core::db::run_migrations(pool).await?;
+        carnelian_core::db::run_migrations(pool, None).await?;
     }
 
     // Load owner keypair
@@ -258,7 +258,10 @@ async fn handle_start(
     let ledger = Ledger::new(config.pool()?.clone());
     ledger.load_last_hash().await?;
 
-    match ledger.verify_chain().await {
+    match ledger
+        .verify_chain(config.owner_public_key.as_deref())
+        .await
+    {
         Ok(true) => {
             tracing::info!("Ledger chain verification passed");
         }
@@ -292,6 +295,12 @@ async fn handle_start(
         ledger.clone(),
     ));
 
+    // Create safe mode guard
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        config_arc.pool()?.clone(),
+        ledger.clone(),
+    ));
+
     // Create scheduler with heartbeat interval from config, worker manager, and config
     let scheduler = Scheduler::new(
         config_arc.pool()?.clone(),
@@ -301,6 +310,7 @@ async fn handle_start(
         config_arc.clone(),
         model_router,
         ledger.clone(),
+        safe_mode_guard,
     );
 
     // Create server
@@ -622,7 +632,7 @@ async fn handle_migrate(
     } else {
         // Run migrations
         tracing::info!("Running database migrations...");
-        carnelian_core::db::run_migrations(pool).await?;
+        carnelian_core::db::run_migrations(pool, None).await?;
 
         println!("✓ Migrations completed successfully");
     }
@@ -664,7 +674,7 @@ async fn handle_skills(
             let pool = config.pool()?.clone();
 
             // Run migrations to ensure schema is up to date
-            carnelian_core::db::run_migrations(&pool).await?;
+            carnelian_core::db::run_migrations(&pool, None).await?;
 
             let discovery = carnelian_core::SkillDiscovery::new(
                 pool,
