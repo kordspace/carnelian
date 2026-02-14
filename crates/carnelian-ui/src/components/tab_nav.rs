@@ -18,6 +18,8 @@ pub fn TabNav() -> Element {
         ("Tasks", Route::Tasks {}),
         ("Events", Route::Events {}),
         ("Skills", Route::Skills {}),
+        ("Approvals", Route::Approvals {}),
+        ("Capabilities", Route::Capabilities {}),
     ];
 
     rsx! {

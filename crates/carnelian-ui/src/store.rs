@@ -42,6 +42,15 @@ pub struct StatusUpdate {
     pub profile: String,
 }
 
+/// A notification about an approval lifecycle event.
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct ApprovalNotification {
+    pub approval_id: String,
+    pub event_type: String,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+}
+
 /// Global application state backed by Dioxus signals.
 #[derive(Clone)]
 pub struct EventStreamStore {
@@ -49,6 +58,7 @@ pub struct EventStreamStore {
     pub connection_state: Signal<ConnectionState>,
     pub system_status: Signal<SystemStatus>,
     pub machine_profile: Signal<String>,
+    pub approval_notifications: Signal<Vec<ApprovalNotification>>,
 }
 
 impl EventStreamStore {
@@ -62,6 +72,7 @@ impl EventStreamStore {
             connection_state: Signal::new(ConnectionState::Disconnected),
             system_status: Signal::new(SystemStatus::default()),
             machine_profile: Signal::new("Unknown".to_string()),
+            approval_notifications: Signal::new(Vec::new()),
         }
     }
 
@@ -95,11 +106,40 @@ impl EventStreamStore {
     }
 
     /// Dioxus-local coroutine that drains the event channel into the
-    /// signal-backed ring buffer.
+    /// signal-backed ring buffer. Also populates `approval_notifications`
+    /// for approval lifecycle events.
     fn bridge_events(&self, mut rx: mpsc::UnboundedReceiver<EventEnvelope>) {
         let mut events = self.events;
+        let mut approval_notifications = self.approval_notifications;
         spawn(async move {
             while let Some(envelope) = rx.recv().await {
+                // Track approval lifecycle events
+                match &envelope.event_type {
+                    carnelian_common::types::EventType::ApprovalQueued
+                    | carnelian_common::types::EventType::ApprovalApproved
+                    | carnelian_common::types::EventType::ApprovalDenied => {
+                        let approval_id = envelope
+                            .payload
+                            .get("approval_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown")
+                            .to_string();
+                        let event_type = format!("{:?}", envelope.event_type);
+                        let mut notifs = approval_notifications.write();
+                        notifs.push(ApprovalNotification {
+                            approval_id,
+                            event_type,
+                            timestamp: envelope.timestamp,
+                        });
+                        // Keep only the last 50 notifications
+                        if notifs.len() > 50 {
+                            let excess = notifs.len() - 50;
+                            notifs.drain(..excess);
+                        }
+                    }
+                    _ => {}
+                }
+
                 let mut buf = events.write();
                 buf.push_back(envelope);
                 if buf.len() > MAX_EVENTS {

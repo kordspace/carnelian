@@ -4,9 +4,12 @@
 //! where `T` is the deserialized response type from `carnelian_common::types`.
 
 use carnelian_common::types::{
+    ApprovalActionRequest, ApprovalActionResponse, BatchApprovalRequest, BatchApprovalResponse,
     CancelTaskRequest, CancelTaskResponse, CreateTaskRequest, CreateTaskResponse,
-    ListSkillsResponse, ListTasksResponse, MetricsSnapshot, PaginatedRunLogsResponse, RunDetail,
-    SkillRefreshResponse, SkillToggleResponse, TaskDetail,
+    GrantCapabilityRequest, GrantCapabilityResponse, ListApprovalsResponse,
+    ListCapabilitiesResponse, ListSkillsResponse, ListTasksResponse, MetricsSnapshot,
+    PaginatedRunLogsResponse, RevokeCapabilityResponse, RunDetail, SkillRefreshResponse,
+    SkillToggleResponse, TaskDetail,
 };
 use uuid::Uuid;
 
@@ -178,6 +181,145 @@ pub async fn get_metrics() -> Result<MetricsSnapshot, String> {
         .await
         .map_err(|e| format!("Request failed: {e}"))?
         .json::<MetricsSnapshot>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+// ── Approval Operations ────────────────────────────────────
+
+/// List pending approvals.
+pub async fn list_pending_approvals(limit: i64) -> Result<ListApprovalsResponse, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/approvals?limit={limit}"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<ListApprovalsResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Approve an approval request.
+pub async fn approve_approval(
+    approval_id: Uuid,
+    signature: String,
+) -> Result<ApprovalActionResponse, String> {
+    let body = ApprovalActionRequest { signature };
+    let resp = client()
+        .post(format!("{API_BASE_URL}/v1/approvals/{approval_id}/approve"))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        return Err(format!("Server error {status}: {text}"));
+    }
+    resp.json::<ApprovalActionResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Deny an approval request.
+pub async fn deny_approval(
+    approval_id: Uuid,
+    signature: String,
+) -> Result<ApprovalActionResponse, String> {
+    let body = ApprovalActionRequest { signature };
+    let resp = client()
+        .post(format!("{API_BASE_URL}/v1/approvals/{approval_id}/deny"))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        return Err(format!("Server error {status}: {text}"));
+    }
+    resp.json::<ApprovalActionResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Batch approve multiple approval requests.
+pub async fn batch_approve_approvals(
+    approval_ids: Vec<Uuid>,
+    signature: String,
+) -> Result<BatchApprovalResponse, String> {
+    let body = BatchApprovalRequest {
+        approval_ids,
+        signature,
+    };
+    let resp = client()
+        .post(format!("{API_BASE_URL}/v1/approvals/batch"))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        return Err(format!("Server error {status}: {text}"));
+    }
+    resp.json::<BatchApprovalResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+// ── Capability Operations ──────────────────────────────────
+
+/// List capability grants with optional filters.
+pub async fn list_capabilities(
+    subject_type: Option<String>,
+    subject_id: Option<String>,
+) -> Result<ListCapabilitiesResponse, String> {
+    let mut url = format!("{API_BASE_URL}/v1/capabilities");
+    let mut params = Vec::new();
+    if let Some(ref st) = subject_type {
+        params.push(format!("subject_type={st}"));
+    }
+    if let Some(ref si) = subject_id {
+        params.push(format!("subject_id={si}"));
+    }
+    if !params.is_empty() {
+        url.push('?');
+        url.push_str(&params.join("&"));
+    }
+    client()
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<ListCapabilitiesResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Grant a capability.
+pub async fn grant_capability(
+    request: GrantCapabilityRequest,
+) -> Result<GrantCapabilityResponse, String> {
+    client()
+        .post(format!("{API_BASE_URL}/v1/capabilities"))
+        .json(&request)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<GrantCapabilityResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Revoke a capability grant.
+pub async fn revoke_capability(grant_id: Uuid) -> Result<RevokeCapabilityResponse, String> {
+    client()
+        .delete(format!("{API_BASE_URL}/v1/capabilities/{grant_id}"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<RevokeCapabilityResponse>()
         .await
         .map_err(|e| format!("Parse failed: {e}"))
 }

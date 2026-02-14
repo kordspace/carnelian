@@ -29,6 +29,10 @@ pub enum Route {
     Events {},
     #[route("/skills")]
     Skills {},
+    #[route("/approvals")]
+    Approvals {},
+    #[route("/capabilities")]
+    Capabilities {},
 }
 
 #[tokio::main]
@@ -94,4 +98,16 @@ fn Events() -> Element {
 #[component]
 fn Skills() -> Element {
     pages::skills::Skills()
+}
+
+/// Approvals page (delegates to `pages::approvals`).
+#[component]
+fn Approvals() -> Element {
+    pages::approvals::Approvals()
+}
+
+/// Capabilities page (delegates to `pages::capabilities`).
+#[component]
+fn Capabilities() -> Element {
+    pages::capabilities::Capabilities()
 }
