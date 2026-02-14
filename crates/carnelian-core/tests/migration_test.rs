@@ -129,7 +129,7 @@ async fn setup_pool(db_url: &str) -> sqlx::PgPool {
         .await
         .expect("Failed to connect to database");
 
-    carnelian_core::db::run_migrations(&pool)
+    carnelian_core::db::run_migrations(&pool, None)
         .await
         .expect("Migrations should succeed");
 
@@ -905,25 +905,26 @@ async fn test_schema_fixes_lz4_compression() {
     let db_url = get_database_url(&container).await;
     let pool = setup_pool(&db_url).await;
 
-    // Verify LZ4 compression on memories.content
+    // memories.content and run_logs.message are BYTEA after migration 0009
+    // (encryption at rest) with default compression — LZ4 was intentionally
+    // removed because encrypted output is incompressible.
     assert!(
-        verify_column_compression(&pool, "memories", "content").await,
-        "memories.content should have LZ4 compression"
+        !verify_column_compression(&pool, "memories", "content").await,
+        "memories.content should NOT have LZ4 compression (reset by migration 0009)"
     );
 
-    // Verify LZ4 compression on run_logs.message
     assert!(
-        verify_column_compression(&pool, "run_logs", "message").await,
-        "run_logs.message should have LZ4 compression"
+        !verify_column_compression(&pool, "run_logs", "message").await,
+        "run_logs.message should NOT have LZ4 compression (reset by migration 0009)"
     );
 
-    // Verify LZ4 compression on ledger_events.metadata
+    // Verify LZ4 compression on ledger_events.metadata (unchanged by migration 0009)
     assert!(
         verify_column_compression(&pool, "ledger_events", "metadata").await,
         "ledger_events.metadata should have LZ4 compression"
     );
 
-    // Insert large text (>8KB) to verify storage works with compression
+    // Insert large BYTEA content (>8KB) to verify storage works
     let lian_id: uuid::Uuid =
         sqlx::query_scalar("SELECT identity_id FROM identities WHERE name = 'Lian' LIMIT 1")
             .fetch_one(&pool)
@@ -931,23 +932,26 @@ async fn test_schema_fixes_lz4_compression() {
             .expect("Lian should exist");
 
     let large_content = "x".repeat(10_000); // 10KB of data
+    let large_content_bytes = large_content.as_bytes().to_vec();
     let memory_id: uuid::Uuid = sqlx::query_scalar(
         "INSERT INTO memories (identity_id, content, source) VALUES ($1, $2, 'observation') RETURNING memory_id",
     )
     .bind(lian_id)
-    .bind(&large_content)
+    .bind(&large_content_bytes)
     .fetch_one(&pool)
     .await
     .expect("Should insert large memory content");
 
-    // Update to trigger compression
+    // Update to verify BYTEA column is writable
     sqlx::query("UPDATE memories SET content = content WHERE memory_id = $1")
         .bind(memory_id)
         .execute(&pool)
         .await
-        .expect("Should update memory to trigger compression");
+        .expect("Should update memory");
 
-    println!("✓ Schema fixes: LZ4 compression verified");
+    println!(
+        "✓ Schema fixes: compression verified (LZ4 on ledger_events, default on memories/run_logs)"
+    );
 }
 
 // =============================================================================
@@ -967,7 +971,7 @@ async fn test_migration_idempotency() {
         .expect("Failed to connect to database");
 
     // Run migrations first time
-    carnelian_core::db::run_migrations(&pool)
+    carnelian_core::db::run_migrations(&pool, None)
         .await
         .expect("First migration run should succeed");
 
@@ -989,7 +993,7 @@ async fn test_migration_idempotency() {
         .expect("Should count capabilities");
 
     // Run migrations second time
-    carnelian_core::db::run_migrations(&pool)
+    carnelian_core::db::run_migrations(&pool, None)
         .await
         .expect("Second migration run should succeed (idempotent)");
 

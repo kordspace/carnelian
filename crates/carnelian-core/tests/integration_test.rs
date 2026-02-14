@@ -87,6 +87,10 @@ fn create_test_scheduler(event_stream: Arc<EventStream>) -> Arc<tokio::sync::Mut
         policy_engine,
         ledger.clone(),
     ));
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger.clone(),
+    ));
     Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool,
         event_stream,
@@ -95,6 +99,7 @@ fn create_test_scheduler(event_stream: Arc<EventStream>) -> Arc<tokio::sync::Mut
         config,
         model_router,
         ledger,
+        safe_mode_guard,
     )))
 }
 
@@ -989,7 +994,7 @@ async fn test_database_server_startup() {
 
     // Run migrations
     let pool = config.pool().expect("Should have pool").clone();
-    carnelian_core::db::run_migrations(&pool)
+    carnelian_core::db::run_migrations(&pool, None)
         .await
         .expect("Should run migrations");
 
@@ -1020,6 +1025,10 @@ async fn test_database_server_startup() {
     ));
 
     // Create Scheduler with the real database pool
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger.clone(),
+    ));
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool.clone(),
         event_stream.clone(),
@@ -1028,6 +1037,7 @@ async fn test_database_server_startup() {
         config.clone(),
         model_router,
         ledger.clone(),
+        safe_mode_guard,
     )));
 
     let server = Server::new(
@@ -1106,7 +1116,16 @@ async fn test_database_connection_failure() {
     let ledger = Arc::new(Ledger::new(pool.clone()));
     let config = Arc::new(config);
     let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
-    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine.clone(), ledger.clone()));
+    let model_router = Arc::new(ModelRouter::new(
+        pool.clone(),
+        "http://localhost:18790".to_string(),
+        policy_engine.clone(),
+        ledger.clone(),
+    ));
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger.clone(),
+    ));
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool,
         event_stream.clone(),
@@ -1115,6 +1134,7 @@ async fn test_database_connection_failure() {
         config.clone(),
         model_router,
         ledger.clone(),
+        safe_mode_guard,
     )));
     let server = Server::new(
         config,
@@ -1199,7 +1219,7 @@ async fn test_database_reconnection() {
 
     // Run migrations
     let pool = config.pool().expect("Should have pool").clone();
-    carnelian_core::db::run_migrations(&pool)
+    carnelian_core::db::run_migrations(&pool, None)
         .await
         .expect("Should run migrations");
 
@@ -1215,7 +1235,16 @@ async fn test_database_reconnection() {
     let ledger = Arc::new(Ledger::new(pool.clone()));
     let config = Arc::new(config);
     let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
-    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine.clone(), ledger.clone()));
+    let model_router = Arc::new(ModelRouter::new(
+        pool.clone(),
+        "http://localhost:18790".to_string(),
+        policy_engine.clone(),
+        ledger.clone(),
+    ));
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger.clone(),
+    ));
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool.clone(),
         event_stream.clone(),
@@ -1224,6 +1253,7 @@ async fn test_database_reconnection() {
         config.clone(),
         model_router,
         ledger.clone(),
+        safe_mode_guard,
     )));
     let server = Server::new(
         config,
@@ -1363,7 +1393,16 @@ async fn test_database_reconnection_under_load() {
     let ledger = Arc::new(Ledger::new(pool.clone()));
     let config = Arc::new(config);
     let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
-    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine.clone(), ledger.clone()));
+    let model_router = Arc::new(ModelRouter::new(
+        pool.clone(),
+        "http://localhost:18790".to_string(),
+        policy_engine.clone(),
+        ledger.clone(),
+    ));
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger.clone(),
+    ));
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool,
         event_stream.clone(),
@@ -1372,6 +1411,7 @@ async fn test_database_reconnection_under_load() {
         config.clone(),
         model_router,
         ledger.clone(),
+        safe_mode_guard,
     )));
     let server = Server::new(
         config,
@@ -1515,7 +1555,7 @@ async fn test_heartbeat_interval_timing() {
 
     // Run migrations (creates Lian identity + seed data needed by scheduler)
     let pool = config.pool().expect("Should have pool").clone();
-    carnelian_core::db::run_migrations(&pool)
+    carnelian_core::db::run_migrations(&pool, None)
         .await
         .expect("Should run migrations");
 
@@ -1533,7 +1573,16 @@ async fn test_heartbeat_interval_timing() {
     let heartbeat_interval = Duration::from_millis(2000);
     let config = Arc::new(config);
     let worker_manager = create_test_worker_manager(config.clone(), event_stream.clone());
-    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine.clone(), ledger.clone()));
+    let model_router = Arc::new(ModelRouter::new(
+        pool.clone(),
+        "http://localhost:18790".to_string(),
+        policy_engine.clone(),
+        ledger.clone(),
+    ));
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger.clone(),
+    ));
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool.clone(),
         event_stream.clone(),
@@ -1542,6 +1591,7 @@ async fn test_heartbeat_interval_timing() {
         config.clone(),
         model_router,
         ledger.clone(),
+        safe_mode_guard,
     )));
 
     let server = Server::new(
@@ -1741,7 +1791,7 @@ async fn test_migration_seed_data() {
         .expect("Failed to connect to database");
 
     // Run migrations
-    carnelian_core::db::run_migrations(&pool)
+    carnelian_core::db::run_migrations(&pool, None)
         .await
         .expect("Migrations should succeed");
 
@@ -1805,7 +1855,7 @@ async fn test_migration_seed_data() {
     assert_eq!(ollama.1, "ollama");
 
     // Verify migrations are idempotent (running again should not error)
-    carnelian_core::db::run_migrations(&pool)
+    carnelian_core::db::run_migrations(&pool, None)
         .await
         .expect("Running migrations again should succeed (idempotent)");
 

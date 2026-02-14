@@ -88,7 +88,7 @@ async fn setup_test_db(database_url: &str) -> sqlx::PgPool {
         .await
         .expect("Failed to connect to test database");
 
-    carnelian_core::db::run_migrations(&pool)
+    carnelian_core::db::run_migrations(&pool, None)
         .await
         .expect("Failed to run migrations");
 
@@ -139,7 +139,16 @@ fn create_test_scheduler(event_stream: Arc<EventStream>) -> Arc<tokio::sync::Mut
     )));
     let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
     let ledger = Arc::new(Ledger::new(pool.clone()));
-    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine, ledger.clone()));
+    let model_router = Arc::new(ModelRouter::new(
+        pool.clone(),
+        "http://localhost:18790".to_string(),
+        policy_engine,
+        ledger.clone(),
+    ));
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger.clone(),
+    ));
     Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool,
         event_stream,
@@ -148,6 +157,7 @@ fn create_test_scheduler(event_stream: Arc<EventStream>) -> Arc<tokio::sync::Mut
         config,
         model_router,
         ledger,
+        safe_mode_guard,
     )))
 }
 
@@ -343,7 +353,16 @@ async fn start_full_server(db_url: &str) -> (u16, tokio::task::JoinHandle<()>, s
         config.clone(),
         event_stream.clone(),
     )));
-    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine.clone(), ledger.clone()));
+    let model_router = Arc::new(ModelRouter::new(
+        pool.clone(),
+        "http://localhost:18790".to_string(),
+        policy_engine.clone(),
+        ledger.clone(),
+    ));
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger.clone(),
+    ));
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool.clone(),
         event_stream.clone(),
@@ -352,6 +371,7 @@ async fn start_full_server(db_url: &str) -> (u16, tokio::task::JoinHandle<()>, s
         config.clone(),
         model_router,
         ledger.clone(),
+        safe_mode_guard,
     )));
 
     let server = Server::new(
@@ -774,7 +794,16 @@ async fn test_criterion3_task_creation_and_execution_lifecycle() {
     assert!(health.healthy, "Mock worker should report healthy");
     drop(test_transport);
 
-    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine.clone(), ledger.clone()));
+    let model_router = Arc::new(ModelRouter::new(
+        pool.clone(),
+        "http://localhost:18790".to_string(),
+        policy_engine.clone(),
+        ledger.clone(),
+    ));
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger.clone(),
+    ));
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool.clone(),
         event_stream.clone(),
@@ -783,6 +812,7 @@ async fn test_criterion3_task_creation_and_execution_lifecycle() {
         config.clone(),
         model_router,
         ledger.clone(),
+        safe_mode_guard.clone(),
     )));
 
     // Start server
@@ -850,6 +880,7 @@ async fn test_criterion3_task_creation_and_execution_lifecycle() {
             &config,
             &active,
             &metrics,
+            &safe_mode_guard,
         )
         .await
         .expect("Scheduler poll should succeed");
@@ -1094,6 +1125,12 @@ async fn test_criterion5_concurrent_task_execution() {
 
     assert_eq!(config.machine_config().max_workers, 3);
 
+    let ledger_for_guard = Arc::new(Ledger::new(pool.clone()));
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger_for_guard,
+    ));
+
     // First poll: should dequeue exactly 3 (max_workers=3, 0 active)
     let metrics = Arc::new(MetricsCollector::new());
     Scheduler::poll_task_queue(
@@ -1103,6 +1140,7 @@ async fn test_criterion5_concurrent_task_execution() {
         &config,
         &active_tasks,
         &metrics,
+        &safe_mode_guard,
     )
     .await
     .expect("poll_task_queue should succeed");
@@ -1160,6 +1198,7 @@ async fn test_criterion5_concurrent_task_execution() {
             &config,
             &active_tasks,
             &metrics,
+            &safe_mode_guard,
         )
         .await
         .expect("poll_task_queue should succeed");
@@ -1325,6 +1364,11 @@ async fn test_criterion6a_invalid_skill_error_handling() {
         Arc::new(tokio::sync::Mutex::new(HashMap::new()));
 
     // Poll — task should be dequeued and fail because skill doesn't exist
+    let ledger_for_guard = Arc::new(Ledger::new(pool.clone()));
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger_for_guard,
+    ));
     let metrics = Arc::new(MetricsCollector::new());
     Scheduler::poll_task_queue(
         &pool,
@@ -1333,6 +1377,7 @@ async fn test_criterion6a_invalid_skill_error_handling() {
         &config,
         &active_tasks,
         &metrics,
+        &safe_mode_guard,
     )
     .await
     .expect("poll_task_queue should succeed");
@@ -1382,7 +1427,16 @@ async fn test_criterion6b_task_cancellation_handling() {
     )));
     let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
     let ledger = Arc::new(Ledger::new(pool.clone()));
-    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine, ledger.clone()));
+    let model_router = Arc::new(ModelRouter::new(
+        pool.clone(),
+        "http://localhost:18790".to_string(),
+        policy_engine,
+        ledger.clone(),
+    ));
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger.clone(),
+    ));
 
     let scheduler = Scheduler::new(
         pool.clone(),
@@ -1392,6 +1446,7 @@ async fn test_criterion6b_task_cancellation_handling() {
         config,
         model_router,
         ledger,
+        safe_mode_guard,
     );
 
     // Insert a pending task
@@ -1558,6 +1613,11 @@ async fn test_criterion6d_timeout_error_handling() {
     assert_eq!(get_task_state(&pool, task_id).await, "pending");
 
     // Dispatch the task
+    let ledger_for_guard = Arc::new(Ledger::new(pool.clone()));
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger_for_guard,
+    ));
     let metrics = Arc::new(MetricsCollector::new());
     Scheduler::poll_task_queue(
         &pool,
@@ -1566,6 +1626,7 @@ async fn test_criterion6d_timeout_error_handling() {
         &config,
         &active_tasks,
         &metrics,
+        &safe_mode_guard,
     )
     .await
     .expect("poll_task_queue should succeed");
@@ -1699,6 +1760,11 @@ async fn test_criterion6e_crash_error_handling() {
     assert_eq!(get_task_state(&pool, task_id).await, "pending");
 
     // Dispatch — the transport should fail because the worker is dead
+    let ledger_for_guard = Arc::new(Ledger::new(pool.clone()));
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger_for_guard,
+    ));
     let metrics = Arc::new(MetricsCollector::new());
     Scheduler::poll_task_queue(
         &pool,
@@ -1707,6 +1773,7 @@ async fn test_criterion6e_crash_error_handling() {
         &config,
         &active_tasks,
         &metrics,
+        &safe_mode_guard,
     )
     .await
     .expect("poll_task_queue should succeed");

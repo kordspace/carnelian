@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 //! Shared test helpers for Phase 3 integration tests.
 //!
-//! Provides PostgreSQL container setup, database initialization, and
+//! Provides `PostgreSQL` container setup, database initialization, and
 //! helper functions for creating test data across all Phase 3 modules.
 
 use std::path::Path;
@@ -16,7 +16,7 @@ use uuid::Uuid;
 // POSTGRESQL CONTAINER
 // =============================================================================
 
-/// Create a PostgreSQL container with pgvector for testing.
+/// Create a `PostgreSQL` container with pgvector for testing.
 pub async fn create_postgres_container() -> testcontainers::ContainerAsync<GenericImage> {
     let image = GenericImage::new("pgvector/pgvector", "pg16").with_wait_for(
         testcontainers::core::WaitFor::message_on_stderr(
@@ -39,7 +39,7 @@ pub async fn get_database_url(container: &testcontainers::ContainerAsync<Generic
         .get_host_port_ipv4(5432)
         .await
         .expect("Failed to get port");
-    format!("postgresql://test:test@127.0.0.1:{}/carnelian_test", port)
+    format!("postgresql://test:test@127.0.0.1:{port}/carnelian_test")
 }
 
 /// Set up a test database with migrations and return the pool.
@@ -51,7 +51,7 @@ pub async fn setup_test_db(database_url: &str) -> PgPool {
         .await
         .expect("Failed to connect to test database");
 
-    carnelian_core::db::run_migrations(&pool)
+    carnelian_core::db::run_migrations(&pool, None)
         .await
         .expect("Failed to run migrations");
 
@@ -62,7 +62,7 @@ pub async fn setup_test_db(database_url: &str) -> PgPool {
 // IDENTITY HELPERS
 // =============================================================================
 
-/// Insert a test identity and return its identity_id.
+/// Insert a test identity and return its `identity_id`.
 pub async fn insert_test_identity(pool: &PgPool, name: &str) -> Uuid {
     let identity_id = Uuid::new_v4();
     sqlx::query(
@@ -78,7 +78,7 @@ pub async fn insert_test_identity(pool: &PgPool, name: &str) -> Uuid {
     identity_id
 }
 
-/// Insert a test identity with a soul file path and return its identity_id.
+/// Insert a test identity with a soul file path and return its `identity_id`.
 pub async fn insert_test_identity_with_soul(pool: &PgPool, name: &str, soul_path: &str) -> Uuid {
     let identity_id = Uuid::new_v4();
     sqlx::query(
@@ -99,10 +99,10 @@ pub async fn insert_test_identity_with_soul(pool: &PgPool, name: &str, soul_path
 // SESSION HELPERS
 // =============================================================================
 
-/// Create a test session and return its session_id.
+/// Create a test session and return its `session_id`.
 pub async fn create_test_session(pool: &PgPool, agent_id: Uuid, channel: &str) -> Uuid {
     let session_id = Uuid::new_v4();
-    let session_key = format!("agent:{}:{}", agent_id, channel);
+    let session_key = format!("agent:{agent_id}:{channel}");
     let counters = json!({"total": 0, "user": 0, "assistant": 0, "tool": 0});
 
     sqlx::query(
@@ -144,10 +144,7 @@ pub async fn insert_test_message(
 }
 
 /// Get the token counters for a session.
-pub async fn get_session_token_counters(
-    pool: &PgPool,
-    session_id: Uuid,
-) -> serde_json::Value {
+pub async fn get_session_token_counters(pool: &PgPool, session_id: Uuid) -> serde_json::Value {
     sqlx::query_scalar::<_, serde_json::Value>(
         "SELECT token_counters FROM sessions WHERE session_id = $1",
     )
@@ -161,7 +158,7 @@ pub async fn get_session_token_counters(
 // MEMORY HELPERS
 // =============================================================================
 
-/// Create a test memory and return its memory_id.
+/// Create a test memory and return its `memory_id`.
 pub async fn create_test_memory(
     pool: &PgPool,
     identity_id: Uuid,
@@ -203,20 +200,18 @@ pub fn create_mock_embedding() -> Vec<f32> {
 
 /// Get the access count for a memory.
 pub async fn get_memory_access_count(pool: &PgPool, memory_id: Uuid) -> i32 {
-    sqlx::query_scalar::<_, i32>(
-        "SELECT access_count FROM memories WHERE memory_id = $1",
-    )
-    .bind(memory_id)
-    .fetch_one(pool)
-    .await
-    .expect("Failed to get memory access count")
+    sqlx::query_scalar::<_, i32>("SELECT access_count FROM memories WHERE memory_id = $1")
+        .bind(memory_id)
+        .fetch_one(pool)
+        .await
+        .expect("Failed to get memory access count")
 }
 
 // =============================================================================
 // MODEL PROVIDER HELPERS
 // =============================================================================
 
-/// Insert a test model provider and return its provider_id.
+/// Insert a test model provider and return its `provider_id`.
 pub async fn insert_test_provider(pool: &PgPool, name: &str, provider_type: &str) -> Uuid {
     let provider_id = Uuid::new_v4();
     let budget = json!({"daily_usd": 10.0, "monthly_usd": 100.0});
@@ -274,17 +269,13 @@ pub fn create_test_soul_file(path: &Path, content: &str) -> std::io::Result<()> 
 }
 
 /// Query and deserialize directives for an identity.
-pub async fn get_identity_directives(
-    pool: &PgPool,
-    identity_id: Uuid,
-) -> Vec<serde_json::Value> {
-    let directives_json: serde_json::Value = sqlx::query_scalar(
-        "SELECT directives FROM identities WHERE identity_id = $1",
-    )
-    .bind(identity_id)
-    .fetch_one(pool)
-    .await
-    .expect("Failed to get identity directives");
+pub async fn get_identity_directives(pool: &PgPool, identity_id: Uuid) -> Vec<serde_json::Value> {
+    let directives_json: serde_json::Value =
+        sqlx::query_scalar("SELECT directives FROM identities WHERE identity_id = $1")
+            .bind(identity_id)
+            .fetch_one(pool)
+            .await
+            .expect("Failed to get identity directives");
 
     match directives_json {
         serde_json::Value::Array(arr) => arr,
@@ -305,11 +296,9 @@ pub async fn get_soul_file_hash(pool: &PgPool, identity_id: Uuid) -> Option<Stri
 
 /// Get the compaction count for a session.
 pub async fn get_compaction_count(pool: &PgPool, session_id: Uuid) -> i32 {
-    sqlx::query_scalar::<_, i32>(
-        "SELECT compaction_count FROM sessions WHERE session_id = $1",
-    )
-    .bind(session_id)
-    .fetch_one(pool)
-    .await
-    .expect("Failed to get compaction count")
+    sqlx::query_scalar::<_, i32>("SELECT compaction_count FROM sessions WHERE session_id = $1")
+        .bind(session_id)
+        .fetch_one(pool)
+        .await
+        .expect("Failed to get compaction count")
 }

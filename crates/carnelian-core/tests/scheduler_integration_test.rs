@@ -71,7 +71,7 @@ async fn setup_test_db(database_url: &str) -> sqlx::PgPool {
         .await
         .expect("Failed to connect to test database");
 
-    carnelian_core::db::run_migrations(&pool)
+    carnelian_core::db::run_migrations(&pool, None)
         .await
         .expect("Failed to run migrations");
 
@@ -206,7 +206,16 @@ async fn test_concurrency_limits() {
 
     let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
     let ledger = Arc::new(Ledger::new(pool.clone()));
-    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine, ledger.clone()));
+    let model_router = Arc::new(ModelRouter::new(
+        pool.clone(),
+        "http://localhost:18790".to_string(),
+        policy_engine,
+        ledger.clone(),
+    ));
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger.clone(),
+    ));
     let scheduler = Scheduler::new(
         pool.clone(),
         event_stream,
@@ -215,6 +224,7 @@ async fn test_concurrency_limits() {
         config.clone(),
         model_router,
         ledger,
+        safe_mode_guard,
     );
 
     // Insert 5 tasks
@@ -268,7 +278,16 @@ async fn test_retry_policy() {
 
     let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
     let ledger = Arc::new(Ledger::new(pool.clone()));
-    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine, ledger.clone()));
+    let model_router = Arc::new(ModelRouter::new(
+        pool.clone(),
+        "http://localhost:18790".to_string(),
+        policy_engine,
+        ledger.clone(),
+    ));
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger.clone(),
+    ));
     let _scheduler = Scheduler::new(
         pool.clone(),
         event_stream,
@@ -277,6 +296,7 @@ async fn test_retry_policy() {
         config.clone(),
         model_router,
         ledger,
+        safe_mode_guard,
     );
 
     // Insert a task
@@ -352,7 +372,16 @@ async fn test_task_cancellation() {
 
     let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
     let ledger = Arc::new(Ledger::new(pool.clone()));
-    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine, ledger.clone()));
+    let model_router = Arc::new(ModelRouter::new(
+        pool.clone(),
+        "http://localhost:18790".to_string(),
+        policy_engine,
+        ledger.clone(),
+    ));
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger.clone(),
+    ));
     let scheduler = Scheduler::new(
         pool.clone(),
         event_stream.clone(),
@@ -361,6 +390,7 @@ async fn test_task_cancellation() {
         config,
         model_router,
         ledger,
+        safe_mode_guard,
     );
 
     // Insert a pending task
@@ -522,6 +552,11 @@ async fn test_poll_dequeues_in_priority_order() {
     assert_eq!(get_task_state(&pool, high_id).await, "pending");
 
     // Poll with max_workers=1: only the highest-priority task should be dequeued
+    let ledger_for_guard = Arc::new(Ledger::new(pool.clone()));
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger_for_guard,
+    ));
     let metrics = Arc::new(MetricsCollector::new());
     Scheduler::poll_task_queue(
         &pool,
@@ -530,6 +565,7 @@ async fn test_poll_dequeues_in_priority_order() {
         &config,
         &active_tasks,
         &metrics,
+        &safe_mode_guard,
     )
     .await
     .expect("poll_task_queue should succeed");
@@ -614,6 +650,11 @@ async fn test_poll_respects_concurrency_limit() {
     }
 
     // Poll: should dequeue exactly 2 (max_workers=2, 0 active)
+    let ledger_for_guard = Arc::new(Ledger::new(pool.clone()));
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger_for_guard,
+    ));
     let metrics = Arc::new(MetricsCollector::new());
     Scheduler::poll_task_queue(
         &pool,
@@ -622,6 +663,7 @@ async fn test_poll_respects_concurrency_limit() {
         &config,
         &active_tasks,
         &metrics,
+        &safe_mode_guard,
     )
     .await
     .expect("poll_task_queue should succeed");
@@ -665,6 +707,7 @@ async fn test_poll_respects_concurrency_limit() {
         &config,
         &active_tasks,
         &metrics,
+        &safe_mode_guard,
     )
     .await
     .expect("Second poll_task_queue should succeed");

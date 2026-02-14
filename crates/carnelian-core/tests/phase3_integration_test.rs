@@ -39,17 +39,29 @@ use std::str::FromStr;
 
 use std::sync::Arc;
 
+use carnelian_core::session::{CompactionOutcome, CompactionTrigger};
+use carnelian_core::soul::SyncResult;
 use carnelian_core::{
     Config, ContextWindow, Ledger, MemoryManager, MemoryQuery, MemorySource, ModelRouter,
-    PolicyEngine, SegmentPriority, SegmentSourceType, SessionKey, SessionManager,
+    PolicyEngine, SafeModeGuard, SegmentPriority, SegmentSourceType, SessionKey, SessionManager,
     SoulManager,
 };
-use carnelian_core::session::{CompactionTrigger, CompactionOutcome};
-use carnelian_core::soul::SyncResult;
 use serde_json::json;
 use uuid::Uuid;
 
 use common::*;
+
+/// Create a `SessionManager` with sensible defaults and a wired `SafeModeGuard`.
+fn create_test_session_manager(pool: &sqlx::PgPool) -> SessionManager {
+    let ledger = Arc::new(Ledger::new(pool.clone()));
+    let guard = Arc::new(SafeModeGuard::new(pool.clone(), ledger));
+    let sm = SessionManager::with_defaults(pool.clone()).with_safe_mode_guard(guard);
+    debug_assert!(
+        sm.has_safe_mode_guard(),
+        "SessionManager must have SafeModeGuard wired"
+    );
+    sm
+}
 
 // =============================================================================
 // TEST GROUP: Soul File System & Database Sync
@@ -68,27 +80,40 @@ async fn test_soul_file_load_and_parse() {
     let identity_id = insert_test_identity_with_soul(&pool, "test_lian", "test_lian.md").await;
 
     let manager = SoulManager::new(pool.clone(), None, souls_path);
-    let soul_data = manager.load(identity_id).await.expect("Failed to load soul");
+    let soul_data = manager
+        .load(identity_id)
+        .await
+        .expect("Failed to load soul");
 
     // Verify directives parsed correctly
-    assert!(!soul_data.directives.is_empty(), "Should have parsed directives");
+    assert!(
+        !soul_data.directives.is_empty(),
+        "Should have parsed directives"
+    );
     assert!(!soul_data.hash.is_empty(), "Should have computed hash");
 
     // Core Truths should be P0
-    let core_truths: Vec<_> = soul_data.directives.iter()
+    let core_truths: Vec<_> = soul_data
+        .directives
+        .iter()
         .filter(|d| d.category == "Core Truths")
         .collect();
     assert_eq!(core_truths.len(), 3, "Should have 3 Core Truths directives");
     assert_eq!(core_truths[0].priority, 0, "Core Truths should be P0");
 
     // Boundaries should be P1
-    let boundaries: Vec<_> = soul_data.directives.iter()
+    let boundaries: Vec<_> = soul_data
+        .directives
+        .iter()
         .filter(|d| d.category == "Boundaries")
         .collect();
     assert_eq!(boundaries.len(), 3, "Should have 3 Boundaries directives");
     assert_eq!(boundaries[0].priority, 1, "Boundaries should be P1");
 
-    println!("✓ Soul file loaded and parsed: {} directives", soul_data.directives.len());
+    println!(
+        "✓ Soul file loaded and parsed: {} directives",
+        soul_data.directives.len()
+    );
 }
 
 /// Sync a soul file to the database and verify directives JSONB and hash are stored.
@@ -103,7 +128,10 @@ async fn test_soul_sync_to_db_new_file() {
     let identity_id = insert_test_identity_with_soul(&pool, "test_lian", "test_lian.md").await;
 
     let manager = SoulManager::new(pool.clone(), None, souls_path);
-    let result = manager.sync_to_db(identity_id).await.expect("Failed to sync");
+    let result = manager
+        .sync_to_db(identity_id)
+        .await
+        .expect("Failed to sync");
 
     assert_eq!(result, SyncResult::Updated, "First sync should update");
 
@@ -115,7 +143,10 @@ async fn test_soul_sync_to_db_new_file() {
     assert!(hash.is_some(), "Hash should be stored in DB");
     assert!(!hash.unwrap().is_empty(), "Hash should not be empty");
 
-    println!("✓ Soul synced to database: {} directives stored", directives.len());
+    println!(
+        "✓ Soul synced to database: {} directives stored",
+        directives.len()
+    );
 }
 
 /// Sync the same file twice and verify the second sync returns Unchanged.
@@ -131,11 +162,21 @@ async fn test_soul_sync_unchanged_hash() {
 
     let manager = SoulManager::new(pool.clone(), None, souls_path);
 
-    let first = manager.sync_to_db(identity_id).await.expect("First sync failed");
+    let first = manager
+        .sync_to_db(identity_id)
+        .await
+        .expect("First sync failed");
     assert_eq!(first, SyncResult::Updated);
 
-    let second = manager.sync_to_db(identity_id).await.expect("Second sync failed");
-    assert_eq!(second, SyncResult::Unchanged, "Second sync should be unchanged");
+    let second = manager
+        .sync_to_db(identity_id)
+        .await
+        .expect("Second sync failed");
+    assert_eq!(
+        second,
+        SyncResult::Unchanged,
+        "Second sync should be unchanged"
+    );
 
     println!("✓ Unchanged hash correctly detected on second sync");
 }
@@ -152,28 +193,48 @@ async fn test_soul_sync_modified_file() {
     let soul_file = temp_dir.path().join("modified.md");
 
     // Write initial content
-    create_test_soul_file(&soul_file, "# Agent\n\n## Core Truths\n- Original directive\n")
-        .expect("Failed to write soul file");
+    create_test_soul_file(
+        &soul_file,
+        "# Agent\n\n## Core Truths\n- Original directive\n",
+    )
+    .expect("Failed to write soul file");
 
     let identity_id = insert_test_identity_with_soul(&pool, "modified_agent", "modified.md").await;
     let manager = SoulManager::new(pool.clone(), None, temp_dir.path().to_path_buf());
 
-    let first = manager.sync_to_db(identity_id).await.expect("First sync failed");
+    let first = manager
+        .sync_to_db(identity_id)
+        .await
+        .expect("First sync failed");
     assert_eq!(first, SyncResult::Updated);
     let hash1 = get_soul_file_hash(&pool, identity_id).await.unwrap();
 
     // Modify the file
-    create_test_soul_file(&soul_file, "# Agent\n\n## Core Truths\n- Modified directive\n- New directive\n")
-        .expect("Failed to modify soul file");
+    create_test_soul_file(
+        &soul_file,
+        "# Agent\n\n## Core Truths\n- Modified directive\n- New directive\n",
+    )
+    .expect("Failed to modify soul file");
 
-    let second = manager.sync_to_db(identity_id).await.expect("Second sync failed");
-    assert_eq!(second, SyncResult::Updated, "Modified file should trigger update");
+    let second = manager
+        .sync_to_db(identity_id)
+        .await
+        .expect("Second sync failed");
+    assert_eq!(
+        second,
+        SyncResult::Updated,
+        "Modified file should trigger update"
+    );
 
     let hash2 = get_soul_file_hash(&pool, identity_id).await.unwrap();
     assert_ne!(hash1, hash2, "Hash should change after modification");
 
     let directives = get_identity_directives(&pool, identity_id).await;
-    assert_eq!(directives.len(), 2, "Should have 2 directives after modification");
+    assert_eq!(
+        directives.len(),
+        2,
+        "Should have 2 directives after modification"
+    );
 
     println!("✓ Modified soul file detected and synced");
 }
@@ -203,7 +264,11 @@ async fn test_soul_watch_initial_sync() {
     let d2 = get_identity_directives(&pool, id2).await;
     assert!(!d2.is_empty(), "Minimal should have directives after watch");
 
-    println!("✓ Watch synced {} + {} directives for 2 identities", d1.len(), d2.len());
+    println!(
+        "✓ Watch synced {} + {} directives for 2 identities",
+        d1.len(),
+        d2.len()
+    );
 }
 
 // =============================================================================
@@ -221,14 +286,20 @@ async fn test_session_create_and_load() {
     let agent_id = insert_test_identity(&pool, "session_agent").await;
     let session_key = format!("agent:{}:ui", agent_id);
 
-    let sm = SessionManager::with_defaults(pool.clone());
-    let created = sm.create_session(&session_key).await.expect("Failed to create session");
+    let sm = create_test_session_manager(&pool);
+    let created = sm
+        .create_session(&session_key)
+        .await
+        .expect("Failed to create session");
 
     assert_eq!(created.agent_id, agent_id);
     assert_eq!(created.channel, "ui");
     assert_eq!(created.session_key, session_key);
 
-    let loaded = sm.load_session(&session_key).await.expect("Failed to load session");
+    let loaded = sm
+        .load_session(&session_key)
+        .await
+        .expect("Failed to load session");
     assert!(loaded.is_some(), "Session should be loadable");
 
     let loaded = loaded.unwrap();
@@ -280,39 +351,77 @@ async fn test_session_append_message() {
     let agent_id = insert_test_identity(&pool, "msg_agent").await;
     let session_key = format!("agent:{}:ui", agent_id);
 
-    let sm = SessionManager::with_defaults(pool.clone());
-    let session = sm.create_session(&session_key).await.expect("Failed to create session");
+    let sm = create_test_session_manager(&pool);
+    let session = sm
+        .create_session(&session_key)
+        .await
+        .expect("Failed to create session");
 
     // Append user message
-    let msg1_id = sm.append_message(
-        session.session_id, "user", "Hello, world!".to_string(),
-        Some(5), None, None, None, None, None,
-    ).await.expect("Failed to append user message");
+    let msg1_id = sm
+        .append_message(
+            session.session_id,
+            "user",
+            "Hello, world!".to_string(),
+            Some(5),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .expect("Failed to append user message");
     assert!(msg1_id > 0);
 
     // Append assistant message
-    let msg2_id = sm.append_message(
-        session.session_id, "assistant", "Hi there!".to_string(),
-        Some(4), None, None, None, None, None,
-    ).await.expect("Failed to append assistant message");
+    let msg2_id = sm
+        .append_message(
+            session.session_id,
+            "assistant",
+            "Hi there!".to_string(),
+            Some(4),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .expect("Failed to append assistant message");
     assert!(msg2_id > msg1_id);
 
     // Append tool message
-    let msg3_id = sm.append_message(
-        session.session_id, "tool", "{\"result\": 42}".to_string(),
-        Some(10), Some("calculator".to_string()), Some("call_1".to_string()),
-        None, None, None,
-    ).await.expect("Failed to append tool message");
+    let msg3_id = sm
+        .append_message(
+            session.session_id,
+            "tool",
+            "{\"result\": 42}".to_string(),
+            Some(10),
+            Some("calculator".to_string()),
+            Some("call_1".to_string()),
+            None,
+            None,
+            None,
+        )
+        .await
+        .expect("Failed to append tool message");
     assert!(msg3_id > msg2_id);
 
     // Verify token counters updated
-    let counters = sm.get_counters(session.session_id).await.expect("Failed to get counters");
+    let counters = sm
+        .get_counters(session.session_id)
+        .await
+        .expect("Failed to get counters");
     assert_eq!(counters.user, 5);
     assert_eq!(counters.assistant, 4);
     assert_eq!(counters.tool, 10);
     assert_eq!(counters.total, 19);
 
-    println!("✓ Messages appended with correct token counters: total={}", counters.total);
+    println!(
+        "✓ Messages appended with correct token counters: total={}",
+        counters.total
+    );
 }
 
 /// Insert many messages and verify pagination works correctly.
@@ -331,16 +440,20 @@ async fn test_session_load_messages_pagination() {
         insert_test_message(&pool, session_id, "user", &format!("Message {}", i)).await;
     }
 
-    let sm = SessionManager::with_defaults(pool.clone());
+    let sm = create_test_session_manager(&pool);
 
     // Load first page (newest first, limit 20)
-    let page1 = sm.load_messages(session_id, Some(20), None).await
+    let page1 = sm
+        .load_messages(session_id, Some(20), None)
+        .await
         .expect("Failed to load page 1");
     assert_eq!(page1.len(), 20, "First page should have 20 messages");
 
     // Load second page using cursor
     let last_id = page1.last().unwrap().message_id;
-    let page2 = sm.load_messages(session_id, Some(20), Some(last_id)).await
+    let page2 = sm
+        .load_messages(session_id, Some(20), Some(last_id))
+        .await
         .expect("Failed to load page 2");
     assert_eq!(page2.len(), 20, "Second page should have 20 messages");
 
@@ -372,16 +485,20 @@ async fn test_session_expiration_cleanup() {
         .await
         .expect("Failed to set expiry");
 
-    let sm = SessionManager::with_defaults(pool.clone());
+    let sm = create_test_session_manager(&pool);
     let deleted = sm.cleanup_expired_sessions().await.expect("Cleanup failed");
-    assert!(deleted >= 1, "Should have deleted at least 1 expired session");
+    assert!(
+        deleted >= 1,
+        "Should have deleted at least 1 expired session"
+    );
 
     // Verify session is gone
-    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id = $1)")
-        .bind(session_id)
-        .fetch_one(&pool)
-        .await
-        .expect("Failed to check existence");
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id = $1)")
+            .bind(session_id)
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to check existence");
     assert!(!exists, "Expired session should be deleted");
 
     println!("✓ Expired session cleaned up: {} sessions deleted", deleted);
@@ -398,28 +515,34 @@ async fn test_session_extend_expiry() {
     let agent_id = insert_test_identity(&pool, "extend_agent").await;
     let session_key = format!("agent:{}:ui", agent_id);
 
-    let sm = SessionManager::with_defaults(pool.clone());
-    let session = sm.create_session(&session_key).await.expect("Failed to create session");
+    let sm = create_test_session_manager(&pool);
+    let session = sm
+        .create_session(&session_key)
+        .await
+        .expect("Failed to create session");
 
-    let original_expiry: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
-        "SELECT expires_at FROM sessions WHERE session_id = $1",
-    )
-    .bind(session.session_id)
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to get expiry");
+    let original_expiry: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("SELECT expires_at FROM sessions WHERE session_id = $1")
+            .bind(session.session_id)
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to get expiry");
 
-    sm.extend_session(session.session_id, 48).await.expect("Failed to extend session");
+    sm.extend_session(session.session_id, 48)
+        .await
+        .expect("Failed to extend session");
 
-    let new_expiry: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
-        "SELECT expires_at FROM sessions WHERE session_id = $1",
-    )
-    .bind(session.session_id)
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to get new expiry");
+    let new_expiry: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("SELECT expires_at FROM sessions WHERE session_id = $1")
+            .bind(session.session_id)
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to get new expiry");
 
-    assert!(new_expiry.is_some(), "Session should have expiry after extension");
+    assert!(
+        new_expiry.is_some(),
+        "Session should have expiry after extension"
+    );
     if let (Some(orig), Some(new)) = (original_expiry, new_expiry) {
         assert!(new > orig, "Extended expiry should be later than original");
     }
@@ -438,25 +561,36 @@ async fn test_session_token_counter_update() {
     let agent_id = insert_test_identity(&pool, "counter_agent").await;
     let session_key = format!("agent:{}:ui", agent_id);
 
-    let sm = SessionManager::with_defaults(pool.clone());
-    let session = sm.create_session(&session_key).await.expect("Failed to create session");
+    let sm = create_test_session_manager(&pool);
+    let session = sm
+        .create_session(&session_key)
+        .await
+        .expect("Failed to create session");
 
     // Increment counters atomically
-    sm.increment_counters(session.session_id, "user", 100).await
+    sm.increment_counters(session.session_id, "user", 100)
+        .await
         .expect("Failed to increment user counters");
-    sm.increment_counters(session.session_id, "assistant", 200).await
+    sm.increment_counters(session.session_id, "assistant", 200)
+        .await
         .expect("Failed to increment assistant counters");
-    sm.increment_counters(session.session_id, "tool", 50).await
+    sm.increment_counters(session.session_id, "tool", 50)
+        .await
         .expect("Failed to increment tool counters");
 
-    let counters = sm.get_counters(session.session_id).await
+    let counters = sm
+        .get_counters(session.session_id)
+        .await
         .expect("Failed to get counters");
     assert_eq!(counters.user, 100);
     assert_eq!(counters.assistant, 200);
     assert_eq!(counters.tool, 50);
     assert_eq!(counters.total, 350);
 
-    println!("✓ Token counters atomically updated: total={}", counters.total);
+    println!(
+        "✓ Token counters atomically updated: total={}",
+        counters.total
+    );
 }
 
 // =============================================================================
@@ -474,32 +608,61 @@ async fn test_memory_create_with_validation() {
     let identity_id = insert_test_identity(&pool, "memory_agent").await;
     let mm = MemoryManager::new(pool.clone(), None);
 
-    let memory = mm.create_memory(
-        identity_id,
-        "User prefers concise responses",
-        Some("Communication preference".to_string()),
-        MemorySource::Conversation,
-        None,
-        0.9,
-    ).await.expect("Failed to create memory");
+    let memory = mm
+        .create_memory(
+            identity_id,
+            "User prefers concise responses",
+            Some("Communication preference".to_string()),
+            MemorySource::Conversation,
+            None,
+            0.9,
+        )
+        .await
+        .expect("Failed to create memory");
 
     assert_eq!(memory.identity_id, identity_id);
     assert_eq!(memory.content, "User prefers concise responses");
-    assert!((memory.importance - 0.9).abs() < f32::EPSILON, "importance should be 0.9");
+    assert!(
+        (memory.importance - 0.9).abs() < f32::EPSILON,
+        "importance should be 0.9"
+    );
     assert!(memory.is_high_importance());
 
     // Validate importance range
-    let bad_result = mm.create_memory(
-        identity_id, "test", None, MemorySource::Conversation, None, 1.5,
-    ).await;
-    assert!(bad_result.is_err(), "Importance > 1.0 should fail validation");
+    let bad_result = mm
+        .create_memory(
+            identity_id,
+            "test",
+            None,
+            MemorySource::Conversation,
+            None,
+            1.5,
+        )
+        .await;
+    assert!(
+        bad_result.is_err(),
+        "Importance > 1.0 should fail validation"
+    );
 
-    let bad_result2 = mm.create_memory(
-        identity_id, "test", None, MemorySource::Conversation, None, -0.1,
-    ).await;
-    assert!(bad_result2.is_err(), "Importance < 0.0 should fail validation");
+    let bad_result2 = mm
+        .create_memory(
+            identity_id,
+            "test",
+            None,
+            MemorySource::Conversation,
+            None,
+            -0.1,
+        )
+        .await;
+    assert!(
+        bad_result2.is_err(),
+        "Importance < 0.0 should fail validation"
+    );
 
-    println!("✓ Memory created with validation: importance={}", memory.importance);
+    println!(
+        "✓ Memory created with validation: importance={}",
+        memory.importance
+    );
 }
 
 /// Insert memories with various timestamps and verify 48hr window retrieval.
@@ -528,15 +691,26 @@ async fn test_memory_load_recent_48hr() {
     .expect("Failed to insert old memory");
 
     let mm = MemoryManager::new(pool.clone(), None);
-    let recent = mm.load_recent_memories(identity_id, 50).await
+    let recent = mm
+        .load_recent_memories(identity_id, 50)
+        .await
         .expect("Failed to load recent memories");
 
     // Should include recent but not old
     let recent_ids: Vec<Uuid> = recent.iter().map(|m| m.memory_id).collect();
-    assert!(recent_ids.contains(&recent_id), "Should include recent memory");
-    assert!(!recent_ids.contains(&old_id), "Should not include 3-day-old memory");
+    assert!(
+        recent_ids.contains(&recent_id),
+        "Should include recent memory"
+    );
+    assert!(
+        !recent_ids.contains(&old_id),
+        "Should not include 3-day-old memory"
+    );
 
-    println!("✓ 48hr window retrieval: {} recent memories loaded", recent.len());
+    println!(
+        "✓ 48hr window retrieval: {} recent memories loaded",
+        recent.len()
+    );
 }
 
 /// Insert memories with varying importance and verify high-importance filtering.
@@ -555,7 +729,9 @@ async fn test_memory_load_high_importance() {
     let very_high_id = create_test_memory(&pool, identity_id, "Very high importance", 0.95).await;
 
     let mm = MemoryManager::new(pool.clone(), None);
-    let high = mm.load_high_importance_memories(identity_id, 0.8, 50).await
+    let high = mm
+        .load_high_importance_memories(identity_id, 0.8, 50)
+        .await
         .expect("Failed to load high importance memories");
 
     assert_eq!(high.len(), 2, "Should have 2 high-importance memories");
@@ -563,7 +739,10 @@ async fn test_memory_load_high_importance() {
     assert!(high_ids.contains(&high_id));
     assert!(high_ids.contains(&very_high_id));
 
-    println!("✓ High-importance filtering: {} memories above 0.8 threshold", high.len());
+    println!(
+        "✓ High-importance filtering: {} memories above 0.8 threshold",
+        high.len()
+    );
 }
 
 /// Insert memories with embeddings and verify pgvector cosine similarity search.
@@ -579,10 +758,17 @@ async fn test_memory_similarity_search() {
 
     // Create memories with embeddings
     let emb1 = create_mock_embedding();
-    let _m1 = mm.create_memory(
-        identity_id, "Rust programming preferences", None,
-        MemorySource::Conversation, Some(emb1.clone()), 0.8,
-    ).await.expect("Failed to create memory with embedding");
+    let _m1 = mm
+        .create_memory(
+            identity_id,
+            "Rust programming preferences",
+            None,
+            MemorySource::Conversation,
+            Some(emb1.clone()),
+            0.8,
+        )
+        .await
+        .expect("Failed to create memory with embedding");
 
     // Create a slightly different embedding
     let mut emb2 = create_mock_embedding();
@@ -594,19 +780,34 @@ async fn test_memory_similarity_search() {
     for val in &mut emb2 {
         *val /= norm;
     }
-    let _m2 = mm.create_memory(
-        identity_id, "Python programming preferences", None,
-        MemorySource::Conversation, Some(emb2), 0.7,
-    ).await.expect("Failed to create second memory with embedding");
+    let _m2 = mm
+        .create_memory(
+            identity_id,
+            "Python programming preferences",
+            None,
+            MemorySource::Conversation,
+            Some(emb2),
+            0.7,
+        )
+        .await
+        .expect("Failed to create second memory with embedding");
 
     // Search with the first embedding (should find itself as most similar)
     let search = carnelian_core::memory::MemorySearchQuery::new(emb1, identity_id);
-    let results = mm.search_memories(search).await
+    let results = mm
+        .search_memories(search)
+        .await
         .expect("Failed to search memories");
 
-    assert!(!results.is_empty(), "Should find at least one similar memory");
+    assert!(
+        !results.is_empty(),
+        "Should find at least one similar memory"
+    );
 
-    println!("✓ pgvector similarity search: {} results found", results.len());
+    println!(
+        "✓ pgvector similarity search: {} results found",
+        results.len()
+    );
 }
 
 /// Verify access count increments on memory retrieval.
@@ -620,16 +821,25 @@ async fn test_memory_access_count_increment() {
     let identity_id = insert_test_identity(&pool, "access_agent").await;
     let mm = MemoryManager::new(pool.clone(), None);
 
-    let memory = mm.create_memory(
-        identity_id, "Test memory for access tracking", None,
-        MemorySource::Observation, None, 0.6,
-    ).await.expect("Failed to create memory");
+    let memory = mm
+        .create_memory(
+            identity_id,
+            "Test memory for access tracking",
+            None,
+            MemorySource::Observation,
+            None,
+            0.6,
+        )
+        .await
+        .expect("Failed to create memory");
 
     assert_eq!(memory.access_count, 0, "Initial access count should be 0");
 
     // Access the memory multiple times
     for _ in 0..3 {
-        mm.get_memory(memory.memory_id).await.expect("Failed to get memory");
+        mm.get_memory(memory.memory_id)
+            .await
+            .expect("Failed to get memory");
     }
 
     let count = get_memory_access_count(&pool, memory.memory_id).await;
@@ -650,12 +860,36 @@ async fn test_memory_query_builder() {
     let mm = MemoryManager::new(pool.clone(), None);
 
     // Create memories with different sources and importance
-    mm.create_memory(identity_id, "Conv memory low", None, MemorySource::Conversation, None, 0.3)
-        .await.unwrap();
-    mm.create_memory(identity_id, "Conv memory high", None, MemorySource::Conversation, None, 0.9)
-        .await.unwrap();
-    mm.create_memory(identity_id, "Task memory", None, MemorySource::Task, None, 0.7)
-        .await.unwrap();
+    mm.create_memory(
+        identity_id,
+        "Conv memory low",
+        None,
+        MemorySource::Conversation,
+        None,
+        0.3,
+    )
+    .await
+    .unwrap();
+    mm.create_memory(
+        identity_id,
+        "Conv memory high",
+        None,
+        MemorySource::Conversation,
+        None,
+        0.9,
+    )
+    .await
+    .unwrap();
+    mm.create_memory(
+        identity_id,
+        "Task memory",
+        None,
+        MemorySource::Task,
+        None,
+        0.7,
+    )
+    .await
+    .unwrap();
 
     // Query with filters
     let query = MemoryQuery::new()
@@ -664,8 +898,15 @@ async fn test_memory_query_builder() {
         .with_min_importance(0.5)
         .with_limit(10);
 
-    let results = mm.query_memories(query).await.expect("Failed to query memories");
-    assert_eq!(results.len(), 1, "Should find 1 conversation memory with importance >= 0.5");
+    let results = mm
+        .query_memories(query)
+        .await
+        .expect("Failed to query memories");
+    assert_eq!(
+        results.len(),
+        1,
+        "Should find 1 conversation memory with importance >= 0.5"
+    );
     assert_eq!(results[0].content, "Conv memory high");
 
     println!("✓ MemoryQuery builder filtering verified");
@@ -688,11 +929,36 @@ async fn test_context_window_priority_ordering() {
     let mut ctx = ContextWindow::new(pool, None).with_budget(100_000);
 
     // Add segments in reverse priority order
-    ctx.add_raw_segment(SegmentPriority::P4, "Tool result".to_string(), SegmentSourceType::ToolResult, None);
-    ctx.add_raw_segment(SegmentPriority::P3, "Conversation".to_string(), SegmentSourceType::ConversationMessage, None);
-    ctx.add_raw_segment(SegmentPriority::P1, "Memory".to_string(), SegmentSourceType::Memory, None);
-    ctx.add_raw_segment(SegmentPriority::P0, "Soul directive".to_string(), SegmentSourceType::SoulDirective, None);
-    ctx.add_raw_segment(SegmentPriority::P2, "Task context".to_string(), SegmentSourceType::TaskContext, None);
+    ctx.add_raw_segment(
+        SegmentPriority::P4,
+        "Tool result".to_string(),
+        SegmentSourceType::ToolResult,
+        None,
+    );
+    ctx.add_raw_segment(
+        SegmentPriority::P3,
+        "Conversation".to_string(),
+        SegmentSourceType::ConversationMessage,
+        None,
+    );
+    ctx.add_raw_segment(
+        SegmentPriority::P1,
+        "Memory".to_string(),
+        SegmentSourceType::Memory,
+        None,
+    );
+    ctx.add_raw_segment(
+        SegmentPriority::P0,
+        "Soul directive".to_string(),
+        SegmentSourceType::SoulDirective,
+        None,
+    );
+    ctx.add_raw_segment(
+        SegmentPriority::P2,
+        "Task context".to_string(),
+        SegmentSourceType::TaskContext,
+        None,
+    );
 
     // enforce_budget does NOT clear segments — it only prunes if over budget
     let config = Config::default();
@@ -702,9 +968,15 @@ async fn test_context_window_priority_ordering() {
     let provenance = ctx.compute_provenance();
     // All 5 segments should survive (budget is huge)
     let total_segments: usize = provenance.segment_counts.values().sum();
-    assert_eq!(total_segments, 5, "All 5 segments should survive budget enforcement");
+    assert_eq!(
+        total_segments, 5,
+        "All 5 segments should survive budget enforcement"
+    );
 
-    println!("✓ Context segments: {} total after enforce_budget", total_segments);
+    println!(
+        "✓ Context segments: {} total after enforce_budget",
+        total_segments
+    );
 }
 
 /// Verify token budget enforcement prunes lower-priority segments.
@@ -740,10 +1012,20 @@ async fn test_context_window_token_budget_enforcement() {
 
     // P0 segment should survive, P3 should be pruned
     let provenance = ctx.compute_provenance();
-    let soul_count = provenance.segment_counts.get("soul_directive").copied().unwrap_or(0);
-    assert!(soul_count >= 1, "P0 soul directive should survive budget enforcement");
+    let soul_count = provenance
+        .segment_counts
+        .get("soul_directive")
+        .copied()
+        .unwrap_or(0);
+    assert!(
+        soul_count >= 1,
+        "P0 soul directive should survive budget enforcement"
+    );
 
-    println!("✓ Token budget enforcement: {} total tokens after pruning", provenance.total_tokens);
+    println!(
+        "✓ Token budget enforcement: {} total tokens after pruning",
+        provenance.total_tokens
+    );
 }
 
 /// Verify soul directives are loaded as P0 segments.
@@ -758,18 +1040,29 @@ async fn test_context_load_soul_directives() {
     let souls_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/souls");
     let identity_id = insert_test_identity_with_soul(&pool, "ctx_soul_agent", "test_lian.md").await;
     let sm = SoulManager::new(pool.clone(), None, souls_path);
-    sm.sync_to_db(identity_id).await.expect("Failed to sync soul");
+    sm.sync_to_db(identity_id)
+        .await
+        .expect("Failed to sync soul");
 
     let mut ctx = ContextWindow::new(pool.clone(), None).with_budget(50000);
-    ctx.load_soul_directives(identity_id).await.expect("Failed to load soul directives");
+    ctx.load_soul_directives(identity_id)
+        .await
+        .expect("Failed to load soul directives");
 
     // Verify segments were loaded (compute_provenance works on current segments)
     let provenance = ctx.compute_provenance();
-    let soul_count = provenance.segment_counts.get("soul_directive").copied().unwrap_or(0);
+    let soul_count = provenance
+        .segment_counts
+        .get("soul_directive")
+        .copied()
+        .unwrap_or(0);
     assert!(soul_count > 0, "Should have loaded soul directive segments");
     assert!(provenance.total_tokens > 0, "Should have counted tokens");
 
-    println!("✓ Soul directives loaded as P0 segments: {} segments", soul_count);
+    println!(
+        "✓ Soul directives loaded as P0 segments: {} segments",
+        soul_count
+    );
 }
 
 /// Verify recent memories are loaded as P1 segments.
@@ -783,21 +1076,49 @@ async fn test_context_load_recent_memories() {
     let identity_id = insert_test_identity(&pool, "ctx_memory_agent").await;
     let mm = MemoryManager::new(pool.clone(), None);
 
-    mm.create_memory(identity_id, "Important recent fact", None, MemorySource::Conversation, None, 0.9)
-        .await.unwrap();
-    mm.create_memory(identity_id, "Another recent fact", None, MemorySource::Observation, None, 0.7)
-        .await.unwrap();
+    mm.create_memory(
+        identity_id,
+        "Important recent fact",
+        None,
+        MemorySource::Conversation,
+        None,
+        0.9,
+    )
+    .await
+    .unwrap();
+    mm.create_memory(
+        identity_id,
+        "Another recent fact",
+        None,
+        MemorySource::Observation,
+        None,
+        0.7,
+    )
+    .await
+    .unwrap();
 
     let mut ctx = ContextWindow::new(pool.clone(), None).with_budget(50000);
-    ctx.load_recent_memories(identity_id, 20).await.expect("Failed to load memories");
+    ctx.load_recent_memories(identity_id, 20)
+        .await
+        .expect("Failed to load memories");
 
     // Verify segments were loaded
     let provenance = ctx.compute_provenance();
-    let mem_count = provenance.segment_counts.get("memory").copied().unwrap_or(0);
+    let mem_count = provenance
+        .segment_counts
+        .get("memory")
+        .copied()
+        .unwrap_or(0);
     assert!(mem_count > 0, "Should have loaded memory segments");
-    assert!(!provenance.memory_ids.is_empty(), "Should have tracked memory IDs");
+    assert!(
+        !provenance.memory_ids.is_empty(),
+        "Should have tracked memory IDs"
+    );
 
-    println!("✓ Recent memories loaded as P1 segments: {} memories", mem_count);
+    println!(
+        "✓ Recent memories loaded as P1 segments: {} memories",
+        mem_count
+    );
 }
 
 /// Verify provenance tracking computes memory IDs and bundle hash.
@@ -811,20 +1132,40 @@ async fn test_context_provenance_tracking() {
     let identity_id = insert_test_identity(&pool, "provenance_agent").await;
     let mm = MemoryManager::new(pool.clone(), None);
 
-    let mem = mm.create_memory(identity_id, "Tracked memory", None, MemorySource::Conversation, None, 0.8)
-        .await.unwrap();
+    let mem = mm
+        .create_memory(
+            identity_id,
+            "Tracked memory",
+            None,
+            MemorySource::Conversation,
+            None,
+            0.8,
+        )
+        .await
+        .unwrap();
 
     let mut ctx = ContextWindow::new(pool.clone(), None).with_budget(50000);
-    ctx.load_recent_memories(identity_id, 20).await.expect("Failed to load memories");
+    ctx.load_recent_memories(identity_id, 20)
+        .await
+        .expect("Failed to load memories");
 
     let provenance = ctx.compute_provenance();
 
-    assert!(provenance.memory_ids.contains(&mem.memory_id), "Provenance should include memory ID");
-    assert!(!provenance.context_bundle_hash.is_empty(), "Bundle hash should be computed");
+    assert!(
+        provenance.memory_ids.contains(&mem.memory_id),
+        "Provenance should include memory ID"
+    );
+    assert!(
+        !provenance.context_bundle_hash.is_empty(),
+        "Bundle hash should be computed"
+    );
     assert!(provenance.total_tokens > 0, "Total tokens should be > 0");
 
-    println!("✓ Provenance tracking: hash={}, {} memory IDs",
-        &provenance.context_bundle_hash[..16], provenance.memory_ids.len());
+    println!(
+        "✓ Provenance tracking: hash={}, {} memory IDs",
+        &provenance.context_bundle_hash[..16],
+        provenance.memory_ids.len()
+    );
 }
 
 /// Verify task context is loaded as P2 segments via the real loader.
@@ -862,14 +1203,29 @@ async fn test_context_load_task_context() {
     .expect("Failed to insert task run");
 
     let mut ctx = ContextWindow::new(pool.clone(), None).with_budget(50000);
-    ctx.load_task_context(task_id).await.expect("Failed to load task context");
+    ctx.load_task_context(task_id)
+        .await
+        .expect("Failed to load task context");
 
     let provenance = ctx.compute_provenance();
-    let task_count = provenance.segment_counts.get("task_context").copied().unwrap_or(0);
-    assert!(task_count > 0, "Should have loaded task context as P2 segment");
-    assert!(provenance.total_tokens > 0, "Task context should have tokens");
+    let task_count = provenance
+        .segment_counts
+        .get("task_context")
+        .copied()
+        .unwrap_or(0);
+    assert!(
+        task_count > 0,
+        "Should have loaded task context as P2 segment"
+    );
+    assert!(
+        provenance.total_tokens > 0,
+        "Task context should have tokens"
+    );
 
-    println!("✓ Task context loaded as P2: {} segments, {} tokens", task_count, provenance.total_tokens);
+    println!(
+        "✓ Task context loaded as P2: {} segments, {} tokens",
+        task_count, provenance.total_tokens
+    );
 }
 
 /// Verify conversation history is loaded as P3 segments via the real loader,
@@ -883,26 +1239,66 @@ async fn test_context_load_conversation_history() {
 
     let agent_id = insert_test_identity(&pool, "ctx_conv_agent").await;
     let session_key = format!("agent:{}:ui", agent_id);
-    let sm = SessionManager::with_defaults(pool.clone());
-    let session = sm.create_session(&session_key).await.expect("Failed to create session");
+    let sm = create_test_session_manager(&pool);
+    let session = sm
+        .create_session(&session_key)
+        .await
+        .expect("Failed to create session");
 
     // Append user/assistant messages (not tool — those are P4)
     for i in 0..5 {
-        sm.append_message(session.session_id, "user", format!("Question {}", i), Some(10), None, None, None, None, None)
-            .await.expect("Failed to append user message");
-        sm.append_message(session.session_id, "assistant", format!("Answer {}", i), Some(10), None, None, None, None, None)
-            .await.expect("Failed to append assistant message");
+        sm.append_message(
+            session.session_id,
+            "user",
+            format!("Question {}", i),
+            Some(10),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .expect("Failed to append user message");
+        sm.append_message(
+            session.session_id,
+            "assistant",
+            format!("Answer {}", i),
+            Some(10),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .expect("Failed to append assistant message");
     }
 
     let mut ctx = ContextWindow::new(pool.clone(), None).with_budget(50000);
-    ctx.load_conversation_history(session.session_id, 50).await.expect("Failed to load conversation history");
+    ctx.load_conversation_history(session.session_id, 50)
+        .await
+        .expect("Failed to load conversation history");
 
     let provenance = ctx.compute_provenance();
-    let conv_count = provenance.segment_counts.get("conversation_message").copied().unwrap_or(0);
-    assert_eq!(conv_count, 10, "Should have loaded 10 conversation messages as P3 segments");
-    assert!(provenance.total_tokens > 0, "Conversation should have tokens");
+    let conv_count = provenance
+        .segment_counts
+        .get("conversation_message")
+        .copied()
+        .unwrap_or(0);
+    assert_eq!(
+        conv_count, 10,
+        "Should have loaded 10 conversation messages as P3 segments"
+    );
+    assert!(
+        provenance.total_tokens > 0,
+        "Conversation should have tokens"
+    );
 
-    println!("✓ Conversation history loaded as P3: {} segments", conv_count);
+    println!(
+        "✓ Conversation history loaded as P3: {} segments",
+        conv_count
+    );
 }
 
 /// Verify tool results are loaded as P4 segments via the real loader,
@@ -916,25 +1312,44 @@ async fn test_context_load_tool_results() {
 
     let agent_id = insert_test_identity(&pool, "ctx_tool_agent").await;
     let session_key = format!("agent:{}:ui", agent_id);
-    let sm = SessionManager::with_defaults(pool.clone());
-    let session = sm.create_session(&session_key).await.expect("Failed to create session");
+    let sm = create_test_session_manager(&pool);
+    let session = sm
+        .create_session(&session_key)
+        .await
+        .expect("Failed to create session");
 
     // Append tool result messages
     for i in 0..3 {
         sm.append_message(
-            session.session_id, "tool",
+            session.session_id,
+            "tool",
             format!("Tool output {}: file contents with data", i),
-            Some(20), Some(format!("tool_{}", i)), Some(format!("call_{}", i)),
-            None, None, None,
-        ).await.expect("Failed to append tool message");
+            Some(20),
+            Some(format!("tool_{}", i)),
+            Some(format!("call_{}", i)),
+            None,
+            None,
+            None,
+        )
+        .await
+        .expect("Failed to append tool message");
     }
 
     let mut ctx = ContextWindow::new(pool.clone(), None).with_budget(50000);
-    ctx.load_tool_results(session.session_id, 20).await.expect("Failed to load tool results");
+    ctx.load_tool_results(session.session_id, 20)
+        .await
+        .expect("Failed to load tool results");
 
     let provenance = ctx.compute_provenance();
-    let tool_count = provenance.segment_counts.get("tool_result").copied().unwrap_or(0);
-    assert_eq!(tool_count, 3, "Should have loaded 3 tool results as P4 segments");
+    let tool_count = provenance
+        .segment_counts
+        .get("tool_result")
+        .copied()
+        .unwrap_or(0);
+    assert_eq!(
+        tool_count, 3,
+        "Should have loaded 3 tool results as P4 segments"
+    );
 
     println!("✓ Tool results loaded as P4: {} segments", tool_count);
 }
@@ -952,21 +1367,49 @@ async fn test_context_over_budget_pruning_cascade() {
     let mut ctx = ContextWindow::new(pool, None).with_budget(50);
 
     // P0: Soul directive (never pruned) — small
-    ctx.add_raw_segment(SegmentPriority::P0, "Be helpful.".to_string(), SegmentSourceType::SoulDirective, None);
+    ctx.add_raw_segment(
+        SegmentPriority::P0,
+        "Be helpful.".to_string(),
+        SegmentSourceType::SoulDirective,
+        None,
+    );
 
     // P2: Task context (never pruned) — small
-    ctx.add_raw_segment(SegmentPriority::P2, "Current task: test".to_string(), SegmentSourceType::TaskContext, None);
+    ctx.add_raw_segment(
+        SegmentPriority::P2,
+        "Current task: test".to_string(),
+        SegmentSourceType::TaskContext,
+        None,
+    );
 
     // P3: Conversation messages (prunable, oldest first) — large
     for i in 0..5 {
-        let large_msg = format!("Conversation message {} with lots of content to consume tokens {}", i, "x".repeat(200));
-        ctx.add_raw_segment(SegmentPriority::P3, large_msg, SegmentSourceType::ConversationMessage, None);
+        let large_msg = format!(
+            "Conversation message {} with lots of content to consume tokens {}",
+            i,
+            "x".repeat(200)
+        );
+        ctx.add_raw_segment(
+            SegmentPriority::P3,
+            large_msg,
+            SegmentSourceType::ConversationMessage,
+            None,
+        );
     }
 
     // P4: Tool results (prunable first) — large
     for i in 0..3 {
-        let large_tool = format!("Tool result {} with extensive output data {}", i, "y".repeat(300));
-        ctx.add_raw_segment(SegmentPriority::P4, large_tool, SegmentSourceType::ToolResult, None);
+        let large_tool = format!(
+            "Tool result {} with extensive output data {}",
+            i,
+            "y".repeat(300)
+        );
+        ctx.add_raw_segment(
+            SegmentPriority::P4,
+            large_tool,
+            SegmentSourceType::ToolResult,
+            None,
+        );
     }
 
     let config = Config::default();
@@ -975,25 +1418,46 @@ async fn test_context_over_budget_pruning_cascade() {
     let provenance = ctx.compute_provenance();
 
     // P0 should always survive
-    let p0_count = provenance.segment_counts.get("soul_directive").copied().unwrap_or(0);
+    let p0_count = provenance
+        .segment_counts
+        .get("soul_directive")
+        .copied()
+        .unwrap_or(0);
     assert!(p0_count >= 1, "P0 soul directive should survive pruning");
 
     // P2 should always survive
-    let p2_count = provenance.segment_counts.get("task_context").copied().unwrap_or(0);
+    let p2_count = provenance
+        .segment_counts
+        .get("task_context")
+        .copied()
+        .unwrap_or(0);
     assert!(p2_count >= 1, "P2 task context should survive pruning");
 
     // P4 should be pruned first (most or all removed)
-    let p4_count = provenance.segment_counts.get("tool_result").copied().unwrap_or(0);
+    let p4_count = provenance
+        .segment_counts
+        .get("tool_result")
+        .copied()
+        .unwrap_or(0);
 
     // P3 should be partially or fully pruned
-    let p3_count = provenance.segment_counts.get("conversation_message").copied().unwrap_or(0);
+    let p3_count = provenance
+        .segment_counts
+        .get("conversation_message")
+        .copied()
+        .unwrap_or(0);
 
     // Total tokens should be within budget
-    assert!(provenance.total_tokens <= 50,
-        "Total tokens {} should be within budget 50", provenance.total_tokens);
+    assert!(
+        provenance.total_tokens <= 50,
+        "Total tokens {} should be within budget 50",
+        provenance.total_tokens
+    );
 
-    println!("✓ Over-budget pruning: P0={}, P2={}, P3={} (was 5), P4={} (was 3), total_tokens={}",
-        p0_count, p2_count, p3_count, p4_count, provenance.total_tokens);
+    println!(
+        "✓ Over-budget pruning: P0={}, P2={}, P3={} (was 5), P4={} (was 3), total_tokens={}",
+        p0_count, p2_count, p3_count, p4_count, provenance.total_tokens
+    );
 }
 
 /// Build context with all loaders (P0–P4) and verify full assembly pipeline
@@ -1007,28 +1471,75 @@ async fn test_context_assemble_full_pipeline() {
 
     // Set up identity with soul
     let souls_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/souls");
-    let identity_id = insert_test_identity_with_soul(&pool, "full_ctx_agent", "test_minimal.md").await;
+    let identity_id =
+        insert_test_identity_with_soul(&pool, "full_ctx_agent", "test_minimal.md").await;
     let soul_mgr = SoulManager::new(pool.clone(), None, souls_path);
-    soul_mgr.sync_to_db(identity_id).await.expect("Failed to sync soul");
+    soul_mgr
+        .sync_to_db(identity_id)
+        .await
+        .expect("Failed to sync soul");
 
     // Create memories (P1)
     let mm = MemoryManager::new(pool.clone(), None);
-    let mem = mm.create_memory(identity_id, "User likes Rust", None, MemorySource::Conversation, None, 0.85)
-        .await.unwrap();
+    let mem = mm
+        .create_memory(
+            identity_id,
+            "User likes Rust",
+            None,
+            MemorySource::Conversation,
+            None,
+            0.85,
+        )
+        .await
+        .unwrap();
 
     // Create session with messages (P3) and tool results (P4)
     let session_key = format!("agent:{}:ui", identity_id);
-    let sesm = SessionManager::with_defaults(pool.clone());
-    let session = sesm.create_session(&session_key).await.expect("Failed to create session");
+    let sesm = create_test_session_manager(&pool);
+    let session = sesm
+        .create_session(&session_key)
+        .await
+        .expect("Failed to create session");
 
-    sesm.append_message(session.session_id, "user", "What is Rust?".to_string(), Some(8), None, None, None, None, None)
-        .await.expect("Failed to append user message");
-    sesm.append_message(session.session_id, "assistant", "Rust is a systems language.".to_string(), Some(10), None, None, None, None, None)
-        .await.expect("Failed to append assistant message");
     sesm.append_message(
-        session.session_id, "tool", "File contents: fn main() {}".to_string(),
-        Some(12), Some("read_file".to_string()), Some("call_001".to_string()), None, None, None,
-    ).await.expect("Failed to append tool message");
+        session.session_id,
+        "user",
+        "What is Rust?".to_string(),
+        Some(8),
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await
+    .expect("Failed to append user message");
+    sesm.append_message(
+        session.session_id,
+        "assistant",
+        "Rust is a systems language.".to_string(),
+        Some(10),
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await
+    .expect("Failed to append assistant message");
+    sesm.append_message(
+        session.session_id,
+        "tool",
+        "File contents: fn main() {}".to_string(),
+        Some(12),
+        Some("read_file".to_string()),
+        Some("call_001".to_string()),
+        None,
+        None,
+        None,
+    )
+    .await
+    .expect("Failed to append tool message");
 
     // Create a task (P2)
     let task_id = Uuid::new_v4();
@@ -1045,27 +1556,49 @@ async fn test_context_assemble_full_pipeline() {
     // Build full context with all priorities via build_for_session
     let config = Config::default();
     let mut ctx = ContextWindow::build_for_session(
-        pool.clone(), None, session.session_id, Some(task_id), &config,
-    ).await.expect("Failed to build context for session");
+        pool.clone(),
+        None,
+        session.session_id,
+        Some(task_id),
+        &config,
+    )
+    .await
+    .expect("Failed to build context for session");
 
     let assembled = ctx.assemble(&config).await.expect("Failed to assemble");
     let provenance = ctx.compute_provenance();
 
-    assert!(!assembled.is_empty(), "Assembled context should not be empty");
+    assert!(
+        !assembled.is_empty(),
+        "Assembled context should not be empty"
+    );
     assert!(provenance.total_tokens > 0, "Should have counted tokens");
-    assert!(!provenance.context_bundle_hash.is_empty(), "Should have bundle hash");
+    assert!(
+        !provenance.context_bundle_hash.is_empty(),
+        "Should have bundle hash"
+    );
 
     // Verify provenance includes memory IDs
-    assert!(provenance.memory_ids.contains(&mem.memory_id),
-        "Provenance should include the created memory ID");
+    assert!(
+        provenance.memory_ids.contains(&mem.memory_id),
+        "Provenance should include the created memory ID"
+    );
 
     // Verify multiple segment types are present
     let total_segments: usize = provenance.segment_counts.values().sum();
-    assert!(total_segments >= 4, "Should have segments from P0, P1, P2, P3, P4 (got {})", total_segments);
+    assert!(
+        total_segments >= 4,
+        "Should have segments from P0, P1, P2, P3, P4 (got {})",
+        total_segments
+    );
 
-    println!("✓ Full context pipeline (P0–P4): {} segments, {} tokens, {} memory IDs, hash={}",
-        total_segments, provenance.total_tokens, provenance.memory_ids.len(),
-        &provenance.context_bundle_hash[..16]);
+    println!(
+        "✓ Full context pipeline (P0–P4): {} segments, {} tokens, {} memory IDs, hash={}",
+        total_segments,
+        provenance.total_tokens,
+        provenance.memory_ids.len(),
+        &provenance.context_bundle_hash[..16]
+    );
 }
 
 // =============================================================================
@@ -1085,67 +1618,127 @@ async fn test_compaction_full_pipeline() {
     let agent_id = insert_test_identity(&pool, "compaction_agent").await;
     let session_key = format!("agent:{}:ui", agent_id);
 
-    let sm = SessionManager::with_defaults(pool.clone());
-    let session = sm.create_session(&session_key).await.expect("Failed to create session");
+    let sm = create_test_session_manager(&pool);
+    let session = sm
+        .create_session(&session_key)
+        .await
+        .expect("Failed to create session");
     let ledger = Ledger::new(pool.clone());
     let config = Config::default();
     let correlation_id = Uuid::now_v7();
 
     // Seed user/assistant exchange pairs with >100 chars combined to trigger memory flush
     for i in 0..5 {
-        let user_msg = format!("User question {} — this is a detailed question about Rust programming and memory management that exceeds the minimum character threshold for flush", i);
-        let asst_msg = format!("Assistant reply {} — here is a comprehensive answer about Rust's ownership model, borrowing rules, and lifetime annotations that provides meaningful content", i);
-        sm.append_message(session.session_id, "user", user_msg, Some(50), None, None, Some(correlation_id), None, None)
-            .await.expect("Failed to append user message");
-        sm.append_message(session.session_id, "assistant", asst_msg, Some(50), None, None, Some(correlation_id), None, None)
-            .await.expect("Failed to append assistant message");
+        let user_msg = format!(
+            "User question {} — this is a detailed question about Rust programming and memory management that exceeds the minimum character threshold for flush",
+            i
+        );
+        let asst_msg = format!(
+            "Assistant reply {} — here is a comprehensive answer about Rust's ownership model, borrowing rules, and lifetime annotations that provides meaningful content",
+            i
+        );
+        sm.append_message(
+            session.session_id,
+            "user",
+            user_msg,
+            Some(50),
+            None,
+            None,
+            Some(correlation_id),
+            None,
+            None,
+        )
+        .await
+        .expect("Failed to append user message");
+        sm.append_message(
+            session.session_id,
+            "assistant",
+            asst_msg,
+            Some(50),
+            None,
+            None,
+            Some(correlation_id),
+            None,
+            None,
+        )
+        .await
+        .expect("Failed to append assistant message");
     }
 
     // Also seed a tool result message for tool pruning coverage
     sm.append_message(
-        session.session_id, "tool",
+        session.session_id,
+        "tool",
         "Tool output: file contents here with enough data to be meaningful".to_string(),
-        Some(20), Some("read_file".to_string()), Some("call_001".to_string()),
-        Some(correlation_id), None, None,
-    ).await.expect("Failed to append tool message");
+        Some(20),
+        Some("read_file".to_string()),
+        Some("call_001".to_string()),
+        Some(correlation_id),
+        None,
+        None,
+    )
+    .await
+    .expect("Failed to append tool message");
 
-    let counters_before = sm.get_counters(session.session_id).await.expect("Failed to get counters");
-    assert!(counters_before.total > 0, "Should have tokens before compaction");
+    let counters_before = sm
+        .get_counters(session.session_id)
+        .await
+        .expect("Failed to get counters");
+    assert!(
+        counters_before.total > 0,
+        "Should have tokens before compaction"
+    );
 
     let initial_count = get_compaction_count(&pool, session.session_id).await;
     assert_eq!(initial_count, 0, "Initial compaction count should be 0");
 
     // Run the full compaction pipeline
-    let outcome: CompactionOutcome = sm.compact_session(
-        session.session_id,
-        CompactionTrigger::ManualRequest,
-        Some(correlation_id),
-        &config,
-        Some(&ledger),
-        false, // do NOT skip flush — exercise the memory flush path
-    ).await.expect("compact_session should succeed");
+    let outcome: CompactionOutcome = sm
+        .compact_session(
+            session.session_id,
+            CompactionTrigger::ManualRequest,
+            Some(correlation_id),
+            &config,
+            Some(&ledger),
+            false, // do NOT skip flush — exercise the memory flush path
+        )
+        .await
+        .expect("compact_session should succeed");
 
     // Verify memories were flushed (exchanges > 100 chars combined)
-    let memory_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM memories WHERE identity_id = $1",
-    )
-    .bind(agent_id)
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to count memories");
-    assert_eq!(usize::try_from(memory_count).unwrap_or(0), outcome.memories_flushed,
-        "DB memory count should match outcome.memories_flushed");
-    assert!(outcome.memories_flushed > 0, "Should have flushed at least 1 memory");
+    let memory_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM memories WHERE identity_id = $1")
+            .bind(agent_id)
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to count memories");
+    assert_eq!(
+        usize::try_from(memory_count).unwrap_or(0),
+        outcome.memories_flushed,
+        "DB memory count should match outcome.memories_flushed"
+    );
+    assert!(
+        outcome.memories_flushed > 0,
+        "Should have flushed at least 1 memory"
+    );
     assert!(!outcome.flush_failed, "Memory flush should not have failed");
 
     // Verify counters were recomputed (step 5 of pipeline)
-    let counters_after = sm.get_counters(session.session_id).await.expect("Failed to get counters");
-    assert_eq!(outcome.tokens_after, counters_after.total,
-        "Outcome tokens_after should match recomputed counters");
+    let counters_after = sm
+        .get_counters(session.session_id)
+        .await
+        .expect("Failed to get counters");
+    assert_eq!(
+        outcome.tokens_after, counters_after.total,
+        "Outcome tokens_after should match recomputed counters"
+    );
 
     // Verify compaction_count incremented
     let new_count = get_compaction_count(&pool, session.session_id).await;
-    assert_eq!(new_count, 1, "Compaction count should be 1 after compact_session");
+    assert_eq!(
+        new_count, 1,
+        "Compaction count should be 1 after compact_session"
+    );
 
     // Verify ledger event was written
     let ledger_count: i64 = sqlx::query_scalar(
@@ -1155,10 +1748,15 @@ async fn test_compaction_full_pipeline() {
     .fetch_one(&pool)
     .await
     .expect("Failed to count ledger events");
-    assert!(ledger_count >= 1, "Should have at least 1 compaction ledger event");
+    assert!(
+        ledger_count >= 1,
+        "Should have at least 1 compaction ledger event"
+    );
 
-    println!("✓ Full compaction pipeline: {} memories flushed, {} → {} tokens, compaction_count={}",
-        outcome.memories_flushed, outcome.tokens_before, outcome.tokens_after, new_count);
+    println!(
+        "✓ Full compaction pipeline: {} memories flushed, {} → {} tokens, compaction_count={}",
+        outcome.memories_flushed, outcome.tokens_before, outcome.tokens_after, new_count
+    );
 }
 
 /// Verify check_and_compact_if_needed triggers compaction when tokens exceed
@@ -1173,8 +1771,11 @@ async fn test_check_and_compact_if_needed() {
     let agent_id = insert_test_identity(&pool, "auto_compact_agent").await;
     let session_key = format!("agent:{}:ui", agent_id);
 
-    let sm = SessionManager::with_defaults(pool.clone());
-    let session = sm.create_session(&session_key).await.expect("Failed to create session");
+    let sm = create_test_session_manager(&pool);
+    let session = sm
+        .create_session(&session_key)
+        .await
+        .expect("Failed to create session");
     let ledger = Ledger::new(pool.clone());
 
     // Use a small context window so we can exceed it with a few messages
@@ -1183,16 +1784,31 @@ async fn test_check_and_compact_if_needed() {
     config.context_reserve_percent = 10; // effective limit = 180 tokens
 
     // First check: under limit, should return None
-    let result = sm.check_and_compact_if_needed(
-        session.session_id, None, &config, Some(&ledger),
-    ).await.expect("check_and_compact_if_needed should succeed");
+    let result = sm
+        .check_and_compact_if_needed(session.session_id, None, &config, Some(&ledger))
+        .await
+        .expect("check_and_compact_if_needed should succeed");
     assert!(result.is_none(), "Should not compact when under limit");
 
     // Seed enough messages to exceed the effective limit (180 tokens)
     for i in 0..10 {
-        let msg = format!("Message {} with enough content to accumulate tokens beyond the small window limit", i);
-        sm.append_message(session.session_id, "user", msg, Some(25), None, None, None, None, None)
-            .await.expect("Failed to append message");
+        let msg = format!(
+            "Message {} with enough content to accumulate tokens beyond the small window limit",
+            i
+        );
+        sm.append_message(
+            session.session_id,
+            "user",
+            msg,
+            Some(25),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .expect("Failed to append message");
         sm.append_message(
             session.session_id, "assistant",
             format!("Reply {} with detailed content that also contributes tokens to push us over the limit threshold", i),
@@ -1200,24 +1816,45 @@ async fn test_check_and_compact_if_needed() {
         ).await.expect("Failed to append message");
     }
 
-    let counters = sm.get_counters(session.session_id).await.expect("Failed to get counters");
-    assert!(counters.total > 180, "Total tokens {} should exceed effective limit 180", counters.total);
+    let counters = sm
+        .get_counters(session.session_id)
+        .await
+        .expect("Failed to get counters");
+    assert!(
+        counters.total > 180,
+        "Total tokens {} should exceed effective limit 180",
+        counters.total
+    );
 
     // Second check: over limit, should trigger compaction
-    let result = sm.check_and_compact_if_needed(
-        session.session_id, Some(Uuid::now_v7()), &config, Some(&ledger),
-    ).await.expect("check_and_compact_if_needed should succeed");
-    assert!(result.is_some(), "Should trigger compaction when over limit");
+    let result = sm
+        .check_and_compact_if_needed(
+            session.session_id,
+            Some(Uuid::now_v7()),
+            &config,
+            Some(&ledger),
+        )
+        .await
+        .expect("check_and_compact_if_needed should succeed");
+    assert!(
+        result.is_some(),
+        "Should trigger compaction when over limit"
+    );
 
     let outcome = result.unwrap();
-    assert!(outcome.tokens_before > 0, "Should have recorded tokens_before");
+    assert!(
+        outcome.tokens_before > 0,
+        "Should have recorded tokens_before"
+    );
 
     // Verify compaction_count incremented
     let count = get_compaction_count(&pool, session.session_id).await;
     assert_eq!(count, 1, "Compaction count should be 1");
 
-    println!("✓ check_and_compact_if_needed: triggered at {} tokens, compacted to {}",
-        outcome.tokens_before, outcome.tokens_after);
+    println!(
+        "✓ check_and_compact_if_needed: triggered at {} tokens, compacted to {}",
+        outcome.tokens_before, outcome.tokens_after
+    );
 }
 
 // =============================================================================
@@ -1249,19 +1886,22 @@ async fn test_model_router_budget_exceeded_via_complete() {
     .expect("Failed to insert openai provider");
 
     // Resolve provider_id for usage seeding
-    let provider_id: Uuid = sqlx::query_scalar(
-        "SELECT provider_id FROM model_providers WHERE name = 'openai' LIMIT 1",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to get provider_id");
+    let provider_id: Uuid =
+        sqlx::query_scalar("SELECT provider_id FROM model_providers WHERE name = 'openai' LIMIT 1")
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to get provider_id");
 
     // Seed usage records to exceed the $5 daily limit
     for _ in 0..6 {
         insert_test_usage(&pool, provider_id, 1.0).await;
     }
     let total = get_total_usage_cost(&pool, provider_id).await;
-    assert!(total > 5.0, "Total usage ${:.2} should exceed $5 daily limit", total);
+    assert!(
+        total > 5.0,
+        "Total usage ${:.2} should exceed $5 daily limit",
+        total
+    );
 
     // Create a ModelRouter pointing to a dummy gateway (won't be reached)
     let identity_id = insert_test_identity(&pool, "budget_test_agent").await;
@@ -1300,13 +1940,21 @@ async fn test_model_router_budget_exceeded_via_complete() {
         correlation_id: Some(correlation_id),
     };
 
-    let result = router.complete(request, identity_id, None, None).await;
+    let result = router
+        .complete(request, identity_id, None, None, None)
+        .await;
     assert!(result.is_err(), "Should fail when budget exceeded");
     let err_str = result.unwrap_err().to_string();
-    assert!(err_str.contains("budget") || err_str.contains("Budget"),
-        "Error should mention budget, got: {}", err_str);
+    assert!(
+        err_str.contains("budget") || err_str.contains("Budget"),
+        "Error should mention budget, got: {}",
+        err_str
+    );
 
-    println!("✓ ModelRouter::complete returns BudgetExceeded when over daily limit (${:.2})", total);
+    println!(
+        "✓ ModelRouter::complete returns BudgetExceeded when over daily limit (${:.2})",
+        total
+    );
 }
 
 /// Verify ModelRouter::complete attempts gateway call when within budget,
@@ -1357,12 +2005,20 @@ async fn test_model_router_within_budget_attempts_gateway() {
         correlation_id: Some(correlation_id),
     };
 
-    let result = router.complete(request, identity_id, None, None).await;
+    let result = router
+        .complete(request, identity_id, None, None, None)
+        .await;
     // Should fail at gateway level (connection refused), NOT at budget level
-    assert!(result.is_err(), "Should fail because gateway is unreachable");
+    assert!(
+        result.is_err(),
+        "Should fail because gateway is unreachable"
+    );
     let err_str = result.unwrap_err().to_string();
-    assert!(err_str.contains("Gateway") || err_str.contains("gateway") || err_str.contains("onnect"),
-        "Error should be gateway-related, got: {}", err_str);
+    assert!(
+        err_str.contains("Gateway") || err_str.contains("gateway") || err_str.contains("onnect"),
+        "Error should be gateway-related, got: {}",
+        err_str
+    );
 
     // Verify a ledger event was written for the model.call.request attempt
     let ledger_count: i64 = sqlx::query_scalar(
@@ -1372,7 +2028,10 @@ async fn test_model_router_within_budget_attempts_gateway() {
     .fetch_one(&pool)
     .await
     .expect("Failed to count ledger events");
-    assert!(ledger_count >= 1, "Should have logged model.call.request to ledger");
+    assert!(
+        ledger_count >= 1,
+        "Should have logged model.call.request to ledger"
+    );
 
     println!("✓ ModelRouter within budget: gateway attempted, ledger event written");
 }
@@ -1395,13 +2054,25 @@ async fn test_heartbeat_agentic_turn_pipeline() {
 
     // Set up identity with soul directives and memories
     let souls_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/souls");
-    let identity_id = insert_test_identity_with_soul(&pool, "heartbeat_agent", "test_lian.md").await;
+    let identity_id =
+        insert_test_identity_with_soul(&pool, "heartbeat_agent", "test_lian.md").await;
     let soul_mgr = SoulManager::new(pool.clone(), None, souls_path);
-    soul_mgr.sync_to_db(identity_id).await.expect("Failed to sync soul");
+    soul_mgr
+        .sync_to_db(identity_id)
+        .await
+        .expect("Failed to sync soul");
 
     let mm = MemoryManager::new(pool.clone(), None);
-    mm.create_memory(identity_id, "Recent observation for heartbeat", None, MemorySource::Observation, None, 0.7)
-        .await.expect("Failed to create memory");
+    mm.create_memory(
+        identity_id,
+        "Recent observation for heartbeat",
+        None,
+        MemorySource::Observation,
+        None,
+        0.7,
+    )
+    .await
+    .expect("Failed to create memory");
 
     // Insert a local provider so the router can select it
     sqlx::query(
@@ -1420,8 +2091,12 @@ async fn test_heartbeat_agentic_turn_pipeline() {
 
     // Step 1: Assemble context (same as run_heartbeat does)
     let mut ctx = ContextWindow::new(pool.clone(), None).with_config(&config);
-    ctx.load_soul_directives(identity_id).await.expect("Failed to load soul directives");
-    ctx.load_recent_memories(identity_id, 10).await.expect("Failed to load memories");
+    ctx.load_soul_directives(identity_id)
+        .await
+        .expect("Failed to load soul directives");
+    ctx.load_recent_memories(identity_id, 10)
+        .await
+        .expect("Failed to load memories");
     ctx.add_raw_segment(
         SegmentPriority::P2,
         "Current state: 0 pending tasks in queue.".to_string(),
@@ -1430,8 +2105,14 @@ async fn test_heartbeat_agentic_turn_pipeline() {
     );
     ctx.enforce_budget(config.tool_trim_threshold, config.tool_clear_age_secs);
 
-    let context_text = ctx.assemble(&config).await.expect("Failed to assemble context");
-    assert!(!context_text.is_empty(), "Heartbeat context should not be empty");
+    let context_text = ctx
+        .assemble(&config)
+        .await
+        .expect("Failed to assemble context");
+    assert!(
+        !context_text.is_empty(),
+        "Heartbeat context should not be empty"
+    );
 
     // Step 2: Attempt model call (will fail — no live gateway)
     let policy_engine = PolicyEngine::new(pool.clone());
@@ -1465,9 +2146,16 @@ async fn test_heartbeat_agentic_turn_pipeline() {
         correlation_id: Some(correlation_id),
     };
 
-    let (status, reason) = match router.complete(request, identity_id, None, None).await {
+    let (status, reason) = match router
+        .complete(request, identity_id, None, None, None)
+        .await
+    {
         Ok(response) => {
-            let content = response.choices.first().map(|c| c.message.content.clone()).unwrap_or_default();
+            let content = response
+                .choices
+                .first()
+                .map(|c| c.message.content.clone())
+                .unwrap_or_default();
             ("ok".to_string(), Some(content))
         }
         Err(e) => ("failed".to_string(), Some(format!("Model call error: {e}"))),
@@ -1493,17 +2181,22 @@ async fn test_heartbeat_agentic_turn_pipeline() {
     .expect("Failed to persist heartbeat");
 
     // Step 4: Write ledger event (same as run_heartbeat does)
-    ledger.append_event(
-        Some(identity_id),
-        "heartbeat.completed",
-        json!({
-            "heartbeat_id": heartbeat_id,
-            "status": status,
-            "tasks_queued": 0,
-            "duration_ms": duration_ms,
-        }),
-        Some(correlation_id),
-    ).await.expect("Failed to log heartbeat to ledger");
+    ledger
+        .append_event(
+            Some(identity_id),
+            "heartbeat.completed",
+            json!({
+                "heartbeat_id": heartbeat_id,
+                "status": status,
+                "tasks_queued": 0,
+                "duration_ms": duration_ms,
+            }),
+            Some(correlation_id),
+            None,
+            None,
+        )
+        .await
+        .expect("Failed to log heartbeat to ledger");
 
     // Verify heartbeat_history record
     let (stored_status, stored_duration, stored_corr): (String, i32, Option<Uuid>) = sqlx::query_as(
@@ -1514,9 +2207,16 @@ async fn test_heartbeat_agentic_turn_pipeline() {
     .await
     .expect("Failed to query heartbeat");
 
-    assert_eq!(stored_status, "failed", "Status should be 'failed' without live gateway");
+    assert_eq!(
+        stored_status, "failed",
+        "Status should be 'failed' without live gateway"
+    );
     assert!(stored_duration > 0, "Duration should be > 0");
-    assert_eq!(stored_corr, Some(correlation_id), "Correlation ID should be preserved");
+    assert_eq!(
+        stored_corr,
+        Some(correlation_id),
+        "Correlation ID should be preserved"
+    );
 
     // Verify ledger event
     let ledger_count: i64 = sqlx::query_scalar(
@@ -1526,10 +2226,15 @@ async fn test_heartbeat_agentic_turn_pipeline() {
     .fetch_one(&pool)
     .await
     .expect("Failed to count ledger events");
-    assert!(ledger_count >= 1, "Should have heartbeat.completed ledger event");
+    assert!(
+        ledger_count >= 1,
+        "Should have heartbeat.completed ledger event"
+    );
 
-    println!("✓ Heartbeat agentic turn: context assembled, model attempted, heartbeat_id={}, status={}, ledger logged",
-        heartbeat_id, stored_status);
+    println!(
+        "✓ Heartbeat agentic turn: context assembled, model attempted, heartbeat_id={}, status={}, ledger logged",
+        heartbeat_id, stored_status
+    );
 }
 
 /// Verify that the heartbeat pipeline correctly propagates correlation IDs
@@ -1558,25 +2263,29 @@ async fn test_heartbeat_correlation_end_to_end() {
     .expect("Failed to persist heartbeat");
 
     // Log heartbeat event with same correlation
-    ledger.append_event(
-        Some(identity_id),
-        "heartbeat.completed",
-        json!({
-            "heartbeat_id": heartbeat_id,
-            "status": "ok",
-            "correlation_id": correlation_id,
-        }),
-        Some(correlation_id),
-    ).await.expect("Failed to log heartbeat");
+    ledger
+        .append_event(
+            Some(identity_id),
+            "heartbeat.completed",
+            json!({
+                "heartbeat_id": heartbeat_id,
+                "status": "ok",
+                "correlation_id": correlation_id,
+            }),
+            Some(correlation_id),
+            None,
+            None,
+        )
+        .await
+        .expect("Failed to log heartbeat");
 
     // Verify correlation ID links heartbeat_history and ledger_events
-    let hb_corr: Option<Uuid> = sqlx::query_scalar(
-        "SELECT correlation_id FROM heartbeat_history WHERE heartbeat_id = $1",
-    )
-    .bind(heartbeat_id)
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to query heartbeat correlation");
+    let hb_corr: Option<Uuid> =
+        sqlx::query_scalar("SELECT correlation_id FROM heartbeat_history WHERE heartbeat_id = $1")
+            .bind(heartbeat_id)
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to query heartbeat correlation");
     assert_eq!(hb_corr, Some(correlation_id));
 
     let ledger_corr: Option<Uuid> = sqlx::query_scalar(
@@ -1588,7 +2297,10 @@ async fn test_heartbeat_correlation_end_to_end() {
     .expect("Failed to query ledger correlation");
     assert_eq!(ledger_corr, Some(correlation_id));
 
-    println!("✓ Heartbeat correlation end-to-end: heartbeat_id={}, correlation_id={}", heartbeat_id, correlation_id);
+    println!(
+        "✓ Heartbeat correlation end-to-end: heartbeat_id={}, correlation_id={}",
+        heartbeat_id, correlation_id
+    );
 }
 
 // =============================================================================
@@ -1606,40 +2318,79 @@ async fn test_agentic_loop_session_persistence() {
     let agent_id = insert_test_identity(&pool, "agentic_agent").await;
     let session_key = format!("agent:{}:ui", agent_id);
 
-    let sm = SessionManager::with_defaults(pool.clone());
-    let session = sm.create_session(&session_key).await.expect("Failed to create session");
+    let sm = create_test_session_manager(&pool);
+    let session = sm
+        .create_session(&session_key)
+        .await
+        .expect("Failed to create session");
 
     // Simulate agentic loop: append user message
-    let _msg_id = sm.append_message(
-        session.session_id, "user", "What is 2+2?".to_string(),
-        Some(8), None, None, Some(Uuid::now_v7()), None, None,
-    ).await.expect("Failed to append user message");
+    let _msg_id = sm
+        .append_message(
+            session.session_id,
+            "user",
+            "What is 2+2?".to_string(),
+            Some(8),
+            None,
+            None,
+            Some(Uuid::now_v7()),
+            None,
+            None,
+        )
+        .await
+        .expect("Failed to append user message");
 
     // Simulate assistant response
-    let _msg_id = sm.append_message(
-        session.session_id, "assistant", "The answer is 4.".to_string(),
-        Some(6), None, None, Some(Uuid::now_v7()), None, None,
-    ).await.expect("Failed to append assistant message");
+    let _msg_id = sm
+        .append_message(
+            session.session_id,
+            "assistant",
+            "The answer is 4.".to_string(),
+            Some(6),
+            None,
+            None,
+            Some(Uuid::now_v7()),
+            None,
+            None,
+        )
+        .await
+        .expect("Failed to append assistant message");
 
     // Simulate tool result persistence
-    let _msg_id = sm.append_message(
-        session.session_id, "tool",
-        json!({"status": "Success", "result": 4}).to_string(),
-        Some(15), Some("calculator".to_string()), Some("call_001".to_string()),
-        Some(Uuid::now_v7()), None, None,
-    ).await.expect("Failed to append tool message");
+    let _msg_id = sm
+        .append_message(
+            session.session_id,
+            "tool",
+            json!({"status": "Success", "result": 4}).to_string(),
+            Some(15),
+            Some("calculator".to_string()),
+            Some("call_001".to_string()),
+            Some(Uuid::now_v7()),
+            None,
+            None,
+        )
+        .await
+        .expect("Failed to append tool message");
 
     // Verify all messages persisted
-    let messages = sm.load_messages(session.session_id, Some(100), None).await
+    let messages = sm
+        .load_messages(session.session_id, Some(100), None)
+        .await
         .expect("Failed to load messages");
     assert_eq!(messages.len(), 3, "Should have 3 messages");
 
     // Verify token counters
-    let counters = sm.get_counters(session.session_id).await.expect("Failed to get counters");
+    let counters = sm
+        .get_counters(session.session_id)
+        .await
+        .expect("Failed to get counters");
     assert_eq!(counters.total, 29, "Total tokens should be 8+6+15=29");
 
-    println!("✓ Agentic loop session persistence: {} messages, {} tokens",
-        messages.len(), counters.total);
+    println!(
+        "✓ Agentic loop session persistence: {} messages, {} tokens",
+        messages.len(),
+        counters.total
+    );
 }
 
 /// Verify correlation ID flows through session messages.
@@ -1654,19 +2405,40 @@ async fn test_agentic_loop_correlation_id_propagation() {
     let session_key = format!("agent:{}:ui", agent_id);
     let correlation_id = Uuid::now_v7();
 
-    let sm = SessionManager::with_defaults(pool.clone());
-    let session = sm.create_session(&session_key).await.expect("Failed to create session");
+    let sm = create_test_session_manager(&pool);
+    let session = sm
+        .create_session(&session_key)
+        .await
+        .expect("Failed to create session");
 
     // Append messages with correlation ID
     sm.append_message(
-        session.session_id, "user", "Hello".to_string(),
-        Some(3), None, None, Some(correlation_id), None, None,
-    ).await.expect("Failed to append message");
+        session.session_id,
+        "user",
+        "Hello".to_string(),
+        Some(3),
+        None,
+        None,
+        Some(correlation_id),
+        None,
+        None,
+    )
+    .await
+    .expect("Failed to append message");
 
     sm.append_message(
-        session.session_id, "assistant", "Hi!".to_string(),
-        Some(2), None, None, Some(correlation_id), None, None,
-    ).await.expect("Failed to append message");
+        session.session_id,
+        "assistant",
+        "Hi!".to_string(),
+        Some(2),
+        None,
+        None,
+        Some(correlation_id),
+        None,
+        None,
+    )
+    .await
+    .expect("Failed to append message");
 
     // Verify correlation IDs are stored
     let corr_ids: Vec<Option<Uuid>> = sqlx::query_scalar(
@@ -1679,10 +2451,17 @@ async fn test_agentic_loop_correlation_id_propagation() {
 
     assert_eq!(corr_ids.len(), 2);
     for cid in &corr_ids {
-        assert_eq!(*cid, Some(correlation_id), "Correlation ID should be preserved");
+        assert_eq!(
+            *cid,
+            Some(correlation_id),
+            "Correlation ID should be preserved"
+        );
     }
 
-    println!("✓ Correlation ID propagated through {} messages", corr_ids.len());
+    println!(
+        "✓ Correlation ID propagated through {} messages",
+        corr_ids.len()
+    );
 }
 
 /// Verify policy engine integration with capability checks.
@@ -1696,14 +2475,20 @@ async fn test_agentic_loop_policy_engine_integration() {
     let policy_engine = PolicyEngine::new(pool.clone());
 
     // Without any grants, capability check should return false
-    let has_cap = policy_engine.check_capability(
-        "identity",
-        &Uuid::new_v4().to_string(),
-        "tool.read_file",
-        None::<&carnelian_core::EventStream>,
-    ).await.unwrap_or(false);
+    let has_cap = policy_engine
+        .check_capability(
+            "identity",
+            &Uuid::new_v4().to_string(),
+            "tool.read_file",
+            None::<&carnelian_core::EventStream>,
+        )
+        .await
+        .unwrap_or(false);
 
-    assert!(!has_cap, "Should not have capability without explicit grant");
+    assert!(
+        !has_cap,
+        "Should not have capability without explicit grant"
+    );
 
     println!("✓ Policy engine denies capability without grant");
 }
@@ -1720,15 +2505,20 @@ async fn test_agentic_loop_ledger_audit() {
     let ledger = Ledger::new(pool.clone());
 
     // Log an agentic event
-    ledger.append_event(
-        Some(identity_id),
-        "agentic.request_received",
-        json!({
-            "session_key": "agent:test:ui",
-            "correlation_id": Uuid::now_v7(),
-        }),
-        Some(Uuid::now_v7()),
-    ).await.expect("Failed to append ledger event");
+    ledger
+        .append_event(
+            Some(identity_id),
+            "agentic.request_received",
+            json!({
+                "session_key": "agent:test:ui",
+                "correlation_id": Uuid::now_v7(),
+            }),
+            Some(Uuid::now_v7()),
+            None,
+            None,
+        )
+        .await
+        .expect("Failed to append ledger event");
 
     // Verify the event exists
     let count: i64 = sqlx::query_scalar(
@@ -1759,41 +2549,73 @@ async fn test_end_to_end_soul_memory_context() {
     let souls_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/souls");
     let identity_id = insert_test_identity_with_soul(&pool, "e2e_agent", "test_lian.md").await;
     let soul_mgr = SoulManager::new(pool.clone(), None, souls_path);
-    soul_mgr.sync_to_db(identity_id).await.expect("Failed to sync soul");
+    soul_mgr
+        .sync_to_db(identity_id)
+        .await
+        .expect("Failed to sync soul");
 
     // 2. Create memories
     let mm = MemoryManager::new(pool.clone(), None);
-    mm.create_memory(identity_id, "User prefers Rust", None, MemorySource::Conversation, None, 0.9)
-        .await.unwrap();
-    mm.create_memory(identity_id, "Project uses PostgreSQL", None, MemorySource::Task, None, 0.85)
-        .await.unwrap();
+    mm.create_memory(
+        identity_id,
+        "User prefers Rust",
+        None,
+        MemorySource::Conversation,
+        None,
+        0.9,
+    )
+    .await
+    .unwrap();
+    mm.create_memory(
+        identity_id,
+        "Project uses PostgreSQL",
+        None,
+        MemorySource::Task,
+        None,
+        0.85,
+    )
+    .await
+    .unwrap();
 
     // 3. Assemble context via build_for_session
     let session_key = format!("agent:{}:ui", identity_id);
-    let sm = SessionManager::with_defaults(pool.clone());
-    let session = sm.create_session(&session_key).await.expect("Failed to create session");
+    let sm = create_test_session_manager(&pool);
+    let session = sm
+        .create_session(&session_key)
+        .await
+        .expect("Failed to create session");
 
     let config = Config::default();
-    let mut ctx = ContextWindow::build_for_session(
-        pool.clone(), None, session.session_id, None, &config,
-    ).await.expect("Failed to build context");
+    let mut ctx =
+        ContextWindow::build_for_session(pool.clone(), None, session.session_id, None, &config)
+            .await
+            .expect("Failed to build context");
 
     let assembled = ctx.assemble(&config).await.expect("Failed to assemble");
     let provenance = ctx.compute_provenance();
 
     // Verify soul directives present
-    assert!(assembled.contains("Core Truths"), "Should contain soul directives");
+    assert!(
+        assembled.contains("Core Truths"),
+        "Should contain soul directives"
+    );
 
     // Verify memories present
-    assert!(assembled.contains("User prefers Rust"), "Should contain memory");
+    assert!(
+        assembled.contains("User prefers Rust"),
+        "Should contain memory"
+    );
 
     // Verify provenance
     assert_eq!(provenance.memory_ids.len(), 2, "Should track 2 memory IDs");
     assert!(!provenance.context_bundle_hash.is_empty());
 
-    println!("✓ End-to-end: soul + {} memories → {} tokens, hash={}",
-        provenance.memory_ids.len(), provenance.total_tokens,
-        &provenance.context_bundle_hash[..16]);
+    println!(
+        "✓ End-to-end: soul + {} memories → {} tokens, hash={}",
+        provenance.memory_ids.len(),
+        provenance.total_tokens,
+        &provenance.context_bundle_hash[..16]
+    );
 }
 
 /// Verify session and message persistence across a simulated restart.
@@ -1815,29 +2637,61 @@ async fn test_session_persistence_across_restart() {
         let agent_id = insert_test_identity(&pool, "restart_agent").await;
         session_key = format!("agent:{}:ui", agent_id);
 
-        let sm = SessionManager::with_defaults(pool.clone());
-        let session = sm.create_session(&session_key).await.expect("Failed to create session");
+        let sm = create_test_session_manager(&pool);
+        let session = sm
+            .create_session(&session_key)
+            .await
+            .expect("Failed to create session");
         session_id = session.session_id;
 
         // Append messages with a correlation ID
         sm.append_message(
-            session_id, "user", "Hello before restart".to_string(),
-            Some(10), None, None, Some(correlation_id), None, None,
-        ).await.expect("Failed to append user message");
+            session_id,
+            "user",
+            "Hello before restart".to_string(),
+            Some(10),
+            None,
+            None,
+            Some(correlation_id),
+            None,
+            None,
+        )
+        .await
+        .expect("Failed to append user message");
 
         sm.append_message(
-            session_id, "assistant", "Hi! I'll remember this.".to_string(),
-            Some(8), None, None, Some(correlation_id), None, None,
-        ).await.expect("Failed to append assistant message");
+            session_id,
+            "assistant",
+            "Hi! I'll remember this.".to_string(),
+            Some(8),
+            None,
+            None,
+            Some(correlation_id),
+            None,
+            None,
+        )
+        .await
+        .expect("Failed to append assistant message");
 
         sm.append_message(
-            session_id, "tool", "Tool result: success".to_string(),
-            Some(5), Some("test_tool".to_string()), Some("call_001".to_string()),
-            Some(correlation_id), None, None,
-        ).await.expect("Failed to append tool message");
+            session_id,
+            "tool",
+            "Tool result: success".to_string(),
+            Some(5),
+            Some("test_tool".to_string()),
+            Some("call_001".to_string()),
+            Some(correlation_id),
+            None,
+            None,
+        )
+        .await
+        .expect("Failed to append tool message");
 
         // Verify before drop
-        let counters = sm.get_counters(session_id).await.expect("Failed to get counters");
+        let counters = sm
+            .get_counters(session_id)
+            .await
+            .expect("Failed to get counters");
         assert_eq!(counters.total, 23, "Pre-restart total should be 10+8+5=23");
 
         // Pool is dropped here, simulating shutdown
@@ -1853,16 +2707,23 @@ async fn test_session_persistence_across_restart() {
             .await
             .expect("Failed to reconnect to database");
 
-        let sm2 = SessionManager::with_defaults(pool2.clone());
+        let sm2 = create_test_session_manager(&pool2);
 
         // Reload session by key
-        let loaded_session = sm2.load_session(&session_key).await
+        let loaded_session = sm2
+            .load_session(&session_key)
+            .await
             .expect("Failed to load session")
             .expect("Session should exist after restart");
-        assert_eq!(loaded_session.session_id, session_id, "Session ID should match");
+        assert_eq!(
+            loaded_session.session_id, session_id,
+            "Session ID should match"
+        );
 
         // Reload messages
-        let messages = sm2.load_messages(session_id, Some(100), None).await
+        let messages = sm2
+            .load_messages(session_id, Some(100), None)
+            .await
             .expect("Failed to load messages");
         assert_eq!(messages.len(), 3, "Should have 3 messages after restart");
         assert_eq!(messages[0].role, "user");
@@ -1871,7 +2732,10 @@ async fn test_session_persistence_across_restart() {
         assert_eq!(messages[2].role, "tool");
 
         // Verify token counters survived
-        let counters = sm2.get_counters(session_id).await.expect("Failed to get counters");
+        let counters = sm2
+            .get_counters(session_id)
+            .await
+            .expect("Failed to get counters");
         assert_eq!(counters.total, 23, "Post-restart total should still be 23");
         assert_eq!(counters.user, 10);
         assert_eq!(counters.assistant, 8);
@@ -1887,11 +2751,18 @@ async fn test_session_persistence_across_restart() {
         .expect("Failed to query correlation IDs");
         assert_eq!(corr_ids.len(), 3);
         for cid in &corr_ids {
-            assert_eq!(*cid, Some(correlation_id), "Correlation ID should survive restart");
+            assert_eq!(
+                *cid,
+                Some(correlation_id),
+                "Correlation ID should survive restart"
+            );
         }
 
-        println!("✓ Session persistence across restart: {} messages, {} tokens, correlation IDs intact",
-            messages.len(), counters.total);
+        println!(
+            "✓ Session persistence across restart: {} messages, {} tokens, correlation IDs intact",
+            messages.len(),
+            counters.total
+        );
     }
 }
 
@@ -1906,33 +2777,54 @@ async fn test_end_to_end_session_lifecycle() {
     let agent_id = insert_test_identity(&pool, "lifecycle_agent").await;
     let session_key = format!("agent:{}:cli", agent_id);
 
-    let sm = SessionManager::with_defaults(pool.clone());
+    let sm = create_test_session_manager(&pool);
 
     // 1. Create session
-    let session = sm.create_session(&session_key).await.expect("Failed to create");
+    let session = sm
+        .create_session(&session_key)
+        .await
+        .expect("Failed to create");
 
     // 2. Append messages
     for i in 0..10 {
         sm.append_message(
-            session.session_id, "user", format!("Message {}", i),
-            Some(5), None, None, None, None, None,
-        ).await.expect("Failed to append");
+            session.session_id,
+            "user",
+            format!("Message {}", i),
+            Some(5),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .expect("Failed to append");
     }
 
     // 3. Verify token tracking
-    let counters = sm.get_counters(session.session_id).await.expect("Failed to get counters");
+    let counters = sm
+        .get_counters(session.session_id)
+        .await
+        .expect("Failed to get counters");
     assert_eq!(counters.user, 50, "Should have 10 * 5 = 50 user tokens");
 
     // 4. Extend session
-    sm.extend_session(session.session_id, 72).await.expect("Failed to extend");
+    sm.extend_session(session.session_id, 72)
+        .await
+        .expect("Failed to extend");
 
     // 5. Load messages
-    let messages = sm.load_messages(session.session_id, Some(100), None).await
+    let messages = sm
+        .load_messages(session.session_id, Some(100), None)
+        .await
         .expect("Failed to load");
     assert_eq!(messages.len(), 10);
 
     // 6. Delete session
-    sm.delete_session(session.session_id).await.expect("Failed to delete");
+    sm.delete_session(session.session_id)
+        .await
+        .expect("Failed to delete");
     let loaded = sm.load_session(&session_key).await.expect("Failed to load");
     assert!(loaded.is_none(), "Session should be deleted");
 

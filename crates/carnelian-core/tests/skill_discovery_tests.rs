@@ -74,7 +74,7 @@ async fn setup_postgres() -> (PgPool, testcontainers::ContainerAsync<GenericImag
     };
 
     // Run migrations
-    carnelian_core::db::run_migrations(&pool)
+    carnelian_core::db::run_migrations(&pool, None)
         .await
         .expect("Failed to run migrations");
 

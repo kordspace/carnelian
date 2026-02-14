@@ -71,7 +71,16 @@ fn create_test_scheduler(event_stream: Arc<EventStream>) -> Arc<tokio::sync::Mut
     )));
     let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
     let ledger = Arc::new(Ledger::new(pool.clone()));
-    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine, ledger.clone()));
+    let model_router = Arc::new(ModelRouter::new(
+        pool.clone(),
+        "http://localhost:18790".to_string(),
+        policy_engine,
+        ledger.clone(),
+    ));
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger.clone(),
+    ));
     Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool,
         event_stream,
@@ -80,6 +89,7 @@ fn create_test_scheduler(event_stream: Arc<EventStream>) -> Arc<tokio::sync::Mut
         config,
         model_router,
         ledger,
+        safe_mode_guard,
     )))
 }
 
@@ -689,7 +699,7 @@ async fn test_capability_grants_text_subject_id() {
         .await
         .expect("Failed to connect to database");
 
-    carnelian_core::db::run_migrations(&pool)
+    carnelian_core::db::run_migrations(&pool, None)
         .await
         .expect("Migrations should succeed");
 
@@ -750,7 +760,7 @@ async fn test_lz4_compression_verification() {
         .await
         .expect("Failed to connect to database");
 
-    carnelian_core::db::run_migrations(&pool)
+    carnelian_core::db::run_migrations(&pool, None)
         .await
         .expect("Migrations should succeed");
 
@@ -760,25 +770,27 @@ async fn test_lz4_compression_verification() {
             .await
             .expect("Lian should exist");
 
-    // Insert large memory content (>8KB)
+    // Insert large memory content (>8KB) — content is BYTEA after migration 0009
     let large_content = "A".repeat(10_000);
+    let large_content_bytes = large_content.as_bytes().to_vec();
     let memory_id: uuid::Uuid = sqlx::query_scalar(
         "INSERT INTO memories (identity_id, content, source) VALUES ($1, $2, 'observation') RETURNING memory_id",
     )
     .bind(lian_id)
-    .bind(&large_content)
+    .bind(&large_content_bytes)
     .fetch_one(&pool)
     .await
     .expect("Should insert large memory");
 
-    // Update to trigger compression
+    // Update to verify BYTEA column is writable
     sqlx::query("UPDATE memories SET content = content WHERE memory_id = $1")
         .bind(memory_id)
         .execute(&pool)
         .await
         .expect("Should update memory");
 
-    // Verify compression is active via pg_attribute
+    // memories.content compression was reset to default by migration 0009
+    // (encrypted BYTEA is incompressible, so LZ4 is no longer applied)
     let compression: Option<String> = sqlx::query_scalar(
         "SELECT attcompression::text FROM pg_attribute \
          WHERE attrelid = 'memories'::regclass AND attname = 'content'",
@@ -787,10 +799,10 @@ async fn test_lz4_compression_verification() {
     .await
     .expect("Should query compression");
 
-    assert_eq!(
+    assert_ne!(
         compression.as_deref(),
         Some("l"),
-        "memories.content should have LZ4 compression (attcompression = 'l')"
+        "memories.content should NOT have LZ4 compression (reset by migration 0009)"
     );
 
     // Verify column size is reasonable
@@ -806,7 +818,7 @@ async fn test_lz4_compression_verification() {
     }
 
     // -------------------------------------------------------------------------
-    // Verify run_logs.message LZ4 compression
+    // Verify run_logs.message compression (reset to default by migration 0009)
     // -------------------------------------------------------------------------
     let rl_compression: Option<String> = sqlx::query_scalar(
         "SELECT attcompression::text FROM pg_attribute \
@@ -816,20 +828,21 @@ async fn test_lz4_compression_verification() {
     .await
     .expect("Should query run_logs.message compression");
 
-    assert_eq!(
+    assert_ne!(
         rl_compression.as_deref(),
         Some("l"),
-        "run_logs.message should have LZ4 compression (attcompression = 'l')"
+        "run_logs.message should NOT have LZ4 compression (reset by migration 0009)"
     );
 
-    // Insert a representative row to confirm the column is writable under LZ4
+    // Insert a representative row to confirm the BYTEA column is writable
     // First we need a task_run to reference
     let large_message = "B".repeat(10_000);
+    let large_message_bytes = large_message.as_bytes().to_vec();
     let rl_insert = sqlx::query(
         "INSERT INTO run_logs (run_id, level, message) \
          SELECT r.run_id, 'info', $1 FROM task_runs r LIMIT 1",
     )
-    .bind(&large_message)
+    .bind(&large_message_bytes)
     .execute(&pool)
     .await;
 
@@ -844,7 +857,7 @@ async fn test_lz4_compression_verification() {
         // Create minimal task + task_run so we can insert a run_log
         sqlx::query(
             "INSERT INTO tasks (created_by, title, state) \
-             VALUES ($1, 'lz4-compression-test', 'pending')",
+             VALUES ($1, 'compression-test', 'pending')",
         )
         .bind(lian_id)
         .execute(&pool)
@@ -863,13 +876,13 @@ async fn test_lz4_compression_verification() {
             "INSERT INTO run_logs (run_id, level, message) \
              SELECT r.run_id, 'info', $1 FROM task_runs r LIMIT 1",
         )
-        .bind(&large_message)
+        .bind(&large_message_bytes)
         .execute(&pool)
         .await
         .expect("Should insert run_log with large message");
     }
 
-    println!("✓ run_logs.message LZ4 compression verified and writable");
+    println!("✓ run_logs.message compression verified (default, not LZ4) and writable");
 
     // -------------------------------------------------------------------------
     // Verify ledger_events.metadata LZ4 compression
@@ -917,7 +930,9 @@ async fn test_lz4_compression_verification() {
     );
 
     println!("✓ ledger_events.metadata LZ4 compression verified and writable");
-    println!("✓ Full LZ4 compression verification passed (memories, run_logs, ledger_events)");
+    println!(
+        "✓ Full compression verification passed (default on memories/run_logs, LZ4 on ledger_events)"
+    );
 }
 
 // =============================================================================
@@ -946,7 +961,16 @@ async fn start_db_backed_server(db_url: &str) -> (u16, tokio::task::JoinHandle<(
         config.clone(),
         event_stream.clone(),
     )));
-    let model_router = Arc::new(ModelRouter::new(pool.clone(), "http://localhost:18790".to_string(), policy_engine.clone(), ledger.clone()));
+    let model_router = Arc::new(ModelRouter::new(
+        pool.clone(),
+        "http://localhost:18790".to_string(),
+        policy_engine.clone(),
+        ledger.clone(),
+    ));
+    let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
+        pool.clone(),
+        ledger.clone(),
+    ));
     let scheduler = Arc::new(tokio::sync::Mutex::new(carnelian_core::Scheduler::new(
         pool.clone(),
         event_stream.clone(),
@@ -955,6 +979,7 @@ async fn start_db_backed_server(db_url: &str) -> (u16, tokio::task::JoinHandle<(
         config.clone(),
         model_router,
         ledger.clone(),
+        safe_mode_guard,
     )));
 
     let server = Server::new(
@@ -991,7 +1016,7 @@ async fn test_task_lifecycle_endpoints() {
         .await
         .expect("Failed to connect to database");
 
-    carnelian_core::db::run_migrations(&pool)
+    carnelian_core::db::run_migrations(&pool, None)
         .await
         .expect("Migrations should succeed");
 
@@ -1104,7 +1129,7 @@ async fn test_runs_and_paginated_logs() {
         .await
         .expect("Failed to connect to database");
 
-    carnelian_core::db::run_migrations(&pool)
+    carnelian_core::db::run_migrations(&pool, None)
         .await
         .expect("Migrations should succeed");
 
@@ -1129,11 +1154,12 @@ async fn test_runs_and_paginated_logs() {
     .await
     .expect("Should insert task_run");
 
-    // Insert 15 run_logs
+    // Insert 15 run_logs (message is BYTEA after migration 0009)
     for i in 0..15 {
+        let msg_bytes = format!("Log message {}", i).into_bytes();
         sqlx::query("INSERT INTO run_logs (run_id, level, message) VALUES ($1, 'info', $2)")
             .bind(run_id)
-            .bind(format!("Log message {}", i))
+            .bind(&msg_bytes)
             .execute(&pool)
             .await
             .expect("Should insert run_log");
@@ -1252,7 +1278,7 @@ async fn test_skill_management_endpoints() {
         .await
         .expect("Failed to connect to database");
 
-    carnelian_core::db::run_migrations(&pool)
+    carnelian_core::db::run_migrations(&pool, None)
         .await
         .expect("Migrations should succeed");
 
