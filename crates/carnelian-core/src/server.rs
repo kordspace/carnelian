@@ -38,6 +38,8 @@ use uuid::Uuid;
 use crate::ledger::Ledger;
 use crate::metrics::MetricsCollector;
 use crate::model_router::ModelRouter;
+use crate::safe_mode::SafeModeGuard;
+use crate::session::SessionManager;
 use crate::worker::WorkerManager;
 use crate::{Config, EventStream, Scheduler, db, policy::PolicyEngine};
 
@@ -111,6 +113,10 @@ pub struct AppState {
     pub metrics: Arc<MetricsCollector>,
     /// Model router for LLM completion requests via the gateway
     pub model_router: Arc<ModelRouter>,
+    /// Safe mode guard for toggling safe mode
+    pub safe_mode_guard: Arc<SafeModeGuard>,
+    /// Session manager for conversation persistence (wired with SafeModeGuard)
+    pub session_manager: Arc<SessionManager>,
     /// Correlation ID counter for request tracing
     correlation_counter: Arc<AtomicU64>,
 }
@@ -126,6 +132,8 @@ impl AppState {
         worker_manager: Arc<tokio::sync::Mutex<WorkerManager>>,
         scheduler: Arc<tokio::sync::Mutex<Scheduler>>,
         model_router: Arc<ModelRouter>,
+        safe_mode_guard: Arc<SafeModeGuard>,
+        session_manager: Arc<SessionManager>,
     ) -> Self {
         Self {
             config,
@@ -136,6 +144,8 @@ impl AppState {
             scheduler,
             metrics: Arc::new(MetricsCollector::new()),
             model_router,
+            safe_mode_guard,
+            session_manager,
             correlation_counter: Arc::new(AtomicU64::new(0)),
         }
     }
@@ -228,8 +238,19 @@ impl Server {
     where
         F: std::future::Future<Output = ()> + Send + 'static,
     {
+        let safe_mode_guard = {
+            let pool = self
+                .config
+                .pool()
+                .expect("Database pool required for SafeModeGuard");
+            Arc::new(SafeModeGuard::new(pool.clone(), self.ledger.clone()))
+        };
+
         let model_router = {
-            let pool = self.config.pool().expect("Database pool required for ModelRouter");
+            let pool = self
+                .config
+                .pool()
+                .expect("Database pool required for ModelRouter");
             Arc::new(
                 ModelRouter::new(
                     pool.clone(),
@@ -237,7 +258,26 @@ impl Server {
                     self.policy_engine.clone(),
                     self.ledger.clone(),
                 )
-                .with_event_stream(self.event_stream.clone()),
+                .with_event_stream(self.event_stream.clone())
+                .with_safe_mode_guard(safe_mode_guard.clone()),
+            )
+        };
+
+        // Wire safe mode guard into worker manager
+        {
+            let mut wm = self.worker_manager.lock().await;
+            wm.set_safe_mode_guard(safe_mode_guard.clone());
+        }
+
+        // Create session manager with safe mode guard wired in
+        let session_manager = {
+            let pool = self
+                .config
+                .pool()
+                .expect("Database pool required for SessionManager");
+            Arc::new(
+                SessionManager::with_defaults(pool.clone())
+                    .with_safe_mode_guard(safe_mode_guard.clone()),
             )
         };
 
@@ -249,6 +289,8 @@ impl Server {
             self.worker_manager.clone(),
             self.scheduler.clone(),
             model_router,
+            safe_mode_guard,
+            session_manager,
         );
 
         // Share the metrics collector with the scheduler and event stream
@@ -424,8 +466,26 @@ fn build_router(state: AppState) -> Router {
         .route("/v1/skills/{skill_id}/enable", post(enable_skill_handler))
         .route("/v1/skills/{skill_id}/disable", post(disable_skill_handler))
         .route("/v1/skills/refresh", post(refresh_skills_handler))
+        // Safe mode endpoints
+        .route("/v1/safe-mode/status", get(safe_mode_status_handler))
+        .route("/v1/safe-mode/enable", post(enable_safe_mode_handler))
+        .route("/v1/safe-mode/disable", post(disable_safe_mode_handler))
         // Metrics endpoint
         .route("/v1/metrics", get(metrics_handler))
+        // Approval endpoints
+        .route("/v1/approvals", get(list_approvals_handler))
+        .route("/v1/approvals/{id}/approve", post(approve_approval_handler))
+        .route("/v1/approvals/{id}/deny", post(deny_approval_handler))
+        .route("/v1/approvals/batch", post(batch_approve_handler))
+        // Capability endpoints
+        .route(
+            "/v1/capabilities",
+            get(list_capabilities_handler).post(grant_capability_handler),
+        )
+        .route(
+            "/v1/capabilities/{id}",
+            axum::routing::delete(revoke_capability_handler),
+        )
         // Gateway usage ingestion
         .route("/api/usage", post(ingest_usage_handler))
         // 10MB request body limit
@@ -1034,16 +1094,18 @@ async fn get_run_logs_handler(
             .flatten()
             .unwrap_or(0);
 
+    // message is BYTEA after migration 0009; sensitive flags encrypted rows
     let rows: Vec<(
         i64,
         Uuid,
         chrono::DateTime<chrono::Utc>,
         String,
-        String,
+        Vec<u8>,
         Option<serde_json::Value>,
         bool,
+        bool,
     )> = sqlx::query_as(
-        r"SELECT log_id, run_id, ts, level, message, fields, truncated
+        r"SELECT log_id, run_id, ts, level, message, fields, truncated, sensitive
           FROM run_logs WHERE run_id = $1 ORDER BY ts ASC LIMIT $2 OFFSET $3",
     )
     .bind(run_id)
@@ -1053,20 +1115,39 @@ async fn get_run_logs_handler(
     .await
     .unwrap_or_default();
 
-    let logs: Vec<RunLogEntry> = rows
-        .into_iter()
-        .map(
-            |(log_id, run_id, ts, level, message, fields, truncated)| RunLogEntry {
-                log_id,
-                run_id,
-                ts,
-                level,
-                message,
-                fields,
-                truncated,
-            },
-        )
-        .collect();
+    // Build an EncryptionHelper if the owner signing key is available (for decrypting sensitive logs)
+    let encryption_helper = state
+        .config
+        .owner_signing_key()
+        .map(|sk| crate::encryption::EncryptionHelper::new(pool, sk));
+
+    let mut logs: Vec<RunLogEntry> = Vec::with_capacity(rows.len());
+    for (log_id, run_id, ts, level, message_bytes, fields, truncated, sensitive) in rows {
+        let message = if sensitive {
+            // Attempt decryption of sensitive message
+            if let Some(ref helper) = encryption_helper {
+                helper
+                    .decrypt_text(&message_bytes)
+                    .await
+                    .unwrap_or_else(|_| "[encrypted — decryption failed]".to_string())
+            } else {
+                "[encrypted — no signing key available]".to_string()
+            }
+        } else {
+            // Non-sensitive: raw UTF-8 bytes
+            String::from_utf8(message_bytes).unwrap_or_else(|_| "[invalid UTF-8]".to_string())
+        };
+        logs.push(RunLogEntry {
+            log_id,
+            run_id,
+            ts,
+            level,
+            message,
+            fields,
+            truncated,
+            sensitive,
+        });
+    }
 
     (
         StatusCode::OK,
@@ -1081,6 +1162,45 @@ async fn get_run_logs_handler(
         ),
     )
         .into_response()
+}
+
+// =============================================================================
+// RUN LOG HELPERS
+// =============================================================================
+
+/// Insert a run log entry, optionally encrypting the message if `sensitive` is true.
+///
+/// When `sensitive=true` and an `EncryptionHelper` is provided, the message is
+/// encrypted before storage. Non-sensitive messages are stored as raw UTF-8 bytes
+/// (the `message` column is BYTEA after migration 0009).
+pub async fn insert_run_log(
+    pool: &sqlx::PgPool,
+    run_id: Uuid,
+    level: &str,
+    message: &str,
+    sensitive: bool,
+    encryption_helper: Option<&crate::encryption::EncryptionHelper>,
+) -> carnelian_common::Result<()> {
+    let message_bytes: Vec<u8> = if sensitive {
+        if let Some(helper) = encryption_helper {
+            helper.encrypt_text(message).await?
+        } else {
+            message.as_bytes().to_vec()
+        }
+    } else {
+        message.as_bytes().to_vec()
+    };
+
+    sqlx::query("INSERT INTO run_logs (run_id, level, message, sensitive) VALUES ($1, $2, $3, $4)")
+        .bind(run_id)
+        .bind(level)
+        .bind(&message_bytes)
+        .bind(sensitive)
+        .execute(pool)
+        .await
+        .map_err(carnelian_common::Error::Database)?;
+
+    Ok(())
 }
 
 // =============================================================================
@@ -1239,6 +1359,87 @@ async fn refresh_skills_handler(State(state): State<AppState>) -> impl IntoRespo
 }
 
 // =============================================================================
+// SAFE MODE HANDLERS
+// =============================================================================
+
+/// Request body for enable/disable safe mode endpoints.
+#[derive(Debug, Deserialize)]
+struct SafeModeToggleRequest {
+    /// Optional actor UUID performing the toggle.
+    #[serde(default)]
+    actor_id: Option<Uuid>,
+}
+
+/// GET `/v1/safe-mode/status` — query current safe mode state.
+async fn safe_mode_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match state.safe_mode_guard.is_enabled().await {
+        Ok(enabled) => (StatusCode::OK, Json(json!({"safe_mode": enabled}))).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to query safe mode status");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to query safe mode: {}", e)})),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// POST `/v1/safe-mode/enable` — enable safe mode.
+async fn enable_safe_mode_handler(
+    State(state): State<AppState>,
+    Json(body): Json<SafeModeToggleRequest>,
+) -> impl IntoResponse {
+    let signing_key = state.config.owner_signing_key();
+    match state
+        .safe_mode_guard
+        .enable(body.actor_id, signing_key)
+        .await
+    {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(json!({"safe_mode": true, "message": "Safe mode enabled"})),
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to enable safe mode");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to enable safe mode: {}", e)})),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// POST `/v1/safe-mode/disable` — disable safe mode.
+async fn disable_safe_mode_handler(
+    State(state): State<AppState>,
+    Json(body): Json<SafeModeToggleRequest>,
+) -> impl IntoResponse {
+    let signing_key = state.config.owner_signing_key();
+    match state
+        .safe_mode_guard
+        .disable(body.actor_id, signing_key)
+        .await
+    {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(json!({"safe_mode": false, "message": "Safe mode disabled"})),
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to disable safe mode");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to disable safe mode: {}", e)})),
+            )
+                .into_response()
+        }
+    }
+}
+
+// =============================================================================
 // USAGE INGESTION HANDLER
 // =============================================================================
 
@@ -1302,14 +1503,13 @@ async fn ingest_usage_handler(
 
     for record in &body.records {
         // Resolve provider name → provider_id
-        let provider_id: Option<Uuid> = sqlx::query_scalar(
-            "SELECT provider_id FROM model_providers WHERE name = $1 LIMIT 1",
-        )
-        .bind(&record.provider)
-        .fetch_optional(pool)
-        .await
-        .ok()
-        .flatten();
+        let provider_id: Option<Uuid> =
+            sqlx::query_scalar("SELECT provider_id FROM model_providers WHERE name = $1 LIMIT 1")
+                .bind(&record.provider)
+                .fetch_optional(pool)
+                .await
+                .ok()
+                .flatten();
 
         let Some(provider_id) = provider_id else {
             tracing::warn!(
@@ -1327,10 +1527,8 @@ async fn ingest_usage_handler(
             .and_then(|s| s.parse().ok());
 
         // Parse timestamp or default to now (handled by DB default)
-        let ts: Option<chrono::DateTime<chrono::Utc>> = record
-            .timestamp
-            .as_deref()
-            .and_then(|s| s.parse().ok());
+        let ts: Option<chrono::DateTime<chrono::Utc>> =
+            record.timestamp.as_deref().and_then(|s| s.parse().ok());
 
         let result = if let Some(ts) = ts {
             sqlx::query(
@@ -1387,6 +1585,740 @@ async fn ingest_usage_handler(
         })),
     )
         .into_response()
+}
+
+// =============================================================================
+// APPROVAL HELPERS
+// =============================================================================
+
+/// After an approval request has been marked as approved, execute the underlying
+/// action (e.g. capability grant or revoke) via the `PolicyEngine`.
+///
+/// For action types that are not capability-related this is a no-op.
+async fn execute_approved_action(
+    approval_id: Uuid,
+    approval_queue: &crate::approvals::ApprovalQueue,
+    policy_engine: &crate::PolicyEngine,
+    event_stream: &crate::EventStream,
+    ledger: &crate::Ledger,
+    signing_key: Option<&ed25519_dalek::SigningKey>,
+) -> carnelian_common::Result<()> {
+    let request = match approval_queue.get(approval_id).await? {
+        Some(r) => r,
+        None => {
+            return Err(carnelian_common::Error::Security(format!(
+                "Approval request not found: {}",
+                approval_id
+            )));
+        }
+    };
+
+    match request.action_type.as_str() {
+        "capability.grant" => {
+            policy_engine
+                .execute_approved_grant(
+                    approval_id,
+                    approval_queue,
+                    Some(event_stream),
+                    Some(ledger),
+                    signing_key,
+                )
+                .await?;
+        }
+        "capability.revoke" => {
+            policy_engine
+                .execute_approved_revoke(
+                    approval_id,
+                    approval_queue,
+                    Some(event_stream),
+                    Some(ledger),
+                    signing_key,
+                )
+                .await?;
+        }
+        _ => {
+            // Non-capability action types (config.change, db.migration, etc.)
+            // are approved but have no automatic execution path yet.
+            tracing::debug!(
+                approval_id = %approval_id,
+                action_type = %request.action_type,
+                "Approved action has no automatic execution path"
+            );
+        }
+    }
+
+    Ok(())
+}
+
+// =============================================================================
+// APPROVAL HANDLERS
+// =============================================================================
+
+/// Query parameters for listing approvals.
+#[derive(Debug, Deserialize)]
+struct ListApprovalsQuery {
+    #[serde(default = "default_approval_limit")]
+    limit: i64,
+    #[serde(default)]
+    action_type: Option<String>,
+}
+
+const fn default_approval_limit() -> i64 {
+    100
+}
+
+/// List pending approvals via `GET /v1/approvals`.
+async fn list_approvals_handler(
+    State(state): State<AppState>,
+    Query(params): Query<ListApprovalsQuery>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "database unavailable"})),
+            )
+                .into_response();
+        }
+    };
+
+    let approval_queue = crate::approvals::ApprovalQueue::new(pool.clone());
+    match approval_queue.list_pending(params.limit).await {
+        Ok(requests) => {
+            let approvals: Vec<carnelian_common::types::ApprovalRequestDetail> = requests
+                .into_iter()
+                .filter(|r| {
+                    params
+                        .action_type
+                        .as_ref()
+                        .is_none_or(|at| r.action_type == *at)
+                })
+                .map(|r| carnelian_common::types::ApprovalRequestDetail {
+                    id: r.id,
+                    action_type: r.action_type,
+                    payload: r.payload,
+                    status: r.status,
+                    requested_by: r.requested_by,
+                    requested_at: r.requested_at,
+                    resolved_at: r.resolved_at,
+                    resolved_by: r.resolved_by,
+                    correlation_id: r.correlation_id,
+                })
+                .collect();
+
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(carnelian_common::types::ListApprovalsResponse {
+                        approvals,
+                    })
+                    .unwrap_or_default(),
+                ),
+            )
+                .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("{}", e)})),
+        )
+            .into_response(),
+    }
+}
+
+/// Approve a pending action via `POST /v1/approvals/:id/approve`.
+async fn approve_approval_handler(
+    State(state): State<AppState>,
+    Path(approval_id): Path<Uuid>,
+    Json(body): Json<carnelian_common::types::ApprovalActionRequest>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "database unavailable"})),
+            )
+                .into_response();
+        }
+    };
+
+    // Load owner signing key for cryptographic approval
+    let signing_key = match state.config.owner_signing_key() {
+        Some(sk) => sk,
+        None => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": "owner signing key not configured"})),
+            )
+                .into_response();
+        }
+    };
+
+    // Validate client-provided signature against owner public key
+    if body.signature.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "signature is required"})),
+        )
+            .into_response();
+    }
+    let public_key_hex = crate::crypto::public_key_from_signing_key(signing_key);
+    match crate::crypto::verify_signature(
+        &public_key_hex,
+        approval_id.to_string().as_bytes(),
+        &body.signature,
+    ) {
+        Ok(true) => {}
+        Ok(false) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": "invalid signature"})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("signature verification failed: {}", e)})),
+            )
+                .into_response();
+        }
+    }
+
+    // Use system UUID as approver (future: extract from auth context)
+    let approved_by = Uuid::nil();
+
+    let approval_queue = crate::approvals::ApprovalQueue::new(pool.clone());
+    match approval_queue
+        .approve(approval_id, approved_by, signing_key, &state.ledger)
+        .await
+    {
+        Ok(()) => {
+            // Execute the underlying action based on the approval's action_type
+            if let Err(e) = execute_approved_action(
+                approval_id,
+                &approval_queue,
+                &state.policy_engine,
+                &state.event_stream,
+                &state.ledger,
+                Some(signing_key),
+            )
+            .await
+            {
+                tracing::error!(
+                    approval_id = %approval_id,
+                    error = %e,
+                    "Failed to execute approved action"
+                );
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": format!("Approved but execution failed: {}", e)})),
+                )
+                    .into_response();
+            }
+
+            // Publish WebSocket event only on successful execution
+            state.event_stream.publish(EventEnvelope::new(
+                EventLevel::Info,
+                EventType::ApprovalApproved,
+                json!({ "approval_id": approval_id }),
+            ));
+
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(carnelian_common::types::ApprovalActionResponse {
+                        approval_id,
+                        status: "approved".to_string(),
+                    })
+                    .unwrap_or_default(),
+                ),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            let status = if e.to_string().contains("not found") {
+                StatusCode::NOT_FOUND
+            } else if e.to_string().contains("already") {
+                StatusCode::CONFLICT
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            (status, Json(json!({"error": format!("{}", e)}))).into_response()
+        }
+    }
+}
+
+/// Deny a pending action via `POST /v1/approvals/:id/deny`.
+async fn deny_approval_handler(
+    State(state): State<AppState>,
+    Path(approval_id): Path<Uuid>,
+    Json(body): Json<carnelian_common::types::ApprovalActionRequest>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "database unavailable"})),
+            )
+                .into_response();
+        }
+    };
+
+    let signing_key = match state.config.owner_signing_key() {
+        Some(sk) => sk,
+        None => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": "owner signing key not configured"})),
+            )
+                .into_response();
+        }
+    };
+
+    // Validate client-provided signature against owner public key
+    if body.signature.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "signature is required"})),
+        )
+            .into_response();
+    }
+    let public_key_hex = crate::crypto::public_key_from_signing_key(signing_key);
+    match crate::crypto::verify_signature(
+        &public_key_hex,
+        approval_id.to_string().as_bytes(),
+        &body.signature,
+    ) {
+        Ok(true) => {}
+        Ok(false) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": "invalid signature"})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("signature verification failed: {}", e)})),
+            )
+                .into_response();
+        }
+    }
+
+    let denied_by = Uuid::nil();
+
+    let approval_queue = crate::approvals::ApprovalQueue::new(pool.clone());
+    match approval_queue
+        .deny(approval_id, denied_by, signing_key, &state.ledger)
+        .await
+    {
+        Ok(()) => {
+            state.event_stream.publish(EventEnvelope::new(
+                EventLevel::Info,
+                EventType::ApprovalDenied,
+                json!({ "approval_id": approval_id }),
+            ));
+
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(carnelian_common::types::ApprovalActionResponse {
+                        approval_id,
+                        status: "denied".to_string(),
+                    })
+                    .unwrap_or_default(),
+                ),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            let status = if e.to_string().contains("not found") {
+                StatusCode::NOT_FOUND
+            } else if e.to_string().contains("already") {
+                StatusCode::CONFLICT
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            (status, Json(json!({"error": format!("{}", e)}))).into_response()
+        }
+    }
+}
+
+/// Batch approve pending actions via `POST /v1/approvals/batch`.
+async fn batch_approve_handler(
+    State(state): State<AppState>,
+    Json(body): Json<carnelian_common::types::BatchApprovalRequest>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "database unavailable"})),
+            )
+                .into_response();
+        }
+    };
+
+    let signing_key = match state.config.owner_signing_key() {
+        Some(sk) => sk,
+        None => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": "owner signing key not configured"})),
+            )
+                .into_response();
+        }
+    };
+
+    // Validate client-provided signature against owner public key.
+    // For batch, the signature is verified against the concatenated sorted IDs.
+    if body.signature.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "signature is required"})),
+        )
+            .into_response();
+    }
+    let public_key_hex = crate::crypto::public_key_from_signing_key(signing_key);
+    {
+        let mut sorted_ids = body.approval_ids.clone();
+        sorted_ids.sort();
+        let message = sorted_ids
+            .iter()
+            .map(|id| id.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        match crate::crypto::verify_signature(&public_key_hex, message.as_bytes(), &body.signature)
+        {
+            Ok(true) => {}
+            Ok(false) => {
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(json!({"error": "invalid signature"})),
+                )
+                    .into_response();
+            }
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": format!("signature verification failed: {}", e)})),
+                )
+                    .into_response();
+            }
+        }
+    }
+
+    let approved_by = Uuid::nil();
+    let all_ids = body.approval_ids.clone();
+
+    let approval_queue = crate::approvals::ApprovalQueue::new(pool.clone());
+    match approval_queue
+        .batch_approve(body.approval_ids, approved_by, signing_key, &state.ledger)
+        .await
+    {
+        Ok(approved) => {
+            let mut executed: Vec<Uuid> = Vec::new();
+            let mut failed: Vec<Uuid> = all_ids
+                .iter()
+                .filter(|id| !approved.contains(id))
+                .copied()
+                .collect();
+
+            // Execute the underlying action for each approved item
+            for id in &approved {
+                match execute_approved_action(
+                    *id,
+                    &approval_queue,
+                    &state.policy_engine,
+                    &state.event_stream,
+                    &state.ledger,
+                    Some(signing_key),
+                )
+                .await
+                {
+                    Ok(()) => {
+                        executed.push(*id);
+                        // Publish event only on successful execution
+                        state.event_stream.publish(EventEnvelope::new(
+                            EventLevel::Info,
+                            EventType::ApprovalApproved,
+                            json!({ "approval_id": id }),
+                        ));
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            approval_id = %id,
+                            error = %e,
+                            "Failed to execute approved action in batch"
+                        );
+                        failed.push(*id);
+                    }
+                }
+            }
+
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(carnelian_common::types::BatchApprovalResponse {
+                        approved: executed,
+                        failed,
+                    })
+                    .unwrap_or_default(),
+                ),
+            )
+                .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("{}", e)})),
+        )
+            .into_response(),
+    }
+}
+
+// =============================================================================
+// CAPABILITY HANDLERS
+// =============================================================================
+
+/// Query parameters for listing capabilities.
+#[derive(Debug, Deserialize)]
+struct ListCapabilitiesQuery {
+    #[serde(default)]
+    subject_type: Option<String>,
+    #[serde(default)]
+    subject_id: Option<String>,
+}
+
+/// List capability grants via `GET /v1/capabilities`.
+async fn list_capabilities_handler(
+    State(state): State<AppState>,
+    Query(params): Query<ListCapabilitiesQuery>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "database unavailable"})),
+            )
+                .into_response();
+        }
+    };
+
+    // If both subject_type and subject_id are provided, use filtered query
+    let grants = if let (Some(st), Some(si)) = (&params.subject_type, &params.subject_id) {
+        state.policy_engine.list_grants_for_subject(st, si).await
+    } else {
+        // List all grants (with optional subject_type filter)
+
+        if let Some(ref st) = params.subject_type {
+            sqlx::query_as::<_, crate::policy::CapabilityGrant>(
+                r"SELECT grant_id, subject_type, subject_id, capability_key, scope, constraints,
+                         approved_by, created_at, expires_at
+                  FROM capability_grants
+                  WHERE subject_type = $1 AND (expires_at IS NULL OR expires_at > NOW())
+                  ORDER BY created_at DESC LIMIT 200",
+            )
+            .bind(st)
+            .fetch_all(pool)
+            .await
+            .map_err(carnelian_common::Error::Database)
+        } else {
+            sqlx::query_as::<_, crate::policy::CapabilityGrant>(
+                r"SELECT grant_id, subject_type, subject_id, capability_key, scope, constraints,
+                         approved_by, created_at, expires_at
+                  FROM capability_grants
+                  WHERE (expires_at IS NULL OR expires_at > NOW())
+                  ORDER BY created_at DESC LIMIT 200",
+            )
+            .fetch_all(pool)
+            .await
+            .map_err(carnelian_common::Error::Database)
+        }
+    };
+
+    match grants {
+        Ok(rows) => {
+            let details: Vec<carnelian_common::types::CapabilityGrantDetail> = rows
+                .into_iter()
+                .map(|g| carnelian_common::types::CapabilityGrantDetail {
+                    grant_id: g.grant_id,
+                    subject_type: g.subject_type,
+                    subject_id: g.subject_id,
+                    capability_key: g.capability_key,
+                    scope: g.scope,
+                    constraints: g.constraints,
+                    approved_by: g.approved_by,
+                    created_at: g.created_at,
+                    expires_at: g.expires_at,
+                })
+                .collect();
+
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(carnelian_common::types::ListCapabilitiesResponse {
+                        grants: details,
+                    })
+                    .unwrap_or_default(),
+                ),
+            )
+                .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("{}", e)})),
+        )
+            .into_response(),
+    }
+}
+
+/// Grant a capability via `POST /v1/capabilities`.
+///
+/// If the action requires approval, returns 202 Accepted with the approval_id.
+async fn grant_capability_handler(
+    State(state): State<AppState>,
+    Json(body): Json<carnelian_common::types::GrantCapabilityRequest>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "database unavailable"})),
+            )
+                .into_response();
+        }
+    };
+
+    let signing_key = state.config.owner_signing_key();
+    let approval_queue = crate::approvals::ApprovalQueue::new(pool.clone());
+
+    match state
+        .policy_engine
+        .grant_capability(
+            &body.subject_type,
+            &body.subject_id,
+            &body.capability_key,
+            body.scope,
+            body.constraints,
+            None, // approved_by
+            body.expires_at,
+            Some(&state.event_stream),
+            Some(&state.ledger),
+            signing_key,
+            Some(&approval_queue),
+        )
+        .await
+    {
+        Ok(grant_id) => (
+            StatusCode::CREATED,
+            Json(
+                serde_json::to_value(carnelian_common::types::GrantCapabilityResponse { grant_id })
+                    .unwrap_or_default(),
+            ),
+        )
+            .into_response(),
+        Err(carnelian_common::Error::ApprovalRequired(approval_id)) => {
+            // Publish queued event
+            state.event_stream.publish(EventEnvelope::new(
+                EventLevel::Info,
+                EventType::ApprovalQueued,
+                json!({
+                    "approval_id": approval_id,
+                    "action_type": "capability.grant",
+                }),
+            ));
+
+            (
+                StatusCode::ACCEPTED,
+                Json(json!({
+                    "approval_id": approval_id,
+                    "message": "Capability grant queued for approval"
+                })),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            let status = if e.to_string().contains("Invalid capability key") {
+                StatusCode::BAD_REQUEST
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            (status, Json(json!({"error": format!("{}", e)}))).into_response()
+        }
+    }
+}
+
+/// Revoke a capability via `DELETE /v1/capabilities/:id`.
+async fn revoke_capability_handler(
+    State(state): State<AppState>,
+    Path(grant_id): Path<Uuid>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "database unavailable"})),
+            )
+                .into_response();
+        }
+    };
+
+    let signing_key = state.config.owner_signing_key();
+    let approval_queue = crate::approvals::ApprovalQueue::new(pool.clone());
+
+    match state
+        .policy_engine
+        .revoke_capability(
+            grant_id,
+            None, // revoked_by
+            Some(&state.event_stream),
+            Some(&state.ledger),
+            signing_key,
+            Some(&approval_queue),
+        )
+        .await
+    {
+        Ok(revoked) => (
+            StatusCode::OK,
+            Json(
+                serde_json::to_value(carnelian_common::types::RevokeCapabilityResponse { revoked })
+                    .unwrap_or_default(),
+            ),
+        )
+            .into_response(),
+        Err(carnelian_common::Error::ApprovalRequired(approval_id)) => {
+            state.event_stream.publish(EventEnvelope::new(
+                EventLevel::Info,
+                EventType::ApprovalQueued,
+                json!({
+                    "approval_id": approval_id,
+                    "action_type": "capability.revoke",
+                }),
+            ));
+
+            (
+                StatusCode::ACCEPTED,
+                Json(json!({
+                    "approval_id": approval_id,
+                    "message": "Capability revocation queued for approval"
+                })),
+            )
+                .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("{}", e)})),
+        )
+            .into_response(),
+    }
 }
 
 // =============================================================================
@@ -1549,6 +2481,11 @@ mod tests {
             policy_engine.clone(),
             ledger.clone(),
         ));
+        let safe_mode_guard = Arc::new(SafeModeGuard::new(pool.clone(), ledger.clone()));
+        let session_manager = Arc::new(
+            SessionManager::with_defaults(pool.clone())
+                .with_safe_mode_guard(safe_mode_guard.clone()),
+        );
         let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
             pool.clone(),
             event_stream.clone(),
@@ -1557,6 +2494,7 @@ mod tests {
             config.clone(),
             model_router.clone(),
             ledger.clone(),
+            safe_mode_guard.clone(),
         )));
         AppState::new(
             config,
@@ -1566,6 +2504,8 @@ mod tests {
             worker_manager,
             scheduler,
             model_router,
+            safe_mode_guard,
+            session_manager,
         )
     }
 

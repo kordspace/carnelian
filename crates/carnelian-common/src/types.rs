@@ -185,6 +185,11 @@ pub enum EventType {
     HeartbeatTick,
     HeartbeatOk,
 
+    // Approval lifecycle
+    ApprovalQueued,
+    ApprovalApproved,
+    ApprovalDenied,
+
     // Custom event type for extensibility
     Custom(String),
 }
@@ -370,6 +375,17 @@ pub struct StreamEvent {
     pub fields: JsonValue,
 }
 
+/// Attestation data reported by a worker during health checks
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkerAttestationData {
+    /// blake3 hash of the most recent ledger event the worker has seen
+    pub last_ledger_head: String,
+    /// Hash of the worker binary/script
+    pub build_checksum: String,
+    /// Configuration state identifier
+    pub config_version: String,
+}
+
 /// Health check response from a worker transport
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthResponse {
@@ -379,6 +395,9 @@ pub struct HealthResponse {
     pub worker_id: String,
     /// Uptime in seconds
     pub uptime_secs: u64,
+    /// Attestation data (optional, for backward compatibility)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attestation: Option<WorkerAttestationData>,
 }
 
 // =============================================================================
@@ -476,6 +495,9 @@ pub struct RunLogEntry {
     pub message: String,
     pub fields: Option<JsonValue>,
     pub truncated: bool,
+    /// Whether this log message contains sensitive data (encrypted at rest).
+    #[serde(default)]
+    pub sensitive: bool,
 }
 
 /// Paginated response for `GET /v1/runs/:id/logs`.
@@ -624,4 +646,109 @@ pub struct MetricsSnapshot {
     #[serde(default)]
     pub render_time_ms: f64,
     pub timestamp: DateTime<Utc>,
+}
+
+// =============================================================================
+// APPROVAL QUEUE API TYPES
+// =============================================================================
+
+/// A single approval request in list / detail responses.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApprovalRequestDetail {
+    pub id: Uuid,
+    pub action_type: String,
+    pub payload: JsonValue,
+    pub status: String,
+    pub requested_by: Option<Uuid>,
+    pub requested_at: DateTime<Utc>,
+    pub resolved_at: Option<DateTime<Utc>>,
+    pub resolved_by: Option<Uuid>,
+    pub correlation_id: Option<Uuid>,
+}
+
+/// Response body for `GET /v1/approvals`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListApprovalsResponse {
+    pub approvals: Vec<ApprovalRequestDetail>,
+}
+
+/// Request body for `POST /v1/approvals/:id/approve` and `POST /v1/approvals/:id/deny`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApprovalActionRequest {
+    /// Hex-encoded Ed25519 signature (unused when server signs internally,
+    /// but kept for future client-side signing).
+    #[serde(default)]
+    pub signature: String,
+}
+
+/// Response body after approving or denying an approval request.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApprovalActionResponse {
+    pub approval_id: Uuid,
+    pub status: String,
+}
+
+/// Request body for `POST /v1/approvals/batch`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchApprovalRequest {
+    pub approval_ids: Vec<Uuid>,
+    #[serde(default)]
+    pub signature: String,
+}
+
+/// Response body for batch approval.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchApprovalResponse {
+    pub approved: Vec<Uuid>,
+    pub failed: Vec<Uuid>,
+}
+
+// =============================================================================
+// CAPABILITY MANAGEMENT API TYPES
+// =============================================================================
+
+/// A single capability grant in list / detail responses.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapabilityGrantDetail {
+    pub grant_id: Uuid,
+    pub subject_type: String,
+    pub subject_id: String,
+    pub capability_key: String,
+    pub scope: Option<JsonValue>,
+    pub constraints: Option<JsonValue>,
+    pub approved_by: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+/// Response body for `GET /v1/capabilities`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListCapabilitiesResponse {
+    pub grants: Vec<CapabilityGrantDetail>,
+}
+
+/// Request body for `POST /v1/capabilities`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GrantCapabilityRequest {
+    pub subject_type: String,
+    pub subject_id: String,
+    pub capability_key: String,
+    #[serde(default)]
+    pub scope: Option<JsonValue>,
+    #[serde(default)]
+    pub constraints: Option<JsonValue>,
+    #[serde(default)]
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+/// Response body after granting a capability.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GrantCapabilityResponse {
+    pub grant_id: Uuid,
+}
+
+/// Response body after revoking a capability.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RevokeCapabilityResponse {
+    pub revoked: bool,
 }
