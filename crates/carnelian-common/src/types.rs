@@ -190,6 +190,9 @@ pub enum EventType {
     ApprovalApproved,
     ApprovalDenied,
 
+    // Workspace scanning
+    TaskAutoQueued,
+
     // Custom event type for extensibility
     Custom(String),
 }

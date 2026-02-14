@@ -565,6 +565,49 @@ impl Scheduler {
             );
         }
 
+        // ── Workspace Scan & Auto-Queue ─────────────────────────────────
+        let scan_limit = config.max_tasks_per_heartbeat;
+        if scan_limit > 0 && !config.workspace_scan_paths.is_empty() {
+            let markers = WorkspaceScanner::scan(&config.workspace_scan_paths, scan_limit);
+            if !markers.is_empty() {
+                let safe_count = markers.iter().filter(|m| m.is_safe).count();
+                let privileged_count = markers.len() - safe_count;
+                tracing::debug!(
+                    total = markers.len(),
+                    safe = safe_count,
+                    privileged = privileged_count,
+                    "Workspace scan found markers"
+                );
+
+                match auto_queue_scanned_tasks(
+                    pool,
+                    event_stream,
+                    &markers,
+                    identity_id,
+                    correlation_id,
+                )
+                .await
+                {
+                    Ok(queued) => {
+                        if queued > 0 {
+                            tracing::info!(
+                                queued = queued,
+                                correlation_id = %correlation_id,
+                                "Auto-queued tasks from workspace scan"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            error = %e,
+                            correlation_id = %correlation_id,
+                            "Failed to auto-queue scanned tasks"
+                        );
+                    }
+                }
+            }
+        }
+
         tracing::info!(
             heartbeat_id = %heartbeat_id,
             identity_id = %identity_id,
@@ -1367,6 +1410,305 @@ impl Scheduler {
     }
 }
 
+// =============================================================================
+// WORKSPACE SCANNER
+// =============================================================================
+
+/// File extensions eligible for workspace scanning.
+const SCANNABLE_EXTENSIONS: &[&str] = &[
+    "rs", "py", "ts", "js", "tsx", "jsx", "go", "java", "c", "cpp", "h", "hpp", "rb", "sh", "bash",
+    "zsh", "toml", "yaml", "yml", "json", "md", "txt",
+];
+
+/// Maximum file size in bytes to scan (256 KB). Larger files are skipped.
+const MAX_SCAN_FILE_BYTES: u64 = 262_144;
+
+/// Keywords in a marker description that indicate a privileged (non-safe) task.
+const PRIVILEGED_KEYWORDS: &[&str] = &[
+    "delete",
+    "drop",
+    "migrate",
+    "deploy",
+    "production",
+    "credential",
+    "secret",
+    "key rotation",
+    "sudo",
+    "admin",
+    "root",
+    "destroy",
+    "truncate",
+    "revert",
+    "rollback",
+    "security",
+    "permission",
+    "privilege",
+];
+
+/// A task marker discovered in a workspace file.
+#[derive(Debug, Clone)]
+pub struct ScannedMarker {
+    /// Relative file path where the marker was found.
+    pub file_path: String,
+    /// 1-indexed line number.
+    pub line_number: usize,
+    /// The marker prefix that matched (`TASK` or `TODO`).
+    pub marker_type: String,
+    /// The text following the marker prefix (trimmed).
+    pub description: String,
+    /// Whether the task is classified as safe to auto-queue.
+    pub is_safe: bool,
+}
+
+/// Workspace scanner that detects `TASK:` and `TODO:` markers in source files.
+pub struct WorkspaceScanner;
+
+impl WorkspaceScanner {
+    /// Scan configured workspace paths for `TASK:` and `TODO:` markers.
+    ///
+    /// Returns up to `limit` markers, skipping files that are too large,
+    /// binary, or have non-scannable extensions. Directories named `target`,
+    /// `node_modules`, `.git`, and `__pycache__` are excluded.
+    pub fn scan(paths: &[std::path::PathBuf], limit: usize) -> Vec<ScannedMarker> {
+        let mut markers = Vec::new();
+
+        for base in paths {
+            if !base.exists() {
+                tracing::debug!(path = %base.display(), "Workspace scan path does not exist, skipping");
+                continue;
+            }
+            Self::walk_dir(base, base, limit, &mut markers);
+            if markers.len() >= limit {
+                break;
+            }
+        }
+
+        markers.truncate(limit);
+        markers
+    }
+
+    /// Recursively walk a directory collecting markers.
+    fn walk_dir(
+        base: &std::path::Path,
+        dir: &std::path::Path,
+        limit: usize,
+        markers: &mut Vec<ScannedMarker>,
+    ) {
+        let entries = match std::fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(_) => return,
+        };
+
+        for entry in entries.flatten() {
+            if markers.len() >= limit {
+                return;
+            }
+
+            let path = entry.path();
+            let file_name = entry.file_name();
+            let name = file_name.to_string_lossy();
+
+            // Skip hidden and well-known non-source directories
+            if path.is_dir() {
+                if name.starts_with('.')
+                    || name == "target"
+                    || name == "node_modules"
+                    || name == "__pycache__"
+                    || name == "dist"
+                    || name == "build"
+                    || name == "vendor"
+                {
+                    continue;
+                }
+                Self::walk_dir(base, &path, limit, markers);
+                continue;
+            }
+
+            // Filter by extension
+            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+            if !SCANNABLE_EXTENSIONS.contains(&ext) {
+                continue;
+            }
+
+            // Skip large files
+            if let Ok(meta) = entry.metadata() {
+                if meta.len() > MAX_SCAN_FILE_BYTES {
+                    continue;
+                }
+            }
+
+            Self::scan_file(base, &path, limit, markers);
+        }
+    }
+
+    /// Scan a single file for `TASK:` and `TODO:` markers.
+    fn scan_file(
+        base: &std::path::Path,
+        path: &std::path::Path,
+        limit: usize,
+        markers: &mut Vec<ScannedMarker>,
+    ) {
+        let content = match std::fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(_) => return, // skip binary / unreadable files
+        };
+
+        let rel_path = path
+            .strip_prefix(base)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .replace('\\', "/");
+
+        for (idx, line) in content.lines().enumerate() {
+            if markers.len() >= limit {
+                return;
+            }
+
+            let trimmed = line.trim();
+
+            // Match TASK: or TODO: (case-insensitive prefix search after stripping comment chars)
+            let stripped = Self::strip_comment_prefix(trimmed);
+            let upper = stripped.to_uppercase();
+
+            let (marker_type, description) = if let Some(rest) = upper.strip_prefix("TASK:") {
+                // Use original casing for description
+                let offset = stripped.len() - rest.len();
+                ("TASK".to_string(), stripped[offset..].trim().to_string())
+            } else if let Some(rest) = upper.strip_prefix("TODO:") {
+                let offset = stripped.len() - rest.len();
+                ("TODO".to_string(), stripped[offset..].trim().to_string())
+            } else {
+                continue;
+            };
+
+            if description.is_empty() {
+                continue;
+            }
+
+            let is_safe = Self::classify_safe(&description);
+
+            markers.push(ScannedMarker {
+                file_path: rel_path.clone(),
+                line_number: idx + 1,
+                marker_type,
+                description,
+                is_safe,
+            });
+        }
+    }
+
+    /// Strip common comment prefixes (`//`, `#`, `--`, `/*`, `*`, `<!--`).
+    fn strip_comment_prefix(line: &str) -> &str {
+        let s = line.trim_start();
+        // Order matters: try longer prefixes first
+        for prefix in &[
+            "///", "//!", "//", "##", "#!", "#", "--", "/*", "*/", "*", "<!--",
+        ] {
+            if let Some(rest) = s.strip_prefix(prefix) {
+                return rest.trim_start();
+            }
+        }
+        s
+    }
+
+    /// Classify whether a task description is safe to auto-queue.
+    ///
+    /// A task is **privileged** (not safe) if its description contains any of
+    /// the [`PRIVILEGED_KEYWORDS`]. Everything else is considered safe.
+    fn classify_safe(description: &str) -> bool {
+        let lower = description.to_lowercase();
+        !PRIVILEGED_KEYWORDS.iter().any(|kw| lower.contains(kw))
+    }
+}
+
+/// Auto-queue scanned markers as tasks in the database, skipping duplicates
+/// and privileged tasks. Returns the number of tasks actually inserted.
+///
+/// Deduplication: a marker is considered a duplicate if a pending or running
+/// task already exists with the same title (which encodes file path and line).
+async fn auto_queue_scanned_tasks(
+    pool: &PgPool,
+    event_stream: &EventStream,
+    markers: &[ScannedMarker],
+    identity_id: Uuid,
+    correlation_id: Uuid,
+) -> Result<usize> {
+    let mut queued = 0usize;
+
+    for marker in markers {
+        if !marker.is_safe {
+            tracing::debug!(
+                file = %marker.file_path,
+                line = marker.line_number,
+                description = %marker.description,
+                "Skipping privileged task marker"
+            );
+            continue;
+        }
+
+        let title = format!(
+            "[{}] {}:{}",
+            marker.marker_type, marker.file_path, marker.line_number
+        );
+
+        // Dedup: skip if a non-terminal task with the same title already exists
+        let existing: Option<i64> = sqlx::query_scalar(
+            r"SELECT COUNT(*) FROM tasks WHERE title = $1 AND state IN ('pending', 'running')",
+        )
+        .bind(&title)
+        .fetch_one(pool)
+        .await
+        .map_err(Error::Database)?;
+
+        if existing.unwrap_or(0) > 0 {
+            tracing::debug!(title = %title, "Task already exists, skipping");
+            continue;
+        }
+
+        // Insert new task
+        let task_id: Uuid = sqlx::query_scalar(
+            r"INSERT INTO tasks (title, description, created_by, priority, correlation_id)
+              VALUES ($1, $2, $3, $4, $5)
+              RETURNING task_id",
+        )
+        .bind(&title)
+        .bind(&marker.description)
+        .bind(identity_id)
+        .bind(0_i32) // default priority for auto-queued tasks
+        .bind(correlation_id)
+        .fetch_one(pool)
+        .await
+        .map_err(Error::Database)?;
+
+        event_stream.publish(
+            EventEnvelope::new(
+                EventLevel::Info,
+                EventType::TaskAutoQueued,
+                json!({
+                    "task_id": task_id,
+                    "title": title,
+                    "marker_type": marker.marker_type,
+                    "file_path": marker.file_path,
+                    "line_number": marker.line_number,
+                    "description": marker.description,
+                    "correlation_id": correlation_id,
+                }),
+            )
+            .with_correlation_id(correlation_id),
+        );
+
+        tracing::info!(
+            task_id = %task_id,
+            title = %title,
+            "Auto-queued task from workspace scan"
+        );
+
+        queued += 1;
+    }
+
+    Ok(queued)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1466,5 +1808,173 @@ mod tests {
         // 3. HeartbeatTick event payload
         // 4. HeartbeatOk event payload
         // Run with: cargo test test_heartbeat_correlation_id_propagation -- --ignored
+    }
+
+    // ── WorkspaceScanner tests ──────────────────────────────────────
+
+    #[test]
+    fn test_classify_safe_tasks() {
+        assert!(WorkspaceScanner::classify_safe(
+            "Implement pagination for list view"
+        ));
+        assert!(WorkspaceScanner::classify_safe("Add unit tests for parser"));
+        assert!(WorkspaceScanner::classify_safe("Refactor error handling"));
+        assert!(WorkspaceScanner::classify_safe("Fix typo in README"));
+    }
+
+    #[test]
+    fn test_classify_privileged_tasks() {
+        assert!(!WorkspaceScanner::classify_safe(
+            "Delete old migration files"
+        ));
+        assert!(!WorkspaceScanner::classify_safe("Deploy to production"));
+        assert!(!WorkspaceScanner::classify_safe("Rotate credential keys"));
+        assert!(!WorkspaceScanner::classify_safe("Drop unused tables"));
+        assert!(!WorkspaceScanner::classify_safe("Migrate database schema"));
+        assert!(!WorkspaceScanner::classify_safe("Update admin permissions"));
+        assert!(!WorkspaceScanner::classify_safe(
+            "Revert last security patch"
+        ));
+        assert!(!WorkspaceScanner::classify_safe("Truncate logs table"));
+    }
+
+    #[test]
+    fn test_strip_comment_prefix() {
+        assert_eq!(
+            WorkspaceScanner::strip_comment_prefix("// TODO: fix"),
+            "TODO: fix"
+        );
+        assert_eq!(
+            WorkspaceScanner::strip_comment_prefix("# TASK: build"),
+            "TASK: build"
+        );
+        assert_eq!(
+            WorkspaceScanner::strip_comment_prefix("-- TODO: query"),
+            "TODO: query"
+        );
+        assert_eq!(
+            WorkspaceScanner::strip_comment_prefix("/// TODO: doc"),
+            "TODO: doc"
+        );
+        assert_eq!(
+            WorkspaceScanner::strip_comment_prefix("* TODO: list"),
+            "TODO: list"
+        );
+        assert_eq!(
+            WorkspaceScanner::strip_comment_prefix("TASK: plain"),
+            "TASK: plain"
+        );
+    }
+
+    #[test]
+    fn test_scan_temp_directory() {
+        let dir =
+            std::env::temp_dir().join(format!("carnelian_scan_test_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Create a Rust file with markers
+        std::fs::write(
+            dir.join("example.rs"),
+            "fn main() {\n    // TODO: Add error handling\n    // TASK: Implement caching\n    println!(\"hello\");\n}\n",
+        )
+        .unwrap();
+
+        // Create a Python file with a privileged marker
+        std::fs::write(
+            dir.join("deploy.py"),
+            "# TODO: Deploy to production\n# TASK: Write unit tests\n",
+        )
+        .unwrap();
+
+        // Create a file that should be skipped (wrong extension)
+        std::fs::write(dir.join("data.bin"), "TODO: should not match").unwrap();
+
+        let markers = WorkspaceScanner::scan(&[dir.clone()], 10);
+
+        // Should find markers from .rs and .py but not .bin
+        assert!(
+            markers.len() >= 3,
+            "Expected at least 3 markers, got {}",
+            markers.len()
+        );
+
+        // Verify the privileged one is classified correctly
+        let deploy_marker = markers
+            .iter()
+            .find(|m| m.description.contains("Deploy to production"));
+        assert!(deploy_marker.is_some(), "Should find deploy marker");
+        assert!(
+            !deploy_marker.unwrap().is_safe,
+            "Deploy marker should be privileged"
+        );
+
+        // Verify safe ones
+        let safe_count = markers.iter().filter(|m| m.is_safe).count();
+        assert!(safe_count >= 2, "Expected at least 2 safe markers");
+
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_scan_respects_limit() {
+        let dir =
+            std::env::temp_dir().join(format!("carnelian_limit_test_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Create a file with many markers
+        let mut content = String::new();
+        for i in 0..20 {
+            content.push_str(&format!("// TODO: Task number {}\n", i));
+        }
+        std::fs::write(dir.join("many.rs"), &content).unwrap();
+
+        let markers = WorkspaceScanner::scan(&[dir.clone()], 5);
+        assert_eq!(markers.len(), 5, "Should respect the limit of 5");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_scan_skips_excluded_dirs() {
+        let dir =
+            std::env::temp_dir().join(format!("carnelian_excl_test_{}", uuid::Uuid::new_v4()));
+        let target_dir = dir.join("target");
+        let node_dir = dir.join("node_modules");
+        std::fs::create_dir_all(&target_dir).unwrap();
+        std::fs::create_dir_all(&node_dir).unwrap();
+
+        std::fs::write(target_dir.join("gen.rs"), "// TODO: Should be skipped").unwrap();
+        std::fs::write(node_dir.join("lib.js"), "// TODO: Should be skipped too").unwrap();
+        std::fs::write(dir.join("src.rs"), "// TODO: Should be found").unwrap();
+
+        let markers = WorkspaceScanner::scan(&[dir.clone()], 10);
+        assert_eq!(
+            markers.len(),
+            1,
+            "Should only find marker outside excluded dirs"
+        );
+        assert!(markers[0].file_path.contains("src.rs"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_scan_empty_description_skipped() {
+        let dir =
+            std::env::temp_dir().join(format!("carnelian_empty_test_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        std::fs::write(
+            dir.join("empty.rs"),
+            "// TODO:\n// TASK:  \n// TODO: Real task\n",
+        )
+        .unwrap();
+
+        let markers = WorkspaceScanner::scan(&[dir.clone()], 10);
+        assert_eq!(markers.len(), 1, "Should skip empty descriptions");
+        assert_eq!(markers[0].description, "Real task");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

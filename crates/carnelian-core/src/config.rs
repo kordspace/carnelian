@@ -217,6 +217,14 @@ pub struct Config {
     #[serde(default = "default_task_retry_delay_secs")]
     pub task_retry_delay_secs: u64,
 
+    /// Maximum tasks auto-queued per heartbeat from workspace scanning (default: 5)
+    #[serde(default = "default_max_tasks_per_heartbeat")]
+    pub max_tasks_per_heartbeat: usize,
+
+    /// Workspace paths to scan for TASK:/TODO: markers during heartbeat (default: ["."])
+    #[serde(default = "default_workspace_scan_paths")]
+    pub workspace_scan_paths: Vec<PathBuf>,
+
     /// Database pool (not serialized, initialized separately)
     #[serde(skip)]
     db_pool: Option<Arc<PgPool>>,
@@ -337,6 +345,14 @@ fn default_task_retry_delay_secs() -> u64 {
     5
 }
 
+fn default_max_tasks_per_heartbeat() -> usize {
+    5
+}
+
+fn default_workspace_scan_paths() -> Vec<PathBuf> {
+    vec![PathBuf::from(".")]
+}
+
 fn default_skills_registry_path() -> PathBuf {
     PathBuf::from("./skills/registry")
 }
@@ -432,6 +448,8 @@ impl Default for Config {
             tool_clear_age_secs: default_tool_clear_age_secs(),
             task_max_retry_attempts: default_task_max_retry_attempts(),
             task_retry_delay_secs: default_task_retry_delay_secs(),
+            max_tasks_per_heartbeat: default_max_tasks_per_heartbeat(),
+            workspace_scan_paths: default_workspace_scan_paths(),
             db_pool: None,
             owner_signing_key: None,
         }
@@ -643,6 +661,19 @@ impl Config {
                     val
                 ))
             })?;
+        }
+
+        if let Ok(val) = std::env::var("CARNELIAN_MAX_TASKS_PER_HEARTBEAT") {
+            self.max_tasks_per_heartbeat = val.parse().map_err(|_| {
+                Error::Config(format!(
+                    "Invalid CARNELIAN_MAX_TASKS_PER_HEARTBEAT value: {}",
+                    val
+                ))
+            })?;
+        }
+
+        if let Ok(val) = std::env::var("CARNELIAN_WORKSPACE_SCAN_PATHS") {
+            self.workspace_scan_paths = val.split(',').map(|s| PathBuf::from(s.trim())).collect();
         }
 
         // CARNELIAN_SOULS_PATH — override path to soul files directory
