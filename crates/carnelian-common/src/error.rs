@@ -1,6 +1,7 @@
 //! Error types for 🔥 Carnelian OS
 
 use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -60,6 +61,17 @@ pub enum Error {
 
     #[error("Agentic error: {0}")]
     Agentic(String),
+
+    #[error("Cryptographic error: {0}")]
+    Crypto(String),
+
+    #[error(
+        "Approval required: action queued with id {0}. Check the approval queue to approve or deny."
+    )]
+    ApprovalRequired(Uuid),
+
+    #[error("Safe mode active: {0}")]
+    SafeModeActive(String),
 }
 
 impl<T> From<tokio::sync::broadcast::error::SendError<T>> for Error {
