@@ -168,11 +168,77 @@ pub fn init_tracing(log_level: &str) -> Result<()> {
         .map(|v| v.to_lowercase() == "production")
         .unwrap_or(false);
 
+    // Check for file-based logging via CARNELIAN_LOG_FILE
+    let log_file = env::var("CARNELIAN_LOG_FILE").ok();
+    let max_files = env::var("CARNELIAN_LOG_MAX_FILES")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(5);
+
+    // Rotation frequency: "hourly" (default, bounds per-file size for long runs) or "daily"
+    // TODO: tracing-appender does not support native size-based rotation; hourly rotation
+    // is used as a size guard to prevent unbounded file growth during 24-hour validation.
+    // Consider switching to `rolling-file` or `tracing-rolling-file` crate for true
+    // size-based rotation if per-file size limits are required.
+    let rotation = match env::var("CARNELIAN_LOG_ROTATION")
+        .unwrap_or_else(|_| "hourly".to_string())
+        .to_lowercase()
+        .as_str()
+    {
+        "daily" => tracing_appender::rolling::Rotation::DAILY,
+        "minutely" => tracing_appender::rolling::Rotation::MINUTELY,
+        _ => tracing_appender::rolling::Rotation::HOURLY,
+    };
+
     // Build EnvFilter with provided log level as default, allow RUST_LOG overrides
     let env_filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level));
 
-    if is_production {
+    if let Some(ref log_path) = log_file {
+        // File-based logging: JSON to rotating file + pretty to stdout
+        let path = std::path::Path::new(log_path);
+        let dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+        let prefix = path
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("carnelian.log");
+
+        // Time-based rotation, keeping up to max_files rotated logs
+        let file_appender = tracing_appender::rolling::RollingFileAppender::builder()
+            .rotation(rotation)
+            .filename_prefix(prefix)
+            .max_log_files(max_files)
+            .build(dir)
+            .map_err(|e| Error::Config(format!("Failed to create log file appender: {e}")))?;
+
+        let file_layer = fmt::layer()
+            .json()
+            .with_current_span(true)
+            .with_span_list(true)
+            .with_ansi(false)
+            .with_target(true)
+            .with_thread_ids(true)
+            .with_file(true)
+            .with_line_number(true)
+            .with_writer(file_appender)
+            .with_filter(EnvFilter::new(log_level));
+
+        let stdout_layer = fmt::layer()
+            .pretty()
+            .with_ansi(true)
+            .with_target(true)
+            .with_thread_ids(true)
+            .with_file(true)
+            .with_line_number(true)
+            .with_span_events(FmtSpan::CLOSE)
+            .with_filter(env_filter);
+
+        tracing_subscriber::registry()
+            .with(file_layer)
+            .with(stdout_layer)
+            .try_init()
+            .map_err(|e| Error::Config(format!("Failed to initialize tracing: {e}")))?;
+    } else if is_production {
         // Production: JSON output with full span context
         let json_layer = fmt::layer()
             .json()
@@ -215,6 +281,7 @@ pub fn init_tracing(log_level: &str) -> Result<()> {
             "development"
         },
         log_level = log_level,
+        log_file = log_file.as_deref().unwrap_or("stdout"),
         "🔥 Carnelian tracing initialized"
     );
 

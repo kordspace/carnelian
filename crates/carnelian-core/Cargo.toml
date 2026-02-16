@@ -20,6 +20,7 @@ anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+tracing-appender.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 ed25519-dalek.workspace = true
