@@ -755,3 +755,123 @@ pub struct GrantCapabilityResponse {
 pub struct RevokeCapabilityResponse {
     pub revoked: bool,
 }
+
+// =============================================================================
+// MEMORY API TYPES
+// =============================================================================
+
+/// Request body for `POST /v1/memories`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateMemoryRequest {
+    pub identity_id: Uuid,
+    pub content: String,
+    #[serde(default)]
+    pub summary: Option<String>,
+    pub source: String,
+    pub importance: f32,
+}
+
+/// Response body after creating a memory.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateMemoryResponse {
+    pub memory_id: Uuid,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Detail view of a memory record (excludes embedding).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryDetail {
+    pub memory_id: Uuid,
+    pub identity_id: Uuid,
+    pub content: String,
+    pub summary: Option<String>,
+    pub source: String,
+    pub importance: f32,
+    pub created_at: DateTime<Utc>,
+    pub accessed_at: DateTime<Utc>,
+    pub access_count: i32,
+}
+
+/// Response body for `GET /v1/memories`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListMemoriesResponse {
+    pub memories: Vec<MemoryDetail>,
+}
+
+/// Response body for `GET /v1/memories/{memory_id}`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetMemoryResponse {
+    pub memory: MemoryDetail,
+}
+
+// =============================================================================
+// HEARTBEAT API TYPES
+// =============================================================================
+
+/// A single heartbeat record from the `heartbeat_history` table.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HeartbeatRecord {
+    pub heartbeat_id: Uuid,
+    pub identity_id: Uuid,
+    pub ts: DateTime<Utc>,
+    pub mantra: Option<String>,
+    pub tasks_queued: i32,
+    pub status: String,
+    pub duration_ms: Option<i32>,
+}
+
+/// Response body for `GET /v1/heartbeats/status`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HeartbeatStatusResponse {
+    pub current_mantra: Option<String>,
+    pub last_heartbeat_time: Option<DateTime<Utc>>,
+    pub next_heartbeat_time: Option<DateTime<Utc>>,
+    pub interval_ms: u64,
+}
+
+// =============================================================================
+// IDENTITY API TYPES
+// =============================================================================
+
+/// Response body for `GET /v1/identity`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IdentityResponse {
+    pub identity_id: Uuid,
+    pub name: String,
+    pub pronouns: Option<String>,
+    pub identity_type: String,
+    pub soul_file_path: Option<String>,
+    pub directive_count: usize,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// =============================================================================
+// PROVIDER API TYPES
+// =============================================================================
+
+/// Detail view of a model provider row.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderDetail {
+    pub provider_id: Uuid,
+    pub provider_type: String,
+    pub name: String,
+    pub enabled: bool,
+    pub config: serde_json::Value,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Response body for `GET /v1/providers`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListProvidersResponse {
+    pub providers: Vec<ProviderDetail>,
+}
+
+/// Response body for `GET /v1/providers/ollama/status`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OllamaStatusResponse {
+    pub connected: bool,
+    pub url: String,
+    pub available_models: Vec<String>,
+    pub error: Option<String>,
+}

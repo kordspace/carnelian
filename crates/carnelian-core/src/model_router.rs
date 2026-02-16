@@ -267,6 +267,12 @@ impl ModelRouter {
         self
     }
 
+    /// Return the gateway base URL.
+    #[must_use]
+    pub fn gateway_url(&self) -> &str {
+        &self.gateway_url
+    }
+
     // =========================================================================
     // PROVIDER MANAGEMENT
     // =========================================================================

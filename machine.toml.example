@@ -124,3 +124,36 @@ ollama_url = "http://localhost:11434"
 # max_memory_mb = 16384
 # gpu_enabled = true
 # default_model = "deepseek-r1:7b"
+
+# =============================================================================
+# Workspace Scanning Configuration
+# =============================================================================
+# Automatic task discovery from TASK: and TODO: markers in source files.
+#
+# During each heartbeat, Carnelian scans configured workspace paths for
+# markers and auto-queues safe tasks to the task queue. Privileged tasks
+# (containing keywords like "delete", "deploy", "production") are skipped.
+
+# Maximum tasks to auto-queue per heartbeat (default: 5)
+# Set to 0 to disable workspace scanning entirely.
+max_tasks_per_heartbeat = 5
+
+# Workspace paths to scan for markers (default: ["."])
+# Paths are relative to the working directory where Carnelian is started.
+# Multiple paths can be specified as an array.
+workspace_scan_paths = ["."]
+
+# Example: Scan multiple project directories
+# workspace_scan_paths = ["./projects/app1", "./projects/app2", "./docs"]
+
+# Scannable file extensions (hardcoded):
+# rs, py, ts, js, tsx, jsx, go, java, c, cpp, h, hpp, rb, sh, bash, zsh,
+# toml, yaml, yml, json, md, txt
+#
+# Excluded directories (hardcoded):
+# target, node_modules, .git, __pycache__, dist, build, vendor, .* (hidden)
+#
+# Privileged keywords (tasks containing these are NOT auto-queued):
+# delete, drop, migrate, deploy, production, credential, secret, key rotation,
+# sudo, admin, root, destroy, truncate, revert, rollback, security, permission,
+# privilege

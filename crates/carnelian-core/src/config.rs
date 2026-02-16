@@ -853,6 +853,29 @@ impl Config {
             )));
         }
 
+        // Workspace scanning validation
+        if self.max_tasks_per_heartbeat > 100 {
+            tracing::warn!(
+                limit = self.max_tasks_per_heartbeat,
+                "max_tasks_per_heartbeat is very high, may impact heartbeat performance"
+            );
+        }
+
+        for path in &self.workspace_scan_paths {
+            if !path.exists() {
+                tracing::warn!(
+                    path = %path.display(),
+                    "Workspace scan path does not exist, will be skipped during scanning"
+                );
+            }
+            if path.is_absolute() {
+                tracing::warn!(
+                    path = %path.display(),
+                    "Absolute workspace scan paths are discouraged for security"
+                );
+            }
+        }
+
         Ok(())
     }
 
