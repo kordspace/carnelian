@@ -389,6 +389,37 @@ carnelian/
 - **LZ4 Compression** - Database column compression for large payloads (memories, logs, metadata)
 - **Skill Discovery** - Automatic filesystem watching with blake3 checksums and database sync
 
+## Workspace Scanning & Auto-Queueing
+
+Carnelian automatically discovers tasks from `TASK:` and `TODO:` markers in your source code during heartbeat cycles.
+
+**Marker Format:**
+```rust
+// TODO: Add error handling for network timeouts
+// TASK: Implement pagination for user list
+```
+
+**Safety Classification:**
+- **Safe tasks** are auto-queued immediately
+- **Privileged tasks** (containing keywords like `delete`, `deploy`, `production`) are skipped and logged
+
+**Configuration:**
+```toml
+# machine.toml
+max_tasks_per_heartbeat = 5
+workspace_scan_paths = ["."]
+```
+
+**Environment Variables:**
+- `CARNELIAN_MAX_TASKS_PER_HEARTBEAT` — override max tasks per heartbeat (set to `0` to disable)
+- `CARNELIAN_WORKSPACE_SCAN_PATHS` — comma-separated list of paths to scan
+
+**Supported File Types:**
+Rust, Python, TypeScript, JavaScript, Go, Java, C/C++, Ruby, Shell, TOML, YAML, JSON, Markdown, and more.
+
+**Excluded Directories:**
+`target`, `node_modules`, `.git`, `__pycache__`, `dist`, `build`, `vendor`
+
 ## Skill Discovery
 
 Skills are defined by `skill.json` manifest files in the `skills/registry/` directory. Discovery runs automatically on server startup and via a file watcher (2-second debounce), or can be triggered manually.
