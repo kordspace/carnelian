@@ -33,6 +33,12 @@ pub enum Route {
     Approvals {},
     #[route("/capabilities")]
     Capabilities {},
+    #[route("/heartbeat")]
+    Heartbeat {},
+    #[route("/identity")]
+    Identity {},
+    #[route("/providers")]
+    Providers {},
 }
 
 #[tokio::main]
@@ -110,4 +116,22 @@ fn Approvals() -> Element {
 #[component]
 fn Capabilities() -> Element {
     pages::capabilities::Capabilities()
+}
+
+/// Heartbeat page (delegates to `pages::heartbeat`).
+#[component]
+fn Heartbeat() -> Element {
+    pages::heartbeat::Heartbeat()
+}
+
+/// Identity page (delegates to `pages::identity`).
+#[component]
+fn Identity() -> Element {
+    pages::identity::Identity()
+}
+
+/// Providers page (delegates to `pages::providers`).
+#[component]
+fn Providers() -> Element {
+    pages::providers::Providers()
 }

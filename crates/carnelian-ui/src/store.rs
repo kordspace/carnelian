@@ -12,9 +12,11 @@
 use std::collections::VecDeque;
 use std::time::Duration;
 
-use carnelian_common::types::EventEnvelope;
+use carnelian_common::types::{EventEnvelope, EventType};
+use chrono::{DateTime, Utc};
 use dioxus::prelude::*;
 use tokio::sync::mpsc;
+use uuid::Uuid;
 
 use crate::websocket::ConnectionState;
 
@@ -51,6 +53,52 @@ pub struct ApprovalNotification {
     pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
+/// State for the Heartbeat panel.
+#[derive(Debug, Clone, Default)]
+pub struct HeartbeatState {
+    pub current_mantra: Option<String>,
+    pub last_heartbeat_time: Option<DateTime<Utc>>,
+    pub next_heartbeat_time: Option<DateTime<Utc>>,
+    pub recent_mantras: Vec<HeartbeatRecord>,
+}
+
+/// A single heartbeat record from the history table.
+#[derive(Debug, Clone)]
+pub struct HeartbeatRecord {
+    pub heartbeat_id: Uuid,
+    pub ts: DateTime<Utc>,
+    pub mantra: String,
+    pub status: String,
+}
+
+/// State for the Identity panel.
+#[derive(Debug, Clone, Default)]
+pub struct IdentityState {
+    pub identity_id: Option<Uuid>,
+    pub name: String,
+    pub pronouns: Option<String>,
+    pub soul_file_preview: String,
+    pub directive_count: usize,
+}
+
+/// State for the Providers panel.
+#[derive(Debug, Clone, Default)]
+pub struct ProviderState {
+    pub ollama_connected: bool,
+    pub ollama_url: String,
+    pub available_models: Vec<String>,
+    pub providers: Vec<ProviderInfo>,
+}
+
+/// Information about a single model provider.
+#[derive(Debug, Clone)]
+pub struct ProviderInfo {
+    pub provider_id: Uuid,
+    pub name: String,
+    pub provider_type: String,
+    pub enabled: bool,
+}
+
 /// Global application state backed by Dioxus signals.
 #[derive(Clone)]
 pub struct EventStreamStore {
@@ -59,6 +107,9 @@ pub struct EventStreamStore {
     pub system_status: Signal<SystemStatus>,
     pub machine_profile: Signal<String>,
     pub approval_notifications: Signal<Vec<ApprovalNotification>>,
+    pub heartbeat_state: Signal<HeartbeatState>,
+    pub identity_state: Signal<IdentityState>,
+    pub provider_state: Signal<ProviderState>,
 }
 
 impl EventStreamStore {
@@ -73,6 +124,9 @@ impl EventStreamStore {
             system_status: Signal::new(SystemStatus::default()),
             machine_profile: Signal::new("Unknown".to_string()),
             approval_notifications: Signal::new(Vec::new()),
+            heartbeat_state: Signal::new(HeartbeatState::default()),
+            identity_state: Signal::new(IdentityState::default()),
+            provider_state: Signal::new(ProviderState::default()),
         }
     }
 
@@ -111,6 +165,9 @@ impl EventStreamStore {
     fn bridge_events(&self, mut rx: mpsc::UnboundedReceiver<EventEnvelope>) {
         let mut events = self.events;
         let mut approval_notifications = self.approval_notifications;
+        let mut heartbeat_state = self.heartbeat_state;
+        let mut identity_state = self.identity_state;
+        let mut provider_state = self.provider_state;
         spawn(async move {
             while let Some(envelope) = rx.recv().await {
                 // Track approval lifecycle events
@@ -138,6 +195,61 @@ impl EventStreamStore {
                         }
                     }
                     _ => {}
+                }
+
+                // Track heartbeat events
+                if matches!(envelope.event_type, EventType::HeartbeatTick) {
+                    let mantra = envelope
+                        .payload
+                        .get("mantra")
+                        .and_then(|v| v.as_str())
+                        .map(String::from);
+                    let mut hb = heartbeat_state.write();
+                    hb.current_mantra = mantra;
+                    hb.last_heartbeat_time = Some(envelope.timestamp);
+                }
+
+                // Track provider/gateway events — HeartbeatOk implies a
+                // successful gateway round-trip, so mark Ollama connected.
+                // GatewayRequestEnd and GatewayRateLimited are reserved for
+                // future use when the backend starts emitting them.
+                if matches!(
+                    envelope.event_type,
+                    EventType::HeartbeatOk
+                        | EventType::GatewayRequestEnd
+                        | EventType::GatewayRateLimited
+                ) {
+                    let mut ps = provider_state.write();
+                    // HeartbeatOk means the gateway responded successfully
+                    if matches!(envelope.event_type, EventType::HeartbeatOk) {
+                        ps.ollama_connected = true;
+                    }
+                    if let Some(url) = envelope.payload.get("gateway_url").and_then(|v| v.as_str())
+                    {
+                        ps.ollama_url = url.to_string();
+                    }
+                    if let Some(models) = envelope
+                        .payload
+                        .get("available_models")
+                        .and_then(|v| v.as_array())
+                    {
+                        ps.available_models = models
+                            .iter()
+                            .filter_map(|m| m.as_str().map(String::from))
+                            .collect();
+                    }
+                }
+
+                // Track soul update events
+                if matches!(envelope.event_type, EventType::SoulUpdated) {
+                    let mut id_state = identity_state.write();
+                    #[allow(clippy::cast_possible_truncation)]
+                    let directive_count = envelope
+                        .payload
+                        .get("directive_count")
+                        .and_then(serde_json::Value::as_u64)
+                        .unwrap_or(0) as usize;
+                    id_state.directive_count = directive_count;
                 }
 
                 let mut buf = events.write();

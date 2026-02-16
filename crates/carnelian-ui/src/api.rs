@@ -6,8 +6,9 @@
 use carnelian_common::types::{
     ApprovalActionRequest, ApprovalActionResponse, BatchApprovalRequest, BatchApprovalResponse,
     CancelTaskRequest, CancelTaskResponse, CreateTaskRequest, CreateTaskResponse,
-    GrantCapabilityRequest, GrantCapabilityResponse, ListApprovalsResponse,
-    ListCapabilitiesResponse, ListSkillsResponse, ListTasksResponse, MetricsSnapshot,
+    GrantCapabilityRequest, GrantCapabilityResponse, HeartbeatRecord, HeartbeatStatusResponse,
+    IdentityResponse, ListApprovalsResponse, ListCapabilitiesResponse, ListProvidersResponse,
+    ListSkillsResponse, ListTasksResponse, MetricsSnapshot, OllamaStatusResponse,
     PaginatedRunLogsResponse, RevokeCapabilityResponse, RunDetail, SkillRefreshResponse,
     SkillToggleResponse, TaskDetail,
 };
@@ -320,6 +321,84 @@ pub async fn revoke_capability(grant_id: Uuid) -> Result<RevokeCapabilityRespons
         .await
         .map_err(|e| format!("Request failed: {e}"))?
         .json::<RevokeCapabilityResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+// ── Heartbeat Operations ────────────────────────────────────
+
+/// Get recent heartbeat records.
+pub async fn get_recent_heartbeats(limit: i64) -> Result<Vec<HeartbeatRecord>, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/heartbeats?limit={limit}"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<Vec<HeartbeatRecord>>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Get current heartbeat status (mantra, last/next times).
+pub async fn get_heartbeat_status() -> Result<HeartbeatStatusResponse, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/heartbeats/status"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<HeartbeatStatusResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+// ── Identity Operations ─────────────────────────────────────
+
+/// Get core identity information.
+pub async fn get_identity() -> Result<IdentityResponse, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/identity"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<IdentityResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Get full SOUL.md content as plain text.
+pub async fn get_soul_content() -> Result<String, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/identity/soul"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .text()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+// ── Provider Operations ─────────────────────────────────────
+
+/// List all model providers.
+pub async fn list_providers() -> Result<ListProvidersResponse, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/providers"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<ListProvidersResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Get Ollama connection status and available models.
+pub async fn get_ollama_status() -> Result<OllamaStatusResponse, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/providers/ollama/status"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<OllamaStatusResponse>()
         .await
         .map_err(|e| format!("Parse failed: {e}"))
 }
