@@ -12,10 +12,12 @@ use axum::{
 };
 use carnelian_common::Result;
 use carnelian_common::types::{
-    CancelTaskRequest, CancelTaskResponse, CreateTaskRequest, CreateTaskResponse, EventEnvelope,
-    EventLevel, EventType, ListRunsResponse, ListSkillsResponse, ListTasksResponse,
-    PaginatedRunLogsResponse, RunDetail, RunLogEntry, RunLogsQuery, SkillDetail,
-    SkillToggleResponse, TaskDetail,
+    CancelTaskRequest, CancelTaskResponse, CreateMemoryRequest, CreateMemoryResponse,
+    CreateTaskRequest, CreateTaskResponse, EventEnvelope, EventLevel, EventType, GetMemoryResponse,
+    HeartbeatRecord, HeartbeatStatusResponse, IdentityResponse, ListMemoriesResponse,
+    ListProvidersResponse, ListRunsResponse, ListSkillsResponse, ListTasksResponse, MemoryDetail,
+    OllamaStatusResponse, PaginatedRunLogsResponse, ProviderDetail, RunDetail, RunLogEntry,
+    RunLogsQuery, SkillDetail, SkillToggleResponse, TaskDetail,
 };
 use futures_util::{SinkExt, StreamExt};
 use http::{Method, header};
@@ -35,7 +37,10 @@ use tower_http::{
 use tracing::{Level, Span};
 use uuid::Uuid;
 
+use std::str::FromStr;
+
 use crate::ledger::Ledger;
+use crate::memory::{MemoryManager, MemoryQuery, MemorySource};
 use crate::metrics::MetricsCollector;
 use crate::model_router::ModelRouter;
 use crate::safe_mode::SafeModeGuard;
@@ -52,6 +57,27 @@ pub struct HealthResponse {
     pub version: String,
     /// Database connection status: "connected" or "disconnected"
     pub database: String,
+}
+
+/// Detailed health check response with extended diagnostics
+#[derive(Debug, Serialize)]
+pub struct DetailedHealthResponse {
+    /// Overall health status: "healthy" or "degraded"
+    pub status: String,
+    /// Application version
+    pub version: String,
+    /// Database connection status: "connected" or "disconnected"
+    pub database: String,
+    /// Seconds since server start
+    pub uptime_seconds: u64,
+    /// Timestamp of the last heartbeat, if any
+    pub last_heartbeat_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Whether the scheduler is running
+    pub scheduler_running: bool,
+    /// Whether the worker manager is active
+    pub worker_manager_active: bool,
+    /// Number of active event stream subscribers
+    pub event_stream_subscriber_count: usize,
 }
 
 /// System status response
@@ -117,8 +143,12 @@ pub struct AppState {
     pub safe_mode_guard: Arc<SafeModeGuard>,
     /// Session manager for conversation persistence (wired with SafeModeGuard)
     pub session_manager: Arc<SessionManager>,
+    /// Memory manager for agent knowledge persistence
+    pub memory_manager: Arc<MemoryManager>,
     /// Correlation ID counter for request tracing
     correlation_counter: Arc<AtomicU64>,
+    /// Server start time for uptime calculation
+    pub started_at: std::time::Instant,
 }
 
 impl AppState {
@@ -134,6 +164,7 @@ impl AppState {
         model_router: Arc<ModelRouter>,
         safe_mode_guard: Arc<SafeModeGuard>,
         session_manager: Arc<SessionManager>,
+        memory_manager: Arc<MemoryManager>,
     ) -> Self {
         Self {
             config,
@@ -146,7 +177,9 @@ impl AppState {
             model_router,
             safe_mode_guard,
             session_manager,
+            memory_manager,
             correlation_counter: Arc::new(AtomicU64::new(0)),
+            started_at: std::time::Instant::now(),
         }
     }
 
@@ -281,6 +314,18 @@ impl Server {
             )
         };
 
+        // Create memory manager for agent knowledge persistence
+        let memory_manager = {
+            let pool = self
+                .config
+                .pool()
+                .expect("Database pool required for MemoryManager");
+            Arc::new(MemoryManager::new(
+                pool.clone(),
+                Some(self.event_stream.clone()),
+            ))
+        };
+
         let state = AppState::new(
             self.config.clone(),
             self.event_stream.clone(),
@@ -291,6 +336,7 @@ impl Server {
             model_router,
             safe_mode_guard,
             session_manager,
+            memory_manager,
         );
 
         // Share the metrics collector with the scheduler and event stream
@@ -449,6 +495,7 @@ const ALLOWED_ORIGINS: [&str; 4] = [
 fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/v1/health", get(health_handler))
+        .route("/v1/health/detailed", get(detailed_health_handler))
         .route("/v1/status", get(status_handler))
         .route("/v1/events", post(publish_event_handler))
         .route("/v1/events/ws", get(ws_handler))
@@ -486,6 +533,21 @@ fn build_router(state: AppState) -> Router {
             "/v1/capabilities/{id}",
             axum::routing::delete(revoke_capability_handler),
         )
+        // Memory endpoints
+        .route(
+            "/v1/memories",
+            post(create_memory_handler).get(list_memories_handler),
+        )
+        .route("/v1/memories/{memory_id}", get(get_memory_handler))
+        // Heartbeat endpoints
+        .route("/v1/heartbeats", get(list_heartbeats_handler))
+        .route("/v1/heartbeats/status", get(heartbeat_status_handler))
+        // Identity endpoints
+        .route("/v1/identity", get(get_identity_handler))
+        .route("/v1/identity/soul", get(get_soul_content_handler))
+        // Provider endpoints
+        .route("/v1/providers", get(list_providers_handler))
+        .route("/v1/providers/ollama/status", get(ollama_status_handler))
         // Gateway usage ingestion
         .route("/api/usage", post(ingest_usage_handler))
         // 10MB request body limit
@@ -551,6 +613,71 @@ async fn health_handler(State(state): State<AppState>) -> impl IntoResponse {
     Json(response)
 }
 
+/// Detailed health check endpoint handler.
+///
+/// Returns extended health diagnostics including uptime, last heartbeat,
+/// scheduler state, worker manager state, and event stream subscriber count.
+async fn detailed_health_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let db_healthy = state.check_database_health().await;
+    let uptime_seconds = state.started_at.elapsed().as_secs();
+
+    // Query last heartbeat timestamp from database
+    let last_heartbeat_at: Option<chrono::DateTime<chrono::Utc>> = if let Ok(pool) = state.config.pool() {
+        sqlx::query_scalar::<_, Option<chrono::DateTime<chrono::Utc>>>(
+            "SELECT created_at FROM heartbeat_history ORDER BY created_at DESC LIMIT 1",
+        )
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .flatten()
+    } else {
+        None
+    };
+
+    // Check scheduler running state
+    let scheduler_running = {
+        let scheduler = state.scheduler.lock().await;
+        scheduler.is_running()
+    };
+
+    // Check worker manager active state
+    let worker_manager_active = {
+        let wm = state.worker_manager.lock().await;
+        !wm.get_worker_status().await.is_empty()
+    };
+
+    let subscriber_count = state.event_stream.subscriber_count();
+
+    let response = DetailedHealthResponse {
+        status: if db_healthy {
+            "healthy".to_string()
+        } else {
+            "degraded".to_string()
+        },
+        version: carnelian_common::VERSION.to_string(),
+        database: if db_healthy {
+            "connected".to_string()
+        } else {
+            "disconnected".to_string()
+        },
+        uptime_seconds,
+        last_heartbeat_at,
+        scheduler_running,
+        worker_manager_active,
+        event_stream_subscriber_count: subscriber_count,
+    };
+
+    tracing::debug!(
+        uptime_seconds = uptime_seconds,
+        scheduler_running = scheduler_running,
+        subscriber_count = subscriber_count,
+        "Detailed health check completed"
+    );
+
+    Json(response)
+}
+
 /// System status endpoint handler.
 ///
 /// Returns current system status including workers, models, and queue depth.
@@ -561,10 +688,24 @@ async fn status_handler(State(state): State<AppState>) -> impl IntoResponse {
         worker_manager.get_worker_status().await
     };
 
+    // Compute real queue depth from database (pending + running tasks)
+    let queue_depth: u32 = if let Ok(pool) = state.config.pool() {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM tasks WHERE state IN ('pending', 'running')",
+        )
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0)
+        .try_into()
+        .unwrap_or(0)
+    } else {
+        0 // TODO: return a meaningful estimate if pool is unavailable
+    };
+
     let response = StatusResponse {
         workers,
         models: vec![],
-        queue_depth: 0,
+        queue_depth,
     };
 
     tracing::debug!(
@@ -2322,6 +2463,574 @@ async fn revoke_capability_handler(
 }
 
 // =============================================================================
+// MEMORY HANDLERS
+// =============================================================================
+
+/// Query parameters for `GET /v1/memories`.
+#[derive(Debug, Deserialize)]
+struct ListMemoriesQuery {
+    identity_id: Option<Uuid>,
+    source: Option<String>,
+    min_importance: Option<f32>,
+    #[serde(default = "default_memory_limit")]
+    limit: i64,
+}
+
+fn default_memory_limit() -> i64 {
+    50
+}
+
+/// Create a new memory via `POST /v1/memories`.
+async fn create_memory_handler(
+    State(state): State<AppState>,
+    Json(body): Json<CreateMemoryRequest>,
+) -> impl IntoResponse {
+    // Validate source
+    let source = match MemorySource::from_str(&body.source) {
+        Ok(s) => s,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Invalid source: must be one of conversation, task, observation, reflection"})),
+            )
+                .into_response();
+        }
+    };
+
+    // Validate importance range
+    if !(0.0..=1.0).contains(&body.importance) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Importance must be between 0.0 and 1.0"})),
+        )
+            .into_response();
+    }
+
+    match state
+        .memory_manager
+        .create_memory(
+            body.identity_id,
+            &body.content,
+            body.summary,
+            source,
+            None, // embedding not provided via REST
+            body.importance,
+        )
+        .await
+    {
+        Ok(memory) => (
+            StatusCode::CREATED,
+            Json(json!(CreateMemoryResponse {
+                memory_id: memory.memory_id,
+                created_at: memory.created_at,
+            })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("{e}")})),
+        )
+            .into_response(),
+    }
+}
+
+/// List memories with optional filtering via `GET /v1/memories`.
+async fn list_memories_handler(
+    State(state): State<AppState>,
+    Query(params): Query<ListMemoriesQuery>,
+) -> impl IntoResponse {
+    let limit = params.limit.clamp(1, 200);
+    let mut query = MemoryQuery::new().with_limit(limit);
+
+    if let Some(id) = params.identity_id {
+        query = query.with_identity(id);
+    }
+
+    if let Some(ref source_str) = params.source {
+        match MemorySource::from_str(source_str) {
+            Ok(s) => {
+                query = query.with_sources(vec![s]);
+            }
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "Invalid source: must be one of conversation, task, observation, reflection"})),
+                )
+                    .into_response();
+            }
+        }
+    }
+
+    if let Some(min_imp) = params.min_importance {
+        query = query.with_min_importance(min_imp);
+    }
+
+    match state.memory_manager.query_memories(query).await {
+        Ok(memories) => {
+            let details: Vec<MemoryDetail> = memories
+                .into_iter()
+                .map(|m| MemoryDetail {
+                    memory_id: m.memory_id,
+                    identity_id: m.identity_id,
+                    content: m.content,
+                    summary: m.summary,
+                    source: m.source,
+                    importance: m.importance,
+                    created_at: m.created_at,
+                    accessed_at: m.accessed_at,
+                    access_count: m.access_count,
+                })
+                .collect();
+            (
+                StatusCode::OK,
+                Json(json!(ListMemoriesResponse { memories: details })),
+            )
+                .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("{e}")})),
+        )
+            .into_response(),
+    }
+}
+
+/// Retrieve a single memory via `GET /v1/memories/{memory_id}`.
+async fn get_memory_handler(
+    State(state): State<AppState>,
+    Path(memory_id): Path<Uuid>,
+) -> impl IntoResponse {
+    match state.memory_manager.get_memory(memory_id).await {
+        Ok(Some(memory)) => {
+            let detail = MemoryDetail {
+                memory_id: memory.memory_id,
+                identity_id: memory.identity_id,
+                content: memory.content,
+                summary: memory.summary,
+                source: memory.source,
+                importance: memory.importance,
+                created_at: memory.created_at,
+                accessed_at: memory.accessed_at,
+                access_count: memory.access_count,
+            };
+            (
+                StatusCode::OK,
+                Json(json!(GetMemoryResponse { memory: detail })),
+            )
+                .into_response()
+        }
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Memory not found"})),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("{e}")})),
+        )
+            .into_response(),
+    }
+}
+
+// =============================================================================
+// HEARTBEAT HANDLERS
+// =============================================================================
+
+/// Query parameters for `GET /v1/heartbeats`.
+#[derive(Debug, Deserialize)]
+struct ListHeartbeatsQuery {
+    #[serde(default = "default_heartbeat_limit")]
+    limit: i64,
+}
+
+fn default_heartbeat_limit() -> i64 {
+    10
+}
+
+/// List recent heartbeat records via `GET /v1/heartbeats`.
+async fn list_heartbeats_handler(
+    State(state): State<AppState>,
+    Query(params): Query<ListHeartbeatsQuery>,
+) -> impl IntoResponse {
+    let limit = params.limit.clamp(1, 100);
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("{e}")})),
+            )
+                .into_response();
+        }
+    };
+
+    let rows: std::result::Result<
+        Vec<(
+            Uuid,
+            Uuid,
+            chrono::DateTime<chrono::Utc>,
+            Option<String>,
+            i32,
+            String,
+            Option<i32>,
+        )>,
+        _,
+    > = sqlx::query_as(
+        r"SELECT heartbeat_id, identity_id, ts, mantra, tasks_queued, status, duration_ms
+          FROM heartbeat_history
+          ORDER BY ts DESC
+          LIMIT $1",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await;
+
+    match rows {
+        Ok(rows) => {
+            let records: Vec<HeartbeatRecord> = rows
+                .into_iter()
+                .map(
+                    |(heartbeat_id, identity_id, ts, mantra, tasks_queued, status, duration_ms)| {
+                        HeartbeatRecord {
+                            heartbeat_id,
+                            identity_id,
+                            ts,
+                            mantra,
+                            tasks_queued,
+                            status,
+                            duration_ms,
+                        }
+                    },
+                )
+                .collect();
+            (StatusCode::OK, Json(json!(records))).into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("{e}")})),
+        )
+            .into_response(),
+    }
+}
+
+/// Get current heartbeat status via `GET /v1/heartbeats/status`.
+async fn heartbeat_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("{e}")})),
+            )
+                .into_response();
+        }
+    };
+
+    let row: std::result::Result<Option<(Option<String>, chrono::DateTime<chrono::Utc>)>, _> =
+        sqlx::query_as(r"SELECT mantra, ts FROM heartbeat_history ORDER BY ts DESC LIMIT 1")
+            .fetch_optional(pool)
+            .await;
+
+    match row {
+        Ok(Some((mantra, last_ts))) => {
+            let interval_ms = state.config.heartbeat_interval_ms;
+            let next_ts = last_ts + chrono::Duration::milliseconds(interval_ms as i64);
+            (
+                StatusCode::OK,
+                Json(json!(HeartbeatStatusResponse {
+                    current_mantra: mantra,
+                    last_heartbeat_time: Some(last_ts),
+                    next_heartbeat_time: Some(next_ts),
+                    interval_ms,
+                })),
+            )
+                .into_response()
+        }
+        Ok(None) => (
+            StatusCode::OK,
+            Json(json!(HeartbeatStatusResponse {
+                current_mantra: None,
+                last_heartbeat_time: None,
+                next_heartbeat_time: None,
+                interval_ms: state.config.heartbeat_interval_ms,
+            })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("{e}")})),
+        )
+            .into_response(),
+    }
+}
+
+// =============================================================================
+// IDENTITY HANDLERS
+// =============================================================================
+
+/// Get core identity information via `GET /v1/identity`.
+async fn get_identity_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("{e}")})),
+            )
+                .into_response();
+        }
+    };
+
+    let row: std::result::Result<Option<(Uuid, String, Option<String>, String, Option<String>, serde_json::Value, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>, _> = sqlx::query_as(
+        r"SELECT identity_id, name, pronouns, identity_type, soul_file_path, directives, created_at, updated_at
+          FROM identities
+          WHERE identity_type = 'core'
+          LIMIT 1",
+    )
+    .fetch_optional(pool)
+    .await;
+
+    match row {
+        Ok(Some((
+            identity_id,
+            name,
+            pronouns,
+            identity_type,
+            soul_file_path,
+            directives,
+            created_at,
+            updated_at,
+        ))) => {
+            let directive_count = directives.as_array().map_or(0, |a| a.len());
+            (
+                StatusCode::OK,
+                Json(json!(IdentityResponse {
+                    identity_id,
+                    name,
+                    pronouns,
+                    identity_type,
+                    soul_file_path,
+                    directive_count,
+                    created_at,
+                    updated_at,
+                })),
+            )
+                .into_response()
+        }
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Core identity not found"})),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("{e}")})),
+        )
+            .into_response(),
+    }
+}
+
+/// Get SOUL.md content via `GET /v1/identity/soul`.
+async fn get_soul_content_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("{e}")})),
+            )
+                .into_response();
+        }
+    };
+
+    // Get core identity's soul_file_path
+    let soul_path: std::result::Result<Option<Option<String>>, _> = sqlx::query_scalar(
+        r"SELECT soul_file_path FROM identities WHERE identity_type = 'core' LIMIT 1",
+    )
+    .fetch_optional(pool)
+    .await;
+
+    let rel_path = match soul_path {
+        Ok(Some(Some(p))) => p,
+        Ok(_) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "Core identity or soul file path not found"})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("{e}")})),
+            )
+                .into_response();
+        }
+    };
+
+    let full_path = state.config.souls_path.join(&rel_path);
+    match tokio::fs::read_to_string(&full_path).await {
+        Ok(content) => (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+            content,
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Failed to read soul file: {e}")})),
+        )
+            .into_response(),
+    }
+}
+
+// =============================================================================
+// PROVIDER HANDLERS
+// =============================================================================
+
+/// List all model providers via `GET /v1/providers`.
+async fn list_providers_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("{e}")})),
+            )
+                .into_response();
+        }
+    };
+
+    let rows: std::result::Result<
+        Vec<(
+            Uuid,
+            String,
+            String,
+            bool,
+            serde_json::Value,
+            chrono::DateTime<chrono::Utc>,
+        )>,
+        _,
+    > = sqlx::query_as(
+        r"SELECT provider_id, provider_type, name, enabled, config, created_at
+          FROM model_providers
+          ORDER BY provider_type ASC, name ASC",
+    )
+    .fetch_all(pool)
+    .await;
+
+    match rows {
+        Ok(rows) => {
+            let providers: Vec<ProviderDetail> = rows
+                .into_iter()
+                .map(
+                    |(provider_id, provider_type, name, enabled, config, created_at)| {
+                        ProviderDetail {
+                            provider_id,
+                            provider_type,
+                            name,
+                            enabled,
+                            config,
+                            created_at,
+                        }
+                    },
+                )
+                .collect();
+            (
+                StatusCode::OK,
+                Json(json!(ListProvidersResponse { providers })),
+            )
+                .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("{e}")})),
+        )
+            .into_response(),
+    }
+}
+
+/// Get Ollama connection status via `GET /v1/providers/ollama/status`.
+async fn ollama_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let gateway_url = format!("{}/health", state.model_router.gateway_url());
+    let http_client = reqwest::Client::new();
+
+    match http_client
+        .get(&gateway_url)
+        .timeout(Duration::from_secs(5))
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => match resp.json::<serde_json::Value>().await {
+            Ok(health) => {
+                let mut connected = false;
+                let mut models = Vec::new();
+
+                if let Some(providers) = health.get("providers").and_then(|v| v.as_array()) {
+                    for p in providers {
+                        let available = p
+                            .get("available")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                        if available {
+                            connected = true;
+                            if let Some(m) = p.get("models").and_then(|v| v.as_array()) {
+                                for model in m {
+                                    if let Some(name) = model.as_str() {
+                                        models.push(name.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                (
+                    StatusCode::OK,
+                    Json(json!(OllamaStatusResponse {
+                        connected,
+                        url: state.model_router.gateway_url().to_string(),
+                        available_models: models,
+                        error: None,
+                    })),
+                )
+                    .into_response()
+            }
+            Err(e) => (
+                StatusCode::OK,
+                Json(json!(OllamaStatusResponse {
+                    connected: false,
+                    url: state.model_router.gateway_url().to_string(),
+                    available_models: vec![],
+                    error: Some(format!("Invalid health response: {e}")),
+                })),
+            )
+                .into_response(),
+        },
+        Ok(resp) => (
+            StatusCode::OK,
+            Json(json!(OllamaStatusResponse {
+                connected: false,
+                url: state.model_router.gateway_url().to_string(),
+                available_models: vec![],
+                error: Some(format!("Gateway returned status {}", resp.status())),
+            })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::OK,
+            Json(json!(OllamaStatusResponse {
+                connected: false,
+                url: state.model_router.gateway_url().to_string(),
+                available_models: vec![],
+                error: Some(format!("Gateway unreachable: {e}")),
+            })),
+        )
+            .into_response(),
+    }
+}
+
+// =============================================================================
 // WEBSOCKET HANDLERS
 // =============================================================================
 
@@ -2486,6 +3195,7 @@ mod tests {
             SessionManager::with_defaults(pool.clone())
                 .with_safe_mode_guard(safe_mode_guard.clone()),
         );
+        let memory_manager = Arc::new(MemoryManager::new(pool.clone(), Some(event_stream.clone())));
         let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
             pool.clone(),
             event_stream.clone(),
@@ -2506,6 +3216,7 @@ mod tests {
             model_router,
             safe_mode_guard,
             session_manager,
+            memory_manager,
         )
     }
 
