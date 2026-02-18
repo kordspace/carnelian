@@ -1,0 +1,11 @@
+# Screenshot placeholders for Carnelian OS UI documentation.
+#
+# Capture these from the running desktop UI using the Night Lab (dark) theme
+# at minimum 1280x800 native resolution:
+#
+#   dashboard.png       — Main dashboard with metric cards, system health gauges, XP widget
+#   xp-progression.png  — XP Progression tab: level history chart, leaderboard, skill levels
+#   task-execution.png  — Active task execution: scheduler queue, run logs, worker status
+#   skills-metrics.png  — Skills metrics: top skills table, usage breakdown
+#
+# Replace this file with actual PNGs once captured.

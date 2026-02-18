@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 64" width="280" height="64">
+  <!-- Full logo: gemstone icon + wordmark (dark variant) -->
+
+  <!-- Gemstone icon (scaled from 64x64) -->
+  <g transform="translate(0,0)">
+    <polygon points="18,18 46,18 38,8 26,8" fill="#D24B2A"/>
+    <polygon points="18,18 26,8 10,24" fill="#E0613E"/>
+    <polygon points="46,18 38,8 54,24" fill="#E0613E"/>
+    <polygon points="26,8 38,8 34,12 30,12" fill="#F2C14E"/>
+    <polygon points="10,24 18,18 18,40" fill="#A33520"/>
+    <polygon points="54,24 46,18 46,40" fill="#A33520"/>
+    <polygon points="18,18 32,28 18,40" fill="#D24B2A"/>
+    <polygon points="46,18 32,28 46,40" fill="#D24B2A"/>
+    <polygon points="18,40 32,28 32,58" fill="#A33520"/>
+    <polygon points="46,40 32,28 32,58" fill="#E0613E"/>
+    <polygon points="10,24 18,40 32,58" fill="#8B2A18"/>
+    <polygon points="54,24 46,40 32,58" fill="#C4442A"/>
+  </g>
+
+  <!-- Wordmark: "Carnelian OS" (Bone for dark backgrounds) -->
+  <text x="72" y="34" font-family="Inter, system-ui, -apple-system, sans-serif" font-weight="700" font-size="28" fill="#F2EFEA">Carnelian OS</text>
+
+  <!-- Sub-label: "🦎 Lian" (Jade Glow for dark backgrounds) -->
+  <text x="72" y="52" font-family="Inter, system-ui, -apple-system, sans-serif" font-weight="400" font-size="13" fill="#39D98A">🦎 Lian</text>
+</svg>

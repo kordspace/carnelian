@@ -1,0 +1,3 @@
+# PNG exports are generated from carnelian-icon.svg using rsvg-convert.
+# See docs/BRAND.md "Asset Inventory" section for rasterisation commands.
+# Do not commit generated PNGs — regenerate them locally.

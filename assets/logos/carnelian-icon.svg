@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Faceted gemstone mark — Carnelian OS -->
+  <!-- Top facet -->
+  <polygon points="18,18 46,18 38,8 26,8" fill="#D24B2A"/>
+  <!-- Left upper facet -->
+  <polygon points="18,18 26,8 10,24" fill="#E0613E"/>
+  <!-- Right upper facet -->
+  <polygon points="46,18 38,8 54,24" fill="#E0613E"/>
+  <!-- Top highlight sliver -->
+  <polygon points="26,8 38,8 34,12 30,12" fill="#F2C14E"/>
+  <!-- Left mid facet -->
+  <polygon points="10,24 18,18 18,40" fill="#A33520"/>
+  <!-- Right mid facet -->
+  <polygon points="54,24 46,18 46,40" fill="#A33520"/>
+  <!-- Center left facet -->
+  <polygon points="18,18 32,28 18,40" fill="#D24B2A"/>
+  <!-- Center right facet -->
+  <polygon points="46,18 32,28 46,40" fill="#D24B2A"/>
+  <!-- Lower left facet -->
+  <polygon points="18,40 32,28 32,58" fill="#A33520"/>
+  <!-- Lower right facet -->
+  <polygon points="46,40 32,28 32,58" fill="#E0613E"/>
+  <!-- Bottom left edge -->
+  <polygon points="10,24 18,40 32,58" fill="#8B2A18"/>
+  <!-- Bottom right edge -->
+  <polygon points="54,24 46,40 32,58" fill="#C4442A"/>
+</svg>
