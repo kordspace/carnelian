@@ -8,7 +8,7 @@ use axum::{
     extract::{Path, Query, State, WebSocketUpgrade, ws::Message},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use base64::Engine as _;
 use carnelian_common::Result;
@@ -6134,6 +6134,56 @@ pub struct RevokedGrantResponse {
     pub reason: Option<String>,
 }
 
+/// List revoked capability grants via `GET /v1/memory/revoked-grants`.
+async fn list_revoked_grants_handler(
+    State(state): State<AppState>,
+    Query(params): Query<ListRevokedGrantsQuery>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "database unavailable"})),
+            )
+                .into_response();
+        }
+    };
+
+    let since = params
+        .since
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .unwrap_or_else(|| chrono::Utc::now() - chrono::Duration::days(7));
+
+    let policy = crate::policy::PolicyEngine::new(pool.clone());
+    let grants = match policy.list_revoked_since(since).await {
+        Ok(g) => g,
+        Err(e) => {
+            tracing::warn!(error = %e, "Failed to list revoked grants");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Database error: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let response = RevokedGrantsResponse {
+        grants: grants
+            .into_iter()
+            .map(|g| RevokedGrantResponse {
+                grant_id: g.grant_id.to_string(),
+                revoked_at: g.revoked_at.to_rfc3339(),
+                revoked_by: g.revoked_by.map(|id| id.to_string()),
+                reason: g.reason,
+            })
+            .collect(),
+    };
+
+    (StatusCode::OK, Json(serde_json::to_value(response).unwrap_or_default())).into_response()
+}
+
 /// Query parameters for `GET /v1/ledger/events`.
 #[derive(Debug, Deserialize)]
 struct LedgerEventsQuery {
@@ -6511,9 +6561,9 @@ async fn get_api_key_handler(State(state): State<AppState>) -> impl IntoResponse
 }
 
 /// Middleware layer that restricts access to localhost only.
-pub async fn localhost_only<B>(
-    req: axum::http::Request<B>,
-    next: axum::middleware::Next<B>,
+pub async fn localhost_only(
+    req: axum::http::Request<axum::body::Body>,
+    next: axum::middleware::Next,
 ) -> impl IntoResponse {
     // Check if request is from localhost
     let remote_addr = req

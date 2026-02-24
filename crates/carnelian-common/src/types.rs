@@ -1078,7 +1078,7 @@ const fn default_retry_delay_secs() -> u64 {
 }
 
 /// Detail record for a workflow, returned by list/get endpoints.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowDetail {
     pub workflow_id: Uuid,
     pub name: String,
