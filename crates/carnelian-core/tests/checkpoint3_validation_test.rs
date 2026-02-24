@@ -54,13 +54,17 @@ async fn setup_test_db(container: &ContainerAsync<GenericImage>) -> Result<PgPoo
         .max_connections(5)
         .connect(&db_url)
         .await
-        .map_err(|e| carnelian_common::Error::DatabaseMessage(format!("Failed to connect: {}", e)))?;
+        .map_err(|e| {
+            carnelian_common::Error::DatabaseMessage(format!("Failed to connect: {}", e))
+        })?;
 
     // Run migrations
     sqlx::migrate!("../db/migrations")
         .run(&pool)
         .await
-        .map_err(|e| carnelian_common::Error::DatabaseMessage(format!("Migration failed: {}", e)))?;
+        .map_err(|e| {
+            carnelian_common::Error::DatabaseMessage(format!("Migration failed: {}", e))
+        })?;
 
     Ok(pool)
 }

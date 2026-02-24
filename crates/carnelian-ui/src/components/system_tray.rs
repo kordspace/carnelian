@@ -37,7 +37,7 @@ const MENU_QUIT: &str = "quit";
 fn load_carnelian_icon() -> TrayIconImage {
     // Embed the SVG file at compile time
     let svg_bytes = include_bytes!("../../../../../assets/logos/carnelian-icon.svg");
-    
+
     // For now, create a colored icon based on the SVG palette
     // In a full implementation, you'd parse the SVG and render it to RGBA
     // This uses the Carnelian Red color from the brand palette (#B7410E)
@@ -48,34 +48,35 @@ fn load_carnelian_icon() -> TrayIconImage {
 fn carnelian_icon_rgba(r: u8, g: u8, b: u8) -> TrayIconImage {
     let size = 32_u32;
     let mut rgba = Vec::with_capacity((size * size * 4) as usize);
-    
+
     // Create a faceted gemstone pattern
     for y in 0..size {
         for x in 0..size {
             // Center of icon
             let cx = size / 2;
             let cy = size / 2;
-            
+
             // Distance from center
             let dx = x as i32 - cx as i32;
             let dy = y as i32 - cy as i32;
             let dist = ((dx * dx + dy * dy) as f32).sqrt();
-            
+
             // Create faceted effect with angular segments
             let angle = (dy as f32).atan2(dx as f32);
-            let segment = ((angle + std::f32::consts::PI) / (std::f32::consts::PI / 4.0)) as i32 % 8;
+            let segment =
+                ((angle + std::f32::consts::PI) / (std::f32::consts::PI / 4.0)) as i32 % 8;
             let facet_variation = (segment % 2) as f32 * 0.15;
-            
+
             // Circle boundary with slight variation for facets
             let radius = 14.0 + facet_variation;
-            
+
             if dist < radius {
                 // Main gemstone color with gradient toward center
                 let gradient = 1.0 - (dist / radius) * 0.4;
                 let br = (r as f32 * gradient) as u8;
                 let bg = (g as f32 * gradient) as u8;
                 let bb = (b as f32 * gradient) as u8;
-                
+
                 // Highlight in center
                 if dist < 4.0 {
                     let highlight = (1.0 - dist / 4.0) * 60.0;
@@ -83,7 +84,7 @@ fn carnelian_icon_rgba(r: u8, g: u8, b: u8) -> TrayIconImage {
                         (br.saturating_add(highlight as u8)).min(255),
                         (bg.saturating_add(highlight as u8 * 2 / 3)).min(255),
                         (bb.saturating_add(highlight as u8 / 3)).min(255),
-                        255
+                        255,
                     ]);
                 } else {
                     rgba.extend_from_slice(&[br, bg, bb, 255]);
@@ -94,7 +95,7 @@ fn carnelian_icon_rgba(r: u8, g: u8, b: u8) -> TrayIconImage {
             }
         }
     }
-    
+
     TrayIconImage::from_rgba(rgba, size, size).expect("valid 32×32 icon")
 }
 

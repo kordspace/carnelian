@@ -9,13 +9,13 @@ use carnelian_common::types::{
     CancelTaskResponse, ChannelDetail, ConfigureVoiceRequest, ConfigureVoiceResponse,
     CreateChannelApiRequest, CreateChannelResponse, CreateSubAgentApiRequest,
     CreateSubAgentResponse, CreateTaskRequest, CreateTaskResponse, CreateWorkflowRequest,
-    DetailedHealthResponse, ExecuteWorkflowRequest, GrantCapabilityRequest, GrantCapabilityResponse,
-    HeartbeatRecord, HeartbeatStatusResponse, IdentityResponse, ListApprovalsResponse,
-    ListCapabilitiesResponse, ListChannelsResponse, ListProvidersResponse, ListRunsResponse,
-    ListSkillsResponse, ListSubAgentsResponse, ListTasksResponse, ListVoicesResponse,
-    ListWorkflowsResponse, MetricsSnapshot, OllamaStatusResponse, PaginatedRunLogsResponse,
-    PairChannelApiRequest, PairChannelResponse, RevokeCapabilityResponse, RunDetail,
-    SkillMetricsDetail, SkillRefreshResponse, SkillToggleResponse, StatusResponse,
+    DetailedHealthResponse, ExecuteWorkflowRequest, GrantCapabilityRequest,
+    GrantCapabilityResponse, HeartbeatRecord, HeartbeatStatusResponse, IdentityResponse,
+    ListApprovalsResponse, ListCapabilitiesResponse, ListChannelsResponse, ListProvidersResponse,
+    ListRunsResponse, ListSkillsResponse, ListSubAgentsResponse, ListTasksResponse,
+    ListVoicesResponse, ListWorkflowsResponse, MetricsSnapshot, OllamaStatusResponse,
+    PaginatedRunLogsResponse, PairChannelApiRequest, PairChannelResponse, RevokeCapabilityResponse,
+    RunDetail, SkillMetricsDetail, SkillRefreshResponse, SkillToggleResponse, StatusResponse,
     SubAgentActionResponse, SubAgentDetail, TaskDetail, TestVoiceRequest, TestVoiceResponse,
     TopSkillsResponse, UpdateChannelApiRequest, UpdateSubAgentApiRequest, UpdateWorkflowRequest,
     WorkflowDetail, WorkflowExecutionResponse, XpHistoryResponse, XpLeaderboardResponse,
@@ -1031,7 +1031,9 @@ pub async fn activate_skill(
 /// Deactivate a skill.
 pub async fn deactivate_skill(skill_id: &str) -> Result<DeactivateSkillResponse, String> {
     client()
-        .delete(format!("{API_BASE_URL}/v1/skill-book/{skill_id}/deactivate"))
+        .delete(format!(
+            "{API_BASE_URL}/v1/skill-book/{skill_id}/deactivate"
+        ))
         .send()
         .await
         .map_err(|e| format!("Request failed: {e}"))?

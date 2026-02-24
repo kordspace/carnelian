@@ -1596,4 +1596,3 @@ pub struct DeactivateSkillResponse {
     pub skill_id: String,
     pub deactivated: bool,
 }
-

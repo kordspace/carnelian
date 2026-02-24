@@ -723,12 +723,18 @@ fn build_router(state: AppState) -> Router {
         .route("/v1/ledger/verify", get(verify_ledger_chain_handler))
         // Setup status endpoints
         .route("/v1/config/setup-status", get(get_setup_status_handler))
-        .route("/v1/config/setup-complete", post(post_setup_complete_handler))
+        .route(
+            "/v1/config/setup-complete",
+            post(post_setup_complete_handler),
+        )
         // Skill Book endpoints
         .route("/v1/skill-book", get(list_skill_book_handler))
         .route("/v1/skill-book/:id", get(get_skill_book_entry_handler))
         .route("/v1/skill-book/:id/activate", post(activate_skill_handler))
-        .route("/v1/skill-book/:id/deactivate", delete(deactivate_skill_handler))
+        .route(
+            "/v1/skill-book/:id/deactivate",
+            delete(deactivate_skill_handler),
+        )
         // API Key endpoint (localhost-only via middleware)
         .route("/v1/config/api-key", get(get_api_key_handler))
         // Revocation sync endpoint
@@ -6171,7 +6177,7 @@ async fn list_ledger_events_handler(
     // Build the base query
     let mut sql = String::from(
         r"SELECT event_id, timestamp, actor_id, action_type, payload_hash, event_hash, signature 
-          FROM ledger_events WHERE 1=1"
+          FROM ledger_events WHERE 1=1",
     );
     let mut binds: Vec<Box<dyn std::any::Any>> = Vec::new();
 
@@ -6200,12 +6206,10 @@ async fn list_ledger_events_handler(
     // Count total for pagination
     let count_sql = sql.replace(
         "SELECT event_id, timestamp, actor_id, action_type, payload_hash, event_hash, signature",
-        "SELECT COUNT(*)"
+        "SELECT COUNT(*)",
     );
-    
-    let total: i64 = match sqlx::query_scalar(&count_sql)
-        .fetch_one(pool)
-        .await {
+
+    let total: i64 = match sqlx::query_scalar(&count_sql).fetch_one(pool).await {
         Ok(t) => t,
         Err(e) => {
             tracing::warn!(error = %e, "Failed to count ledger events");
@@ -6218,35 +6222,47 @@ async fn list_ledger_events_handler(
     };
 
     // Add ordering and pagination
-    sql.push_str(&format!(" ORDER BY event_id DESC LIMIT {} OFFSET {}", limit, offset));
+    sql.push_str(&format!(
+        " ORDER BY event_id DESC LIMIT {} OFFSET {}",
+        limit, offset
+    ));
 
     // Execute query
-    let rows: Vec<(i64, chrono::DateTime<chrono::Utc>, String, String, String, String, Option<String>)> = 
-        match sqlx::query_as(&sql).fetch_all(pool).await {
-            Ok(r) => r,
-            Err(e) => {
-                tracing::warn!(error = %e, "Failed to fetch ledger events");
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": format!("Database error: {}", e)})),
-                )
-                    .into_response();
-            }
-        };
+    let rows: Vec<(
+        i64,
+        chrono::DateTime<chrono::Utc>,
+        String,
+        String,
+        String,
+        String,
+        Option<String>,
+    )> = match sqlx::query_as(&sql).fetch_all(pool).await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(error = %e, "Failed to fetch ledger events");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Database error: {}", e)})),
+            )
+                .into_response();
+        }
+    };
 
     let events: Vec<carnelian_common::types::LedgerEventDetail> = rows
         .into_iter()
-        .map(|(event_id, timestamp, actor_id, action_type, payload_hash, event_hash, signature)| {
-            carnelian_common::types::LedgerEventDetail {
-                event_id,
-                timestamp: timestamp.to_rfc3339(),
-                actor_id,
-                action_type,
-                payload_hash,
-                event_hash,
-                signature,
-            }
-        })
+        .map(
+            |(event_id, timestamp, actor_id, action_type, payload_hash, event_hash, signature)| {
+                carnelian_common::types::LedgerEventDetail {
+                    event_id,
+                    timestamp: timestamp.to_rfc3339(),
+                    actor_id,
+                    action_type,
+                    payload_hash,
+                    event_hash,
+                    signature,
+                }
+            },
+        )
         .collect();
 
     let response = carnelian_common::types::ListLedgerEventsResponse {
@@ -6267,26 +6283,26 @@ async fn list_ledger_events_handler(
 async fn verify_ledger_chain_handler(State(state): State<AppState>) -> impl IntoResponse {
     match state.ledger.verify_chain(None).await {
         Ok(intact) => {
-            let (event_count, first_event_id, last_event_id) =
-                if let Ok(pool) = state.config.pool() {
-                    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ledger_events")
+            let (event_count, first_event_id, last_event_id) = if let Ok(pool) = state.config.pool()
+            {
+                let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ledger_events")
+                    .fetch_one(pool)
+                    .await
+                    .unwrap_or(0);
+                let first: Option<i64> =
+                    sqlx::query_scalar("SELECT MIN(event_id) FROM ledger_events")
                         .fetch_one(pool)
                         .await
-                        .unwrap_or(0);
-                    let first: Option<i64> =
-                        sqlx::query_scalar("SELECT MIN(event_id) FROM ledger_events")
-                            .fetch_one(pool)
-                            .await
-                            .unwrap_or(None);
-                    let last: Option<i64> =
-                        sqlx::query_scalar("SELECT MAX(event_id) FROM ledger_events")
-                            .fetch_one(pool)
-                            .await
-                            .unwrap_or(None);
-                    (count as u64, first, last)
-                } else {
-                    (0u64, None, None)
-                };
+                        .unwrap_or(None);
+                let last: Option<i64> =
+                    sqlx::query_scalar("SELECT MAX(event_id) FROM ledger_events")
+                        .fetch_one(pool)
+                        .await
+                        .unwrap_or(None);
+                (count as u64, first, last)
+            } else {
+                (0u64, None, None)
+            };
             let response = carnelian_common::types::LedgerVerifyResponse {
                 intact,
                 event_count,
@@ -6324,13 +6340,12 @@ async fn get_setup_status_handler(State(state): State<AppState>) -> impl IntoRes
     };
 
     // Check if setup_complete key exists in config_store
-    let setup_complete: Option<String> = sqlx::query_scalar(
-        "SELECT value FROM config_store WHERE key = 'setup_complete'",
-    )
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten();
+    let setup_complete: Option<String> =
+        sqlx::query_scalar("SELECT value FROM config_store WHERE key = 'setup_complete'")
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten();
 
     // Check if machine.toml exists
     let machine_toml_exists = std::path::Path::new("machine.toml").exists()
@@ -6396,13 +6411,11 @@ async fn post_setup_complete_handler(State(state): State<AppState>) -> impl Into
 /// List all skills in the Skill Book catalog via `GET /v1/skill-book`.
 async fn list_skill_book_handler(State(state): State<AppState>) -> impl IntoResponse {
     match state.skill_book.load_catalog() {
-        Ok(catalog) => {
-            (
-                StatusCode::OK,
-                Json(serde_json::to_value(catalog).unwrap_or_default()),
-            )
-                .into_response()
-        }
+        Ok(catalog) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(catalog).unwrap_or_default()),
+        )
+            .into_response(),
         Err(e) => {
             tracing::warn!(error = %e, "Failed to load Skill Book catalog");
             (
@@ -6509,9 +6522,8 @@ pub async fn localhost_only<B>(
         .map(|addr| addr.ip().to_string())
         .unwrap_or_default();
 
-    let is_localhost = remote_addr == "127.0.0.1" 
-        || remote_addr == "::1" 
-        || remote_addr == "localhost";
+    let is_localhost =
+        remote_addr == "127.0.0.1" || remote_addr == "::1" || remote_addr == "localhost";
 
     if !is_localhost {
         return (
@@ -6525,4 +6537,3 @@ pub async fn localhost_only<B>(
 
     next.run(req).await
 }
-

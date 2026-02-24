@@ -60,9 +60,21 @@ pub fn Ledger() -> Element {
                 match api::list_ledger_events(
                     limit,
                     offset,
-                    if action_type.is_empty() { None } else { Some(action_type) },
-                    if actor_id.is_empty() { None } else { Some(actor_id) },
-                    if from_ts.is_empty() { None } else { Some(from_ts) },
+                    if action_type.is_empty() {
+                        None
+                    } else {
+                        Some(action_type)
+                    },
+                    if actor_id.is_empty() {
+                        None
+                    } else {
+                        Some(actor_id)
+                    },
+                    if from_ts.is_empty() {
+                        None
+                    } else {
+                        Some(from_ts)
+                    },
                     if to_ts.is_empty() { None } else { Some(to_ts) },
                 )
                 .await

@@ -253,7 +253,7 @@ pub fn SkillBook() -> Element {
                         div { class: "modal",
                             h3 { "Activate {skill.name}" }
                             p { "{skill.description}" }
-                            
+
                             if !skill.required_config.is_empty() {
                                 div { class: "config-form",
                                     h4 { "Configuration Required" }
@@ -278,7 +278,7 @@ pub fn SkillBook() -> Element {
                                     }
                                 }
                             }
-                            
+
                             div { class: "modal-actions",
                                 button {
                                     class: "btn-secondary",

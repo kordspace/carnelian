@@ -894,8 +894,8 @@ async fn test_criterion3_task_creation_and_execution_lifecycle() {
             &active,
             &metrics,
             &safe_mode_guard,
-        &None,
-        &None,
+            &None,
+            &None,
         )
         .await
         .expect("Scheduler poll should succeed");
@@ -1216,8 +1216,8 @@ async fn test_criterion5_concurrent_task_execution() {
             &active_tasks,
             &metrics,
             &safe_mode_guard,
-        &None,
-        &None,
+            &None,
+            &None,
         )
         .await
         .expect("poll_task_queue should succeed");

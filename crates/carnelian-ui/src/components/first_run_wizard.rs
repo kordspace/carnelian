@@ -43,13 +43,15 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
     let mut model_provider = use_signal(|| "ollama".to_string());
 
     // Step 5: Starter Skills
-    let mut selected_skills = use_signal(|| vec![
-        ("file-analyzer", true),
-        ("code-review", true),
-        ("model-usage", true),
-        ("web-search", false),
-        ("telegram-notify", false),
-    ]);
+    let mut selected_skills = use_signal(|| {
+        vec![
+            ("file-analyzer", true),
+            ("code-review", true),
+            ("model-usage", true),
+            ("web-search", false),
+            ("telegram-notify", false),
+        ]
+    });
 
     // Load initial data
     use_hook({
@@ -209,8 +211,14 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
 /// Step 1: Prerequisites Check
 #[component]
 fn Step1Prerequisites(health: Option<DetailedHealthResponse>) -> Element {
-    let docker_ok = health.as_ref().map(|h| h.database == "connected").unwrap_or(false);
-    let db_ok = health.as_ref().map(|h| h.database == "connected").unwrap_or(false);
+    let docker_ok = health
+        .as_ref()
+        .map(|h| h.database == "connected")
+        .unwrap_or(false);
+    let db_ok = health
+        .as_ref()
+        .map(|h| h.database == "connected")
+        .unwrap_or(false);
 
     rsx! {
         div { class: "wizard-step",
@@ -293,7 +301,10 @@ fn Step2MachineProfile(selected: Signal<String>) -> Element {
 /// Step 3: Owner Keypair Display
 #[component]
 fn Step3Identity(identity: Option<IdentityResponse>) -> Element {
-    let public_key = identity.as_ref().map(|i| i.public_key.clone()).unwrap_or_default();
+    let public_key = identity
+        .as_ref()
+        .map(|i| i.public_key.clone())
+        .unwrap_or_default();
 
     rsx! {
         div { class: "wizard-step",

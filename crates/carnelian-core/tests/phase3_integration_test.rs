@@ -616,6 +616,7 @@ async fn test_memory_create_with_validation() {
             MemorySource::Conversation,
             None,
             0.9,
+            None,
         )
         .await
         .expect("Failed to create memory");
@@ -637,6 +638,7 @@ async fn test_memory_create_with_validation() {
             MemorySource::Conversation,
             None,
             1.5,
+            None,
         )
         .await;
     assert!(
@@ -652,6 +654,7 @@ async fn test_memory_create_with_validation() {
             MemorySource::Conversation,
             None,
             -0.1,
+            None,
         )
         .await;
     assert!(
@@ -766,6 +769,7 @@ async fn test_memory_similarity_search() {
             MemorySource::Conversation,
             Some(emb1.clone()),
             0.8,
+            None,
         )
         .await
         .expect("Failed to create memory with embedding");
@@ -788,6 +792,7 @@ async fn test_memory_similarity_search() {
             MemorySource::Conversation,
             Some(emb2),
             0.7,
+            None,
         )
         .await
         .expect("Failed to create second memory with embedding");
@@ -829,6 +834,7 @@ async fn test_memory_access_count_increment() {
             MemorySource::Observation,
             None,
             0.6,
+            None,
         )
         .await
         .expect("Failed to create memory");
@@ -867,6 +873,7 @@ async fn test_memory_query_builder() {
         MemorySource::Conversation,
         None,
         0.3,
+        None,
     )
     .await
     .unwrap();
@@ -877,6 +884,7 @@ async fn test_memory_query_builder() {
         MemorySource::Conversation,
         None,
         0.9,
+        None,
     )
     .await
     .unwrap();
@@ -887,6 +895,7 @@ async fn test_memory_query_builder() {
         MemorySource::Task,
         None,
         0.7,
+        None,
     )
     .await
     .unwrap();
@@ -1083,6 +1092,7 @@ async fn test_context_load_recent_memories() {
         MemorySource::Conversation,
         None,
         0.9,
+        None,
     )
     .await
     .unwrap();
@@ -1093,6 +1103,7 @@ async fn test_context_load_recent_memories() {
         MemorySource::Observation,
         None,
         0.7,
+        None,
     )
     .await
     .unwrap();
@@ -1140,6 +1151,7 @@ async fn test_context_provenance_tracking() {
             MemorySource::Conversation,
             None,
             0.8,
+            None,
         )
         .await
         .unwrap();
@@ -1489,6 +1501,7 @@ async fn test_context_assemble_full_pipeline() {
             MemorySource::Conversation,
             None,
             0.85,
+            None,
         )
         .await
         .unwrap();
@@ -2070,6 +2083,7 @@ async fn test_heartbeat_agentic_turn_pipeline() {
         MemorySource::Observation,
         None,
         0.7,
+        None,
     )
     .await
     .expect("Failed to create memory");
@@ -2563,6 +2577,7 @@ async fn test_end_to_end_soul_memory_context() {
         MemorySource::Conversation,
         None,
         0.9,
+        None,
     )
     .await
     .unwrap();
@@ -2573,6 +2588,7 @@ async fn test_end_to_end_soul_memory_context() {
         MemorySource::Task,
         None,
         0.85,
+        None,
     )
     .await
     .unwrap();
