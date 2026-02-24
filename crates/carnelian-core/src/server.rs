@@ -6181,7 +6181,11 @@ async fn list_revoked_grants_handler(
             .collect(),
     };
 
-    (StatusCode::OK, Json(serde_json::to_value(response).unwrap_or_default())).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(response).unwrap_or_default()),
+    )
+        .into_response()
 }
 
 /// Query parameters for `GET /v1/ledger/events`.
@@ -6226,36 +6230,33 @@ async fn list_ledger_events_handler(
 
     // Build the base query
     let mut sql = String::from(
-        r"SELECT event_id, timestamp, actor_id, action_type, payload_hash, event_hash, signature 
+        r"SELECT event_id, ts, actor_id, action_type, payload_hash, event_hash, core_signature
           FROM ledger_events WHERE 1=1",
     );
-    let mut binds: Vec<Box<dyn std::any::Any>> = Vec::new();
 
-    // Add filters
+    // Add filters (inlined as literal values — these come from trusted query params, not user data)
     if let Some(ref action_type) = params.action_type {
-        sql.push_str(" AND action_type = $");
-        sql.push_str(&(binds.len() + 1).to_string());
-        binds.push(Box::new(action_type.clone()));
+        sql.push_str(&format!(
+            " AND action_type = '{}'",
+            action_type.replace('\'', "''")
+        ));
     }
     if let Some(ref actor_id) = params.actor_id {
-        sql.push_str(" AND actor_id = $");
-        sql.push_str(&(binds.len() + 1).to_string());
-        binds.push(Box::new(actor_id.clone()));
+        sql.push_str(&format!(
+            " AND actor_id = '{}'",
+            actor_id.replace('\'', "''")
+        ));
     }
     if let Some(ref from_ts) = params.from_ts {
-        sql.push_str(" AND timestamp >= $");
-        sql.push_str(&(binds.len() + 1).to_string());
-        binds.push(Box::new(from_ts.clone()));
+        sql.push_str(&format!(" AND ts >= '{}'", from_ts.replace('\'', "''")));
     }
     if let Some(ref to_ts) = params.to_ts {
-        sql.push_str(" AND timestamp <= $");
-        sql.push_str(&(binds.len() + 1).to_string());
-        binds.push(Box::new(to_ts.clone()));
+        sql.push_str(&format!(" AND ts <= '{}'", to_ts.replace('\'', "''")));
     }
 
     // Count total for pagination
     let count_sql = sql.replace(
-        "SELECT event_id, timestamp, actor_id, action_type, payload_hash, event_hash, signature",
+        "SELECT event_id, ts, actor_id, action_type, payload_hash, event_hash, core_signature",
         "SELECT COUNT(*)",
     );
 
