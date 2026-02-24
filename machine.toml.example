@@ -18,13 +18,23 @@
 # Determines resource limits and default model settings.
 #
 # Available profiles:
-# - "thummim": RTX 2080 Super (8GB VRAM), 32GB RAM - constrained profile
-# - "urim": RTX 2080 Ti (11GB VRAM), 64GB RAM - high-end profile
+# - "standard": Entry-level (8GB VRAM, 32GB RAM) - good for most tasks
+# - "performance": High-end (11GB+ VRAM, 64GB RAM) - for demanding workloads
 # - "custom": User-defined settings (see [machine] section below)
 #
 # Can be overridden with MACHINE_PROFILE environment variable.
 
-machine_profile = "thummim"
+machine_profile = "standard"
+
+# =============================================================================
+# Agent Identity
+# =============================================================================
+# Customize the AI assistant's display name. This name appears in UI, logs,
+# and channel adapter responses (Discord, Telegram, etc.)
+#
+# Can be overridden with CARNELIAN_AGENT_NAME environment variable.
+
+agent_name = "Lian"
 
 # =============================================================================
 # Server Configuration
