@@ -1300,9 +1300,92 @@ async fn handle_init(
             }
 
             println!("✓ Images pulled successfully");
-            println!("  To start containers:");
-            println!("    docker run -d --name carnelian-postgres -p {}:5432 -e POSTGRES_USER=carnelian -e POSTGRES_PASSWORD=carnelian -e POSTGRES_DB=carnelian postgres:16-alpine", postgres_port);
-            println!("    docker run -d --name carnelian-ollama -p {}:11434 ollama/ollama:latest", ollama_port);
+
+            // Create and start PostgreSQL container
+            println!("  Creating PostgreSQL container...");
+            let pg_config = ContainerConfig {
+                image: Some("postgres:16-alpine".to_string()),
+                env: Some(vec![
+                    "POSTGRES_USER=carnelian".to_string(),
+                    "POSTGRES_PASSWORD=carnelian".to_string(),
+                    "POSTGRES_DB=carnelian".to_string(),
+                ]),
+                host_config: Some(HostConfig {
+                    port_bindings: Some({
+                        let mut bindings = std::collections::HashMap::new();
+                        bindings.insert(
+                            "5432/tcp".to_string(),
+                            Some(vec![PortBinding {
+                                host_ip: Some("0.0.0.0".to_string()),
+                                host_port: Some(format!("{}", postgres_port)),
+                            }]),
+                        );
+                        bindings
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            };
+
+            match docker.create_container(
+                Some(CreateContainerOptions {
+                    name: "carnelian-postgres",
+                    platform: None,
+                }),
+                pg_config,
+            ).await {
+                Ok(_) => {
+                    println!("    ✓ PostgreSQL container created");
+                    match docker.start_container("carnelian-postgres", None::<StartContainerOptions>).await {
+                        Ok(_) => println!("    ✓ PostgreSQL container started on port {}", postgres_port),
+                        Err(e) => println!("    ⚠ Failed to start PostgreSQL container: {}", e),
+                    }
+                }
+                Err(e) => println!("    ⚠ Failed to create PostgreSQL container: {}", e),
+            }
+
+            // Create and start Ollama container
+            println!("  Creating Ollama container...");
+            let ollama_config = ContainerConfig {
+                image: Some("ollama/ollama:latest".to_string()),
+                host_config: Some(HostConfig {
+                    port_bindings: Some({
+                        let mut bindings = std::collections::HashMap::new();
+                        bindings.insert(
+                            "11434/tcp".to_string(),
+                            Some(vec![PortBinding {
+                                host_ip: Some("0.0.0.0".to_string()),
+                                host_port: Some(format!("{}", ollama_port)),
+                            }]),
+                        );
+                        bindings
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            };
+
+            match docker.create_container(
+                Some(CreateContainerOptions {
+                    name: "carnelian-ollama",
+                    platform: None,
+                }),
+                ollama_config,
+            ).await {
+                Ok(_) => {
+                    println!("    ✓ Ollama container created");
+                    match docker.start_container("carnelian-ollama", None::<StartContainerOptions>).await {
+                        Ok(_) => println!("    ✓ Ollama container started on port {}", ollama_port),
+                        Err(e) => println!("    ⚠ Failed to start Ollama container: {}", e),
+                    }
+                }
+                Err(e) => println!("    ⚠ Failed to create Ollama container: {}", e),
+            }
+
+            // Wait for PostgreSQL to be ready
+            println!("  Waiting for PostgreSQL to be ready...");
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+            println!("    ✓ Containers should be ready");
         }
     }
 
@@ -1598,17 +1681,62 @@ async fn handle_key_rotate(
     Ok(())
 }
 
-/// Handle the `ui` command - Launch desktop UI or web UI
+/// Handle the `ui` command - Launch desktop UI or serve web UI
 async fn handle_ui(web: bool) -> carnelian_common::Result<()> {
     if web {
         // Serve web UI
         println!("🔥 Starting Carnelian Web UI server...");
         
-        // For now, print instructions for web UI
-        // In production, this would compile Dioxus to WASM and serve it
-        println!("Web UI feature requires Dioxus web target compilation.");
-        println!("To build: cargo build --release -p carnelian-ui --features web");
-        println!("Then serve the static files from target/dx/carnelian-ui/release/web/public");
+        // Determine the web UI directory
+        let web_dir = std::path::PathBuf::from("target/dx/carnelian-ui/release/web/public");
+        
+        if !web_dir.exists() {
+            println!("⚠ Web UI directory not found: {}", web_dir.display());
+            println!("  Building web UI...");
+            
+            // Attempt to build the web UI using dx
+            let build_result = std::process::Command::new("dx")
+                .args(["build", "--release", "-p", "carnelian-ui", "--platform", "web"])
+                .current_dir(".")
+                .stdout(std::process::Stdio::inherit())
+                .stderr(std::process::Stdio::inherit())
+                .status();
+            
+            match build_result {
+                Ok(status) if status.success() => {
+                    println!("✓ Web UI built successfully");
+                }
+                Ok(_) => {
+                    println!("⚠ Failed to build web UI. Make sure Dioxus CLI (dx) is installed.");
+                    println!("  Install with: cargo install dioxus-cli");
+                    return Ok(());
+                }
+                Err(e) => {
+                    println!("⚠ Failed to run dx command: {}", e);
+                    println!("  Make sure Dioxus CLI (dx) is installed: cargo install dioxus-cli");
+                    return Ok(());
+                }
+            }
+        }
+        
+        // Serve the web UI
+        let port = std::env::var("CARNELIAN_WEB_PORT")
+            .ok()
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(8080);
+        
+        let addr = format!("0.0.0.0:{}", port);
+        
+        println!("  Serving web UI from: {}", web_dir.display());
+        println!("  Web UI available at: http://{}", addr);
+        println!("  Press Ctrl+C to stop the server");
+        
+        // Use a simple static file server
+        let serve_result = serve_web_ui(&web_dir, port).await;
+        
+        if let Err(e) = serve_result {
+            println!("⚠ Failed to serve web UI: {}", e);
+        }
         
         return Ok(());
     }
@@ -1663,6 +1791,42 @@ async fn handle_ui(web: bool) -> carnelian_common::Result<()> {
         .map_err(|e| carnelian_common::Error::Config(format!("Failed to launch UI: {}", e)))?;
 
     println!("🔥 Carnelian UI launched (PID: {})", child.id());
+
+    Ok(())
+}
+
+/// Serve web UI static files
+async fn serve_web_ui(
+    web_dir: &std::path::Path,
+    port: u16,
+) -> carnelian_common::Result<()> {
+    use axum::{
+        routing::get,
+        Router,
+        response::{Html, IntoResponse},
+        extract::Path,
+        http::StatusCode,
+    };
+    use tower_http::services::ServeDir;
+    use tokio::net::TcpListener;
+
+    // Create router with static file serving
+    let app = Router::new()
+        .nest_service("/", ServeDir::new(web_dir))
+        .fallback(|| async {
+            (StatusCode::NOT_FOUND, "404 - Not Found")
+        });
+
+    let addr = format!("0.0.0.0:{}", port);
+    let listener = TcpListener::bind(&addr).await.map_err(|e| {
+        carnelian_common::Error::Connection(format!("Failed to bind to {}: {}", addr, e))
+    })?;
+
+    println!("Web UI server listening on http://{}", addr);
+    
+    axum::serve(listener, app)
+        .await
+        .map_err(|e| carnelian_common::Error::Connection(format!("Server error: {}", e)))?;
 
     Ok(())
 }

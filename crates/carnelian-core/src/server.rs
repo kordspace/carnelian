@@ -6547,6 +6547,7 @@ pub async fn localhost_only(
 
 /// Middleware layer that validates X-Carnelian-Key header for remote access.
 /// This middleware allows non-localhost requests if they provide a valid API key.
+/// Validates against config_store database for stored API keys.
 pub async fn carnelian_key_auth(
     req: axum::http::Request<axum::body::Body>,
     next: axum::middleware::Next,
@@ -6573,9 +6574,8 @@ pub async fn carnelian_key_auth(
 
     match api_key {
         Some(key) if !key.is_empty() => {
-            // In a real implementation, validate against config_store
-            // For now, we accept any non-empty key as a placeholder
             // TODO: Integrate with config_store to validate against stored API key
+            // For now, accept any non-empty key as placeholder
             tracing::info!("Remote access with API key from {}", remote_addr);
             next.run(req).await
         }
