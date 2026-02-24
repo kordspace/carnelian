@@ -1,0 +1,19 @@
+# =============================================================================
+# Carnelian OS - Thummim Machine Profile Override
+# =============================================================================
+# Thummim: RTX 2080 Super (8GB VRAM), 32GB RAM
+# Recommended model: deepseek-r1:7b
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.thummim.yml up -d
+# =============================================================================
+
+services:
+  carnelian-core:
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 4G
+        reservations:
+          memory: 1G

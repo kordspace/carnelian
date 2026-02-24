@@ -1,18 +1,23 @@
 # =============================================================================
-# Carnelian OS - Development Environment
+# Carnelian OS - Production Environment
 # =============================================================================
-# This Docker Compose configuration provides local development infrastructure:
+# This Docker Compose configuration provides full production infrastructure:
 # - PostgreSQL 16 with pgvector extension for vector embeddings
 # - Ollama runtime with NVIDIA GPU support for local LLM inference
+# - Carnelian Core orchestrator with health checks and resource limits
 #
 # Machine Profiles:
-# - Thummim: RTX 2080 Super (8GB VRAM), 32GB RAM
-# - Urim: RTX 2080 Ti (11GB VRAM), 64GB RAM
+# - Standard: Entry-level GPU (8GB VRAM), 32GB RAM
+# - Performance: High-end GPU (11GB+ VRAM), 64GB RAM
 #
 # Quick Start:
 #   docker-compose up -d
 #   docker-compose ps
 #   docker-compose logs -f
+#
+# Production with Machine Profile:
+#   docker-compose -f docker-compose.yml -f docker-compose.performance.yml up -d
+#   docker-compose -f docker-compose.yml -f docker-compose.standard.yml up -d
 #
 # Shutdown:
 #   docker-compose down          # Preserve data
@@ -68,13 +73,13 @@ services:
   # - NVIDIA Container Toolkit installed
   # - Docker configured for GPU access
   #
-  # Model Download:
-  #   docker exec carnelian-ollama ollama pull deepseek-r1:7b    # Thummim
-  #   docker exec carnelian-ollama ollama pull deepseek-r1:32b   # Urim (if VRAM allows)
+  # Machine Download:
+  #   docker exec carnelian-ollama ollama pull deepseek-r1:7b    # Standard profile
+  #   docker exec carnelian-ollama ollama pull deepseek-r1:32b   # Performance profile (if VRAM allows)
   #
   # Memory Requirements:
   # - deepseek-r1:7b (Q4_K_M): ~6GB VRAM, ~8GB RAM
-  # - deepseek-r1:32b: ~20GB VRAM (requires Urim or better)
+  # - deepseek-r1:32b: ~20GB VRAM (requires Performance profile or better)
   # ---------------------------------------------------------------------------
   carnelian-ollama:
     image: ollama/ollama:latest
@@ -107,12 +112,63 @@ services:
       start_period: 60s
     restart: unless-stopped
 
+  # ---------------------------------------------------------------------------
+  # Carnelian Core Orchestrator
+  # ---------------------------------------------------------------------------
+  # HTTP API: http://localhost:18789
+  # Docker Internal: http://carnelian-core:18789
+  #
+  # Service dependencies: PostgreSQL and Ollama must be healthy before starting
+  # Health check: GET /v1/health endpoint
+  #
+  # Machine profile resource limits can be overridden via compose override files:
+  #   docker-compose -f docker-compose.yml -f docker-compose.performance.yml up -d
+  # ---------------------------------------------------------------------------
+  carnelian-core:
+    image: carnelian/carnelian-core:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: carnelian-core
+    command: carnelian start
+    environment:
+      DATABASE_URL: postgresql://carnelian:carnelian@carnelian-postgres:5432/carnelian
+      CARNELIAN_OLLAMA_URL: http://carnelian-ollama:11434
+      CARNELIAN_ENV: production
+      LOG_LEVEL: INFO
+    volumes:
+      - ./machine.toml:/app/machine.toml:ro
+      - carnelian-data:/app/data
+      - ~/.carnelian:/root/.carnelian:ro
+    ports:
+      - "18789:18789"
+    depends_on:
+      carnelian-postgres:
+        condition: service_healthy
+      carnelian-ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18789/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 4G
+        reservations:
+          memory: 1G
+    restart: unless-stopped
+
 # =============================================================================
 # Named Volumes
 # =============================================================================
 # Data Persistence Strategy:
 # - postgres-data: PostgreSQL database files (schemas, tables, indexes)
 # - ollama-models: Downloaded Ollama models (can be large, 4-20GB per model)
+# - carnelian-data: Carnelian core data directory
 #
 # Backup Recommendations:
 # - PostgreSQL: Use pg_dump for logical backups
@@ -126,4 +182,6 @@ volumes:
   postgres-data:
     driver: local
   ollama-models:
+    driver: local
+  carnelian-data:
     driver: local

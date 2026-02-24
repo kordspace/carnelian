@@ -1,0 +1,19 @@
+# =============================================================================
+# Carnelian OS - Performance Machine Profile Override
+# =============================================================================
+# Performance: High-end GPU (11GB+ VRAM), 64GB RAM
+# Recommended model: deepseek-r1:32b
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.performance.yml up -d
+# =============================================================================
+
+services:
+  carnelian-core:
+    deploy:
+      resources:
+        limits:
+          cpus: "8"
+          memory: 8G
+        reservations:
+          memory: 2G
