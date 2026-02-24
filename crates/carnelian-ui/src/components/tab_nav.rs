@@ -23,6 +23,11 @@ pub fn TabNav() -> Element {
         ("Heartbeat", Route::Heartbeat {}),
         ("Identity", Route::Identity {}),
         ("Providers", Route::Providers {}),
+        ("Sub-Agents", Route::SubAgents {}),
+        ("Channels", Route::Channels {}),
+        ("Workflows", Route::Workflows {}),
+        ("XP", Route::XpProgression {}),
+        ("Voice", Route::VoiceSettingsPage {}),
     ];
 
     rsx! {

@@ -2,10 +2,14 @@
 
 pub mod approvals;
 pub mod capabilities;
+pub mod channels;
 pub mod dashboard;
 pub mod events;
 pub mod heartbeat;
 pub mod identity;
 pub mod providers;
 pub mod skills;
+pub mod sub_agents;
 pub mod tasks;
+pub mod workflows;
+pub mod xp_progression;

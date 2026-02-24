@@ -2,4 +2,7 @@
 
 pub mod system_tray;
 pub mod tab_nav;
+pub mod toast;
 pub mod top_bar;
+pub mod voice_settings;
+pub mod xp_widget;

@@ -1165,4 +1165,430 @@ h3 { font-size: 16px; font-weight: 600; color: #E0E0E0; }
     flex: 1;
     overflow-y: auto;
 }
+
+/* ============================================================
+   WORKFLOW BUILDER
+   ============================================================ */
+
+.wf-builder-container {
+    display: flex;
+    flex: 1;
+    gap: 0;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.wf-sidebar {
+    width: 220px;
+    min-width: 220px;
+    padding: 12px;
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+    overflow-y: auto;
+    background: rgba(15, 15, 30, 0.4);
+}
+
+.wf-sidebar h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: #E0E0E0;
+    margin: 0 0 8px 0;
+}
+
+.wf-skill-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.wf-skill-card {
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.wf-skill-card:hover {
+    background: rgba(74, 144, 226, 0.1);
+    border-color: rgba(74, 144, 226, 0.3);
+}
+
+.wf-skill-card-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: #E0E0E0;
+    margin-bottom: 4px;
+}
+
+.wf-runtime-node { background: rgba(104, 211, 145, 0.15); color: #68D391; }
+.wf-runtime-python { background: rgba(246, 173, 85, 0.15); color: #F6AD55; }
+.wf-runtime-shell { background: rgba(159, 122, 234, 0.15); color: #9F7AEA; }
+
+.wf-canvas-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.wf-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(15, 15, 30, 0.3);
+}
+
+.wf-canvas {
+    flex: 1;
+    overflow: auto;
+    background: rgba(10, 10, 25, 0.6);
+    border-radius: 4px;
+    margin: 8px;
+}
+
+.wf-canvas svg {
+    display: block;
+}
+
+.wf-config-panel {
+    width: 260px;
+    min-width: 260px;
+    padding: 12px;
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
+    overflow-y: auto;
+    background: rgba(15, 15, 30, 0.4);
+}
+
+.wf-config-content h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: #E0E0E0;
+    margin: 0 0 4px 0;
+}
+
+.wf-config-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 20px;
+    text-align: center;
+}
+
+.wf-dep-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.wf-validation-errors {
+    padding: 8px;
+    margin-bottom: 8px;
+}
+
+.wf-validation-error {
+    color: #FC8181;
+    font-size: 12px;
+    padding: 4px 0;
+}
+
+/* Execution modal results */
+
+.wf-exec-results {
+    margin-top: 12px;
+}
+
+.wf-exec-summary {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.wf-exec-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.wf-exec-step {
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.wf-exec-step-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+}
+
+.wf-exec-step-name {
+    font-weight: 600;
+    color: #E0E0E0;
+}
+
+.wf-exec-step-error {
+    color: #FC8181;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.wf-step-success { border-left: 3px solid #68D391; }
+.wf-step-failed  { border-left: 3px solid #FC8181; }
+.wf-step-skipped { border-left: 3px solid #A0AEC0; }
+.wf-step-pending { border-left: 3px solid #F6AD55; }
+.wf-step-running { border-left: 3px solid #4A90E2; animation: pulse 1.5s infinite; }
+
+.wf-field-error {
+    border-color: #FC8181 !important;
+    box-shadow: 0 0 0 1px rgba(252, 129, 129, 0.3);
+}
+.wf-field-error-msg {
+    color: #FC8181;
+    font-size: 11px;
+    margin-top: 4px;
+}
+
+.badge-enabled  { background: rgba(104, 211, 145, 0.15); color: #68D391; }
+.badge-disabled { background: rgba(160, 174, 192, 0.15); color: #A0AEC0; }
+
+.btn-danger {
+    background: rgba(252, 129, 129, 0.15);
+    color: #FC8181;
+    border: 1px solid rgba(252, 129, 129, 0.3);
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+
+.btn-danger:hover {
+    background: rgba(252, 129, 129, 0.25);
+}
+
+.btn-danger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.filter-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #B0B0B0;
+    cursor: pointer;
+}
+
+.filter-checkbox input[type="checkbox"] {
+    accent-color: #4A90E2;
+}
+
+.form-textarea {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    color: #E0E0E0;
+    padding: 8px 10px;
+    font-size: 13px;
+    resize: vertical;
+    min-height: 60px;
+}
+
+.form-textarea:focus {
+    outline: none;
+    border-color: rgba(74, 144, 226, 0.5);
+}
+
+.cell-truncate {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.filter-bar-actions {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 18px;
+    color: #E0E0E0;
+}
+
+.modal-body {
+    margin-bottom: 16px;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.btn-icon {
+    background: none;
+    border: none;
+    color: #7F8C8D;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px;
+}
+
+.btn-icon:hover {
+    color: #E0E0E0;
+}
+
+/* ============================================================
+   XP LEVEL BADGE (top bar + widget)
+   ============================================================ */
+
+.xp-level-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    background: linear-gradient(135deg, #D4A017, #F5C842);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    white-space: nowrap;
+}
+
+/* ============================================================
+   XP PROGRESS BAR
+   ============================================================ */
+
+.xp-progress-bar-container {
+    width: 80px;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.xp-progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #D4A017, #F5C842);
+    border-radius: 3px;
+    transition: width 0.4s ease;
+}
+
+.xp-progress-label {
+    font-size: 11px;
+    color: #A0A0A0;
+    white-space: nowrap;
+}
+
+/* ============================================================
+   XP WIDGET CARD
+   ============================================================ */
+
+.xp-widget {
+    background: rgba(30, 30, 50, 0.65);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 24px;
+    transition: border-color 0.2s ease;
+}
+
+.xp-widget:hover {
+    border-color: rgba(212, 160, 23, 0.3);
+}
+
+/* ============================================================
+   TOAST NOTIFICATIONS
+   ============================================================ */
+
+.toast-container {
+    position: fixed;
+    top: 70px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+}
+
+.toast {
+    background: rgba(30, 30, 50, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 13px;
+    color: #E0E0E0;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    animation: toast-slide-in 0.3s ease-out;
+    pointer-events: auto;
+}
+
+.toast-level-up {
+    border-color: rgba(212, 160, 23, 0.5);
+    font-size: 15px;
+    font-weight: 700;
+    animation: toast-slide-in 0.3s ease-out, toast-pulse 1.5s ease-in-out 2;
+}
+
+@keyframes toast-slide-in {
+    0% { transform: translateX(100%); opacity: 0; }
+    100% { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes toast-pulse {
+    0%, 100% { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); }
+    50% { box-shadow: 0 4px 24px rgba(212, 160, 23, 0.4); }
+}
+
+/* ============================================================
+   XP PIE CHART
+   ============================================================ */
+
+.xp-pie-chart {
+    width: 80px;
+    height: 80px;
+    flex-shrink: 0;
+}
+
+.xp-pie-chart svg {
+    display: block;
+}
+
+/* ============================================================
+   VOICE SETTINGS PANEL
+   ============================================================ */
+
+.voice-settings-panel {
+    background: rgba(30, 30, 50, 0.65);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 24px;
+    max-width: 560px;
+}
 "#;

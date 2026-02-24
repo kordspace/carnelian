@@ -89,9 +89,23 @@ pub fn TopBar() -> Element {
                 }
             }
 
-            // Right: Profile badge + settings
+            // Right: Profile badge + XP indicator + settings
             div { class: "top-bar-right",
                 span { class: "{badge_class}", "{profile_text}" }
+                {
+                    let xp = store.xp_state.read();
+                    let level = xp.level;
+                    let progress_pct = xp.progress_pct;
+                    let total_xp = xp.total_xp;
+                    let width_style = format!("width: {progress_pct:.1}%");
+                    rsx! {
+                        span { class: "xp-level-badge", "Lv. {level}" }
+                        div { class: "xp-progress-bar-container",
+                            div { class: "xp-progress-bar-fill", style: "{width_style}" }
+                        }
+                        span { class: "xp-progress-label", "{total_xp} XP" }
+                    }
+                }
                 button {
                     class: "btn-icon",
                     title: "Settings",

@@ -15,6 +15,7 @@ use dioxus::prelude::*;
 
 use components::system_tray::SystemTray;
 use components::tab_nav::TabNav;
+use components::toast::ToastOverlay;
 use components::top_bar::TopBar;
 
 /// Application routes.
@@ -39,6 +40,16 @@ pub enum Route {
     Identity {},
     #[route("/providers")]
     Providers {},
+    #[route("/sub-agents")]
+    SubAgents {},
+    #[route("/channels")]
+    Channels {},
+    #[route("/workflows")]
+    Workflows {},
+    #[route("/xp")]
+    XpProgression {},
+    #[route("/voice")]
+    VoiceSettingsPage {},
 }
 
 #[tokio::main]
@@ -78,6 +89,7 @@ fn Layout() -> Element {
             div { class: "main-content",
                 Outlet::<Route> {}
             }
+            ToastOverlay {}
         }
     }
 }
@@ -134,4 +146,38 @@ fn Identity() -> Element {
 #[component]
 fn Providers() -> Element {
     pages::providers::Providers()
+}
+
+/// Sub-Agents page (delegates to `pages::sub_agents`).
+#[component]
+fn SubAgents() -> Element {
+    pages::sub_agents::SubAgents()
+}
+
+/// Channels page (delegates to `pages::channels`).
+#[component]
+fn Channels() -> Element {
+    pages::channels::Channels()
+}
+
+/// Workflows page (delegates to `pages::workflows`).
+#[component]
+fn Workflows() -> Element {
+    pages::workflows::Workflows()
+}
+
+/// XP Progression page (delegates to `pages::xp_progression`).
+#[component]
+fn XpProgression() -> Element {
+    pages::xp_progression::XpProgression()
+}
+
+/// Voice Settings page (renders the VoiceSettings component).
+#[component]
+fn VoiceSettingsPage() -> Element {
+    rsx! {
+        div { class: "page-section",
+            components::voice_settings::VoiceSettings {}
+        }
+    }
 }

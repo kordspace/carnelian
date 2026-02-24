@@ -12,7 +12,7 @@
 use std::collections::VecDeque;
 use std::time::Duration;
 
-use carnelian_common::types::{EventEnvelope, EventType};
+use carnelian_common::types::{AgentXpResponse, EventEnvelope, EventType};
 use chrono::{DateTime, Utc};
 use dioxus::prelude::*;
 use tokio::sync::mpsc;
@@ -81,6 +81,40 @@ pub struct IdentityState {
     pub directive_count: usize,
 }
 
+/// XP progression state.
+#[derive(Debug, Clone, Default)]
+pub struct XpState {
+    pub identity_id: Option<Uuid>,
+    pub total_xp: i64,
+    pub level: i32,
+    pub xp_to_next_level: i64,
+    pub progress_pct: f64,
+    pub milestone_feature: Option<String>,
+}
+
+/// Kind of toast notification.
+#[derive(Debug, Clone)]
+pub enum ToastKind {
+    XpGained { amount: i32, source: String },
+    LevelUp { new_level: i32 },
+}
+
+/// A transient toast notification.
+#[derive(Debug, Clone)]
+pub struct ToastNotification {
+    pub id: u64,
+    pub kind: ToastKind,
+    pub timestamp: DateTime<Utc>,
+}
+
+/// State for the Channels panel.
+#[derive(Debug, Clone, Default)]
+pub struct ChannelState {
+    pub total_channels: usize,
+    pub running_channels: usize,
+    pub last_channel_event: Option<DateTime<Utc>>,
+}
+
 /// State for the Providers panel.
 #[derive(Debug, Clone, Default)]
 pub struct ProviderState {
@@ -110,6 +144,9 @@ pub struct EventStreamStore {
     pub heartbeat_state: Signal<HeartbeatState>,
     pub identity_state: Signal<IdentityState>,
     pub provider_state: Signal<ProviderState>,
+    pub channel_state: Signal<ChannelState>,
+    pub xp_state: Signal<XpState>,
+    pub toast_notifications: Signal<Vec<ToastNotification>>,
 }
 
 impl EventStreamStore {
@@ -127,6 +164,9 @@ impl EventStreamStore {
             heartbeat_state: Signal::new(HeartbeatState::default()),
             identity_state: Signal::new(IdentityState::default()),
             provider_state: Signal::new(ProviderState::default()),
+            channel_state: Signal::new(ChannelState::default()),
+            xp_state: Signal::new(XpState::default()),
+            toast_notifications: Signal::new(Vec::new()),
         }
     }
 
@@ -142,14 +182,18 @@ impl EventStreamStore {
         let (state_tx, state_rx) = mpsc::unbounded_channel::<ConnectionState>();
         let (status_tx, status_rx) = mpsc::unbounded_channel::<StatusUpdate>();
 
+        let (xp_tx, xp_rx) = mpsc::unbounded_channel::<AgentXpResponse>();
+
         // --- Tokio tasks (Send-safe, no signals) ---
         crate::websocket::start_websocket_client(WS_URL.to_string(), event_tx, state_tx);
         start_status_polling(status_tx);
+        start_xp_polling(xp_tx);
 
         // --- Dioxus coroutines (UI thread, signal writes OK) ---
         self.bridge_events(event_rx);
         self.bridge_connection_state(state_rx);
         self.bridge_status(status_rx);
+        self.bridge_xp(xp_rx);
     }
 
     /// Return the most recent `count` events (newest first).
@@ -168,6 +212,8 @@ impl EventStreamStore {
         let mut heartbeat_state = self.heartbeat_state;
         let mut identity_state = self.identity_state;
         let mut provider_state = self.provider_state;
+        let mut channel_state = self.channel_state;
+        let mut toast_notifications = self.toast_notifications;
         spawn(async move {
             while let Some(envelope) = rx.recv().await {
                 // Track approval lifecycle events
@@ -195,6 +241,51 @@ impl EventStreamStore {
                         }
                     }
                     _ => {}
+                }
+
+                // Track XP events from SSE
+                if let EventType::Custom(ref name) = envelope.event_type {
+                    if name == "XpAwarded" {
+                        let amount = envelope
+                            .payload
+                            .get("xp_amount")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(0) as i32;
+                        let source = envelope
+                            .payload
+                            .get("source")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown")
+                            .to_string();
+                        let mut toasts = toast_notifications.write();
+                        let next_id = toasts.len() as u64;
+                        toasts.push(ToastNotification {
+                            id: next_id,
+                            kind: ToastKind::XpGained { amount, source },
+                            timestamp: envelope.timestamp,
+                        });
+                        if toasts.len() > 10 {
+                            let excess = toasts.len() - 10;
+                            toasts.drain(..excess);
+                        }
+                    } else if name == "XpLevelUp" {
+                        let new_level = envelope
+                            .payload
+                            .get("new_level")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(0) as i32;
+                        let mut toasts = toast_notifications.write();
+                        let next_id = toasts.len() as u64;
+                        toasts.push(ToastNotification {
+                            id: next_id,
+                            kind: ToastKind::LevelUp { new_level },
+                            timestamp: envelope.timestamp,
+                        });
+                        if toasts.len() > 10 {
+                            let excess = toasts.len() - 10;
+                            toasts.drain(..excess);
+                        }
+                    }
                 }
 
                 // Track heartbeat events
@@ -240,6 +331,25 @@ impl EventStreamStore {
                     }
                 }
 
+                // Track channel lifecycle events
+                if let EventType::Custom(ref name) = envelope.event_type {
+                    if name == "ChannelCreated"
+                        || name == "ChannelUpdated"
+                        || name == "ChannelDeleted"
+                        || name == "ChannelPaired"
+                    {
+                        let mut cs = channel_state.write();
+                        cs.last_channel_event = Some(envelope.timestamp);
+                        // Update counts from payload if available
+                        if let Some(total) = envelope.payload.get("total_channels").and_then(|v| v.as_u64()) {
+                            cs.total_channels = total as usize;
+                        }
+                        if let Some(running) = envelope.payload.get("running_channels").and_then(|v| v.as_u64()) {
+                            cs.running_channels = running as usize;
+                        }
+                    }
+                }
+
                 // Track soul update events
                 if matches!(envelope.event_type, EventType::SoulUpdated) {
                     let mut id_state = identity_state.write();
@@ -282,6 +392,55 @@ impl EventStreamStore {
             }
         });
     }
+
+    /// Dioxus-local coroutine that drains XP updates.
+    fn bridge_xp(&self, mut rx: mpsc::UnboundedReceiver<AgentXpResponse>) {
+        let mut xp_state = self.xp_state;
+        spawn(async move {
+            while let Some(resp) = rx.recv().await {
+                xp_state.set(XpState {
+                    identity_id: Some(resp.identity_id),
+                    total_xp: resp.total_xp,
+                    level: resp.level,
+                    xp_to_next_level: resp.xp_to_next_level,
+                    progress_pct: resp.progress_pct,
+                    milestone_feature: resp.milestone_feature,
+                });
+            }
+        });
+    }
+}
+
+/// Tokio task that polls the XP endpoint every 60 seconds.
+fn start_xp_polling(xp_tx: mpsc::UnboundedSender<AgentXpResponse>) {
+    tokio::spawn(async move {
+        let client = reqwest::Client::new();
+        let status_url = format!("{SERVER_BASE_URL}/v1/status");
+
+        loop {
+            // First get the identity_id from /v1/status
+            if let Ok(resp) = client.get(&status_url).send().await {
+                if let Ok(body) = resp.text().await {
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
+                        if let Some(id_str) = json.get("identity_id").and_then(|v| v.as_str()) {
+                            if let Ok(identity_id) = id_str.parse::<Uuid>() {
+                                let xp_url = format!(
+                                    "{SERVER_BASE_URL}/v1/xp/agents/{identity_id}"
+                                );
+                                if let Ok(xp_resp) = client.get(&xp_url).send().await {
+                                    if let Ok(xp) = xp_resp.json::<AgentXpResponse>().await {
+                                        let _ = xp_tx.send(xp);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            tokio::time::sleep(Duration::from_secs(60)).await;
+        }
+    });
 }
 
 /// Tokio task that polls the server status endpoint every 30 seconds
