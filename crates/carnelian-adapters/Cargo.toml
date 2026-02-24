@@ -1,0 +1,36 @@
+[package]
+name = "carnelian-adapters"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+carnelian-common = { path = "../carnelian-common" }
+carnelian-core = { path = "../carnelian-core" }
+tokio.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+sqlx.workspace = true
+tracing.workspace = true
+async-trait.workspace = true
+
+# Telegram bot framework
+teloxide = { version = "0.13", features = ["macros"] }
+# Discord bot framework
+serenity = { version = "0.12", features = ["client", "gateway", "model", "cache"] }
+# Rate limiting
+governor = "0.7"
+# Concurrent hash maps for spam score tracking
+dashmap = "6.0"
+
+[dev-dependencies]
+tokio-test.workspace = true
+
+[lints]
+workspace = true
