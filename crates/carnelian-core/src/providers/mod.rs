@@ -3,10 +3,9 @@
 //! Native Rust implementations for LLM provider APIs.
 //! Replaces the TypeScript gateway with direct provider communication.
 
-use crate::model_router::{CompletionChunk, CompletionRequest};
+use crate::model_router::{CompletionChunk, CompletionRequest, CompletionResponse};
 use carnelian_common::Result;
 use futures_util::stream::BoxStream;
-use serde::{Deserialize, Serialize};
 
 pub mod anthropic;
 pub mod fireworks;
