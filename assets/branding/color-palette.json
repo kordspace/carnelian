@@ -1,0 +1,194 @@
+{
+  "core": {
+    "obsidian": {
+      "hex": "#0B0E14",
+      "name": "Obsidian",
+      "usage": "Background / dark anchor"
+    },
+    "slate": {
+      "hex": "#2A2F3A",
+      "name": "Slate",
+      "usage": "Surfaces"
+    },
+    "bone": {
+      "hex": "#F2EFEA",
+      "name": "Bone",
+      "usage": "Light background / text"
+    },
+    "ink": {
+      "hex": "#10131A",
+      "name": "Ink",
+      "usage": "Light text"
+    }
+  },
+  "forge": {
+    "carnelianEmber": {
+      "hex": "#D24B2A",
+      "name": "Carnelian Ember",
+      "usage": "Primary"
+    },
+    "moltenOrange": {
+      "hex": "#E0613E",
+      "name": "Molten Orange",
+      "usage": "Hover / alt"
+    },
+    "signalGold": {
+      "hex": "#F2C14E",
+      "name": "Signal Gold",
+      "usage": "Accent"
+    },
+    "softGold": {
+      "hex": "#FFE7B0",
+      "name": "Soft Gold",
+      "usage": "Tint / background"
+    }
+  },
+  "nightLab": {
+    "deepEmerald": {
+      "hex": "#0F6B4C",
+      "name": "Deep Emerald",
+      "usage": "Primary accent"
+    },
+    "jadeGlow": {
+      "hex": "#39D98A",
+      "name": "Jade Glow",
+      "usage": "Interactive / links"
+    },
+    "moss": {
+      "hex": "#163C2D",
+      "name": "Moss",
+      "usage": "Muted surfaces"
+    },
+    "amethyst": {
+      "hex": "#7C4DFF",
+      "name": "Amethyst",
+      "usage": "Secondary accent"
+    },
+    "violetMist": {
+      "hex": "#B39DFF",
+      "name": "Violet Mist",
+      "usage": "Hover / tint"
+    },
+    "plumShadow": {
+      "hex": "#2A1748",
+      "name": "Plum Shadow",
+      "usage": "Depth"
+    }
+  },
+  "tokens": {
+    "light": {
+      "brandPrimary": {
+        "hex": "#D24B2A",
+        "name": "Carnelian Ember",
+        "usage": "Primary brand color (Forge)"
+      },
+      "brandSecondary": {
+        "hex": "#F2C14E",
+        "name": "Signal Gold",
+        "usage": "Secondary brand color (Forge)"
+      },
+      "bg": {
+        "hex": "#F2EFEA",
+        "name": "Bone",
+        "usage": "Page background"
+      },
+      "surface1": {
+        "hex": "#FFFFFF",
+        "name": "White",
+        "usage": "Card / panel background"
+      },
+      "surface2": {
+        "hex": "#F7F3EC",
+        "name": "Warm White",
+        "usage": "Secondary surface"
+      },
+      "border": {
+        "hex": "#E6DDCF",
+        "name": "Sand",
+        "usage": "Borders and dividers"
+      },
+      "text": {
+        "hex": "#10131A",
+        "name": "Ink",
+        "usage": "Primary text"
+      },
+      "stateSuccess": {
+        "hex": "#0F6B4C",
+        "name": "Deep Emerald",
+        "usage": "Success state"
+      },
+      "stateWarning": {
+        "hex": "#F2C14E",
+        "name": "Signal Gold",
+        "usage": "Warning state"
+      },
+      "stateDanger": {
+        "hex": "#C0392B",
+        "name": "Crimson",
+        "usage": "Danger / error state"
+      },
+      "stateInfo": {
+        "hex": "#2D6CDF",
+        "name": "Cobalt",
+        "usage": "Informational state"
+      }
+    },
+    "dark": {
+      "brandPrimary": {
+        "hex": "#39D98A",
+        "name": "Jade Glow",
+        "usage": "Primary brand color (Night Lab)"
+      },
+      "brandSecondary": {
+        "hex": "#7C4DFF",
+        "name": "Amethyst",
+        "usage": "Secondary brand color (Night Lab)"
+      },
+      "bg": {
+        "hex": "#0B0E14",
+        "name": "Obsidian",
+        "usage": "Page background"
+      },
+      "surface1": {
+        "hex": "#141824",
+        "name": "Dark Surface",
+        "usage": "Card / panel background"
+      },
+      "surface2": {
+        "hex": "#1B2030",
+        "name": "Deep Surface",
+        "usage": "Secondary surface"
+      },
+      "border": {
+        "hex": "#2A2F3A",
+        "name": "Slate",
+        "usage": "Borders and dividers"
+      },
+      "text": {
+        "hex": "#F2EFEA",
+        "name": "Bone",
+        "usage": "Primary text"
+      },
+      "stateSuccess": {
+        "hex": "#39D98A",
+        "name": "Jade Glow",
+        "usage": "Success state"
+      },
+      "stateWarning": {
+        "hex": "#D24B2A",
+        "name": "Carnelian Ember",
+        "usage": "Warning state (use sparingly)"
+      },
+      "stateDanger": {
+        "hex": "#FF5C5C",
+        "name": "Coral Red",
+        "usage": "Danger / error state"
+      },
+      "stateInfo": {
+        "hex": "#B39DFF",
+        "name": "Violet Mist",
+        "usage": "Informational state"
+      }
+    }
+  }
+}

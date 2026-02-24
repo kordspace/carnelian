@@ -1,0 +1,26 @@
+# =============================================================================
+# Urim Machine Profile — RTX 2080 Ti (11GB VRAM), 64GB RAM
+# =============================================================================
+# Recommended Ollama model: deepseek-r1:32b
+# High-end profile for production workloads
+# =============================================================================
+
+machine_profile = "urim"
+http_port = 18789
+
+skill_timeout_secs = 600
+skill_timeout_grace_period_secs = 5
+skill_max_output_bytes = 4194304
+skill_max_log_lines = 20000
+
+database_url = "postgresql://carnelian:carnelian@localhost:5432/carnelian"
+db_max_connections = 20
+db_connection_timeout_secs = 30
+db_idle_timeout_secs = 600
+
+log_level = "INFO"
+
+ollama_url = "http://localhost:11434"
+
+max_tasks_per_heartbeat = 10
+workspace_scan_paths = ["."]

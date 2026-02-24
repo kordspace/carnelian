@@ -1,0 +1,96 @@
+/*
+ * 🔥 Carnelian OS — Brand Design Tokens
+ *
+ * Canonical source of truth for colour and typography CSS custom properties.
+ * Referenced by crates/carnelian-ui/src/theme.rs.
+ *
+ * Themes:
+ *   :root            → Forge (Light Mode)
+ *   [data-theme="dark"] → Night Lab (Dark Mode)
+ */
+
+/* ===== Typography ===== */
+
+:root {
+  /* Font families */
+  --font-display: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-body:    'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono:    'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  /* Font sizes */
+  --font-size-xs:  11px;
+  --font-size-sm:  12px;
+  --font-size-base: 14px;
+  --font-size-md:  16px;
+  --font-size-lg:  18px;
+  --font-size-xl:  24px;
+  --font-size-2xl: 28px;
+  --font-size-3xl: 36px;
+
+  /* Font weights */
+  --font-weight-regular:  400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+
+  /* Line heights */
+  --line-height-tight:  1.2;
+  --line-height-snug:   1.3;
+  --line-height-normal: 1.5;
+
+  /* Letter spacing */
+  --letter-spacing-tight:  -0.02em;
+  --letter-spacing-snug:   -0.01em;
+  --letter-spacing-normal:  0;
+  --letter-spacing-wide:    0.02em;
+}
+
+/* ===== Light Mode: Forge (ember + gold) ===== */
+
+:root {
+  --brand-primary:   #D24B2A;
+  --brand-secondary: #F2C14E;
+  --bg:              #F2EFEA;
+  --surface-1:       #FFFFFF;
+  --surface-2:       #F7F3EC;
+  --border:          #E6DDCF;
+  --text:            #10131A;
+  --text-muted:      #2A2F3A;
+  --state-success:   #0F6B4C;
+  --state-warning:   #F2C14E;
+  --state-danger:    #C0392B;
+  --state-info:      #2D6CDF;
+
+  /* Forge-specific */
+  --forge-ember:     #D24B2A;
+  --forge-molten:    #E0613E;
+  --forge-gold:      #F2C14E;
+  --forge-soft-gold: #FFE7B0;
+}
+
+/* ===== Dark Mode: Night Lab (greens + purples) ===== */
+
+[data-theme="dark"] {
+  --brand-primary:   #39D98A;
+  --brand-secondary: #7C4DFF;
+  --bg:              #0B0E14;
+  --surface-1:       #141824;
+  --surface-2:       #1B2030;
+  --border:          #2A2F3A;
+  --text:            #F2EFEA;
+  --text-muted:      #8A8F9A;
+  --state-success:   #39D98A;
+  --state-warning:   #D24B2A;
+  --state-danger:    #FF5C5C;
+  --state-info:      #B39DFF;
+
+  /* Night Lab — Greens */
+  --nightlab-emerald: #0F6B4C;
+  --nightlab-jade:    #39D98A;
+  --nightlab-moss:    #163C2D;
+
+  /* Night Lab — Purples */
+  --nightlab-amethyst:    #7C4DFF;
+  --nightlab-violet-mist: #B39DFF;
+  --nightlab-plum-shadow: #2A1748;
+}
