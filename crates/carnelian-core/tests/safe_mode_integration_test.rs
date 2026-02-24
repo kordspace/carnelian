@@ -331,6 +331,8 @@ async fn test_safe_mode_blocks_task_execution() {
         &active_tasks,
         &metrics,
         &safe_mode_guard,
+        &None,
+        &None,
     )
     .await
     .expect("poll_task_queue should succeed even in safe mode");

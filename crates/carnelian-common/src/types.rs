@@ -832,6 +832,7 @@ pub struct GetMemoryResponse {
 // =============================================================================
 
 /// Request body for `POST /v1/memories/export`.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExportMemoryRequest {
     pub memory_ids: Vec<Uuid>,
@@ -963,7 +964,7 @@ pub struct OllamaStatusResponse {
 // =============================================================================
 
 /// Detail record for a sub-agent, returned by list/get endpoints.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubAgentDetail {
     pub sub_agent_id: Uuid,
     pub parent_id: Uuid,
@@ -1065,14 +1066,14 @@ pub struct WorkflowStepDef {
 }
 
 /// Retry policy for a workflow step.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowRetryPolicy {
     pub max_attempts: u32,
     #[serde(default = "default_retry_delay_secs")]
     pub delay_secs: u64,
 }
 
-fn default_retry_delay_secs() -> u64 {
+const fn default_retry_delay_secs() -> u64 {
     5
 }
 
@@ -1166,7 +1167,7 @@ pub struct WorkflowExecutionResponse {
 // =============================================================================
 
 /// Detail view of a channel session, returned by list/get endpoints.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChannelDetail {
     pub session_id: Uuid,
     pub channel_type: String,
@@ -1213,7 +1214,7 @@ fn default_trust_level() -> String {
     "conversational".to_string()
 }
 
-fn default_enabled() -> bool {
+const fn default_enabled() -> bool {
     true
 }
 
@@ -1393,7 +1394,7 @@ pub struct AwardXpResponse {
 // VOICE API TYPES
 // =============================================================================
 
-/// A single voice entry from ElevenLabs.
+/// A single voice entry from `ElevenLabs`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VoiceInfo {
     pub voice_id: String,

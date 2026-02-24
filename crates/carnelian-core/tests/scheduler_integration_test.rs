@@ -566,6 +566,8 @@ async fn test_poll_dequeues_in_priority_order() {
         &active_tasks,
         &metrics,
         &safe_mode_guard,
+        &None,
+        &None,
     )
     .await
     .expect("poll_task_queue should succeed");
@@ -664,6 +666,8 @@ async fn test_poll_respects_concurrency_limit() {
         &active_tasks,
         &metrics,
         &safe_mode_guard,
+        &None,
+        &None,
     )
     .await
     .expect("poll_task_queue should succeed");
@@ -708,6 +712,8 @@ async fn test_poll_respects_concurrency_limit() {
         &active_tasks,
         &metrics,
         &safe_mode_guard,
+        &None,
+        &None,
     )
     .await
     .expect("Second poll_task_queue should succeed");
