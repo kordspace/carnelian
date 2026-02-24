@@ -60,13 +60,12 @@ pub async fn load_bot_credential(
 ) -> Result<Option<String>> {
     let key = format!("channel.{channel_type}.{channel_id}.token");
 
-    let row: Option<(serde_json::Value,)> = sqlx::query_as(
-        r"SELECT value FROM config_store WHERE key = $1",
-    )
-    .bind(&key)
-    .fetch_optional(pool)
-    .await
-    .map_err(Error::Database)?;
+    let row: Option<(serde_json::Value,)> =
+        sqlx::query_as(r"SELECT value FROM config_store WHERE key = $1")
+            .bind(&key)
+            .fetch_optional(pool)
+            .await
+            .map_err(Error::Database)?;
 
     Ok(row.and_then(|(v,)| v.as_str().map(String::from)))
 }

@@ -191,10 +191,7 @@ impl SubAgentManager {
         }
 
         // Merge runtime into directives JSONB so it persists with the record
-        let mut merged_directives = request
-            .directives
-            .clone()
-            .unwrap_or_else(|| json!({}));
+        let mut merged_directives = request.directives.clone().unwrap_or_else(|| json!({}));
         if let Some(obj) = merged_directives.as_object_mut() {
             obj.insert("_runtime".to_string(), json!(request.runtime));
         }
@@ -276,9 +273,10 @@ impl SubAgentManager {
             }
         }
 
-        let sub_agent = self.get_sub_agent(identity_id).await?.ok_or_else(|| {
-            Error::Database(sqlx::Error::RowNotFound)
-        })?;
+        let sub_agent = self
+            .get_sub_agent(identity_id)
+            .await?
+            .ok_or_else(|| Error::Database(sqlx::Error::RowNotFound))?;
 
         tracing::info!(
             sub_agent_id = %identity_id,
@@ -436,9 +434,10 @@ impl SubAgentManager {
 
         tx.commit().await.map_err(Error::Database)?;
 
-        let sub_agent = self.get_sub_agent(sub_agent_id).await?.ok_or_else(|| {
-            Error::Database(sqlx::Error::RowNotFound)
-        })?;
+        let sub_agent = self
+            .get_sub_agent(sub_agent_id)
+            .await?
+            .ok_or_else(|| Error::Database(sqlx::Error::RowNotFound))?;
 
         tracing::info!(sub_agent_id = %sub_agent_id, "Sub-agent updated");
 
@@ -548,13 +547,11 @@ impl SubAgentManager {
 
     /// Update the `last_active_at` timestamp for a sub-agent.
     pub async fn update_last_active(&self, sub_agent_id: Uuid) -> Result<()> {
-        sqlx::query(
-            "UPDATE sub_agents SET last_active_at = NOW() WHERE sub_agent_id = $1",
-        )
-        .bind(sub_agent_id)
-        .execute(&self.pool)
-        .await
-        .map_err(Error::Database)?;
+        sqlx::query("UPDATE sub_agents SET last_active_at = NOW() WHERE sub_agent_id = $1")
+            .bind(sub_agent_id)
+            .execute(&self.pool)
+            .await
+            .map_err(Error::Database)?;
 
         Ok(())
     }

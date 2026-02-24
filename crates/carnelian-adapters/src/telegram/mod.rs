@@ -21,11 +21,11 @@ use carnelian_core::EventStream;
 use carnelian_core::policy::PolicyEngine;
 use carnelian_core::session::SessionManager;
 
+use crate::ChannelAdapter;
 use crate::events;
 use crate::rate_limiter::RateLimiter;
 use crate::spam_detector::SpamDetector;
 use crate::types::ChannelConfig;
-use crate::ChannelAdapter;
 
 /// Telegram bot adapter.
 ///

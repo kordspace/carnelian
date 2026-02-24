@@ -31,8 +31,8 @@ use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use carnelian_common::types::{
-    EventEnvelope, EventLevel, EventType, StepResultDetail, WorkflowDetail, WorkflowExecutionResponse,
-    WorkflowStepDef,
+    EventEnvelope, EventLevel, EventType, StepResultDetail, WorkflowDetail,
+    WorkflowExecutionResponse, WorkflowStepDef,
 };
 use carnelian_common::{Error, Result};
 
@@ -629,7 +629,10 @@ impl WorkflowEngine {
             .count();
 
         let (status, execution_summary) = if !has_failure {
-            ("success".to_string(), format!("All {} steps completed successfully", successful_steps))
+            (
+                "success".to_string(),
+                format!("All {} steps completed successfully", successful_steps),
+            )
         } else if successful_steps > 0 {
             (
                 "partial_success".to_string(),
@@ -641,7 +644,10 @@ impl WorkflowEngine {
                 ),
             )
         } else {
-            ("failed".to_string(), format!("All {} steps failed", failed_steps))
+            (
+                "failed".to_string(),
+                format!("All {} steps failed", failed_steps),
+            )
         };
 
         let event_type = if has_failure {
@@ -718,10 +724,7 @@ impl WorkflowEngine {
             .retry_policy
             .as_ref()
             .map_or(1, |p| p.max_attempts.max(1));
-        let delay_secs = step
-            .retry_policy
-            .as_ref()
-            .map_or(5, |p| p.delay_secs);
+        let delay_secs = step.retry_policy.as_ref().map_or(5, |p| p.delay_secs);
 
         let mut last_result = None;
 
@@ -773,20 +776,19 @@ impl WorkflowEngine {
         let step_start = Instant::now();
 
         // Resolve input parameters from context
-        let resolved_input = step
-            .input_mapping
-            .as_ref()
-            .map_or_else(|| json!({}), |mapping| Self::resolve_input(mapping, context));
+        let resolved_input = step.input_mapping.as_ref().map_or_else(
+            || json!({}),
+            |mapping| Self::resolve_input(mapping, context),
+        );
 
         // Look up the skill_id for this skill_name
-        let skill_id: Option<Uuid> = sqlx::query_scalar(
-            "SELECT skill_id FROM skills WHERE name = $1 AND enabled = true",
-        )
-        .bind(&step.skill_name)
-        .fetch_optional(&self.pool)
-        .await
-        .ok()
-        .flatten();
+        let skill_id: Option<Uuid> =
+            sqlx::query_scalar("SELECT skill_id FROM skills WHERE name = $1 AND enabled = true")
+                .bind(&step.skill_name)
+                .fetch_optional(&self.pool)
+                .await
+                .ok()
+                .flatten();
 
         let skill_id = match skill_id {
             Some(id) => id,
@@ -884,14 +886,13 @@ impl WorkflowEngine {
                     "failed" | "timeout" | "canceled" => {
                         // Also check the task-level state — the scheduler may
                         // have exhausted retries and marked the task as failed.
-                        let task_state: Option<String> = sqlx::query_scalar(
-                            "SELECT state FROM tasks WHERE task_id = $1",
-                        )
-                        .bind(task_id)
-                        .fetch_optional(&self.pool)
-                        .await
-                        .ok()
-                        .flatten();
+                        let task_state: Option<String> =
+                            sqlx::query_scalar("SELECT state FROM tasks WHERE task_id = $1")
+                                .bind(task_id)
+                                .fetch_optional(&self.pool)
+                                .await
+                                .ok()
+                                .flatten();
 
                         let is_terminal = matches!(
                             task_state.as_deref(),
@@ -904,7 +905,8 @@ impl WorkflowEngine {
                                 skill_name: step.skill_name.clone(),
                                 status: StepStatus::Failed,
                                 output: result,
-                                error: error.or_else(|| Some(format!("Step ended with state: {state}"))),
+                                error: error
+                                    .or_else(|| Some(format!("Step ended with state: {state}"))),
                                 duration_ms: step_start.elapsed().as_millis() as u64,
                             };
                         }
@@ -918,14 +920,13 @@ impl WorkflowEngine {
                 // No task_runs row yet — the scheduler hasn't picked it up.
                 // Also check if the task itself reached a terminal state
                 // (e.g. cancelled externally).
-                let task_state: Option<String> = sqlx::query_scalar(
-                    "SELECT state FROM tasks WHERE task_id = $1",
-                )
-                .bind(task_id)
-                .fetch_optional(&self.pool)
-                .await
-                .ok()
-                .flatten();
+                let task_state: Option<String> =
+                    sqlx::query_scalar("SELECT state FROM tasks WHERE task_id = $1")
+                        .bind(task_id)
+                        .fetch_optional(&self.pool)
+                        .await
+                        .ok()
+                        .flatten();
 
                 if matches!(task_state.as_deref(), Some("canceled")) {
                     return StepResult {
@@ -994,13 +995,16 @@ impl WorkflowEngine {
                     // parts[1] is "step_id.output.field..."
                     let rest: Vec<&str> = parts[1].splitn(2, '.').collect();
                     let step_id = rest[0];
-                    context.step_outputs.get(step_id).map_or(JsonValue::Null, |step_output| {
-                        if rest.len() > 1 {
-                            Self::navigate_json(step_output, rest[1])
-                        } else {
-                            step_output.clone()
-                        }
-                    })
+                    context
+                        .step_outputs
+                        .get(step_id)
+                        .map_or(JsonValue::Null, |step_output| {
+                            if rest.len() > 1 {
+                                Self::navigate_json(step_output, rest[1])
+                            } else {
+                                step_output.clone()
+                            }
+                        })
                 } else {
                     JsonValue::Null
                 }
@@ -1044,7 +1048,11 @@ impl WorkflowEngine {
     /// Evaluate a condition expression against the context.
     /// Simple implementation: checks if the condition resolves to a truthy value.
     #[allow(clippy::unused_self)]
-    fn evaluate_condition(&self, condition: &JsonValue, context: &WorkflowExecutionContext) -> bool {
+    fn evaluate_condition(
+        &self,
+        condition: &JsonValue,
+        context: &WorkflowExecutionContext,
+    ) -> bool {
         // If condition is a string starting with "$.", resolve it
         if let Some(expr) = condition.as_str() {
             if let Some(path) = expr.strip_prefix("$.") {
@@ -1118,7 +1126,9 @@ impl WorkflowEngine {
 
             // Check for common skill-related keywords
             let name_lower = skill_name.to_lowercase();
-            let keywords = ["analyze", "test", "review", "build", "deploy", "report", "lint", "format", "check"];
+            let keywords = [
+                "analyze", "test", "review", "build", "deploy", "report", "lint", "format", "check",
+            ];
             for kw in &keywords {
                 if name_lower.contains(kw) && desc_lower.contains(kw) {
                     score += 5;
@@ -1222,8 +1232,12 @@ impl WorkflowEngine {
         let workflow = Self::create_workflow_from_skills(skill_names, title);
 
         // Execute with task_id as correlation
-        self.execute_workflow_definition(&workflow, json!({"task_id": task_id.to_string()}), Some(task_id))
-            .await
+        self.execute_workflow_definition(
+            &workflow,
+            json!({"task_id": task_id.to_string()}),
+            Some(task_id),
+        )
+        .await
     }
 
     // =========================================================================
@@ -1308,10 +1322,7 @@ impl WorkflowEngine {
             .and_then(|s| Uuid::parse_str(s).ok())
             .ok_or_else(|| Error::Worker("Missing workflow_id in dispatch".into()))?;
 
-        let input = dispatch
-            .get("input")
-            .cloned()
-            .unwrap_or_else(|| json!({}));
+        let input = dispatch.get("input").cloned().unwrap_or_else(|| json!({}));
 
         let result = self
             .execute_workflow(workflow_id, input, Some(task_id))
@@ -1388,13 +1399,24 @@ impl WorkflowEngine {
         )
         .bind(task_id)
         .bind(format!("Workflow execution: {}", workflow.name))
-        .bind(format!("Workflow {} execution record", workflow.workflow_id))
-        .bind(if status == "success" { "completed" } else { "failed" })
+        .bind(format!(
+            "Workflow {} execution record",
+            workflow.workflow_id
+        ))
+        .bind(if status == "success" {
+            "completed"
+        } else {
+            "failed"
+        })
         .bind(correlation_id)
         .execute(&self.pool)
         .await;
 
-        let run_state = if status == "success" { "success" } else { "failed" };
+        let run_state = if status == "success" {
+            "success"
+        } else {
+            "failed"
+        };
 
         let _ = sqlx::query(
             r#"

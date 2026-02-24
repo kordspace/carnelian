@@ -11,12 +11,12 @@ use carnelian_common::types::{
     CreateSubAgentResponse, CreateTaskRequest, CreateTaskResponse, CreateWorkflowRequest,
     ExecuteWorkflowRequest, GrantCapabilityRequest, GrantCapabilityResponse, HeartbeatRecord,
     HeartbeatStatusResponse, IdentityResponse, ListApprovalsResponse, ListCapabilitiesResponse,
-    ListChannelsResponse, ListProvidersResponse, ListSkillsResponse, ListSubAgentsResponse,
-    ListTasksResponse, ListVoicesResponse, ListWorkflowsResponse, ListRunsResponse,
+    ListChannelsResponse, ListProvidersResponse, ListRunsResponse, ListSkillsResponse,
+    ListSubAgentsResponse, ListTasksResponse, ListVoicesResponse, ListWorkflowsResponse,
     MetricsSnapshot, OllamaStatusResponse, PaginatedRunLogsResponse, PairChannelApiRequest,
     PairChannelResponse, RevokeCapabilityResponse, RunDetail, SkillMetricsDetail,
-    SkillRefreshResponse, SkillToggleResponse, SubAgentActionResponse, SubAgentDetail,
-    TaskDetail, TestVoiceRequest, TestVoiceResponse, TopSkillsResponse, UpdateChannelApiRequest,
+    SkillRefreshResponse, SkillToggleResponse, SubAgentActionResponse, SubAgentDetail, TaskDetail,
+    TestVoiceRequest, TestVoiceResponse, TopSkillsResponse, UpdateChannelApiRequest,
     UpdateSubAgentApiRequest, UpdateWorkflowRequest, WorkflowDetail, WorkflowExecutionResponse,
     XpHistoryResponse, XpLeaderboardResponse,
 };
@@ -431,9 +431,7 @@ pub async fn list_sub_agents(
     parent_id: Option<Uuid>,
     include_terminated: bool,
 ) -> Result<ListSubAgentsResponse, String> {
-    let mut url = format!(
-        "{API_BASE_URL}/v1/sub-agents?include_terminated={include_terminated}"
-    );
+    let mut url = format!("{API_BASE_URL}/v1/sub-agents?include_terminated={include_terminated}");
     if let Some(pid) = parent_id {
         url.push_str(&format!("&parent_id={pid}"));
     }
@@ -519,7 +517,9 @@ pub async fn pause_sub_agent(sub_agent_id: Uuid) -> Result<SubAgentActionRespons
 /// Resume a paused sub-agent.
 pub async fn resume_sub_agent(sub_agent_id: Uuid) -> Result<SubAgentActionResponse, String> {
     client()
-        .post(format!("{API_BASE_URL}/v1/sub-agents/{sub_agent_id}/resume"))
+        .post(format!(
+            "{API_BASE_URL}/v1/sub-agents/{sub_agent_id}/resume"
+        ))
         .send()
         .await
         .map_err(|e| format!("Request failed: {e}"))?
@@ -558,9 +558,7 @@ pub async fn get_workflow(workflow_id: Uuid) -> Result<WorkflowDetail, String> {
 }
 
 /// Create a new workflow.
-pub async fn create_workflow(
-    request: CreateWorkflowRequest,
-) -> Result<WorkflowDetail, String> {
+pub async fn create_workflow(request: CreateWorkflowRequest) -> Result<WorkflowDetail, String> {
     let resp = client()
         .post(format!("{API_BASE_URL}/v1/workflows"))
         .json(&request)
@@ -618,9 +616,7 @@ pub async fn execute_workflow(
     request: ExecuteWorkflowRequest,
 ) -> Result<WorkflowExecutionResponse, String> {
     let resp = client()
-        .post(format!(
-            "{API_BASE_URL}/v1/workflows/{workflow_id}/execute"
-        ))
+        .post(format!("{API_BASE_URL}/v1/workflows/{workflow_id}/execute"))
         .json(&request)
         .send()
         .await

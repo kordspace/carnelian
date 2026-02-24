@@ -1795,9 +1795,8 @@ impl WorkerManager {
         let worker_id = format!("sub-agent-{}", sub_agent_id);
         let api_url = format!("http://localhost:{}", self.config.http_port);
 
-        let identity_pack_json = serde_json::to_string(&identity_pack).map_err(|e| {
-            Error::Config(format!("Failed to serialize identity pack: {}", e))
-        })?;
+        let identity_pack_json = serde_json::to_string(&identity_pack)
+            .map_err(|e| Error::Config(format!("Failed to serialize identity pack: {}", e)))?;
 
         let mut cmd = match runtime {
             WorkerRuntime::Node => {
@@ -1849,10 +1848,7 @@ impl WorkerManager {
             last_attestation_verified: None,
         };
 
-        self.workers
-            .write()
-            .await
-            .insert(worker_id.clone(), worker);
+        self.workers.write().await.insert(worker_id.clone(), worker);
 
         self.event_stream.publish(EventEnvelope::new(
             EventLevel::Info,

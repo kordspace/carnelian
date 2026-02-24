@@ -6,9 +6,9 @@
 //! - WASM modules (sandboxed execution)
 //! - TypeScript/Node.js workers (existing, process-based)
 
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use crate::skills::SkillManifest;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Unique identifier for a skill
 pub type SkillId = String;
@@ -18,14 +18,14 @@ pub type SkillId = String;
 pub struct SkillInput {
     /// Action to perform (e.g., "read", "write", "list")
     pub action: String,
-    
+
     /// Action parameters
     #[serde(default)]
     pub params: serde_json::Value,
-    
+
     /// Requestor identity
     pub identity_id: Option<uuid::Uuid>,
-    
+
     /// Session correlation ID
     pub correlation_id: Option<uuid::Uuid>,
 }
@@ -35,15 +35,15 @@ pub struct SkillInput {
 pub struct SkillOutput {
     /// Success status
     pub success: bool,
-    
+
     /// Output data
     #[serde(default)]
     pub data: serde_json::Value,
-    
+
     /// Error message if failed
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
-    
+
     /// Execution metadata
     #[serde(default)]
     pub metadata: HashMap<String, String>,
@@ -62,22 +62,22 @@ pub enum HealthStatus {
 pub struct SkillContext {
     /// Database connection pool
     pub pool: sqlx::PgPool,
-    
+
     /// Event stream for logging
     pub event_stream: crate::events::EventStream,
-    
+
     /// Capability grants for this execution
     pub capabilities: Vec<String>,
-    
+
     /// Identity of the requestor
     pub identity_id: Option<uuid::Uuid>,
-    
+
     /// Session correlation ID
     pub correlation_id: Option<uuid::Uuid>,
-    
+
     /// Task ID if part of a task
     pub task_id: Option<uuid::Uuid>,
-    
+
     /// Run ID if part of a task run
     pub run_id: Option<uuid::Uuid>,
 }
@@ -90,13 +90,13 @@ pub struct SkillContext {
 pub trait Skill: Send + Sync {
     /// Get the skill manifest
     fn manifest(&self) -> &SkillManifest;
-    
+
     /// Check if skill has required capabilities
     fn has_capabilities(&self, required: &[String]) -> bool {
         let available = self.manifest().capabilities_required.clone();
         required.iter().all(|cap| available.contains(cap))
     }
-    
+
     /// Invoke the skill with given input
     ///
     /// # Arguments
@@ -105,15 +105,19 @@ pub trait Skill: Send + Sync {
     ///
     /// # Returns
     /// Skill output with success status and data
-    async fn invoke(&self, ctx: &SkillContext, input: SkillInput) -> carnelian_common::Result<SkillOutput>;
-    
+    async fn invoke(
+        &self,
+        ctx: &SkillContext,
+        input: SkillInput,
+    ) -> carnelian_common::Result<SkillOutput>;
+
     /// Health check for the skill
     ///
     /// Default implementation returns Healthy
     async fn health(&self) -> HealthStatus {
         HealthStatus::Healthy
     }
-    
+
     /// Initialize the skill
     ///
     /// Called once when skill is loaded. Use for setup like:
@@ -123,7 +127,7 @@ pub trait Skill: Send + Sync {
     async fn init(&mut self) -> carnelian_common::Result<()> {
         Ok(())
     }
-    
+
     /// Shutdown the skill
     ///
     /// Called when skill is being unloaded. Use for cleanup.
@@ -160,11 +164,15 @@ macro_rules! export_skill {
             let skill = Box::new(<$skill_type>::new());
             Box::into_raw(skill)
         }
-        
+
         #[no_mangle]
-        pub extern "C" fn _carnelian_skill_destroy(skill: *mut dyn $crate::skills::skill_trait::Skill) {
+        pub extern "C" fn _carnelian_skill_destroy(
+            skill: *mut dyn $crate::skills::skill_trait::Skill,
+        ) {
             if !skill.is_null() {
-                unsafe { Box::from_raw(skill); }
+                unsafe {
+                    Box::from_raw(skill);
+                }
             }
         }
     };

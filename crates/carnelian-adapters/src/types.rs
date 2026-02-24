@@ -169,9 +169,7 @@ impl ChannelSession {
     /// Parse the stored `trust_level` string into a `TrustLevel` enum.
     #[must_use]
     pub fn parsed_trust_level(&self) -> TrustLevel {
-        self.trust_level
-            .parse()
-            .unwrap_or(TrustLevel::Untrusted)
+        self.trust_level.parse().unwrap_or(TrustLevel::Untrusted)
     }
 
     /// Parse the stored `channel_type` string into a `ChannelType` enum.

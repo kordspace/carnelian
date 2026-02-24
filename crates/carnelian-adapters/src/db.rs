@@ -114,13 +114,11 @@ pub async fn update_channel_session(
 ///
 /// Returns `true` if a row was deleted.
 pub async fn delete_channel_session(pool: &PgPool, session_id: Uuid) -> Result<bool> {
-    let result = sqlx::query(
-        r"DELETE FROM channel_sessions WHERE session_id = $1",
-    )
-    .bind(session_id)
-    .execute(pool)
-    .await
-    .map_err(Error::Database)?;
+    let result = sqlx::query(r"DELETE FROM channel_sessions WHERE session_id = $1")
+        .bind(session_id)
+        .execute(pool)
+        .await
+        .map_err(Error::Database)?;
 
     Ok(result.rows_affected() > 0)
 }
@@ -163,13 +161,11 @@ pub async fn list_channel_sessions(
 
 /// Update the `last_seen_at` timestamp for a channel session.
 pub async fn touch_channel_session(pool: &PgPool, session_id: Uuid) -> Result<()> {
-    sqlx::query(
-        r"UPDATE channel_sessions SET last_seen_at = NOW() WHERE session_id = $1",
-    )
-    .bind(session_id)
-    .execute(pool)
-    .await
-    .map_err(Error::Database)?;
+    sqlx::query(r"UPDATE channel_sessions SET last_seen_at = NOW() WHERE session_id = $1")
+        .bind(session_id)
+        .execute(pool)
+        .await
+        .map_err(Error::Database)?;
 
     Ok(())
 }

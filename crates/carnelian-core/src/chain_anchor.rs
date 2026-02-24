@@ -4,9 +4,9 @@
 //! ledger slice hashes in the local database, enabling verification and
 //! cross-instance proof material.
 
-use std::collections::HashMap;
-use sqlx::{PgPool, Row};
 use serde_json::Value;
+use sqlx::{PgPool, Row};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::memory::ChainAnchor;
@@ -58,7 +58,7 @@ impl ChainAnchor for LocalDbChainAnchor {
             INSERT INTO chain_anchors (hash, ledger_event_from, ledger_event_to, metadata)
             VALUES ($1, $2, $3, $4)
             RETURNING anchor_id
-            "#
+            "#,
         )
         .bind(hash)
         .bind(from_event)
@@ -68,7 +68,8 @@ impl ChainAnchor for LocalDbChainAnchor {
         .await
         .map_err(|e| Error::DatabaseMessage(format!("Failed to store chain anchor: {}", e)))?;
 
-        let anchor_id: Uuid = row.try_get("anchor_id")
+        let anchor_id: Uuid = row
+            .try_get("anchor_id")
             .map_err(|e| Error::DatabaseMessage(format!("Failed to extract anchor_id: {}", e)))?;
 
         tracing::info!(
@@ -95,29 +96,28 @@ impl ChainAnchor for LocalDbChainAnchor {
         let anchor_uuid = Uuid::parse_str(anchor_id)
             .map_err(|e| Error::Validation(format!("Invalid anchor_id UUID: {}", e)))?;
 
-        let row = sqlx::query(
-            "SELECT hash FROM chain_anchors WHERE anchor_id = $1"
-        )
-        .bind(anchor_uuid)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| Error::DatabaseMessage(format!("Failed to query anchor: {}", e)))?;
+        let row = sqlx::query("SELECT hash FROM chain_anchors WHERE anchor_id = $1")
+            .bind(anchor_uuid)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| Error::DatabaseMessage(format!("Failed to query anchor: {}", e)))?;
 
         match row {
             Some(row) => {
-                let stored_hash: String = row.try_get("hash")
-                    .map_err(|e| Error::DatabaseMessage(format!("Failed to extract hash: {}", e)))?;
+                let stored_hash: String = row.try_get("hash").map_err(|e| {
+                    Error::DatabaseMessage(format!("Failed to extract hash: {}", e))
+                })?;
                 let matches = stored_hash == hash;
 
                 // Update verified flag
-                sqlx::query(
-                    "UPDATE chain_anchors SET verified = $1 WHERE anchor_id = $2"
-                )
-                .bind(matches)
-                .bind(anchor_uuid)
-                .execute(&self.pool)
-                .await
-                .map_err(|e| Error::DatabaseMessage(format!("Failed to update verified flag: {}", e)))?;
+                sqlx::query("UPDATE chain_anchors SET verified = $1 WHERE anchor_id = $2")
+                    .bind(matches)
+                    .bind(anchor_uuid)
+                    .execute(&self.pool)
+                    .await
+                    .map_err(|e| {
+                        Error::DatabaseMessage(format!("Failed to update verified flag: {}", e))
+                    })?;
 
                 tracing::info!(
                     anchor_id = %anchor_uuid,
@@ -151,7 +151,7 @@ impl ChainAnchor for LocalDbChainAnchor {
                    published_at, metadata, verified
             FROM chain_anchors 
             WHERE anchor_id = $1
-            "#
+            "#,
         )
         .bind(anchor_uuid)
         .fetch_optional(&self.pool)
@@ -160,20 +160,28 @@ impl ChainAnchor for LocalDbChainAnchor {
 
         match row {
             Some(row) => {
-                let anchor_id: Uuid = row.try_get("anchor_id")
-                    .map_err(|e| Error::DatabaseMessage(format!("Failed to extract anchor_id: {}", e)))?;
-                let hash: String = row.try_get("hash")
-                    .map_err(|e| Error::DatabaseMessage(format!("Failed to extract hash: {}", e)))?;
-                let from_event: i64 = row.try_get("ledger_event_from")
-                    .map_err(|e| Error::DatabaseMessage(format!("Failed to extract from_event: {}", e)))?;
-                let to_event: i64 = row.try_get("ledger_event_to")
-                    .map_err(|e| Error::DatabaseMessage(format!("Failed to extract to_event: {}", e)))?;
-                let published_at: chrono::DateTime<chrono::Utc> = row.try_get("published_at")
-                    .map_err(|e| Error::DatabaseMessage(format!("Failed to extract published_at: {}", e)))?;
-                let metadata: Value = row.try_get("metadata")
-                    .map_err(|e| Error::DatabaseMessage(format!("Failed to extract metadata: {}", e)))?;
-                let verified: bool = row.try_get("verified")
-                    .map_err(|e| Error::DatabaseMessage(format!("Failed to extract verified: {}", e)))?;
+                let anchor_id: Uuid = row.try_get("anchor_id").map_err(|e| {
+                    Error::DatabaseMessage(format!("Failed to extract anchor_id: {}", e))
+                })?;
+                let hash: String = row.try_get("hash").map_err(|e| {
+                    Error::DatabaseMessage(format!("Failed to extract hash: {}", e))
+                })?;
+                let from_event: i64 = row.try_get("ledger_event_from").map_err(|e| {
+                    Error::DatabaseMessage(format!("Failed to extract from_event: {}", e))
+                })?;
+                let to_event: i64 = row.try_get("ledger_event_to").map_err(|e| {
+                    Error::DatabaseMessage(format!("Failed to extract to_event: {}", e))
+                })?;
+                let published_at: chrono::DateTime<chrono::Utc> =
+                    row.try_get("published_at").map_err(|e| {
+                        Error::DatabaseMessage(format!("Failed to extract published_at: {}", e))
+                    })?;
+                let metadata: Value = row.try_get("metadata").map_err(|e| {
+                    Error::DatabaseMessage(format!("Failed to extract metadata: {}", e))
+                })?;
+                let verified: bool = row.try_get("verified").map_err(|e| {
+                    Error::DatabaseMessage(format!("Failed to extract verified: {}", e))
+                })?;
 
                 let proof = serde_json::json!({
                     "anchor_id": anchor_id.to_string(),
@@ -205,7 +213,7 @@ pub async fn find_anchors_by_event_range(
         FROM chain_anchors 
         WHERE ledger_event_from <= $2 AND ledger_event_to >= $1
         ORDER BY ledger_event_from ASC
-        "#
+        "#,
     )
     .bind(to_event)
     .bind(from_event)
@@ -215,27 +223,47 @@ pub async fn find_anchors_by_event_range(
 
     let mut results = Vec::new();
     for row in rows {
-        let anchor_id: Uuid = row.try_get("anchor_id")
+        let anchor_id: Uuid = row
+            .try_get("anchor_id")
             .map_err(|e| Error::DatabaseMessage(format!("Failed to extract anchor_id: {}", e)))?;
-        let hash: String = row.try_get("hash")
+        let hash: String = row
+            .try_get("hash")
             .map_err(|e| Error::DatabaseMessage(format!("Failed to extract hash: {}", e)))?;
-        let from_event: i64 = row.try_get("ledger_event_from")
+        let from_event: i64 = row
+            .try_get("ledger_event_from")
             .map_err(|e| Error::DatabaseMessage(format!("Failed to extract from_event: {}", e)))?;
-        let to_event: i64 = row.try_get("ledger_event_to")
+        let to_event: i64 = row
+            .try_get("ledger_event_to")
             .map_err(|e| Error::DatabaseMessage(format!("Failed to extract to_event: {}", e)))?;
-        let published_at: chrono::DateTime<chrono::Utc> = row.try_get("published_at")
-            .map_err(|e| Error::DatabaseMessage(format!("Failed to extract published_at: {}", e)))?;
-        let metadata: Value = row.try_get("metadata")
+        let published_at: chrono::DateTime<chrono::Utc> =
+            row.try_get("published_at").map_err(|e| {
+                Error::DatabaseMessage(format!("Failed to extract published_at: {}", e))
+            })?;
+        let metadata: Value = row
+            .try_get("metadata")
             .map_err(|e| Error::DatabaseMessage(format!("Failed to extract metadata: {}", e)))?;
-        let verified: bool = row.try_get("verified")
+        let verified: bool = row
+            .try_get("verified")
             .map_err(|e| Error::DatabaseMessage(format!("Failed to extract verified: {}", e)))?;
 
         let mut anchor = HashMap::new();
-        anchor.insert("anchor_id".to_string(), Value::String(anchor_id.to_string()));
+        anchor.insert(
+            "anchor_id".to_string(),
+            Value::String(anchor_id.to_string()),
+        );
         anchor.insert("hash".to_string(), Value::String(hash));
-        anchor.insert("ledger_event_from".to_string(), Value::Number(from_event.into()));
-        anchor.insert("ledger_event_to".to_string(), Value::Number(to_event.into()));
-        anchor.insert("published_at".to_string(), Value::String(published_at.to_rfc3339()));
+        anchor.insert(
+            "ledger_event_from".to_string(),
+            Value::Number(from_event.into()),
+        );
+        anchor.insert(
+            "ledger_event_to".to_string(),
+            Value::Number(to_event.into()),
+        );
+        anchor.insert(
+            "published_at".to_string(),
+            Value::String(published_at.to_rfc3339()),
+        );
         anchor.insert("metadata".to_string(), metadata);
         anchor.insert("verified".to_string(), Value::Bool(verified));
         results.push(anchor);
@@ -245,10 +273,7 @@ pub async fn find_anchors_by_event_range(
 }
 
 /// List recent anchors (for discovery and sync).
-pub async fn list_recent_anchors(
-    pool: &PgPool,
-    limit: i64,
-) -> Result<Vec<HashMap<String, Value>>> {
+pub async fn list_recent_anchors(pool: &PgPool, limit: i64) -> Result<Vec<HashMap<String, Value>>> {
     let rows = sqlx::query(
         r#"
         SELECT anchor_id, hash, ledger_event_from, ledger_event_to, 
@@ -256,7 +281,7 @@ pub async fn list_recent_anchors(
         FROM chain_anchors 
         ORDER BY published_at DESC
         LIMIT $1
-        "#
+        "#,
     )
     .bind(limit)
     .fetch_all(pool)
@@ -265,27 +290,47 @@ pub async fn list_recent_anchors(
 
     let mut results = Vec::new();
     for row in rows {
-        let anchor_id: Uuid = row.try_get("anchor_id")
+        let anchor_id: Uuid = row
+            .try_get("anchor_id")
             .map_err(|e| Error::DatabaseMessage(format!("Failed to extract anchor_id: {}", e)))?;
-        let hash: String = row.try_get("hash")
+        let hash: String = row
+            .try_get("hash")
             .map_err(|e| Error::DatabaseMessage(format!("Failed to extract hash: {}", e)))?;
-        let from_event: i64 = row.try_get("ledger_event_from")
+        let from_event: i64 = row
+            .try_get("ledger_event_from")
             .map_err(|e| Error::DatabaseMessage(format!("Failed to extract from_event: {}", e)))?;
-        let to_event: i64 = row.try_get("ledger_event_to")
+        let to_event: i64 = row
+            .try_get("ledger_event_to")
             .map_err(|e| Error::DatabaseMessage(format!("Failed to extract to_event: {}", e)))?;
-        let published_at: chrono::DateTime<chrono::Utc> = row.try_get("published_at")
-            .map_err(|e| Error::DatabaseMessage(format!("Failed to extract published_at: {}", e)))?;
-        let metadata: Value = row.try_get("metadata")
+        let published_at: chrono::DateTime<chrono::Utc> =
+            row.try_get("published_at").map_err(|e| {
+                Error::DatabaseMessage(format!("Failed to extract published_at: {}", e))
+            })?;
+        let metadata: Value = row
+            .try_get("metadata")
             .map_err(|e| Error::DatabaseMessage(format!("Failed to extract metadata: {}", e)))?;
-        let verified: bool = row.try_get("verified")
+        let verified: bool = row
+            .try_get("verified")
             .map_err(|e| Error::DatabaseMessage(format!("Failed to extract verified: {}", e)))?;
 
         let mut anchor = HashMap::new();
-        anchor.insert("anchor_id".to_string(), Value::String(anchor_id.to_string()));
+        anchor.insert(
+            "anchor_id".to_string(),
+            Value::String(anchor_id.to_string()),
+        );
         anchor.insert("hash".to_string(), Value::String(hash));
-        anchor.insert("ledger_event_from".to_string(), Value::Number(from_event.into()));
-        anchor.insert("ledger_event_to".to_string(), Value::Number(to_event.into()));
-        anchor.insert("published_at".to_string(), Value::String(published_at.to_rfc3339()));
+        anchor.insert(
+            "ledger_event_from".to_string(),
+            Value::Number(from_event.into()),
+        );
+        anchor.insert(
+            "ledger_event_to".to_string(),
+            Value::Number(to_event.into()),
+        );
+        anchor.insert(
+            "published_at".to_string(),
+            Value::String(published_at.to_rfc3339()),
+        );
         anchor.insert("metadata".to_string(), metadata);
         anchor.insert("verified".to_string(), Value::Bool(verified));
         results.push(anchor);

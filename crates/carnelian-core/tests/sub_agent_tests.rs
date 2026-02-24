@@ -85,7 +85,13 @@ async fn test_create_sub_agent() {
     };
 
     let sub_agent = manager
-        .create_sub_agent(parent_id, parent_id, request.clone(), &policy_engine, Some(&ledger))
+        .create_sub_agent(
+            parent_id,
+            parent_id,
+            request.clone(),
+            &policy_engine,
+            Some(&ledger),
+        )
         .await
         .expect("Should create sub-agent");
 
@@ -131,7 +137,10 @@ async fn test_create_sub_agent_without_capability_fails() {
         .create_sub_agent(fake_parent, fake_parent, request, &policy_engine, None)
         .await;
 
-    assert!(result.is_err(), "Should fail without sub_agent.create capability");
+    assert!(
+        result.is_err(),
+        "Should fail without sub_agent.create capability"
+    );
     let err_msg = result.unwrap_err().to_string();
     assert!(
         err_msg.contains("sub_agent.create"),
@@ -249,7 +258,10 @@ async fn test_list_sub_agents_with_filters() {
     manager.delete_sub_agent(a2.sub_agent_id).await.unwrap();
 
     // List without terminated
-    let active = manager.list_sub_agents(Some(parent_id), false).await.unwrap();
+    let active = manager
+        .list_sub_agents(Some(parent_id), false)
+        .await
+        .unwrap();
     assert!(
         active.iter().any(|a| a.sub_agent_id == a1.sub_agent_id),
         "Active list should contain a1"
@@ -260,7 +272,10 @@ async fn test_list_sub_agents_with_filters() {
     );
 
     // List with terminated
-    let all = manager.list_sub_agents(Some(parent_id), true).await.unwrap();
+    let all = manager
+        .list_sub_agents(Some(parent_id), true)
+        .await
+        .unwrap();
     assert!(
         all.iter().any(|a| a.sub_agent_id == a2.sub_agent_id),
         "Full list should contain terminated a2"
@@ -372,15 +387,33 @@ async fn test_pause_and_resume_sub_agent() {
 
     // Pause
     manager.pause_sub_agent(created.sub_agent_id).await.unwrap();
-    let paused = manager.get_sub_agent(created.sub_agent_id).await.unwrap().unwrap();
+    let paused = manager
+        .get_sub_agent(created.sub_agent_id)
+        .await
+        .unwrap()
+        .unwrap();
     let directives = paused.directives.unwrap();
-    assert_eq!(directives["_paused"], json!(true), "Should have _paused flag");
+    assert_eq!(
+        directives["_paused"],
+        json!(true),
+        "Should have _paused flag"
+    );
 
     // Resume
-    manager.resume_sub_agent(created.sub_agent_id).await.unwrap();
-    let resumed = manager.get_sub_agent(created.sub_agent_id).await.unwrap().unwrap();
+    manager
+        .resume_sub_agent(created.sub_agent_id)
+        .await
+        .unwrap();
+    let resumed = manager
+        .get_sub_agent(created.sub_agent_id)
+        .await
+        .unwrap()
+        .unwrap();
     let directives = resumed.directives.unwrap();
-    assert!(directives.get("_paused").is_none(), "Should not have _paused flag after resume");
+    assert!(
+        directives.get("_paused").is_none(),
+        "Should not have _paused flag after resume"
+    );
 
     // Cleanup
     let _ = sqlx::query("DELETE FROM sub_agents WHERE sub_agent_id = $1")
@@ -426,15 +459,28 @@ async fn test_soft_delete_sub_agent() {
         .unwrap();
 
     // First delete should succeed
-    let deleted = manager.delete_sub_agent(created.sub_agent_id).await.unwrap();
+    let deleted = manager
+        .delete_sub_agent(created.sub_agent_id)
+        .await
+        .unwrap();
     assert!(deleted, "First delete should return true");
 
     // Verify terminated_at is set
-    let terminated = manager.get_sub_agent(created.sub_agent_id).await.unwrap().unwrap();
-    assert!(terminated.terminated_at.is_some(), "terminated_at should be set");
+    let terminated = manager
+        .get_sub_agent(created.sub_agent_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        terminated.terminated_at.is_some(),
+        "terminated_at should be set"
+    );
 
     // Second delete should return false (already terminated)
-    let deleted_again = manager.delete_sub_agent(created.sub_agent_id).await.unwrap();
+    let deleted_again = manager
+        .delete_sub_agent(created.sub_agent_id)
+        .await
+        .unwrap();
     assert!(!deleted_again, "Second delete should return false");
 
     // Delete non-existent

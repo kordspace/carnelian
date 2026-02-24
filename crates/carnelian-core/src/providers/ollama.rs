@@ -11,7 +11,10 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::model_router::{Choice, ChunkChoice, ChunkDelta, CompletionChunk, CompletionRequest, CompletionResponse, Message, UsageStats};
+use crate::model_router::{
+    Choice, ChunkChoice, ChunkDelta, CompletionChunk, CompletionRequest, CompletionResponse,
+    Message, UsageStats,
+};
 use crate::providers::Provider;
 use carnelian_common::{Error, Result};
 
@@ -73,17 +76,17 @@ impl OllamaProvider {
     /// Build the full prompt string
     fn build_prompt(&self, system: Option<String>, conversation: Vec<String>) -> String {
         let mut prompt = String::new();
-        
+
         if let Some(sys) = system {
             prompt.push_str(&sys);
             prompt.push_str("\n\n");
         }
-        
+
         for line in conversation {
             prompt.push_str(&line);
             prompt.push('\n');
         }
-        
+
         prompt.push_str("Assistant: ");
         prompt
     }
@@ -101,8 +104,14 @@ impl Provider for OllamaProvider {
 
     async fn health_check(&self) -> Result<bool> {
         let url = format!("{}/api/tags", self.base_url);
-        
-        match self.client.get(&url).timeout(Duration::from_secs(5)).send().await {
+
+        match self
+            .client
+            .get(&url)
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await
+        {
             Ok(resp) => Ok(resp.status().is_success()),
             Err(_) => Ok(false),
         }
@@ -110,26 +119,26 @@ impl Provider for OllamaProvider {
 
     async fn list_models(&self) -> Result<Vec<String>> {
         let url = format!("{}/api/tags", self.base_url);
-        
+
         let resp = self
             .client
             .get(&url)
             .send()
             .await
             .map_err(|e| Error::ModelRouting(format!("Ollama list models failed: {e}")))?;
-        
+
         if !resp.status().is_success() {
             return Err(Error::ModelRouting(format!(
                 "Ollama returned status {}",
                 resp.status()
             )));
         }
-        
+
         let data: serde_json::Value = resp
             .json()
             .await
             .map_err(|e| Error::ModelRouting(format!("Failed to parse Ollama response: {e}")))?;
-        
+
         let models: Vec<String> = data["models"]
             .as_array()
             .map(|arr| {
@@ -138,13 +147,15 @@ impl Provider for OllamaProvider {
                     .collect()
             })
             .unwrap_or_default();
-        
+
         Ok(models)
     }
 
     async fn has_model(&self, model: &str) -> Result<bool> {
         let models = self.list_models().await?;
-        Ok(models.iter().any(|m| m == model || m.starts_with(&format!("{}", model))))
+        Ok(models
+            .iter()
+            .any(|m| m == model || m.starts_with(&format!("{}", model))))
     }
 
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
@@ -152,7 +163,7 @@ impl Provider for OllamaProvider {
         let prompt = self.build_prompt(system, conversation);
 
         let url = format!("{}/api/generate", self.base_url);
-        
+
         let body = json!({
             "model": request.model,
             "prompt": prompt,
@@ -225,7 +236,7 @@ impl Provider for OllamaProvider {
 
         let url = format!("{}/api/generate", self.base_url);
         let model = request.model.clone();
-        
+
         let body = json!({
             "model": request.model,
             "prompt": prompt,
@@ -266,18 +277,18 @@ impl Provider for OllamaProvider {
                 match chunk_result {
                     Ok(bytes) => {
                         let text = String::from_utf8_lossy(&bytes);
-                        
+
                         for line in text.lines() {
                             if line.is_empty() {
                                 continue;
                             }
-                            
+
                             // Each line is a JSON object
                             match serde_json::from_str::<serde_json::Value>(line) {
                                 Ok(data) => {
                                     if let Some(response_text) = data["response"].as_str() {
                                         accumulated.push_str(response_text);
-                                        
+
                                         let chunk = CompletionChunk {
                                             id: chunk_id.clone(),
                                             model: model.clone(),
@@ -290,11 +301,11 @@ impl Provider for OllamaProvider {
                                                 finish_reason: None,
                                             }],
                                         };
-                                        
+
                                         yield Ok(chunk);
                                         chunk_index += 1;
                                     }
-                                    
+
                                     // Check if done
                                     if data["done"].as_bool() == Some(true) {
                                         let final_chunk = CompletionChunk {

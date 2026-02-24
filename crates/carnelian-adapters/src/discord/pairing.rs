@@ -16,9 +16,9 @@ use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
 use carnelian_core::EventStream;
 use carnelian_core::policy::PolicyEngine;
 
+use crate::db as channel_db;
 use crate::events;
 use crate::types::{PairingRequest, TrustLevel};
-use crate::db as channel_db;
 
 /// Handle the `!pair` command.
 ///
@@ -42,10 +42,27 @@ pub async fn handle_pair(
         initiate_pairing(ctx, msg, &channel_id, db_pool, identity_id, None).await
     } else if let Ok(requested_trust) = trimmed.parse::<TrustLevel>() {
         // Argument is a trust level name — initiate with that level
-        initiate_pairing(ctx, msg, &channel_id, db_pool, identity_id, Some(requested_trust)).await
+        initiate_pairing(
+            ctx,
+            msg,
+            &channel_id,
+            db_pool,
+            identity_id,
+            Some(requested_trust),
+        )
+        .await
     } else {
         // Argument is a pairing token — verify and complete
-        complete_pairing(ctx, msg, &channel_id, trimmed, db_pool, event_stream, policy_engine).await
+        complete_pairing(
+            ctx,
+            msg,
+            &channel_id,
+            trimmed,
+            db_pool,
+            event_stream,
+            policy_engine,
+        )
+        .await
     }
 }
 
@@ -108,7 +125,10 @@ async fn complete_pairing(
         Some(s) => s,
         None => {
             msg.channel_id
-                .say(&ctx.http, "❌ No pending pairing found. Use `!pair` to start.")
+                .say(
+                    &ctx.http,
+                    "❌ No pending pairing found. Use `!pair` to start.",
+                )
                 .await?;
             return Ok(());
         }
@@ -138,7 +158,10 @@ async fn complete_pairing(
     if let Ok(expires_at) = chrono::DateTime::parse_from_rfc3339(expires_str) {
         if chrono::Utc::now() > expires_at {
             msg.channel_id
-                .say(&ctx.http, "❌ Pairing token has expired. Use `!pair` to generate a new one.")
+                .say(
+                    &ctx.http,
+                    "❌ Pairing token has expired. Use `!pair` to generate a new one.",
+                )
                 .await?;
             return Ok(());
         }
@@ -175,13 +198,8 @@ async fn complete_pairing(
         "discord_guild_id": msg.guild_id.map(|g| g.to_string()),
     });
 
-    channel_db::update_channel_session(
-        db_pool,
-        session.session_id,
-        trust_level.as_str(),
-        metadata,
-    )
-    .await?;
+    channel_db::update_channel_session(db_pool, session.session_id, trust_level.as_str(), metadata)
+        .await?;
 
     // Grant capabilities
     for cap in trust_level.capabilities() {

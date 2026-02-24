@@ -254,27 +254,34 @@ fn render_channel_row(
     let trust_badge = trust_level_badge_class(&channel.trust_level);
     let pairing_text = pairing_status_text(&channel.metadata);
     let pairing_class = pairing_status_class(&channel.metadata);
-    let status_text = if channel.adapter_running { "Running" } else { "Stopped" };
+    let status_text = if channel.adapter_running {
+        "Running"
+    } else {
+        "Stopped"
+    };
     let status_class = if channel.adapter_running {
         "badge-status badge-running"
     } else {
         "badge-status badge-cancelled"
     };
-    let status_dot = if channel.adapter_running { "\u{1F7E2}" } else { "\u{26AB}" };
+    let status_dot = if channel.adapter_running {
+        "\u{1F7E2}"
+    } else {
+        "\u{26AB}"
+    };
 
     // Comment 4: Show last message text + relative time, falling back to last_seen_at
-    let last_message_display = if let (Some(text), Some(at)) =
-        (&channel.last_message_text, channel.last_message_at)
-    {
-        let truncated = if text.len() > 30 {
-            format!("{}\u{2026}", &text[..30])
+    let last_message_display =
+        if let (Some(text), Some(at)) = (&channel.last_message_text, channel.last_message_at) {
+            let truncated = if text.len() > 30 {
+                format!("{}\u{2026}", &text[..30])
+            } else {
+                text.clone()
+            };
+            format!("{} ({})", truncated, format_relative_time(at))
         } else {
-            text.clone()
+            format_relative_time(channel.last_seen_at)
         };
-        format!("{} ({})", truncated, format_relative_time(at))
-    } else {
-        format_relative_time(channel.last_seen_at)
-    };
 
     let name_display = if channel.channel_user_id.len() > 24 {
         format!("{}\u{2026}", &channel.channel_user_id[..24])
@@ -290,7 +297,11 @@ fn render_channel_row(
     // Comment 3: Disable/enable toggle
     let is_enabled = channel.enabled;
     let toggle_label = if is_enabled { "Disable" } else { "Enable" };
-    let toggle_class = if is_enabled { "btn-secondary btn-sm" } else { "btn-primary btn-sm" };
+    let toggle_class = if is_enabled {
+        "btn-secondary btn-sm"
+    } else {
+        "btn-primary btn-sm"
+    };
     let session_id = channel.session_id;
     let mut refresh_sig = *refresh;
 

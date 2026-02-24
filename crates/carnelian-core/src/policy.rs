@@ -311,7 +311,7 @@ impl PolicyEngine {
     /// Check if a grant has been revoked (for cross-instance revocation checking)
     pub async fn is_grant_revoked(&self, grant_id: Uuid) -> Result<bool> {
         let exists: Option<(bool,)> = sqlx::query_as(
-            "SELECT EXISTS(SELECT 1 FROM revoked_capability_grants WHERE grant_id = $1)"
+            "SELECT EXISTS(SELECT 1 FROM revoked_capability_grants WHERE grant_id = $1)",
         )
         .bind(grant_id)
         .fetch_optional(&self.pool)
@@ -322,10 +322,7 @@ impl PolicyEngine {
     }
 
     /// List revoked grants since a given timestamp (for cross-instance sync)
-    pub async fn list_revoked_since(
-        &self,
-        since: DateTime<Utc>,
-    ) -> Result<Vec<RevokedGrantInfo>> {
+    pub async fn list_revoked_since(&self, since: DateTime<Utc>) -> Result<Vec<RevokedGrantInfo>> {
         let rows = sqlx::query_as::<_, RevokedGrantInfo>(
             r#"SELECT 
                 grant_id,
@@ -562,7 +559,7 @@ impl PolicyEngine {
                   AND capability_key = 'memory.read'
                   AND (expires_at IS NULL OR expires_at > NOW())
                   AND scope @> jsonb_build_object('topics', jsonb_build_array($2))
-            )"#
+            )"#,
         )
         .bind(identity_id.to_string())
         .bind(topic)

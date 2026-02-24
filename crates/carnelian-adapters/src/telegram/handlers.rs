@@ -90,8 +90,11 @@ async fn handle_message(
     // 2. Check rate limit
     if let Err(e) = rate_limiter.check_rate_limit("telegram", &chat_id, trust_level) {
         tracing::warn!(%e, "Rate limit exceeded for Telegram user");
-        bot.send_message(msg.chat.id, "⏳ You're sending messages too quickly. Please slow down.")
-            .await?;
+        bot.send_message(
+            msg.chat.id,
+            "⏳ You're sending messages too quickly. Please slow down.",
+        )
+        .await?;
         return Ok(());
     }
 

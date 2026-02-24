@@ -11,7 +11,10 @@ use reqwest::Client;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap};
 use serde::{Deserialize, Serialize};
 
-use crate::model_router::{Choice, ChunkChoice, ChunkDelta, CompletionChunk, CompletionRequest, CompletionResponse, Message, UsageStats};
+use crate::model_router::{
+    Choice, ChunkChoice, ChunkDelta, CompletionChunk, CompletionRequest, CompletionResponse,
+    Message, UsageStats,
+};
 use crate::providers::Provider;
 use carnelian_common::{Error, Result};
 
@@ -27,7 +30,7 @@ impl FireworksProvider {
     /// Create a new Fireworks provider
     pub fn new(api_key: impl Into<String>) -> Self {
         let api_key = api_key.into();
-        
+
         let mut headers = HeaderMap::new();
         headers.insert(
             AUTHORIZATION,
@@ -140,8 +143,14 @@ impl Provider for FireworksProvider {
         // Fireworks doesn't have a simple health endpoint
         // Try a simple API call to check connectivity
         let url = format!("{}/models", self.base_url);
-        
-        match self.client.get(&url).timeout(Duration::from_secs(10)).send().await {
+
+        match self
+            .client
+            .get(&url)
+            .timeout(Duration::from_secs(10))
+            .send()
+            .await
+        {
             Ok(resp) => Ok(resp.status().is_success()),
             Err(_) => Ok(false),
         }
@@ -167,14 +176,14 @@ impl Provider for FireworksProvider {
         if model.starts_with("accounts/fireworks/") {
             return Ok(true);
         }
-        
+
         let models = self.list_models().await?;
         Ok(models.iter().any(|m| m == model))
     }
 
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
         let url = format!("{}/chat/completions", self.base_url);
-        
+
         let fireworks_request = FireworksRequest {
             model: request.model,
             messages: self.convert_messages(&request.messages),
@@ -207,16 +216,20 @@ impl Provider for FireworksProvider {
         Ok(CompletionResponse {
             id: data.id,
             model: data.model,
-            choices: data.choices.into_iter().map(|c| Choice {
-                index: c.index,
-                message: Message {
-                    role: c.message.role,
-                    content: c.message.content,
-                    name: None,
-                    tool_call_id: None,
-                },
-                finish_reason: c.finish_reason,
-            }).collect(),
+            choices: data
+                .choices
+                .into_iter()
+                .map(|c| Choice {
+                    index: c.index,
+                    message: Message {
+                        role: c.message.role,
+                        content: c.message.content,
+                        name: None,
+                        tool_call_id: None,
+                    },
+                    finish_reason: c.finish_reason,
+                })
+                .collect(),
             usage: UsageStats {
                 prompt_tokens: data.usage.prompt_tokens,
                 completion_tokens: data.usage.completion_tokens,
@@ -232,7 +245,7 @@ impl Provider for FireworksProvider {
     ) -> Result<BoxStream<'static, Result<CompletionChunk>>> {
         let url = format!("{}/chat/completions", self.base_url);
         let model = request.model.clone();
-        
+
         let fireworks_request = FireworksRequest {
             model: request.model,
             messages: self.convert_messages(&request.messages),
@@ -269,21 +282,21 @@ impl Provider for FireworksProvider {
                 match chunk_result {
                     Ok(bytes) => {
                         buffer.push_str(&String::from_utf8_lossy(&bytes));
-                        
+
                         // Process complete SSE events
                         while let Some(pos) = buffer.find("\n\n") {
                             let event = buffer[..pos].to_string();
                             buffer = buffer[pos + 2..].to_string();
-                            
+
                             // Parse SSE event
                             for line in event.lines() {
                                 if let Some(data) = line.strip_prefix("data: ") {
                                     let data = data.trim();
-                                    
+
                                     if data == "[DONE]" {
                                         return;
                                     }
-                                    
+
                                     match serde_json::from_str::<FireworksStreamResponse>(data) {
                                         Ok(stream_resp) => {
                                             for choice in stream_resp.choices {

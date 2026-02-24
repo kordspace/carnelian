@@ -5,8 +5,8 @@
 
 use std::sync::Arc;
 
-use carnelian_common::{Error, Result};
 use carnelian_common::types::VoiceInfo;
+use carnelian_common::{Error, Result};
 use sqlx::PgPool;
 use tokio::sync::Semaphore;
 use uuid::Uuid;

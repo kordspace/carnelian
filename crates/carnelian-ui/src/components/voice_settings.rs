@@ -22,9 +22,7 @@ pub fn VoiceSettings() -> Element {
 
     let eval = eval;
 
-    let voices = use_resource(|| async {
-        crate::api::list_voices().await.ok()
-    });
+    let voices = use_resource(|| async { crate::api::list_voices().await.ok() });
 
     let voices_read = voices.read();
     let voice_list = (*voices_read).as_ref().and_then(|o| o.as_ref());

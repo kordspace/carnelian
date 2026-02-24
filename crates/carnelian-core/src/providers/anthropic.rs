@@ -12,7 +12,10 @@ use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::model_router::{Choice, ChunkChoice, ChunkDelta, CompletionChunk, CompletionRequest, CompletionResponse, Message, UsageStats};
+use crate::model_router::{
+    Choice, ChunkChoice, ChunkDelta, CompletionChunk, CompletionRequest, CompletionResponse,
+    Message, UsageStats,
+};
 use crate::providers::Provider;
 use carnelian_common::{Error, Result};
 
@@ -28,16 +31,13 @@ impl AnthropicProvider {
     /// Create a new Anthropic provider
     pub fn new(api_key: impl Into<String>) -> Self {
         let api_key = api_key.into();
-        
+
         let mut headers = HeaderMap::new();
         headers.insert(
             "x-api-key",
             HeaderValue::from_str(&api_key).expect("Invalid API key format"),
         );
-        headers.insert(
-            "anthropic-version",
-            HeaderValue::from_static("2023-06-01"),
-        );
+        headers.insert("anthropic-version", HeaderValue::from_static("2023-06-01"));
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
         let client = Client::builder()
@@ -67,7 +67,12 @@ impl AnthropicProvider {
                 }
                 _ => {
                     anthropic_messages.push(AnthropicMessage {
-                        role: if msg.role == "assistant" { "assistant" } else { "user" }.to_string(),
+                        role: if msg.role == "assistant" {
+                            "assistant"
+                        } else {
+                            "user"
+                        }
+                        .to_string(),
                         content: msg.content.clone(),
                     });
                 }
@@ -172,8 +177,14 @@ impl Provider for AnthropicProvider {
     async fn health_check(&self) -> Result<bool> {
         // Anthropic doesn't have a simple health endpoint, so check if we can list models
         let url = format!("{}/models", self.base_url);
-        
-        match self.client.get(&url).timeout(Duration::from_secs(10)).send().await {
+
+        match self
+            .client
+            .get(&url)
+            .timeout(Duration::from_secs(10))
+            .send()
+            .await
+        {
             Ok(resp) => Ok(resp.status().is_success()),
             Err(_) => Ok(false),
         }
@@ -181,14 +192,14 @@ impl Provider for AnthropicProvider {
 
     async fn list_models(&self) -> Result<Vec<String>> {
         let url = format!("{}/models", self.base_url);
-        
+
         let resp = self
             .client
             .get(&url)
             .send()
             .await
             .map_err(|e| Error::ModelRouting(format!("Anthropic list models failed: {e}")))?;
-        
+
         if !resp.status().is_success() {
             // Anthropic may not support model listing in all API versions
             // Return common Claude models as fallback
@@ -200,12 +211,12 @@ impl Provider for AnthropicProvider {
                 "claude-3-haiku-20240307".to_string(),
             ]);
         }
-        
+
         let data: AnthropicModelsResponse = resp
             .json()
             .await
             .map_err(|e| Error::ModelRouting(format!("Failed to parse Anthropic response: {e}")))?;
-        
+
         let models: Vec<String> = data.data.into_iter().map(|m| m.id).collect();
         Ok(models)
     }
@@ -215,16 +226,16 @@ impl Provider for AnthropicProvider {
         if model.to_lowercase().starts_with("claude") {
             return Ok(true);
         }
-        
+
         let models = self.list_models().await?;
         Ok(models.iter().any(|m| m == model))
     }
 
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
         let url = format!("{}/messages", self.base_url);
-        
+
         let (system, messages) = self.convert_messages(&request.messages);
-        
+
         let anthropic_request = AnthropicRequest {
             model: request.model,
             messages,
@@ -256,7 +267,9 @@ impl Provider for AnthropicProvider {
             .map_err(|e| Error::ModelRouting(format!("Failed to parse Anthropic response: {e}")))?;
 
         // Combine all content blocks into single content
-        let content = data.content.iter()
+        let content = data
+            .content
+            .iter()
             .filter(|c| c.content_type == "text")
             .map(|c| c.text.clone())
             .collect::<Vec<_>>()
@@ -290,9 +303,9 @@ impl Provider for AnthropicProvider {
     ) -> Result<BoxStream<'static, Result<CompletionChunk>>> {
         let url = format!("{}/messages", self.base_url);
         let model = request.model.clone();
-        
+
         let (system, messages) = self.convert_messages(&request.messages);
-        
+
         let anthropic_request = AnthropicRequest {
             model: request.model,
             messages,
@@ -332,16 +345,16 @@ impl Provider for AnthropicProvider {
                 match chunk_result {
                     Ok(bytes) => {
                         buffer.push_str(&String::from_utf8_lossy(&bytes));
-                        
+
                         // Process complete SSE events
                         while let Some(pos) = buffer.find("\n\n") {
                             let event_text = buffer[..pos].to_string();
                             buffer = buffer[pos + 2..].to_string();
-                            
+
                             // Parse SSE event
                             let mut event_type = String::new();
                             let mut event_data = String::new();
-                            
+
                             for line in event_text.lines() {
                                 if let Some(et) = line.strip_prefix("event: ") {
                                     event_type = et.to_string();
@@ -349,11 +362,11 @@ impl Provider for AnthropicProvider {
                                     event_data = data.to_string();
                                 }
                             }
-                            
+
                             if event_data.is_empty() {
                                 continue;
                             }
-                            
+
                             match serde_json::from_str::<AnthropicStreamEvent>(&event_data) {
                                 Ok(event) => {
                                     match event.event_type.as_str() {

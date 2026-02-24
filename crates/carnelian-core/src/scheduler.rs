@@ -894,11 +894,7 @@ impl Scheduler {
 
             // Check if this is a workflow-dispatch task
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&desc_str) {
-                if parsed
-                    .get("_workflow_dispatch")
-                    .and_then(|d| d.as_bool())
-                    == Some(true)
-                {
+                if parsed.get("_workflow_dispatch").and_then(|d| d.as_bool()) == Some(true) {
                     tracing::info!(
                         task_id = %task_id,
                         "Detected workflow-dispatch task, delegating to WorkflowEngine"
@@ -1324,24 +1320,31 @@ impl Scheduler {
                             .flatten();
 
                             if let Some(agent_id) = assigned_to {
-                                let mut total_xp = crate::xp::XpManager::calculate_task_xp(duration_ms);
+                                let mut total_xp =
+                                    crate::xp::XpManager::calculate_task_xp(duration_ms);
 
                                 // First skill use bonus
                                 if let Some(sid) = skill_id {
-                                    if let Ok(true) = xp_mgr.is_first_skill_use(agent_id, sid).await {
+                                    if let Ok(true) = xp_mgr.is_first_skill_use(agent_id, sid).await
+                                    {
                                         total_xp += 10;
                                     }
                                 }
 
-                                let source = crate::xp::XpSource::TaskCompletion { task_id, skill_id };
-                                if let Err(e) = xp_mgr.award_xp(agent_id, source, total_xp, None).await {
+                                let source =
+                                    crate::xp::XpSource::TaskCompletion { task_id, skill_id };
+                                if let Err(e) =
+                                    xp_mgr.award_xp(agent_id, source, total_xp, None).await
+                                {
                                     tracing::warn!(error = %e, task_id = %task_id, "Failed to award task XP");
                                 }
                             }
 
                             // Update skill metrics on success
                             if let Some(sid) = skill_id {
-                                if let Err(e) = xp_mgr.update_skill_metrics(sid, duration_ms, true).await {
+                                if let Err(e) =
+                                    xp_mgr.update_skill_metrics(sid, duration_ms, true).await
+                                {
                                     tracing::warn!(error = %e, skill_id = %sid, "Failed to update skill metrics");
                                 }
                             }
@@ -1382,7 +1385,9 @@ impl Scheduler {
                         // Track skill failure metrics
                         if let Some(xp_mgr) = xp_manager {
                             if let Some(sid) = skill_id {
-                                if let Err(e) = xp_mgr.update_skill_metrics(sid, duration_ms, false).await {
+                                if let Err(e) =
+                                    xp_mgr.update_skill_metrics(sid, duration_ms, false).await
+                                {
                                     tracing::warn!(error = %e, skill_id = %sid, "Failed to update skill metrics on failure");
                                 }
                             }

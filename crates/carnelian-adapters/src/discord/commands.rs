@@ -41,7 +41,16 @@ pub async fn handle_prefix_command(
         "!start" | "!hello" => handle_start(ctx, msg).await,
         "!help" => handle_help(ctx, msg).await,
         "!pair" => {
-            super::pairing::handle_pair(ctx, msg, args, db_pool, event_stream, policy_engine, identity_id).await
+            super::pairing::handle_pair(
+                ctx,
+                msg,
+                args,
+                db_pool,
+                event_stream,
+                policy_engine,
+                identity_id,
+            )
+            .await
         }
         "!status" => handle_status(ctx, msg, db_pool).await,
         "!unpair" => handle_unpair(ctx, msg, db_pool, event_stream).await,

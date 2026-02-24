@@ -4,8 +4,7 @@
 use std::collections::HashMap;
 
 use carnelian_common::types::{
-    CreateSubAgentApiRequest, EventType, ProviderDetail, SubAgentDetail,
-    UpdateSubAgentApiRequest,
+    CreateSubAgentApiRequest, EventType, ProviderDetail, SubAgentDetail, UpdateSubAgentApiRequest,
 };
 use dioxus::prelude::*;
 use uuid::Uuid;
@@ -874,13 +873,23 @@ fn ConfirmActionModal(
     };
 
     let message = match action.as_str() {
-        "pause" => format!("Are you sure you want to pause sub-agent \"{sub_agent_name}\"? Its worker process will be stopped."),
-        "resume" => format!("Are you sure you want to resume sub-agent \"{sub_agent_name}\"? A new worker process will be spawned."),
-        "terminate" => format!("Are you sure you want to terminate sub-agent \"{sub_agent_name}\"? This action cannot be undone."),
+        "pause" => format!(
+            "Are you sure you want to pause sub-agent \"{sub_agent_name}\"? Its worker process will be stopped."
+        ),
+        "resume" => format!(
+            "Are you sure you want to resume sub-agent \"{sub_agent_name}\"? A new worker process will be spawned."
+        ),
+        "terminate" => format!(
+            "Are you sure you want to terminate sub-agent \"{sub_agent_name}\"? This action cannot be undone."
+        ),
         _ => format!("Are you sure you want to {action} sub-agent \"{sub_agent_name}\"?"),
     };
 
-    let btn_class = if action == "terminate" { "btn-danger" } else { "btn-primary" };
+    let btn_class = if action == "terminate" {
+        "btn-danger"
+    } else {
+        "btn-primary"
+    };
 
     rsx! {
         div {

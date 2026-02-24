@@ -84,8 +84,8 @@ use chrono::{DateTime, Duration, Utc};
 use ed25519_dalek::SigningKey;
 use pgvector::Vector;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use serde_json::Value as JsonValue;
+use serde_json::json;
 use sqlx::{FromRow, PgPool, Row};
 use uuid::Uuid;
 
@@ -1585,7 +1585,9 @@ impl MemoryManager {
         }
 
         if envelopes.is_empty() {
-            return Err(Error::Memory("No memories matched export criteria".to_string()));
+            return Err(Error::Memory(
+                "No memories matched export criteria".to_string(),
+            ));
         }
 
         // Serialize batch to CBOR
@@ -1637,7 +1639,9 @@ impl MemoryManager {
         // 1. Verify signature if requested
         let cbor_data = if verify_signature {
             if envelope_bytes.len() < 64 {
-                return Err(Error::Memory("Envelope too short for signature verification".to_string()));
+                return Err(Error::Memory(
+                    "Envelope too short for signature verification".to_string(),
+                ));
             }
             let sig_bytes = &envelope_bytes[..64];
             let cbor_payload = &envelope_bytes[64..];
@@ -1649,7 +1653,9 @@ impl MemoryManager {
 
             let valid = crate::crypto::verify_signature(pk, cbor_payload, &sig_hex)?;
             if !valid {
-                return Err(Error::Memory("Envelope signature verification failed".to_string()));
+                return Err(Error::Memory(
+                    "Envelope signature verification failed".to_string(),
+                ));
             }
             cbor_payload
         } else {
@@ -1669,16 +1675,17 @@ impl MemoryManager {
             if let Some(topic_filter) = envelope.metadata.get("topic_filter") {
                 let topics: Vec<&str> = topic_filter.split(',').map(|s| s.trim()).collect();
                 let policy_engine = crate::policy::PolicyEngine::new(self.pool.clone());
-                
+
                 for topic in topics {
                     let has_capability = policy_engine
                         .check_memory_topic_capability(identity_id, topic)
                         .await?;
-                    
+
                     if !has_capability {
-                        return Err(Error::Security(
-                            format!("Topic capability denied: {}", topic)
-                        ));
+                        return Err(Error::Security(format!(
+                            "Topic capability denied: {}",
+                            topic
+                        )));
                     }
                 }
             }
@@ -1693,7 +1700,9 @@ impl MemoryManager {
         }
 
         // 4. Decrypt content
-        let decrypted = self.decrypt_content_bytes(&envelope.encrypted_content).await?;
+        let decrypted = self
+            .decrypt_content_bytes(&envelope.encrypted_content)
+            .await?;
 
         // 5. Deserialize JSON to memory fields
         let mem_json: JsonValue = serde_json::from_slice(&decrypted)
@@ -1703,13 +1712,9 @@ impl MemoryManager {
             .as_str()
             .ok_or_else(|| Error::Memory("Missing 'content' field in envelope".to_string()))?;
         let summary = mem_json["summary"].as_str().map(String::from);
-        let source_str = mem_json["source"]
-            .as_str()
-            .unwrap_or("observation");
+        let source_str = mem_json["source"].as_str().unwrap_or("observation");
         let source = MemorySource::from_str(source_str).unwrap_or(MemorySource::Observation);
-        let importance = mem_json["importance"]
-            .as_f64()
-            .unwrap_or(0.5) as f32;
+        let importance = mem_json["importance"].as_f64().unwrap_or(0.5) as f32;
 
         // 6. Verify ledger proof if present
         let ledger_proof_valid = if let Some(ref proof) = envelope.ledger_proof {
@@ -1724,19 +1729,36 @@ impl MemoryManager {
 
         // 7. Create new memory
         let memory = self
-            .create_memory(identity_id, content, summary, source, None, importance, None)
+            .create_memory(
+                identity_id,
+                content,
+                summary,
+                source,
+                None,
+                importance,
+                None,
+            )
             .await?;
 
         // 8. Recreate capability grants if present
         for grant in &envelope.capability_grants {
-            if let Err(e) = self.recreate_capability_grant(memory.memory_id, grant).await {
-                warnings.push(format!("Failed to recreate capability grant {}: {}", grant.grant_id, e));
+            if let Err(e) = self
+                .recreate_capability_grant(memory.memory_id, grant)
+                .await
+            {
+                warnings.push(format!(
+                    "Failed to recreate capability grant {}: {}",
+                    grant.grant_id, e
+                ));
             }
         }
 
         // 9. Add embedding if present
         if let Some(ref emb) = envelope.embedding {
-            if let Err(e) = self.add_embedding_to_memory(memory.memory_id, emb.clone()).await {
+            if let Err(e) = self
+                .add_embedding_to_memory(memory.memory_id, emb.clone())
+                .await
+            {
                 warnings.push(format!("Failed to add embedding: {}", e));
             }
         }
@@ -1810,7 +1832,9 @@ impl MemoryManager {
         //    so individual envelopes do not carry their own signatures.
         let (cbor_data, batch_verified) = if verify_signature {
             if batch_bytes.len() < 64 {
-                return Err(Error::Memory("Batch too short for signature verification".to_string()));
+                return Err(Error::Memory(
+                    "Batch too short for signature verification".to_string(),
+                ));
             }
             let sig_bytes = &batch_bytes[..64];
             let cbor_payload = &batch_bytes[64..];
@@ -1822,7 +1846,9 @@ impl MemoryManager {
 
             let valid = crate::crypto::verify_signature(pk, cbor_payload, &sig_hex)?;
             if !valid {
-                return Err(Error::Memory("Batch signature verification failed".to_string()));
+                return Err(Error::Memory(
+                    "Batch signature verification failed".to_string(),
+                ));
             }
             (cbor_payload, true)
         } else {
@@ -2009,15 +2035,15 @@ impl MemoryManager {
             .fetch_optional(&self.pool)
             .await?;
 
-        Ok(row.map(|(event_id, ts, event_hash, prev_hash, core_signature)| {
-            LedgerProofMaterial {
+        Ok(row.map(
+            |(event_id, ts, event_hash, prev_hash, core_signature)| LedgerProofMaterial {
                 event_id,
                 event_hash,
                 prev_hash,
                 core_signature,
                 timestamp: ts,
-            }
-        }))
+            },
+        ))
     }
 
     /// Retrieve capability grants associated with a memory.
@@ -2025,28 +2051,35 @@ impl MemoryManager {
         &self,
         memory_id: Uuid,
     ) -> Result<Vec<CapabilityGrantMetadata>> {
-        let rows: Vec<(Uuid, String, Option<JsonValue>, Option<Uuid>, Option<DateTime<Utc>>)> =
-            sqlx::query_as(
-                r"SELECT grant_id, capability_key, scope, approved_by, expires_at
+        let rows: Vec<(
+            Uuid,
+            String,
+            Option<JsonValue>,
+            Option<Uuid>,
+            Option<DateTime<Utc>>,
+        )> = sqlx::query_as(
+            r"SELECT grant_id, capability_key, scope, approved_by, expires_at
                   FROM capability_grants
                   WHERE subject_type = 'external_key' AND subject_id = $1::text
                   ORDER BY grant_id",
-            )
-            .bind(memory_id.to_string())
-            .fetch_all(&self.pool)
-            .await?;
+        )
+        .bind(memory_id.to_string())
+        .fetch_all(&self.pool)
+        .await?;
 
         Ok(rows
             .into_iter()
-            .map(|(grant_id, capability_key, scope, approved_by, expires_at)| {
-                CapabilityGrantMetadata {
-                    grant_id,
-                    capability_key,
-                    scope,
-                    approved_by,
-                    expires_at,
-                }
-            })
+            .map(
+                |(grant_id, capability_key, scope, approved_by, expires_at)| {
+                    CapabilityGrantMetadata {
+                        grant_id,
+                        capability_key,
+                        scope,
+                        approved_by,
+                        expires_at,
+                    }
+                },
+            )
             .collect())
     }
 
@@ -2120,9 +2153,7 @@ impl MemoryManager {
     ) -> Result<()> {
         // Check if grant has been revoked using PolicyEngine (cross-instance revocation check)
         let policy_engine = crate::policy::PolicyEngine::new(self.pool.clone());
-        let is_revoked = policy_engine
-            .is_grant_revoked(grant.grant_id)
-            .await?;
+        let is_revoked = policy_engine.is_grant_revoked(grant.grant_id).await?;
 
         if is_revoked {
             tracing::warn!(grant_id = %grant.grant_id, "Grant has been revoked on this instance, skipping recreation");
@@ -2498,7 +2529,10 @@ mod tests {
             embedding: None,
             metadata: {
                 let mut m = HashMap::new();
-                m.insert("exported_at".to_string(), "2025-01-01T00:00:00Z".to_string());
+                m.insert(
+                    "exported_at".to_string(),
+                    "2025-01-01T00:00:00Z".to_string(),
+                );
                 m
             },
             chain_anchor: None,
@@ -2629,8 +2663,8 @@ mod tests {
         assert_eq!(signed_payload.len(), 64 + cbor_bytes.len());
         let extracted_sig = hex::encode(&signed_payload[..64]);
         let extracted_cbor = &signed_payload[64..];
-        let valid = verify_signature(&public_key_hex, extracted_cbor, &extracted_sig)
-            .expect("verify");
+        let valid =
+            verify_signature(&public_key_hex, extracted_cbor, &extracted_sig).expect("verify");
         assert!(valid);
 
         // Tampered payload should fail
@@ -2667,7 +2701,10 @@ mod tests {
         assert!(!verified.unwrap());
 
         let proof = rt.block_on(anchor.get_anchor_proof("anchor_id"));
-        assert_eq!(proof.unwrap(), serde_json::json!({"status": "not_implemented"}));
+        assert_eq!(
+            proof.unwrap(),
+            serde_json::json!({"status": "not_implemented"})
+        );
     }
 
     #[test]
@@ -2815,8 +2852,8 @@ mod tests {
         }
         let tampered_sig = hex::encode(&tampered_batch[..64]);
         let tampered_cbor = &tampered_batch[64..];
-        let tampered_valid =
-            verify_signature(&public_key_hex, tampered_cbor, &tampered_sig).expect("verify tampered");
+        let tampered_valid = verify_signature(&public_key_hex, tampered_cbor, &tampered_sig)
+            .expect("verify tampered");
         assert!(
             !tampered_valid,
             "Tampered batch signature should be invalid"

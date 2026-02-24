@@ -12,8 +12,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use async_trait::async_trait;
 use serde_json::json;
-use serenity::all::{ChannelId, GatewayIntents, Http};
 use serenity::Client;
+use serenity::all::{ChannelId, GatewayIntents, Http};
 use sqlx::PgPool;
 use tokio::sync::RwLock;
 
@@ -22,11 +22,11 @@ use carnelian_core::EventStream;
 use carnelian_core::policy::PolicyEngine;
 use carnelian_core::session::SessionManager;
 
+use crate::ChannelAdapter;
 use crate::events;
 use crate::rate_limiter::RateLimiter;
 use crate::spam_detector::SpamDetector;
 use crate::types::ChannelConfig;
-use crate::ChannelAdapter;
 
 /// Discord bot adapter.
 ///
@@ -214,12 +214,9 @@ impl ChannelAdapter for DiscordAdapter {
     }
 
     async fn send_message(&self, channel_user_id: &str, text: &str) -> anyhow::Result<()> {
-        let http = self
-            .http_client
-            .read()
-            .await
-            .clone()
-            .ok_or_else(|| anyhow::anyhow!("Discord HTTP client not available — adapter may not be running"))?;
+        let http = self.http_client.read().await.clone().ok_or_else(|| {
+            anyhow::anyhow!("Discord HTTP client not available — adapter may not be running")
+        })?;
 
         let channel_id: u64 = channel_user_id
             .parse()

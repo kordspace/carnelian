@@ -553,10 +553,19 @@ async fn test_criterion1_system_startup_complete() {
         status["queue_depth"].is_number(),
         "Status should have queue_depth"
     );
-    assert!(status.get("identity_id").is_some(), "Status should have identity_id");
+    assert!(
+        status.get("identity_id").is_some(),
+        "Status should have identity_id"
+    );
     assert!(status["version"].is_string(), "Status should have version");
-    assert!(status["machine_profile"].is_string(), "Status should have machine_profile");
-    assert!(status.get("uptime_seconds").is_some(), "Status should have uptime_seconds");
+    assert!(
+        status["machine_profile"].is_string(),
+        "Status should have machine_profile"
+    );
+    assert!(
+        status.get("uptime_seconds").is_some(),
+        "Status should have uptime_seconds"
+    );
 
     // Verify WebSocket availability
     let (_write, mut read) = connect_websocket(port).await;

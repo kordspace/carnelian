@@ -105,9 +105,9 @@ pub mod session;
 pub mod skills;
 pub mod soul;
 pub mod sub_agent;
+pub mod voice;
 pub mod worker;
 pub mod workflow;
-pub mod voice;
 pub mod xp;
 
 use std::env;
@@ -142,10 +142,12 @@ pub use server::{AppState, Server};
 pub use session::{Session, SessionKey, SessionManager, SessionMessage, TokenCounters};
 pub use skills::{SkillDiscovery, SkillManifest};
 pub use soul::SoulManager;
-pub use sub_agent::{SubAgent, SubAgentManager, CreateSubAgentRequest, UpdateSubAgentRequest, IdentityPack};
+pub use sub_agent::{
+    CreateSubAgentRequest, IdentityPack, SubAgent, SubAgentManager, UpdateSubAgentRequest,
+};
+pub use voice::VoiceGateway;
 pub use worker::WorkerManager;
 pub use workflow::WorkflowEngine;
-pub use voice::VoiceGateway;
 pub use xp::XpManager;
 
 /// Core orchestrator version

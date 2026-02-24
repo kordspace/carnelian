@@ -113,12 +113,11 @@ impl XpManager {
     /// Uses `ON CONFLICT DO NOTHING` for idempotency. Fetches the initial
     /// `xp_to_next_level` from `level_progression WHERE level = 2`.
     pub async fn ensure_agent_xp(&self, identity_id: Uuid) -> Result<()> {
-        let xp_to_next: Option<i64> = sqlx::query_scalar(
-            "SELECT total_xp_required FROM level_progression WHERE level = 2",
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(Error::Database)?;
+        let xp_to_next: Option<i64> =
+            sqlx::query_scalar("SELECT total_xp_required FROM level_progression WHERE level = 2")
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(Error::Database)?;
 
         let xp_to_next = xp_to_next.unwrap_or(100);
 
@@ -165,9 +164,7 @@ impl XpManager {
             XpSource::TaskCompletion { task_id, skill_id } => {
                 (Some(*task_id), *skill_id, None::<i64>)
             }
-            XpSource::LedgerSigning { ledger_event_id } => {
-                (None, None, Some(*ledger_event_id))
-            }
+            XpSource::LedgerSigning { ledger_event_id } => (None, None, Some(*ledger_event_id)),
             XpSource::SkillUsage { skill_id } => (None, Some(*skill_id), None),
             XpSource::QualityBonus => (None, None, None),
         };
@@ -272,11 +269,7 @@ impl XpManager {
     // =========================================================================
 
     /// Check whether this is the first time the identity has used the given skill.
-    pub async fn is_first_skill_use(
-        &self,
-        identity_id: Uuid,
-        skill_id: Uuid,
-    ) -> Result<bool> {
+    pub async fn is_first_skill_use(&self, identity_id: Uuid, skill_id: Uuid) -> Result<bool> {
         let exists: Option<i64> = sqlx::query_scalar(
             "SELECT xp_event_id FROM xp_events \
              WHERE identity_id = $1 AND skill_id = $2 \
@@ -333,13 +326,12 @@ impl XpManager {
         .map_err(Error::Database)?;
 
         // Recalculate skill_level from level_progression
-        let total_xp: Option<i64> = sqlx::query_scalar(
-            "SELECT total_xp_earned FROM skill_metrics WHERE skill_id = $1",
-        )
-        .bind(skill_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(Error::Database)?;
+        let total_xp: Option<i64> =
+            sqlx::query_scalar("SELECT total_xp_earned FROM skill_metrics WHERE skill_id = $1")
+                .bind(skill_id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(Error::Database)?;
 
         if let Some(total_xp) = total_xp {
             let skill_level: Option<i32> = sqlx::query_scalar(
@@ -377,12 +369,10 @@ impl XpManager {
     /// 3. **Fast execution bonus** (+10% XP): Below-average task duration
     pub async fn run_quality_bonus_check(&self, pool: &PgPool) -> Result<()> {
         // Get all identities with agent_xp rows
-        let agents: Vec<(Uuid, i64)> = sqlx::query_as(
-            "SELECT identity_id, total_xp FROM agent_xp",
-        )
-        .fetch_all(pool)
-        .await
-        .map_err(Error::Database)?;
+        let agents: Vec<(Uuid, i64)> = sqlx::query_as("SELECT identity_id, total_xp FROM agent_xp")
+            .fetch_all(pool)
+            .await
+            .map_err(Error::Database)?;
 
         if agents.is_empty() {
             tracing::debug!("No agents with XP rows, skipping quality bonus check");

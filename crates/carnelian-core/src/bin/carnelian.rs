@@ -206,8 +206,12 @@ async fn main() {
         Commands::Init => handle_init(cli.config, cli.log_level, cli.database_url).await,
         Commands::Ui => handle_ui().await,
         Commands::Keygen { output } => handle_keygen(output).await,
-        Commands::Key { command } => handle_key(command, cli.config, cli.log_level, cli.database_url).await,
-        Commands::MigrateFromThummim { path } => handle_migrate_from_thummim(path, cli.config, cli.log_level, cli.database_url).await,
+        Commands::Key { command } => {
+            handle_key(command, cli.config, cli.log_level, cli.database_url).await
+        }
+        Commands::MigrateFromThummim { path } => {
+            handle_migrate_from_thummim(path, cli.config, cli.log_level, cli.database_url).await
+        }
     };
 
     if let Err(e) = result {
@@ -993,12 +997,15 @@ async fn handle_init(
     _log_level_override: Option<String>,
     _database_url_override: Option<String>,
 ) -> carnelian_common::Result<()> {
-    use std::io::{stdin, stdout, Write};
+    use std::io::{Write, stdin, stdout};
 
     // Welcome banner
     println!("╔═══════════════════════════════════════════════════════════════╗");
     println!("║ 🔥 Carnelian OS Setup Wizard                              ║");
-    println!("║   Version {}                                           ║", carnelian_common::VERSION);
+    println!(
+        "║   Version {}                                           ║",
+        carnelian_common::VERSION
+    );
     println!("╚═══════════════════════════════════════════════════════════════╝");
     println!();
 
@@ -1029,7 +1036,11 @@ async fn handle_init(
     let mut profile = String::new();
     stdin().read_line(&mut profile).unwrap();
     let profile = profile.trim();
-    let machine_profile = if profile.is_empty() { "thummim" } else { profile };
+    let machine_profile = if profile.is_empty() {
+        "thummim"
+    } else {
+        profile
+    };
 
     // Database URL
     print!("Database URL [postgresql://carnelian:carnelian@localhost:5432/carnelian]: ");
@@ -1072,7 +1083,11 @@ async fn handle_init(
     let workspace_paths = if paths.trim().is_empty() {
         vec![".".to_string()]
     } else {
-        paths.trim().split(',').map(|s| s.trim().to_string()).collect()
+        paths
+            .trim()
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .collect()
     };
 
     // Owner keypair
@@ -1086,8 +1101,10 @@ async fn handle_init(
     let home_dir = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".to_string());
-    let default_keypair_path = PathBuf::from(&home_dir).join(".carnelian").join("owner.key");
-    
+    let default_keypair_path = PathBuf::from(&home_dir)
+        .join(".carnelian")
+        .join("owner.key");
+
     // Track the actual key path for machine.toml
     let mut actual_keypair_path: Option<PathBuf> = None;
 
@@ -1120,7 +1137,7 @@ async fn handle_init(
         println!("✓ Generated new owner keypair");
         println!("  Public key (hex): {}", hex::encode(public_key.as_bytes()));
         println!("  Private key file: {}", default_keypair_path.display());
-        
+
         actual_keypair_path = Some(default_keypair_path);
     } else {
         print!("Path to existing key file (or press Enter to skip): ");
@@ -1131,9 +1148,10 @@ async fn handle_init(
         if !key_path.is_empty() {
             let path = std::path::Path::new(key_path);
             if !path.exists() {
-                return Err(carnelian_common::Error::Config(
-                    format!("Key file not found: {}", key_path)
-                ));
+                return Err(carnelian_common::Error::Config(format!(
+                    "Key file not found: {}",
+                    key_path
+                )));
             }
             println!("✓ Using existing key: {}", key_path);
             actual_keypair_path = Some(PathBuf::from(key_path));
@@ -1152,10 +1170,26 @@ async fn handle_init(
         if overwrite.trim().to_lowercase() != "y" {
             println!("Skipped writing machine.toml");
         } else {
-            write_machine_toml(&machine_toml_path, machine_profile, &database_url, &ollama_url, http_port, &workspace_paths, actual_keypair_path.as_ref())?;
+            write_machine_toml(
+                &machine_toml_path,
+                machine_profile,
+                &database_url,
+                &ollama_url,
+                http_port,
+                &workspace_paths,
+                actual_keypair_path.as_ref(),
+            )?;
         }
     } else {
-        write_machine_toml(&machine_toml_path, machine_profile, &database_url, &ollama_url, http_port, &workspace_paths, actual_keypair_path.as_ref())?;
+        write_machine_toml(
+            &machine_toml_path,
+            machine_profile,
+            &database_url,
+            &ollama_url,
+            http_port,
+            &workspace_paths,
+            actual_keypair_path.as_ref(),
+        )?;
     }
 
     // Run migrations
@@ -1168,7 +1202,7 @@ async fn handle_init(
         // Create minimal config for migrations
         let mut config = Config::default();
         config.database_url = database_url.clone();
-        
+
         println!("Connecting to database...");
         if let Err(e) = config.connect_database().await {
             println!("⚠ Failed to connect to database: {}", e);
@@ -1195,7 +1229,13 @@ async fn handle_init(
     println!("  2. Launch UI:         carnelian ui");
     println!("  3. Check status:      carnelian status");
     println!();
-    println!("Configuration file: {}", machine_toml_path.canonicalize().unwrap_or(machine_toml_path).display());
+    println!(
+        "Configuration file: {}",
+        machine_toml_path
+            .canonicalize()
+            .unwrap_or(machine_toml_path)
+            .display()
+    );
 
     Ok(())
 }
@@ -1222,7 +1262,8 @@ fn write_machine_toml(
         String::new()
     };
 
-    let content = format!(r#"# 🔥 Carnelian OS Machine Configuration
+    let content = format!(
+        r#"# 🔥 Carnelian OS Machine Configuration
 # Generated by carnelian init
 
 machine_profile = "{}"
@@ -1244,7 +1285,9 @@ max_tasks_per_heartbeat = 5
 workspace_scan_paths = [{}]
 
 # Owner keypair (generated by init)
-{}"#, profile, http_port, database_url, ollama_url, workspace_paths_str, keypair_line);
+{}"#,
+        profile, http_port, database_url, ollama_url, workspace_paths_str, keypair_line
+    );
 
     std::fs::write(path, content).map_err(|e| {
         carnelian_common::Error::Config(format!("Failed to write machine.toml: {}", e))
@@ -1277,9 +1320,8 @@ async fn handle_keygen(output: Option<PathBuf>) -> carnelian_common::Result<()> 
     }
 
     // Write private key
-    std::fs::write(&output_path, &private_key_bytes).map_err(|e| {
-        carnelian_common::Error::Config(format!("Failed to write key file: {}", e))
-    })?;
+    std::fs::write(&output_path, &private_key_bytes)
+        .map_err(|e| carnelian_common::Error::Config(format!("Failed to write key file: {}", e)))?;
 
     // Set permissions on Unix
     #[cfg(unix)]
@@ -1292,8 +1334,17 @@ async fn handle_keygen(output: Option<PathBuf>) -> carnelian_common::Result<()> 
     }
 
     println!("🔥 Generated Ed25519 keypair");
-    println!("   Public key (hex): {}", hex::encode(public_key.as_bytes()));
-    println!("   Private key file: {}", output_path.canonicalize().unwrap_or(output_path.clone()).display());
+    println!(
+        "   Public key (hex): {}",
+        hex::encode(public_key.as_bytes())
+    );
+    println!(
+        "   Private key file: {}",
+        output_path
+            .canonicalize()
+            .unwrap_or(output_path.clone())
+            .display()
+    );
     println!();
     println!("Add to machine.toml:");
     println!("   owner_keypair_path = \"{}\"", output_path.display());
@@ -1355,13 +1406,15 @@ async fn handle_key_rotate(
 
     // Load owner keypair into a local variable first to avoid temporary lifetime issues
     let owner_keypair_opt = config.owner_signing_key();
-    let old_keypair = owner_keypair_opt.as_ref()
+    let old_keypair = owner_keypair_opt
+        .as_ref()
         .ok_or_else(|| carnelian_common::Error::Security("Owner keypair not loaded".to_string()))?;
     let old_public_key = old_keypair.verifying_key();
     let old_public_key_hex = hex::encode(old_public_key.as_bytes());
 
     // Generate new keypair
-    let (new_public_key, new_private_key_bytes) = carnelian_core::crypto::generate_ed25519_keypair();
+    let (new_public_key, new_private_key_bytes) =
+        carnelian_core::crypto::generate_ed25519_keypair();
     let new_public_key_hex = hex::encode(new_public_key.as_bytes());
 
     // Build rotation message
@@ -1376,26 +1429,26 @@ async fn handle_key_rotate(
     let new_value = serde_json::json!({
         "seed_base64": base64::encode(&new_private_key_bytes)
     });
-    
+
     Config::update_config_value(
         &pool,
         "owner_keypair",
         None, // old_value (we don't track the previous value in this context)
         &new_value,
-        None, // requested_by (no specific requester for CLI rotation)
-        None, // ledger (no ledger in CLI context)
+        None,              // requested_by (no specific requester for CLI rotation)
+        None,              // ledger (no ledger in CLI context)
         Some(old_keypair), // owner_signing_key for signing the ledger entry
-        None, // approval_queue (direct write, no approval needed for CLI)
-    ).await?;
+        None,              // approval_queue (direct write, no approval needed for CLI)
+    )
+    .await?;
 
     // Determine key file path
-    let keypair_path = config.owner_keypair_path.clone()
-        .unwrap_or_else(|| {
-            let home = std::env::var("HOME")
-                .or_else(|_| std::env::var("USERPROFILE"))
-                .unwrap_or_else(|_| ".".to_string());
-            PathBuf::from(home).join(".carnelian").join("owner.key.new")
-        });
+    let keypair_path = config.owner_keypair_path.clone().unwrap_or_else(|| {
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap_or_else(|_| ".".to_string());
+        PathBuf::from(home).join(".carnelian").join("owner.key.new")
+    });
 
     // Write new key file
     std::fs::write(&keypair_path, &new_private_key_bytes).map_err(|e| {
@@ -1415,7 +1468,10 @@ async fn handle_key_rotate(
     println!("🔥 Key rotation completed");
     println!("   Old public key: {}", old_public_key_hex);
     println!("   New public key: {}", new_public_key_hex);
-    println!("   Rotation signature: {}", hex::encode(signature.to_bytes()));
+    println!(
+        "   Rotation signature: {}",
+        hex::encode(signature.to_bytes())
+    );
     println!("   New key file: {}", keypair_path.display());
     println!();
     println!("The new keypair has been stored in the database and written to disk.");
@@ -1427,13 +1483,14 @@ async fn handle_key_rotate(
 async fn handle_ui() -> carnelian_common::Result<()> {
     // Determine UI binary path
     let ui_binary = if let Ok(exe_path) = std::env::current_exe() {
-        let same_dir = exe_path.parent()
+        let same_dir = exe_path
+            .parent()
             .map(|p| p.join("carnelian-ui"))
             .unwrap_or_else(|| PathBuf::from("carnelian-ui"));
-        
+
         #[cfg(windows)]
         let same_dir = same_dir.with_extension("exe");
-        
+
         if same_dir.exists() {
             same_dir
         } else {
@@ -1446,15 +1503,16 @@ async fn handle_ui() -> carnelian_common::Result<()> {
 
     if !ui_binary.exists() && !which::which(&ui_binary).is_ok() {
         return Err(carnelian_common::Error::Config(
-            "carnelian-ui binary not found. Build it with: cargo build --release -p carnelian-ui".to_string()
+            "carnelian-ui binary not found. Build it with: cargo build --release -p carnelian-ui"
+                .to_string(),
         ));
     }
 
     // Spawn the UI (detached)
     let mut cmd = std::process::Command::new(&ui_binary);
     cmd.stdin(std::process::Stdio::null())
-       .stdout(std::process::Stdio::null())
-       .stderr(std::process::Stdio::null());
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
 
     #[cfg(unix)]
     {
@@ -1468,9 +1526,9 @@ async fn handle_ui() -> carnelian_common::Result<()> {
         }
     }
 
-    let child = cmd.spawn().map_err(|e| {
-        carnelian_common::Error::Config(format!("Failed to launch UI: {}", e))
-    })?;
+    let child = cmd
+        .spawn()
+        .map_err(|e| carnelian_common::Error::Config(format!("Failed to launch UI: {}", e)))?;
 
     println!("🔥 Carnelian UI launched (PID: {})", child.id());
 
@@ -1497,7 +1555,7 @@ async fn handle_migrate_from_thummim(
         let p = input.trim();
         if p.is_empty() {
             return Err(carnelian_common::Error::Config(
-                "Thummim project path is required".to_string()
+                "Thummim project path is required".to_string(),
             ));
         }
         PathBuf::from(p)
@@ -1505,16 +1563,18 @@ async fn handle_migrate_from_thummim(
 
     // Validate path
     if !thummim_path.exists() {
-        return Err(carnelian_common::Error::Config(
-            format!("Path does not exist: {}", thummim_path.display())
-        ));
+        return Err(carnelian_common::Error::Config(format!(
+            "Path does not exist: {}",
+            thummim_path.display()
+        )));
     }
 
     let skills_dir = thummim_path.join("skills");
     if !skills_dir.exists() {
-        return Err(carnelian_common::Error::Config(
-            format!("No skills/ directory found in {}", thummim_path.display())
-        ));
+        return Err(carnelian_common::Error::Config(format!(
+            "No skills/ directory found in {}",
+            thummim_path.display()
+        )));
     }
 
     // Load Carnelian config
@@ -1559,11 +1619,15 @@ async fn handle_migrate_from_thummim(
         carnelian_common::Error::Config(format!("Failed to create registry: {}", e))
     })?;
 
-    for entry in walkdir::WalkDir::new(&skills_dir).into_iter().filter_map(|e| e.ok()) {
+    for entry in walkdir::WalkDir::new(&skills_dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
         let path = entry.path();
         if path.file_name() == Some(std::ffi::OsStr::new("SKILL.md")) {
             let skill_dir = path.parent().unwrap();
-            let skill_name = skill_dir.file_name()
+            let skill_name = skill_dir
+                .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown");
 
@@ -1583,9 +1647,10 @@ async fn handle_migrate_from_thummim(
             let mut runtime = "node";
 
             if let Some(frontmatter_start) = content.find("---") {
-                if let Some(frontmatter_end) = content[frontmatter_start+3..].find("---") {
-                    let frontmatter = &content[frontmatter_start+3..frontmatter_start+3+frontmatter_end];
-                    
+                if let Some(frontmatter_end) = content[frontmatter_start + 3..].find("---") {
+                    let frontmatter =
+                        &content[frontmatter_start + 3..frontmatter_start + 3 + frontmatter_end];
+
                     // Simple parsing - look for key: value patterns
                     for line in frontmatter.lines() {
                         if let Some((key, value)) = line.split_once(':') {
@@ -1616,7 +1681,8 @@ async fn handle_migrate_from_thummim(
             }
 
             // Write skill.json
-            let skill_json = format!(r#"{{
+            let skill_json = format!(
+                r#"{{
   "name": "{}",
   "description": "{}",
   "runtime": "{}",
@@ -1626,7 +1692,11 @@ async fn handle_migrate_from_thummim(
     "network": "disabled",
     "max_memory_mb": 128
   }}
-}}"#, name, description.replace('"', "\\\""), runtime);
+}}"#,
+                name,
+                description.replace('"', "\\\""),
+                runtime
+            );
 
             if let Err(e) = std::fs::write(carnelian_skill_dir.join("skill.json"), skill_json) {
                 eprintln!("  ⚠ Failed to write skill.json: {}", e);
@@ -1657,7 +1727,7 @@ async fn handle_migrate_from_thummim(
         if let Some(task_list) = tasks.as_array() {
             for task in task_list {
                 let status = task["status"].as_str().unwrap_or("pending");
-                
+
                 // Only migrate pending and in_progress
                 if status != "pending" && status != "in_progress" {
                     tasks_skipped += 1;
@@ -1714,11 +1784,26 @@ async fn handle_migrate_from_thummim(
     println!("╔═══════════════════════════════════════════════════════════════╗");
     println!("║ Migration Summary                                         ║");
     println!("╠═══════════════════════════════════════════════════════════════╣");
-    println!("║ Skills migrated:  {:>3}                                    ║", skills_migrated);
-    println!("║ Skills skipped:   {:>3}  (already exist)                   ║", skills_skipped);
-    println!("║ Skills errored:   {:>3}                                    ║", skills_errored);
-    println!("║ Tasks imported:   {:>3}                                    ║", tasks_imported);
-    println!("║ Tasks skipped:    {:>3}  (completed)                       ║", tasks_skipped);
+    println!(
+        "║ Skills migrated:  {:>3}                                    ║",
+        skills_migrated
+    );
+    println!(
+        "║ Skills skipped:   {:>3}  (already exist)                   ║",
+        skills_skipped
+    );
+    println!(
+        "║ Skills errored:   {:>3}                                    ║",
+        skills_errored
+    );
+    println!(
+        "║ Tasks imported:   {:>3}                                    ║",
+        tasks_imported
+    );
+    println!(
+        "║ Tasks skipped:    {:>3}  (completed)                       ║",
+        tasks_skipped
+    );
     println!("╚═══════════════════════════════════════════════════════════════╝");
     println!();
     println!("Next: carnelian skills refresh");

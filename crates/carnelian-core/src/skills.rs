@@ -38,7 +38,7 @@ use crate::events::EventStream;
 pub mod skill_trait;
 pub mod wasm_runtime;
 
-pub use skill_trait::{Skill, SkillContext, SkillInput, SkillOutput, HealthStatus, BoxedSkill};
+pub use skill_trait::{BoxedSkill, HealthStatus, Skill, SkillContext, SkillInput, SkillOutput};
 
 // =============================================================================
 // MANIFEST SCHEMA

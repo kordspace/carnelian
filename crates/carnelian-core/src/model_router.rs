@@ -248,9 +248,11 @@ impl ModelRouter {
 
         // Initialize provider registry with native providers
         let mut provider_registry = ProviderRegistry::new();
-        
+
         // Add Ollama provider (local)
-        provider_registry.add_provider(Box::new(crate::providers::OllamaProvider::default_localhost()));
+        provider_registry.add_provider(Box::new(
+            crate::providers::OllamaProvider::default_localhost(),
+        ));
 
         Self {
             pool,
@@ -276,31 +278,28 @@ impl ModelRouter {
     }
 
     /// Initialize remote providers with API keys from configuration.
-    /// 
+    ///
     /// This should be called after the router is created to add remote providers
     /// (OpenAI, Anthropic, Fireworks) when API keys are available.
     pub fn with_remote_providers(mut self, config: &crate::config::Config) -> Self {
         // Add OpenAI if API key is configured
         if let Some(api_key) = config.openai_api_key() {
-            self.provider_registry.add_provider(
-                Box::new(crate::providers::OpenAiProvider::new(api_key))
-            );
+            self.provider_registry
+                .add_provider(Box::new(crate::providers::OpenAiProvider::new(api_key)));
             tracing::info!("OpenAI provider initialized");
         }
 
         // Add Anthropic if API key is configured
         if let Some(api_key) = config.anthropic_api_key() {
-            self.provider_registry.add_provider(
-                Box::new(crate::providers::AnthropicProvider::new(api_key))
-            );
+            self.provider_registry
+                .add_provider(Box::new(crate::providers::AnthropicProvider::new(api_key)));
             tracing::info!("Anthropic provider initialized");
         }
 
         // Add Fireworks if API key is configured
         if let Some(api_key) = config.fireworks_api_key() {
-            self.provider_registry.add_provider(
-                Box::new(crate::providers::FireworksProvider::new(api_key))
-            );
+            self.provider_registry
+                .add_provider(Box::new(crate::providers::FireworksProvider::new(api_key)));
             tracing::info!("Fireworks provider initialized");
         }
 
@@ -308,7 +307,7 @@ impl ModelRouter {
     }
 
     /// Return the gateway base URL.
-    /// 
+    ///
     /// Deprecated: Native providers don't use a gateway.
     #[must_use]
     pub fn gateway_url(&self) -> &str {
@@ -558,7 +557,7 @@ impl ModelRouter {
     ///
     /// # Errors
     ///
-    /// Returns `ModelRouting` if no provider is available, or `BudgetExceeded` 
+    /// Returns `ModelRouting` if no provider is available, or `BudgetExceeded`
     /// if the provider's daily spend limit has been hit.
     pub async fn complete(
         &self,
@@ -582,11 +581,15 @@ impl ModelRouter {
         }
 
         // Get the native provider implementation
-        let provider = self.provider_registry
+        let provider = self
+            .provider_registry
             .get_provider(&provider_config.name)
-            .ok_or_else(|| Error::ModelRouting(
-                format!("Provider '{}' not found in registry", provider_config.name)
-            ))?;
+            .ok_or_else(|| {
+                Error::ModelRouting(format!(
+                    "Provider '{}' not found in registry",
+                    provider_config.name
+                ))
+            })?;
 
         // Audit: log context integrity (before model call)
         if let Some(prov) = provenance {
@@ -733,11 +736,15 @@ impl ModelRouter {
         }
 
         // Get the native provider implementation
-        let provider = self.provider_registry
+        let provider = self
+            .provider_registry
             .get_provider(&provider_config.name)
-            .ok_or_else(|| Error::ModelRouting(
-                format!("Provider '{}' not found in registry", provider_config.name)
-            ))?;
+            .ok_or_else(|| {
+                Error::ModelRouting(format!(
+                    "Provider '{}' not found in registry",
+                    provider_config.name
+                ))
+            })?;
 
         // Audit: log context integrity (before model call)
         if let Some(prov) = provenance {
@@ -826,9 +833,10 @@ impl ModelRouter {
                     match chunk_result {
                         Ok(chunk) => {
                             // Check if this is the final chunk
-                            let is_final = chunk.choices.iter().any(|c| {
-                                c.finish_reason.as_ref() == Some(&"stop".to_string())
-                            });
+                            let is_final = chunk
+                                .choices
+                                .iter()
+                                .any(|c| c.finish_reason.as_ref() == Some(&"stop".to_string()));
 
                             if is_final {
                                 // Stream finished - we need to estimate usage
@@ -846,10 +854,10 @@ impl ModelRouter {
                 // Stream complete - persist estimated usage
                 // Estimate tokens based on characters (rough approximation)
                 let est_prompt = (prompt_chars as i32 + 3) / 4;
-                // We don't have the actual content length here, 
+                // We don't have the actual content length here,
                 // so we skip usage persistence for streaming responses
                 // In a production system, we'd track this properly
-                
+
                 // Best-effort ledger
                 let est_completion = 0i32; // Unknown for streaming
                 let usage = UsageStats {

@@ -6,9 +6,8 @@
 use std::collections::HashMap;
 
 use carnelian_common::types::{
-    CreateWorkflowRequest, EventType, ExecuteWorkflowRequest, SkillDetail,
-    StepResultDetail, TaskDetail, UpdateWorkflowRequest, WorkflowDetail,
-    WorkflowExecutionResponse, WorkflowStepDef,
+    CreateWorkflowRequest, EventType, ExecuteWorkflowRequest, SkillDetail, StepResultDetail,
+    TaskDetail, UpdateWorkflowRequest, WorkflowDetail, WorkflowExecutionResponse, WorkflowStepDef,
 };
 use dioxus::prelude::*;
 use serde_json::json;
@@ -80,11 +79,7 @@ pub fn Workflows() -> Element {
         .as_ref()
         .map_or_else(Vec::new, std::clone::Clone::clone);
 
-    let filtered = filter_workflows(
-        &all_workflows,
-        &filter_status.read(),
-        &filter_search.read(),
-    );
+    let filtered = filter_workflows(&all_workflows, &filter_status.read(), &filter_search.read());
     let sorted = sort_workflows(filtered, &sort_col.read(), *sort_asc.read());
 
     rsx! {
@@ -402,7 +397,9 @@ fn WorkflowBuilderView(
 
     // ── Builder state ────────────────────────────────────────
     let mut builder_name = use_signal(|| {
-        workflow.as_ref().map_or_else(String::new, |w| w.name.clone())
+        workflow
+            .as_ref()
+            .map_or_else(String::new, |w| w.name.clone())
     });
     let mut builder_desc = use_signal(|| {
         workflow
@@ -410,18 +407,18 @@ fn WorkflowBuilderView(
             .and_then(|w| w.description.clone())
             .unwrap_or_default()
     });
-    let mut builder_steps = use_signal(|| {
-        workflow
-            .as_ref()
-            .map_or_else(Vec::new, |w| w.steps.clone())
-    });
+    let mut builder_steps =
+        use_signal(|| workflow.as_ref().map_or_else(Vec::new, |w| w.steps.clone()));
     let mut node_positions = use_signal(|| {
         let mut map = HashMap::<String, (f64, f64)>::new();
         if let Some(ref w) = workflow {
             for (i, step) in w.steps.iter().enumerate() {
                 map.insert(
                     step.step_id.clone(),
-                    (120.0 + (i as f64 % 3.0) * 220.0, 80.0 + (i as f64 / 3.0).floor() * 160.0),
+                    (
+                        120.0 + (i as f64 % 3.0) * 220.0,
+                        80.0 + (i as f64 / 3.0).floor() * 160.0,
+                    ),
                 );
             }
         }
@@ -454,8 +451,7 @@ fn WorkflowBuilderView(
         .iter()
         .filter(|s| s.enabled)
         .filter(|s| {
-            skill_search_lower.is_empty()
-                || s.name.to_lowercase().contains(&skill_search_lower)
+            skill_search_lower.is_empty() || s.name.to_lowercase().contains(&skill_search_lower)
         })
         .collect();
 
@@ -822,9 +818,9 @@ fn render_connection(
     let to = positions.get(to_id).copied().unwrap_or((0.0, 0.0));
 
     let x1 = from.0 + NODE_WIDTH / 2.0;
-    let y1 = from.1 + NODE_HEIGHT;  // bottom of source node
+    let y1 = from.1 + NODE_HEIGHT; // bottom of source node
     let x2 = to.0 + NODE_WIDTH / 2.0;
-    let y2 = to.1;                   // top of target node
+    let y2 = to.1; // top of target node
 
     let mid_y = (y1 + y2) / 2.0;
     let d = format!("M {x1} {y1} C {x1} {mid_y}, {x2} {mid_y}, {x2} {y2}");
@@ -904,7 +900,10 @@ fn render_node(
     dragging_node: &mut Signal<Option<(String, f64, f64)>>,
     connecting_from: &mut Signal<Option<String>>,
 ) -> Element {
-    let pos = positions.get(&step.step_id).copied().unwrap_or((50.0, 50.0));
+    let pos = positions
+        .get(&step.step_id)
+        .copied()
+        .unwrap_or((50.0, 50.0));
     let x = pos.0;
     let y = pos.1;
     let step_id = step.step_id.clone();
@@ -922,7 +921,7 @@ fn render_node(
 
     // Port positions
     let input_port_cx = x + NODE_WIDTH / 2.0;
-    let input_port_cy = y;          // top center
+    let input_port_cy = y; // top center
     let output_port_cx = x + NODE_WIDTH / 2.0;
     let output_port_cy = y + NODE_HEIGHT; // bottom center
 
@@ -1169,14 +1168,14 @@ fn StepConfigPanel(
     on_delete: EventHandler<String>,
 ) -> Element {
     let mut input_mapping_str = use_signal(|| {
-        step.input_mapping
-            .as_ref()
-            .map_or_else(String::new, |v| serde_json::to_string_pretty(v).unwrap_or_default())
+        step.input_mapping.as_ref().map_or_else(String::new, |v| {
+            serde_json::to_string_pretty(v).unwrap_or_default()
+        })
     });
     let mut condition_str = use_signal(|| {
-        step.condition
-            .as_ref()
-            .map_or_else(String::new, |v| serde_json::to_string_pretty(v).unwrap_or_default())
+        step.condition.as_ref().map_or_else(String::new, |v| {
+            serde_json::to_string_pretty(v).unwrap_or_default()
+        })
     });
     let mut continue_on_error = use_signal(|| step.continue_on_error);
     // JSON parse error feedback
@@ -1326,7 +1325,7 @@ fn StepConfigPanel(
 struct LiveStepStatus {
     step_id: String,
     skill_name: String,
-    status: String,       // "pending", "running", "success", "failed", "skipped"
+    status: String, // "pending", "running", "success", "failed", "skipped"
     duration_ms: u64,
 }
 
@@ -1337,7 +1336,8 @@ fn WorkflowExecutionModal(workflow: WorkflowDetail, on_close: EventHandler) -> E
     let mut execution_input = use_signal(|| "{}".to_string());
     let mut input_parse_err = use_signal(|| Option::<String>::None);
     let mut executing = use_signal(|| false);
-    let mut execution_result = use_signal(|| Option::<Result<WorkflowExecutionResponse, String>>::None);
+    let mut execution_result =
+        use_signal(|| Option::<Result<WorkflowExecutionResponse, String>>::None);
     // Live step statuses populated from WebSocket events
     let mut live_steps = use_signal(Vec::<LiveStepStatus>::new);
     // Track the correlation_id for this execution to filter events
@@ -1355,13 +1355,19 @@ fn WorkflowExecutionModal(workflow: WorkflowDetail, on_close: EventHandler) -> E
         if let Some(last) = events.back() {
             let payload = &last.payload;
             // Only process events for this workflow
-            let event_wf_id = payload.get("workflow_id").and_then(|v| v.as_str()).unwrap_or("");
+            let event_wf_id = payload
+                .get("workflow_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             if event_wf_id != wf_id_str {
                 return;
             }
             // Optionally filter by correlation_id if we have one
             if let Some(ref corr) = *exec_correlation.read() {
-                let event_corr = payload.get("correlation_id").and_then(|v| v.as_str()).unwrap_or("");
+                let event_corr = payload
+                    .get("correlation_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 if !event_corr.is_empty() && event_corr != corr {
                     return;
                 }
@@ -1375,19 +1381,38 @@ fn WorkflowExecutionModal(workflow: WorkflowDetail, on_close: EventHandler) -> E
                     }
                     live_status.set(Some("running".to_string()));
                     // Initialize live steps from the workflow definition
-                    let initial: Vec<LiveStepStatus> = workflow.steps.iter().map(|s| LiveStepStatus {
-                        step_id: s.step_id.clone(),
-                        skill_name: s.skill_name.clone(),
-                        status: "pending".to_string(),
-                        duration_ms: 0,
-                    }).collect();
+                    let initial: Vec<LiveStepStatus> = workflow
+                        .steps
+                        .iter()
+                        .map(|s| LiveStepStatus {
+                            step_id: s.step_id.clone(),
+                            skill_name: s.skill_name.clone(),
+                            status: "pending".to_string(),
+                            duration_ms: 0,
+                        })
+                        .collect();
                     live_steps.set(initial);
                 }
                 EventType::WorkflowStepCompleted => {
-                    let step_id = payload.get("step_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                    let status = payload.get("status").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
-                    let duration_ms = payload.get("duration_ms").and_then(|v| v.as_u64()).unwrap_or(0);
-                    let skill_name = payload.get("skill_name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    let step_id = payload
+                        .get("step_id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let status = payload
+                        .get("status")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+                    let duration_ms = payload
+                        .get("duration_ms")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    let skill_name = payload
+                        .get("skill_name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
                     let mut steps = live_steps.read().clone();
                     if let Some(s) = steps.iter_mut().find(|s| s.step_id == step_id) {
                         s.status = status;
@@ -1589,10 +1614,9 @@ fn render_step_result(step: &StepResultDetail) -> Element {
         "skipped" => "\u{23ED}",
         _ => "\u{23F3}",
     };
-    let output_str = step
-        .output
-        .as_ref()
-        .map_or_else(String::new, |v| serde_json::to_string_pretty(v).unwrap_or_default());
+    let output_str = step.output.as_ref().map_or_else(String::new, |v| {
+        serde_json::to_string_pretty(v).unwrap_or_default()
+    });
     let error_str = step.error.clone().unwrap_or_default();
 
     rsx! {
@@ -1718,7 +1742,11 @@ fn render_history_row(
     expanded_task: &mut Signal<Option<Uuid>>,
     expanded_detail: &mut Signal<Option<serde_json::Value>>,
 ) -> Element {
-    let wf_name = task.title.strip_prefix("Workflow execution: ").unwrap_or(&task.title).to_string();
+    let wf_name = task
+        .title
+        .strip_prefix("Workflow execution: ")
+        .unwrap_or(&task.title)
+        .to_string();
     let status_badge = match task.state.as_str() {
         "completed" => "badge-status badge-completed",
         "failed" => "badge-status badge-failed",
@@ -1766,11 +1794,26 @@ fn render_history_row(
 }
 
 fn render_history_step(step_json: &serde_json::Value) -> Element {
-    let step_id = step_json.get("step_id").and_then(|v| v.as_str()).unwrap_or("?");
-    let skill_name = step_json.get("skill_name").and_then(|v| v.as_str()).unwrap_or("?");
-    let status = step_json.get("status").and_then(|v| v.as_str()).unwrap_or("unknown");
-    let duration_ms = step_json.get("duration_ms").and_then(|v| v.as_u64()).unwrap_or(0);
-    let error = step_json.get("error").and_then(|v| v.as_str()).unwrap_or("");
+    let step_id = step_json
+        .get("step_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+    let skill_name = step_json
+        .get("skill_name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+    let status = step_json
+        .get("status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    let duration_ms = step_json
+        .get("duration_ms")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let error = step_json
+        .get("error")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
 
     let status_class = match status {
         "Success" | "success" => "wf-step-success",

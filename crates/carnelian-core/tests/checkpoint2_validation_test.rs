@@ -36,8 +36,7 @@ use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
 use carnelian_core::scheduler::{WorkspaceScanner, auto_queue_scanned_tasks};
 use carnelian_core::soul::SoulManager;
 use carnelian_core::{
-    Config, EventStream, Ledger, ModelRouter, PolicyEngine,
-    Scheduler, Server, WorkerManager,
+    Config, EventStream, Ledger, ModelRouter, PolicyEngine, Scheduler, Server, WorkerManager,
 };
 use futures_util::StreamExt;
 use serde_json::json;
@@ -373,10 +372,7 @@ fn latency_stats(latencies: &[Duration]) -> (Duration, Duration, Duration, Durat
 // =============================================================================
 
 /// Insert a default "Lian" identity into the database and return its identity_id.
-async fn insert_test_identity(
-    pool: &sqlx::PgPool,
-    soul_file_path: Option<&str>,
-) -> Uuid {
+async fn insert_test_identity(pool: &sqlx::PgPool, soul_file_path: Option<&str>) -> Uuid {
     sqlx::query_scalar(
         r"INSERT INTO identities (name, pronouns, identity_type, soul_file_path, directives)
           VALUES ('Lian', 'she/her', 'core', $1, '[]'::jsonb)
@@ -405,12 +401,7 @@ fn create_temp_workspace(markers: &[(&str, &str)]) -> tempfile::TempDir {
 }
 
 /// Create a SOUL.md file at the given path with structured content.
-fn create_test_soul_file(
-    path: &Path,
-    name: &str,
-    pronouns: &str,
-    directives: &[&str],
-) {
+fn create_test_soul_file(path: &Path, name: &str, pronouns: &str, directives: &[&str]) {
     let mut content = format!("# {}\n\n## Core Truths\n", name);
     for d in directives {
         content.push_str(&format!("- {}\n", d));
@@ -438,20 +429,23 @@ async fn count_pending_tasks(pool: &sqlx::PgPool) -> i64 {
 }
 
 /// Filter collected WebSocket events by event_type string.
-fn filter_events_by_type<'a>(events: &'a [serde_json::Value], event_type: &str) -> Vec<&'a serde_json::Value> {
+fn filter_events_by_type<'a>(
+    events: &'a [serde_json::Value],
+    event_type: &str,
+) -> Vec<&'a serde_json::Value> {
     events
         .iter()
-        .filter(|e| {
-            e.get("event_type")
-                .and_then(|v| v.as_str())
-                == Some(event_type)
-        })
+        .filter(|e| e.get("event_type").and_then(|v| v.as_str()) == Some(event_type))
         .collect()
 }
 
 /// Assert that an event payload contains a specific field with expected value.
 #[allow(dead_code)]
-fn assert_event_contains_field(event: &serde_json::Value, field: &str, expected: &serde_json::Value) {
+fn assert_event_contains_field(
+    event: &serde_json::Value,
+    field: &str,
+    expected: &serde_json::Value,
+) {
     let payload = event.get("payload").unwrap_or(event);
     let actual = payload.get(field);
     assert!(
@@ -476,7 +470,10 @@ fn assert_event_contains_field(event: &serde_json::Value, field: &str, expected:
 /// - `POST /v1/chat/completions` with a mock completion
 /// - `GET /api/tags` with a list of models
 fn start_mock_ollama_server(port: u16) -> tokio::task::JoinHandle<()> {
-    use axum::{Router, routing::{get, post}};
+    use axum::{
+        Router,
+        routing::{get, post},
+    };
 
     let app = Router::new()
         .route("/health", get(mock_health_handler))
@@ -583,7 +580,10 @@ async fn test_criterion_1_identity_sync() {
         Some(event_stream.clone()),
         souls_dir.path().to_path_buf(),
     );
-    let result = soul_manager.sync_to_db(identity_id).await.expect("Initial sync should succeed");
+    let result = soul_manager
+        .sync_to_db(identity_id)
+        .await
+        .expect("Initial sync should succeed");
     assert_eq!(
         result,
         carnelian_core::soul::SyncResult::Updated,
@@ -597,7 +597,9 @@ async fn test_criterion_1_identity_sync() {
             .fetch_one(&pool)
             .await
             .expect("Should query directives");
-    let directives = directives_json.as_array().expect("Directives should be array");
+    let directives = directives_json
+        .as_array()
+        .expect("Directives should be array");
     // Initial soul has 3 directives: 2 core truths + 1 identity/pronouns
     assert!(
         directives.len() >= 2,
@@ -627,7 +629,10 @@ async fn test_criterion_1_identity_sync() {
             );
         }
     }
-    assert_eq!(soul_updated_count, 1, "Should have emitted exactly 1 SoulUpdated event");
+    assert_eq!(
+        soul_updated_count, 1,
+        "Should have emitted exactly 1 SoulUpdated event"
+    );
 
     // Verify hash stored
     let stored_hash: Option<String> =
@@ -652,7 +657,10 @@ async fn test_criterion_1_identity_sync() {
     update_soul_file(&soul_file, updated_content);
 
     // Re-sync
-    let result2 = soul_manager.sync_to_db(identity_id).await.expect("Re-sync should succeed");
+    let result2 = soul_manager
+        .sync_to_db(identity_id)
+        .await
+        .expect("Re-sync should succeed");
     assert_eq!(
         result2,
         carnelian_core::soul::SyncResult::Updated,
@@ -694,10 +702,16 @@ async fn test_criterion_1_identity_sync() {
             soul_updated_count2 += 1;
         }
     }
-    assert_eq!(soul_updated_count2, 1, "Should have emitted 1 more SoulUpdated event");
+    assert_eq!(
+        soul_updated_count2, 1,
+        "Should have emitted 1 more SoulUpdated event"
+    );
 
     // Verify unchanged sync returns Unchanged
-    let result3 = soul_manager.sync_to_db(identity_id).await.expect("Third sync should succeed");
+    let result3 = soul_manager
+        .sync_to_db(identity_id)
+        .await
+        .expect("Third sync should succeed");
     assert_eq!(
         result3,
         carnelian_core::soul::SyncResult::Unchanged,
@@ -748,12 +762,8 @@ async fn test_criterion_2_heartbeat_execution() {
     tokio::time::sleep(Duration::from_millis(200)).await;
 
     // Wait for first HeartbeatTick event (up to 15s to account for startup + interval)
-    let first_heartbeat = assert_event_received(
-        &mut ws_read,
-        "HeartbeatTick",
-        Duration::from_secs(15),
-    )
-    .await;
+    let first_heartbeat =
+        assert_event_received(&mut ws_read, "HeartbeatTick", Duration::from_secs(15)).await;
     assert!(
         first_heartbeat.is_some(),
         "Should receive first HeartbeatTick event within 15 seconds"
@@ -785,12 +795,8 @@ async fn test_criterion_2_heartbeat_execution() {
     );
 
     // Wait for second HeartbeatTick to verify periodicity
-    let second_heartbeat = assert_event_received(
-        &mut ws_read,
-        "HeartbeatTick",
-        Duration::from_secs(10),
-    )
-    .await;
+    let second_heartbeat =
+        assert_event_received(&mut ws_read, "HeartbeatTick", Duration::from_secs(10)).await;
     assert!(
         second_heartbeat.is_some(),
         "Should receive second HeartbeatTick event"
@@ -808,13 +814,12 @@ async fn test_criterion_2_heartbeat_execution() {
     );
 
     // Verify heartbeat_history table has records
-    let hb_count: i64 = sqlx::query_scalar::<_, Option<i64>>(
-        "SELECT COUNT(*) FROM heartbeat_history",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Should query heartbeat count")
-    .unwrap_or(0);
+    let hb_count: i64 =
+        sqlx::query_scalar::<_, Option<i64>>("SELECT COUNT(*) FROM heartbeat_history")
+            .fetch_one(&pool)
+            .await
+            .expect("Should query heartbeat count")
+            .unwrap_or(0);
     assert!(
         hb_count >= 2,
         "heartbeat_history should have at least 2 records, got {}",
@@ -847,14 +852,18 @@ async fn test_criterion_2_heartbeat_execution() {
         .expect("GET /v1/heartbeats should succeed");
     assert_eq!(list_resp.status(), 200);
     let list_body: serde_json::Value = list_resp.json().await.unwrap();
-    let records = list_body.as_array().expect("Should be array of heartbeat records");
+    let records = list_body
+        .as_array()
+        .expect("Should be array of heartbeat records");
     assert!(
         records.len() >= 2,
         "Should have at least 2 heartbeat records, got {}",
         records.len()
     );
 
-    println!("✓ Criterion 2: Heartbeat execution — periodic ticks, mantra rotation, DB persistence");
+    println!(
+        "✓ Criterion 2: Heartbeat execution — periodic ticks, mantra rotation, DB persistence"
+    );
 
     server_handle.abort();
 }
@@ -883,18 +892,48 @@ async fn test_criterion_3_workspace_auto_queue() {
     // Create workspace with 10 files: 5 safe, 3 privileged, 2 duplicates
     let workspace = create_temp_workspace(&[
         // 5 safe tasks
-        ("src/parser.rs", "// TASK: Add unit test for parser\nfn parse() {}"),
-        ("src/utils.rs", "// TODO: Refactor utility functions\nfn util() {}"),
-        ("src/api.rs", "// TASK: Add pagination to list endpoint\nfn list() {}"),
-        ("src/models.rs", "// TODO: Add validation for input fields\nstruct Model {}"),
-        ("src/handlers.rs", "// TASK: Implement error handling middleware\nfn handle() {}"),
+        (
+            "src/parser.rs",
+            "// TASK: Add unit test for parser\nfn parse() {}",
+        ),
+        (
+            "src/utils.rs",
+            "// TODO: Refactor utility functions\nfn util() {}",
+        ),
+        (
+            "src/api.rs",
+            "// TASK: Add pagination to list endpoint\nfn list() {}",
+        ),
+        (
+            "src/models.rs",
+            "// TODO: Add validation for input fields\nstruct Model {}",
+        ),
+        (
+            "src/handlers.rs",
+            "// TASK: Implement error handling middleware\nfn handle() {}",
+        ),
         // 3 privileged tasks (contain privileged keywords)
-        ("src/db.rs", "// TASK: Delete old migration files from production\nfn migrate() {}"),
-        ("src/auth.rs", "// TODO: Deploy credential rotation to production\nfn auth() {}"),
-        ("src/keys.rs", "// TASK: Rotate API secret keys\nfn keys() {}"),
+        (
+            "src/db.rs",
+            "// TASK: Delete old migration files from production\nfn migrate() {}",
+        ),
+        (
+            "src/auth.rs",
+            "// TODO: Deploy credential rotation to production\nfn auth() {}",
+        ),
+        (
+            "src/keys.rs",
+            "// TASK: Rotate API secret keys\nfn keys() {}",
+        ),
         // 2 more safe tasks (will be used for dedup testing)
-        ("src/cache.rs", "// TASK: Add cache invalidation logic\nfn cache() {}"),
-        ("src/logging.rs", "// TODO: Improve structured logging format\nfn log() {}"),
+        (
+            "src/cache.rs",
+            "// TASK: Add cache invalidation logic\nfn cache() {}",
+        ),
+        (
+            "src/logging.rs",
+            "// TODO: Improve structured logging format\nfn log() {}",
+        ),
     ]);
 
     // Step 1: Verify WorkspaceScanner detects all markers
@@ -944,12 +983,11 @@ async fn test_criterion_3_workspace_auto_queue() {
     assert_eq!(pending, 5, "Should have 5 pending tasks in DB");
 
     // Verify task titles encode file path and line number
-    let titles: Vec<String> = sqlx::query_scalar(
-        "SELECT title FROM tasks WHERE state = 'pending' ORDER BY title",
-    )
-    .fetch_all(&pool)
-    .await
-    .expect("Should query task titles");
+    let titles: Vec<String> =
+        sqlx::query_scalar("SELECT title FROM tasks WHERE state = 'pending' ORDER BY title")
+            .fetch_all(&pool)
+            .await
+            .expect("Should query task titles");
     for title in &titles {
         assert!(
             title.starts_with("[TASK]") || title.starts_with("[TODO]"),
@@ -1052,7 +1090,10 @@ async fn test_criterion_4_model_integration() {
 
     // Verify Ollama status endpoint
     let status_resp = client
-        .get(format!("http://127.0.0.1:{}/v1/providers/ollama/status", port))
+        .get(format!(
+            "http://127.0.0.1:{}/v1/providers/ollama/status",
+            port
+        ))
         .send()
         .await
         .expect("GET /v1/providers/ollama/status should succeed");
@@ -1064,10 +1105,7 @@ async fn test_criterion_4_model_integration() {
         Some(true),
         "Ollama should be connected via mock server"
     );
-    assert!(
-        status_body["url"].is_string(),
-        "Should have gateway URL"
-    );
+    assert!(status_body["url"].is_string(), "Should have gateway URL");
     assert!(
         status_body["error"].is_null(),
         "Should have no error when connected"
@@ -1076,10 +1114,7 @@ async fn test_criterion_4_model_integration() {
     let models = status_body["available_models"]
         .as_array()
         .expect("available_models should be array");
-    assert!(
-        !models.is_empty(),
-        "Should have at least 1 available model"
-    );
+    assert!(!models.is_empty(), "Should have at least 1 available model");
     let model_names: Vec<&str> = models.iter().filter_map(|m| m.as_str()).collect();
     assert!(
         model_names.contains(&"deepseek-r1:7b"),
@@ -1095,7 +1130,9 @@ async fn test_criterion_4_model_integration() {
         .expect("GET /v1/providers should succeed");
     assert_eq!(providers_resp.status(), 200);
 
-    println!("✓ Criterion 4: Model integration — Ollama connected, models listed, provider status OK");
+    println!(
+        "✓ Criterion 4: Model integration — Ollama connected, models listed, provider status OK"
+    );
 
     server_handle.abort();
 }
@@ -1124,9 +1161,18 @@ async fn test_criterion_5_agentic_loop() {
 
     // Create workspace with 3 safe TASK markers
     let workspace = create_temp_workspace(&[
-        ("src/feature_a.rs", "// TASK: Implement feature A\nfn feature_a() {}"),
-        ("src/feature_b.rs", "// TASK: Implement feature B\nfn feature_b() {}"),
-        ("src/feature_c.rs", "// TODO: Write tests for feature C\nfn feature_c() {}"),
+        (
+            "src/feature_a.rs",
+            "// TASK: Implement feature A\nfn feature_a() {}",
+        ),
+        (
+            "src/feature_b.rs",
+            "// TASK: Implement feature B\nfn feature_b() {}",
+        ),
+        (
+            "src/feature_c.rs",
+            "// TODO: Write tests for feature C\nfn feature_c() {}",
+        ),
     ]);
 
     // Start mock Ollama server
@@ -1136,13 +1182,14 @@ async fn test_criterion_5_agentic_loop() {
 
     // Start server with short heartbeat (5s) and workspace scan
     let workspace_path = workspace.path().to_path_buf();
-    let (port, server_handle, _pool) = start_full_server_with_config(&database_url, move |config| {
-        config.heartbeat_interval_ms = 5_000;
-        config.gateway_url = format!("http://127.0.0.1:{}", mock_port);
-        config.workspace_scan_paths = vec![workspace_path];
-        config.max_tasks_per_heartbeat = 5;
-    })
-    .await;
+    let (port, server_handle, _pool) =
+        start_full_server_with_config(&database_url, move |config| {
+            config.heartbeat_interval_ms = 5_000;
+            config.gateway_url = format!("http://127.0.0.1:{}", mock_port);
+            config.workspace_scan_paths = vec![workspace_path];
+            config.max_tasks_per_heartbeat = 5;
+        })
+        .await;
 
     // Connect WebSocket
     let (_ws_write, mut ws_read) = connect_websocket(port).await;
@@ -1161,7 +1208,9 @@ async fn test_criterion_5_agentic_loop() {
     );
 
     // Extract correlation_id from the first HeartbeatTick for cross-referencing
-    let hb_payload = heartbeat_events[0].get("payload").unwrap_or(heartbeat_events[0]);
+    let hb_payload = heartbeat_events[0]
+        .get("payload")
+        .unwrap_or(heartbeat_events[0]);
     let hb_correlation_id = hb_payload
         .get("correlation_id")
         .and_then(|v| v.as_str())
@@ -1209,13 +1258,12 @@ async fn test_criterion_5_agentic_loop() {
     );
 
     // Verify heartbeat recorded in history
-    let hb_count: i64 = sqlx::query_scalar::<_, Option<i64>>(
-        "SELECT COUNT(*) FROM heartbeat_history",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Should query heartbeat count")
-    .unwrap_or(0);
+    let hb_count: i64 =
+        sqlx::query_scalar::<_, Option<i64>>("SELECT COUNT(*) FROM heartbeat_history")
+            .fetch_one(&pool)
+            .await
+            .expect("Should query heartbeat count")
+            .unwrap_or(0);
     assert!(hb_count >= 1, "Should have at least 1 heartbeat record");
 
     println!(
@@ -1272,12 +1320,18 @@ async fn test_criterion_6_memory_management() {
         .send()
         .await
         .expect("POST /v1/memories should succeed");
-    assert_eq!(create_resp.status(), 201, "Memory creation should return 201");
+    assert_eq!(
+        create_resp.status(),
+        201,
+        "Memory creation should return 201"
+    );
     let create_body: serde_json::Value = create_resp.json().await.unwrap();
     let memory_id_str = create_body["memory_id"]
         .as_str()
         .expect("Should have memory_id");
-    let memory_id: Uuid = memory_id_str.parse().expect("memory_id should be valid UUID");
+    let memory_id: Uuid = memory_id_str
+        .parse()
+        .expect("memory_id should be valid UUID");
     assert!(
         create_body["created_at"].is_string(),
         "Should have created_at"
@@ -1339,7 +1393,11 @@ async fn test_criterion_6_memory_management() {
     let test_memories = vec![
         ("conversation", 0.6, "Discussed project architecture"),
         ("task", 0.4, "Completed database migration task"),
-        ("reflection", 0.9, "Key insight: modular design improves maintainability"),
+        (
+            "reflection",
+            0.9,
+            "Key insight: modular design improves maintainability",
+        ),
         ("observation", 0.3, "User logged in from new device"),
         ("conversation", 0.7, "User asked about deployment process"),
     ];
@@ -1356,7 +1414,12 @@ async fn test_criterion_6_memory_management() {
             .send()
             .await
             .expect("POST /v1/memories should succeed");
-        assert_eq!(resp.status(), 201, "Memory creation should return 201 for {}", source);
+        assert_eq!(
+            resp.status(),
+            201,
+            "Memory creation should return 201 for {}",
+            source
+        );
     }
 
     // Collect events from the batch creation of 5 more memories
@@ -1390,15 +1453,14 @@ async fn test_criterion_6_memory_management() {
     let memories = list_body["memories"]
         .as_array()
         .expect("Should have memories array");
-    assert_eq!(
-        memories.len(),
-        6,
-        "Should have 6 total memories"
-    );
+    assert_eq!(memories.len(), 6, "Should have 6 total memories");
 
     // 5. Filter by source
     let obs_resp = client
-        .get(format!("{}/v1/memories?identity_id={}&source=observation", base, identity_id))
+        .get(format!(
+            "{}/v1/memories?identity_id={}&source=observation",
+            base, identity_id
+        ))
         .send()
         .await
         .expect("GET /v1/memories?source=observation should succeed");
@@ -1407,11 +1469,7 @@ async fn test_criterion_6_memory_management() {
     let obs_memories = obs_body["memories"]
         .as_array()
         .expect("Should have memories array");
-    assert_eq!(
-        obs_memories.len(),
-        2,
-        "Should have 2 observation memories"
-    );
+    assert_eq!(obs_memories.len(), 2, "Should have 2 observation memories");
 
     // 6. Filter by min_importance
     let high_resp = client
@@ -1461,7 +1519,11 @@ async fn test_criterion_6_memory_management() {
         .send()
         .await
         .expect("POST with invalid importance should return response");
-    assert_eq!(bad_imp_resp.status(), 400, "Invalid importance should return 400");
+    assert_eq!(
+        bad_imp_resp.status(),
+        400,
+        "Invalid importance should return 400"
+    );
 
     // 9. Verify 404 for non-existent memory
     let missing_resp = client
@@ -1469,7 +1531,11 @@ async fn test_criterion_6_memory_management() {
         .send()
         .await
         .expect("GET non-existent memory should return response");
-    assert_eq!(missing_resp.status(), 404, "Non-existent memory should return 404");
+    assert_eq!(
+        missing_resp.status(),
+        404,
+        "Non-existent memory should return 404"
+    );
 
     // 10. Verify database persistence
     let db_count: i64 = sqlx::query_scalar::<_, Option<i64>>(
@@ -1482,7 +1548,9 @@ async fn test_criterion_6_memory_management() {
     .unwrap_or(0);
     assert_eq!(db_count, 6, "Database should have 6 memories");
 
-    println!("✓ Criterion 6: Memory management — CRUD, filtering, validation, persistence verified");
+    println!(
+        "✓ Criterion 6: Memory management — CRUD, filtering, validation, persistence verified"
+    );
 
     server_handle.abort();
 }
@@ -1509,13 +1577,34 @@ async fn test_criterion_7_security() {
 
     // Create workspace with ONLY privileged markers
     let workspace = create_temp_workspace(&[
-        ("src/danger1.rs", "// TASK: Delete all user data from production\nfn danger() {}"),
-        ("src/danger2.rs", "// TODO: Deploy to production with sudo access\nfn deploy() {}"),
-        ("src/danger3.rs", "// TASK: Rotate API secret keys and certificates\nfn rotate() {}"),
-        ("src/danger4.rs", "// TODO: Drop old database tables\nfn cleanup() {}"),
-        ("src/danger5.rs", "// TASK: Revert production migration rollback\nfn revert() {}"),
-        ("src/danger6.rs", "// TODO: Update admin password and credentials\nfn admin() {}"),
-        ("src/danger7.rs", "// TASK: Destroy old encryption private_key files\nfn destroy() {}"),
+        (
+            "src/danger1.rs",
+            "// TASK: Delete all user data from production\nfn danger() {}",
+        ),
+        (
+            "src/danger2.rs",
+            "// TODO: Deploy to production with sudo access\nfn deploy() {}",
+        ),
+        (
+            "src/danger3.rs",
+            "// TASK: Rotate API secret keys and certificates\nfn rotate() {}",
+        ),
+        (
+            "src/danger4.rs",
+            "// TODO: Drop old database tables\nfn cleanup() {}",
+        ),
+        (
+            "src/danger5.rs",
+            "// TASK: Revert production migration rollback\nfn revert() {}",
+        ),
+        (
+            "src/danger6.rs",
+            "// TODO: Update admin password and credentials\nfn admin() {}",
+        ),
+        (
+            "src/danger7.rs",
+            "// TASK: Destroy old encryption private_key files\nfn destroy() {}",
+        ),
     ]);
 
     // Scan workspace
@@ -1534,7 +1623,10 @@ async fn test_criterion_7_security() {
         0,
         "Should have 0 safe markers, but got {} safe: {:?}",
         safe_markers.len(),
-        safe_markers.iter().map(|m| &m.description).collect::<Vec<_>>()
+        safe_markers
+            .iter()
+            .map(|m| &m.description)
+            .collect::<Vec<_>>()
     );
     assert!(
         privileged_markers.len() >= 7,
@@ -1566,10 +1658,7 @@ async fn test_criterion_7_security() {
     .await
     .expect("Auto-queue should succeed");
 
-    assert_eq!(
-        queued, 0,
-        "Should queue zero tasks (all privileged)"
-    );
+    assert_eq!(queued, 0, "Should queue zero tasks (all privileged)");
 
     // Verify zero tasks in database
     let pending = count_pending_tasks(&pool).await;
@@ -1589,14 +1678,23 @@ async fn test_criterion_7_security() {
 
     // Test mixed workspace — verify safe tasks pass while privileged are blocked
     let mixed_workspace = create_temp_workspace(&[
-        ("src/safe.rs", "// TASK: Add unit test for parser\nfn test() {}"),
-        ("src/unsafe.rs", "// TASK: Delete production database\nfn danger() {}"),
+        (
+            "src/safe.rs",
+            "// TASK: Add unit test for parser\nfn test() {}",
+        ),
+        (
+            "src/unsafe.rs",
+            "// TASK: Delete production database\nfn danger() {}",
+        ),
     ]);
     let mixed_markers = WorkspaceScanner::scan(&[mixed_workspace.path().to_path_buf()]);
     let mixed_safe = mixed_markers.iter().filter(|m| m.is_safe).count();
     let mixed_priv = mixed_markers.iter().filter(|m| !m.is_safe).count();
     assert_eq!(mixed_safe, 1, "Mixed workspace should have 1 safe marker");
-    assert_eq!(mixed_priv, 1, "Mixed workspace should have 1 privileged marker");
+    assert_eq!(
+        mixed_priv, 1,
+        "Mixed workspace should have 1 privileged marker"
+    );
 
     println!(
         "✓ Criterion 7: Security — {} privileged markers detected, 0 auto-queued, keyword filtering verified",

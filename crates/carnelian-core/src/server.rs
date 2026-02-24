@@ -10,8 +10,8 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
-use carnelian_common::Result;
 use base64::Engine as _;
+use carnelian_common::Result;
 use carnelian_common::types::{
     AgentXpResponse, AwardXpRequest, AwardXpResponse, CancelTaskRequest, CancelTaskResponse,
     ConfigureVoiceRequest, ConfigureVoiceResponse, CreateMemoryRequest, CreateMemoryResponse,
@@ -54,7 +54,7 @@ use crate::metrics::MetricsCollector;
 use crate::model_router::ModelRouter;
 use crate::safe_mode::SafeModeGuard;
 use crate::session::SessionManager;
-use crate::sub_agent::{SubAgentManager, CreateSubAgentRequest, UpdateSubAgentRequest};
+use crate::sub_agent::{CreateSubAgentRequest, SubAgentManager, UpdateSubAgentRequest};
 use crate::worker::{WorkerManager, WorkerRuntime};
 use crate::{Config, EventStream, Scheduler, db, policy::PolicyEngine};
 
@@ -367,10 +367,10 @@ impl Server {
                 .pool()
                 .expect("Database pool required for MemoryManager");
             let chain_anchor = Arc::new(crate::chain_anchor::LocalDbChainAnchor::new(pool.clone()));
-            Arc::new(MemoryManager::new(
-                pool.clone(),
-                Some(self.event_stream.clone()),
-            ).with_chain_anchor(chain_anchor))
+            Arc::new(
+                MemoryManager::new(pool.clone(), Some(self.event_stream.clone()))
+                    .with_chain_anchor(chain_anchor),
+            )
         };
 
         // Create sub-agent lifecycle manager
@@ -698,9 +698,15 @@ fn build_router(state: AppState) -> Router {
         // Ledger anchor endpoints
         .route("/v1/ledger/anchor", post(publish_ledger_anchor_handler))
         .route("/v1/ledger/anchor/{id}", get(get_ledger_anchor_handler))
-        .route("/v1/ledger/anchor/{id}/verify", get(verify_ledger_anchor_handler))
+        .route(
+            "/v1/ledger/anchor/{id}/verify",
+            get(verify_ledger_anchor_handler),
+        )
         // Revocation sync endpoint
-        .route("/v1/memory/revoked-grants", get(list_revoked_grants_handler))
+        .route(
+            "/v1/memory/revoked-grants",
+            get(list_revoked_grants_handler),
+        )
         // 10MB request body limit
         .layer(RequestBodyLimitLayer::new(10 * 1024 * 1024))
         // 30-second timeout
@@ -773,18 +779,19 @@ async fn detailed_health_handler(State(state): State<AppState>) -> impl IntoResp
     let uptime_seconds = state.started_at.elapsed().as_secs();
 
     // Query last heartbeat timestamp from database
-    let last_heartbeat_at: Option<chrono::DateTime<chrono::Utc>> = if let Ok(pool) = state.config.pool() {
-        sqlx::query_scalar::<_, Option<chrono::DateTime<chrono::Utc>>>(
-            "SELECT created_at FROM heartbeat_history ORDER BY created_at DESC LIMIT 1",
-        )
-        .fetch_optional(pool)
-        .await
-        .ok()
-        .flatten()
-        .flatten()
-    } else {
-        None
-    };
+    let last_heartbeat_at: Option<chrono::DateTime<chrono::Utc>> =
+        if let Ok(pool) = state.config.pool() {
+            sqlx::query_scalar::<_, Option<chrono::DateTime<chrono::Utc>>>(
+                "SELECT created_at FROM heartbeat_history ORDER BY created_at DESC LIMIT 1",
+            )
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten()
+            .flatten()
+        } else {
+            None
+        };
 
     // Check scheduler running state
     let scheduler_running = {
@@ -2820,8 +2827,8 @@ async fn export_memories_handler(
     State(state): State<AppState>,
     Json(body): Json<ExportMemoryRequest>,
 ) -> impl IntoResponse {
-    use base64::Engine;
     use crate::memory::MemoryExportOptions;
+    use base64::Engine;
 
     if body.memory_ids.is_empty() {
         return (
@@ -2866,13 +2873,13 @@ async fn export_memories_handler(
                 .into_response()
         }
         Err(e) => {
-            state.event_stream.publish(
-                carnelian_common::types::EventEnvelope::new(
+            state
+                .event_stream
+                .publish(carnelian_common::types::EventEnvelope::new(
                     EventLevel::Error,
                     EventType::MemoryExportFailed,
                     json!({"error": format!("{e}")}),
-                ),
-            );
+                ));
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"error": format!("{e}")})),
@@ -2889,16 +2896,17 @@ async fn import_memories_handler(
 ) -> impl IntoResponse {
     use base64::Engine;
 
-    let envelope_bytes = match base64::engine::general_purpose::STANDARD.decode(&body.envelope_base64) {
-        Ok(b) => b,
-        Err(e) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"error": format!("Invalid base64: {e}")})),
-            )
-                .into_response();
-        }
-    };
+    let envelope_bytes =
+        match base64::engine::general_purpose::STANDARD.decode(&body.envelope_base64) {
+            Ok(b) => b,
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": format!("Invalid base64: {e}")})),
+                )
+                    .into_response();
+            }
+        };
 
     let public_key = if body.verify_signature {
         match &body.public_key {
@@ -2920,7 +2928,10 @@ async fn import_memories_handler(
         .await
     {
         Ok(results) => {
-            let successful_count = results.iter().filter(|r| r.memory_id != uuid::Uuid::nil()).count();
+            let successful_count = results
+                .iter()
+                .filter(|r| r.memory_id != uuid::Uuid::nil())
+                .count();
             let failed_count = results.len() - successful_count;
             let api_results: Vec<MemoryImportResultApi> = results
                 .into_iter()
@@ -2942,13 +2953,13 @@ async fn import_memories_handler(
                 .into_response()
         }
         Err(e) => {
-            state.event_stream.publish(
-                carnelian_common::types::EventEnvelope::new(
+            state
+                .event_stream
+                .publish(carnelian_common::types::EventEnvelope::new(
                     EventLevel::Error,
                     EventType::MemoryImportFailed,
                     json!({"error": format!("{e}")}),
-                ),
-            );
+                ));
             (
                 StatusCode::BAD_REQUEST,
                 Json(json!({"error": format!("{e}")})),
@@ -3398,13 +3409,12 @@ async fn resolve_caller_identity(
     })?;
 
     // Verify the identity exists in the database
-    let exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM identities WHERE identity_id = $1)",
-    )
-    .bind(caller_id)
-    .fetch_one(pool)
-    .await
-    .unwrap_or(false);
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM identities WHERE identity_id = $1)")
+            .bind(caller_id)
+            .fetch_one(pool)
+            .await
+            .unwrap_or(false);
 
     if !exists {
         return Err((
@@ -3909,7 +3919,11 @@ async fn list_workflows_handler(
     State(state): State<AppState>,
     Query(params): Query<ListWorkflowsParams>,
 ) -> impl IntoResponse {
-    match state.workflow_engine.list_workflows(params.enabled_only).await {
+    match state
+        .workflow_engine
+        .list_workflows(params.enabled_only)
+        .await
+    {
         Ok(workflows) => {
             let details: Vec<_> = workflows.iter().map(|w| w.to_detail()).collect();
             (
@@ -4138,7 +4152,19 @@ async fn list_channels_handler(
     };
 
     let rows = if let Some(ref ct) = params.channel_type {
-        sqlx::query_as::<_, (Uuid, String, String, String, Option<Uuid>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>, serde_json::Value)>(
+        sqlx::query_as::<
+            _,
+            (
+                Uuid,
+                String,
+                String,
+                String,
+                Option<Uuid>,
+                chrono::DateTime<chrono::Utc>,
+                chrono::DateTime<chrono::Utc>,
+                serde_json::Value,
+            ),
+        >(
             r"SELECT session_id, channel_type, channel_user_id, trust_level,
                      identity_id, created_at, last_seen_at, metadata
               FROM channel_sessions WHERE channel_type = $1
@@ -4148,7 +4174,19 @@ async fn list_channels_handler(
         .fetch_all(pool)
         .await
     } else {
-        sqlx::query_as::<_, (Uuid, String, String, String, Option<Uuid>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>, serde_json::Value)>(
+        sqlx::query_as::<
+            _,
+            (
+                Uuid,
+                String,
+                String,
+                String,
+                Option<Uuid>,
+                chrono::DateTime<chrono::Utc>,
+                chrono::DateTime<chrono::Utc>,
+                serde_json::Value,
+            ),
+        >(
             r"SELECT session_id, channel_type, channel_user_id, trust_level,
                      identity_id, created_at, last_seen_at, metadata
               FROM channel_sessions
@@ -4163,11 +4201,8 @@ async fn list_channels_handler(
             let adapters = state.channel_adapters.read().await;
             let channels: Vec<ChannelDetail> = rows
                 .into_iter()
-                .map(|(session_id, channel_type, channel_user_id, trust_level, identity_id, created_at, last_seen_at, metadata)| {
-                    let adapter_running = adapters
-                        .get(&session_id)
-                        .map_or(false, |a| a.is_running());
-                    ChannelDetail {
+                .map(
+                    |(
                         session_id,
                         channel_type,
                         channel_user_id,
@@ -4176,9 +4211,22 @@ async fn list_channels_handler(
                         created_at,
                         last_seen_at,
                         metadata,
-                        adapter_running,
-                    }
-                })
+                    )| {
+                        let adapter_running =
+                            adapters.get(&session_id).map_or(false, |a| a.is_running());
+                        ChannelDetail {
+                            session_id,
+                            channel_type,
+                            channel_user_id,
+                            trust_level,
+                            identity_id,
+                            created_at,
+                            last_seen_at,
+                            metadata,
+                            adapter_running,
+                        }
+                    },
+                )
                 .collect();
             (StatusCode::OK, Json(json!({"channels": channels}))).into_response()
         }
@@ -4285,7 +4333,10 @@ async fn create_channel_handler(
                     }
                 } else {
                     // Store the token via raw SQL (adapter disabled)
-                    let key = format!("channel.{}.{}.token", body.channel_type, body.channel_user_id);
+                    let key = format!(
+                        "channel.{}.{}.token",
+                        body.channel_type, body.channel_user_id
+                    );
                     let value = serde_json::Value::String(token.to_string());
                     let _ = sqlx::query(
                         r"INSERT INTO config_store (key, value) VALUES ($1, $2)
@@ -4339,7 +4390,19 @@ async fn get_channel_handler(
         }
     };
 
-    let result = sqlx::query_as::<_, (Uuid, String, String, String, Option<Uuid>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>, serde_json::Value)>(
+    let result = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            String,
+            String,
+            String,
+            Option<Uuid>,
+            chrono::DateTime<chrono::Utc>,
+            chrono::DateTime<chrono::Utc>,
+            serde_json::Value,
+        ),
+    >(
         r"SELECT session_id, channel_type, channel_user_id, trust_level,
                  identity_id, created_at, last_seen_at, metadata
           FROM channel_sessions WHERE session_id = $1",
@@ -4349,7 +4412,16 @@ async fn get_channel_handler(
     .await;
 
     match result {
-        Ok(Some((session_id, channel_type, channel_user_id, trust_level, identity_id, created_at, last_seen_at, metadata))) => {
+        Ok(Some((
+            session_id,
+            channel_type,
+            channel_user_id,
+            trust_level,
+            identity_id,
+            created_at,
+            last_seen_at,
+            metadata,
+        ))) => {
             let adapter_running = state
                 .channel_adapters
                 .read()
@@ -4508,11 +4580,15 @@ async fn update_channel_handler(
             "adapter_restarted": adapter_restarted,
         }),
     ));
-    (StatusCode::OK, Json(json!({
-        "session_id": id,
-        "status": "updated",
-        "adapter_restarted": adapter_restarted,
-    }))).into_response()
+    (
+        StatusCode::OK,
+        Json(json!({
+            "session_id": id,
+            "status": "updated",
+            "adapter_restarted": adapter_restarted,
+        })),
+    )
+        .into_response()
 }
 
 /// Delete a channel session via `DELETE /v1/channels/{id}`.
@@ -4552,7 +4628,9 @@ async fn delete_channel_handler(
     // Remove credentials from config_store
     if let Ok(Some((ref channel_type, ref channel_user_id))) = channel_info {
         if let Some(ref factory) = state.channel_adapter_factory {
-            let _ = factory.delete_credentials(channel_type, channel_user_id).await;
+            let _ = factory
+                .delete_credentials(channel_type, channel_user_id)
+                .await;
         } else {
             // Fallback: delete directly via SQL
             let key = format!("channel.{channel_type}.{channel_user_id}.token");
@@ -4836,22 +4914,21 @@ async fn get_xp_history_handler(
     let offset = (page - 1) * page_size;
 
     // Total count
-    let total: i64 = match sqlx::query_scalar(
-        "SELECT COUNT(*) FROM xp_events WHERE identity_id = $1",
-    )
-    .bind(identity_id)
-    .fetch_one(pool)
-    .await
-    {
-        Ok(t) => t,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": e.to_string()})),
-            )
-                .into_response();
-        }
-    };
+    let total: i64 =
+        match sqlx::query_scalar("SELECT COUNT(*) FROM xp_events WHERE identity_id = $1")
+            .bind(identity_id)
+            .fetch_one(pool)
+            .await
+        {
+            Ok(t) => t,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": e.to_string()})),
+                )
+                    .into_response();
+            }
+        };
 
     // Fetch page
     let rows = match sqlx::query_as::<_, (i64, String, i32, Option<Uuid>, Option<Uuid>, Option<i64>, serde_json::Value, chrono::DateTime<chrono::Utc>)>(
@@ -4878,8 +4955,8 @@ async fn get_xp_history_handler(
 
     let events: Vec<XpEventDetail> = rows
         .into_iter()
-        .map(|(event_id, source, xp_amount, task_id, skill_id, ledger_event_id, metadata, created_at)| {
-            XpEventDetail {
+        .map(
+            |(
                 event_id,
                 source,
                 xp_amount,
@@ -4888,8 +4965,19 @@ async fn get_xp_history_handler(
                 ledger_event_id,
                 metadata,
                 created_at,
-            }
-        })
+            )| {
+                XpEventDetail {
+                    event_id,
+                    source,
+                    xp_amount,
+                    task_id,
+                    skill_id,
+                    ledger_event_id,
+                    metadata,
+                    created_at,
+                }
+            },
+        )
         .collect();
 
     (
@@ -4908,9 +4996,7 @@ async fn get_xp_history_handler(
 }
 
 /// Get XP leaderboard via `GET /v1/xp/leaderboard`.
-async fn get_xp_leaderboard_handler(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+async fn get_xp_leaderboard_handler(State(state): State<AppState>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(_) => {
@@ -4944,20 +5030,20 @@ async fn get_xp_leaderboard_handler(
 
     let entries: Vec<LeaderboardEntry> = rows
         .into_iter()
-        .map(|(rank, identity_id, name, total_xp, level)| LeaderboardEntry {
-            rank,
-            identity_id,
-            name,
-            total_xp,
-            level,
-        })
+        .map(
+            |(rank, identity_id, name, total_xp, level)| LeaderboardEntry {
+                rank,
+                identity_id,
+                name,
+                total_xp,
+                level,
+            },
+        )
         .collect();
 
     (
         StatusCode::OK,
-        Json(
-            serde_json::to_value(XpLeaderboardResponse { entries }).unwrap_or_default(),
-        ),
+        Json(serde_json::to_value(XpLeaderboardResponse { entries }).unwrap_or_default()),
     )
         .into_response()
 }
@@ -4978,7 +5064,20 @@ async fn get_skill_metrics_handler(
         }
     };
 
-    let row = match sqlx::query_as::<_, (Uuid, String, i32, i32, i32, i32, i64, i32, Option<chrono::DateTime<chrono::Utc>>)>(
+    let row = match sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            String,
+            i32,
+            i32,
+            i32,
+            i32,
+            i64,
+            i32,
+            Option<chrono::DateTime<chrono::Utc>>,
+        ),
+    >(
         r"SELECT sm.skill_id, s.name AS skill_name,
                  sm.usage_count, sm.success_count, sm.failure_count,
                  sm.avg_duration_ms, sm.total_xp_earned, sm.skill_level, sm.last_used_at
@@ -5000,7 +5099,17 @@ async fn get_skill_metrics_handler(
         }
     };
 
-    let (sid, skill_name, usage_count, success_count, failure_count, avg_duration_ms, total_xp_earned, skill_level, last_used_at) = match row {
+    let (
+        sid,
+        skill_name,
+        usage_count,
+        success_count,
+        failure_count,
+        avg_duration_ms,
+        total_xp_earned,
+        skill_level,
+        last_used_at,
+    ) = match row {
         Some(r) => r,
         None => {
             return (
@@ -5056,7 +5165,20 @@ async fn get_top_skills_handler(
 
     let limit = params.limit.clamp(1, 100);
 
-    let rows = match sqlx::query_as::<_, (Uuid, String, i32, i32, i32, i32, i64, i32, Option<chrono::DateTime<chrono::Utc>>)>(
+    let rows = match sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            String,
+            i32,
+            i32,
+            i32,
+            i32,
+            i64,
+            i32,
+            Option<chrono::DateTime<chrono::Utc>>,
+        ),
+    >(
         r"SELECT sm.skill_id, s.name AS skill_name,
                  sm.usage_count, sm.success_count, sm.failure_count,
                  sm.avg_duration_ms, sm.total_xp_earned, sm.skill_level, sm.last_used_at
@@ -5081,32 +5203,42 @@ async fn get_top_skills_handler(
 
     let skills: Vec<SkillMetricsDetail> = rows
         .into_iter()
-        .map(|(skill_id, skill_name, usage_count, success_count, failure_count, avg_duration_ms, total_xp_earned, skill_level, last_used_at)| {
-            let success_rate = if usage_count > 0 {
-                success_count as f64 / usage_count as f64
-            } else {
-                0.0
-            };
-            SkillMetricsDetail {
+        .map(
+            |(
                 skill_id,
                 skill_name,
                 usage_count,
                 success_count,
                 failure_count,
-                success_rate,
                 avg_duration_ms,
                 total_xp_earned,
                 skill_level,
                 last_used_at,
-            }
-        })
+            )| {
+                let success_rate = if usage_count > 0 {
+                    success_count as f64 / usage_count as f64
+                } else {
+                    0.0
+                };
+                SkillMetricsDetail {
+                    skill_id,
+                    skill_name,
+                    usage_count,
+                    success_count,
+                    failure_count,
+                    success_rate,
+                    avg_duration_ms,
+                    total_xp_earned,
+                    skill_level,
+                    last_used_at,
+                }
+            },
+        )
         .collect();
 
     (
         StatusCode::OK,
-        Json(
-            serde_json::to_value(TopSkillsResponse { skills }).unwrap_or_default(),
-        ),
+        Json(serde_json::to_value(TopSkillsResponse { skills }).unwrap_or_default()),
     )
         .into_response()
 }
@@ -5248,12 +5380,7 @@ async fn award_xp_handler(
     // Award XP using the mapped source variant
     let level_up = match state
         .xp_manager
-        .award_xp(
-            body.identity_id,
-            xp_source,
-            body.xp_amount,
-            body.metadata,
-        )
+        .award_xp(body.identity_id, xp_source, body.xp_amount, body.metadata)
         .await
     {
         Ok(lu) => lu,
@@ -5267,22 +5394,21 @@ async fn award_xp_handler(
     };
 
     // Query updated total_xp
-    let new_total_xp: i64 = match sqlx::query_scalar(
-        "SELECT total_xp FROM agent_xp WHERE identity_id = $1",
-    )
-    .bind(body.identity_id)
-    .fetch_one(pool)
-    .await
-    {
-        Ok(t) => t,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": e.to_string()})),
-            )
-                .into_response();
-        }
-    };
+    let new_total_xp: i64 =
+        match sqlx::query_scalar("SELECT total_xp FROM agent_xp WHERE identity_id = $1")
+            .bind(body.identity_id)
+            .fetch_one(pool)
+            .await
+        {
+            Ok(t) => t,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": e.to_string()})),
+                )
+                    .into_response();
+            }
+        };
 
     (
         StatusCode::OK,
@@ -5407,11 +5533,7 @@ async fn test_voice_handler(
                 .into_response();
         }
         Err(carnelian_common::Error::RateLimitExceeded(msg)) => {
-            return (
-                StatusCode::TOO_MANY_REQUESTS,
-                Json(json!({"error": msg})),
-            )
-                .into_response();
+            return (StatusCode::TOO_MANY_REQUESTS, Json(json!({"error": msg}))).into_response();
         }
         Err(e) => {
             return (
@@ -5422,8 +5544,7 @@ async fn test_voice_handler(
         }
     };
 
-    let audio_base64 =
-        base64::engine::general_purpose::STANDARD.encode(&audio_bytes);
+    let audio_base64 = base64::engine::general_purpose::STANDARD.encode(&audio_bytes);
 
     (
         StatusCode::OK,
@@ -5439,9 +5560,7 @@ async fn test_voice_handler(
 }
 
 /// List available voices via `GET /v1/voice/voices`.
-async fn list_voices_handler(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+async fn list_voices_handler(State(state): State<AppState>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(_) => {
@@ -5475,9 +5594,7 @@ async fn list_voices_handler(
 
     (
         StatusCode::OK,
-        Json(
-            serde_json::to_value(ListVoicesResponse { voices }).unwrap_or_default(),
-        ),
+        Json(serde_json::to_value(ListVoicesResponse { voices }).unwrap_or_default()),
     )
         .into_response()
 }
@@ -5528,11 +5645,7 @@ async fn transcribe_voice_handler(
                 .into_response();
         }
         Err(carnelian_common::Error::RateLimitExceeded(msg)) => {
-            return (
-                StatusCode::TOO_MANY_REQUESTS,
-                Json(json!({"error": msg})),
-            )
-                .into_response();
+            return (StatusCode::TOO_MANY_REQUESTS, Json(json!({"error": msg}))).into_response();
         }
         Err(e) => {
             return (
@@ -5545,9 +5658,7 @@ async fn transcribe_voice_handler(
 
     (
         StatusCode::OK,
-        Json(
-            serde_json::to_value(TranscribeVoiceResponse { text }).unwrap_or_default(),
-        ),
+        Json(serde_json::to_value(TranscribeVoiceResponse { text }).unwrap_or_default()),
     )
         .into_response()
 }
@@ -5588,10 +5699,15 @@ mod tests {
         );
         let memory_manager = {
             let chain_anchor = Arc::new(crate::chain_anchor::LocalDbChainAnchor::new(pool.clone()));
-            Arc::new(MemoryManager::new(pool.clone(), Some(event_stream.clone()))
-                .with_chain_anchor(chain_anchor))
+            Arc::new(
+                MemoryManager::new(pool.clone(), Some(event_stream.clone()))
+                    .with_chain_anchor(chain_anchor),
+            )
         };
-        let sub_agent_manager = Arc::new(SubAgentManager::new(pool.clone(), Some(event_stream.clone())));
+        let sub_agent_manager = Arc::new(SubAgentManager::new(
+            pool.clone(),
+            Some(event_stream.clone()),
+        ));
         let workflow_engine = Arc::new(crate::workflow::WorkflowEngine::new(
             pool.clone(),
             Some(event_stream.clone()),
@@ -5771,12 +5887,16 @@ async fn publish_ledger_anchor_handler(
     let mut config_guard = state.config.clone();
     let owner_signing_key = config_guard.owner_signing_key().cloned();
 
-    match state.ledger.publish_ledger_anchor(
-        body.from_event_id,
-        body.to_event_id,
-        &chain_anchor,
-        owner_signing_key.as_ref(),
-    ).await {
+    match state
+        .ledger
+        .publish_ledger_anchor(
+            body.from_event_id,
+            body.to_event_id,
+            &chain_anchor,
+            owner_signing_key.as_ref(),
+        )
+        .await
+    {
         Ok(anchor_id) => {
             // Get the proof to return the merkle root
             match chain_anchor.get_anchor_proof(&anchor_id).await {
@@ -5798,11 +5918,13 @@ async fn publish_ledger_anchor_handler(
                         merkle_root,
                         event_count,
                     };
-                    (StatusCode::OK, Json(serde_json::to_value(response).unwrap())).into_response()
+                    (
+                        StatusCode::OK,
+                        Json(serde_json::to_value(response).unwrap()),
+                    )
+                        .into_response()
                 }
-                _ => {
-                    (StatusCode::OK, Json(json!({"anchor_id": anchor_id}))).into_response()
-                }
+                _ => (StatusCode::OK, Json(json!({"anchor_id": anchor_id}))).into_response(),
             }
         }
         Err(e) => {
@@ -5849,40 +5971,49 @@ async fn get_ledger_anchor_handler(
     match chain_anchor.get_anchor_proof(&id).await {
         Ok(Some(proof)) => {
             let response = AnchorProofResponse {
-                anchor_id: proof.get("anchor_id")
+                anchor_id: proof
+                    .get("anchor_id")
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string(),
-                hash: proof.get("hash")
+                hash: proof
+                    .get("hash")
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string(),
-                ledger_event_from: proof.get("ledger_event_from")
+                ledger_event_from: proof
+                    .get("ledger_event_from")
                     .and_then(|v| v.as_i64())
                     .unwrap_or(0),
-                ledger_event_to: proof.get("ledger_event_to")
+                ledger_event_to: proof
+                    .get("ledger_event_to")
                     .and_then(|v| v.as_i64())
                     .unwrap_or(0),
-                published_at: proof.get("published_at")
+                published_at: proof
+                    .get("published_at")
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string(),
-                metadata: proof.get("metadata")
+                metadata: proof
+                    .get("metadata")
                     .cloned()
                     .unwrap_or(serde_json::json!({})),
-                verified: proof.get("verified")
+                verified: proof
+                    .get("verified")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false),
             };
-            (StatusCode::OK, Json(serde_json::to_value(response).unwrap())).into_response()
-        }
-        Ok(None) => {
             (
-                StatusCode::NOT_FOUND,
-                Json(json!({"error": "Anchor not found"})),
+                StatusCode::OK,
+                Json(serde_json::to_value(response).unwrap()),
             )
                 .into_response()
         }
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Anchor not found"})),
+        )
+            .into_response(),
         Err(e) => {
             tracing::warn!(error = %e, "Failed to get anchor proof");
             (
@@ -5925,17 +6056,15 @@ async fn verify_ledger_anchor_handler(
     let chain_anchor = crate::chain_anchor::LocalDbChainAnchor::new(pool.clone());
 
     match chain_anchor.verify_anchor(&id, hash).await {
-        Ok(matches) => {
-            (
-                StatusCode::OK,
-                Json(json!({
-                    "anchor_id": id,
-                    "hash": hash,
-                    "verified": matches,
-                })),
-            )
-                .into_response()
-        }
+        Ok(matches) => (
+            StatusCode::OK,
+            Json(json!({
+                "anchor_id": id,
+                "hash": hash,
+                "verified": matches,
+            })),
+        )
+            .into_response(),
         Err(e) => {
             tracing::warn!(error = %e, "Failed to verify anchor");
             (
@@ -6016,7 +6145,11 @@ async fn list_revoked_grants_handler(
                 .collect();
 
             let response = RevokedGrantsResponse { grants };
-            (StatusCode::OK, Json(serde_json::to_value(response).unwrap())).into_response()
+            (
+                StatusCode::OK,
+                Json(serde_json::to_value(response).unwrap()),
+            )
+                .into_response()
         }
         Err(e) => {
             tracing::warn!(error = %e, "Failed to list revoked grants");

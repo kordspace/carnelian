@@ -15,11 +15,11 @@ use carnelian_core::EventStream;
 use carnelian_core::policy::PolicyEngine;
 use carnelian_core::session::SessionManager;
 
+use crate::db as channel_db;
 use crate::events;
 use crate::rate_limiter::RateLimiter;
 use crate::spam_detector::SpamDetector;
 use crate::types::{ChannelConfig, TrustLevel};
-use crate::db as channel_db;
 
 /// Serenity event handler that bridges Discord events to Carnelian.
 pub struct DiscordHandler {
@@ -99,17 +99,25 @@ impl EventHandler for DiscordHandler {
         let trust_level = session.parsed_trust_level();
 
         // 2. Check rate limit
-        if let Err(e) = self.rate_limiter.check_rate_limit("discord", &channel_id, trust_level) {
+        if let Err(e) = self
+            .rate_limiter
+            .check_rate_limit("discord", &channel_id, trust_level)
+        {
             tracing::warn!(%e, "Rate limit exceeded for Discord user");
             let _ = msg
                 .channel_id
-                .say(&ctx.http, "⏳ You're sending messages too quickly. Please slow down.")
+                .say(
+                    &ctx.http,
+                    "⏳ You're sending messages too quickly. Please slow down.",
+                )
                 .await;
             return;
         }
 
         // 3. Update spam score
-        let spam_score = self.spam_detector.update_score("discord", &channel_id, &content);
+        let spam_score = self
+            .spam_detector
+            .update_score("discord", &channel_id, &content);
         if self.spam_detector.is_spam(spam_score) {
             tracing::warn!(
                 channel_id = %channel_id,
@@ -134,7 +142,10 @@ impl EventHandler for DiscordHandler {
         if !has_receive {
             let _ = msg
                 .channel_id
-                .say(&ctx.http, "🔒 This channel is not yet paired. Use `!pair` to connect.")
+                .say(
+                    &ctx.http,
+                    "🔒 This channel is not yet paired. Use `!pair` to connect.",
+                )
                 .await;
             return;
         }

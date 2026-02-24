@@ -341,10 +341,18 @@ impl EventStreamStore {
                         let mut cs = channel_state.write();
                         cs.last_channel_event = Some(envelope.timestamp);
                         // Update counts from payload if available
-                        if let Some(total) = envelope.payload.get("total_channels").and_then(|v| v.as_u64()) {
+                        if let Some(total) = envelope
+                            .payload
+                            .get("total_channels")
+                            .and_then(|v| v.as_u64())
+                        {
                             cs.total_channels = total as usize;
                         }
-                        if let Some(running) = envelope.payload.get("running_channels").and_then(|v| v.as_u64()) {
+                        if let Some(running) = envelope
+                            .payload
+                            .get("running_channels")
+                            .and_then(|v| v.as_u64())
+                        {
                             cs.running_channels = running as usize;
                         }
                     }
@@ -424,9 +432,8 @@ fn start_xp_polling(xp_tx: mpsc::UnboundedSender<AgentXpResponse>) {
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
                         if let Some(id_str) = json.get("identity_id").and_then(|v| v.as_str()) {
                             if let Ok(identity_id) = id_str.parse::<Uuid>() {
-                                let xp_url = format!(
-                                    "{SERVER_BASE_URL}/v1/xp/agents/{identity_id}"
-                                );
+                                let xp_url =
+                                    format!("{SERVER_BASE_URL}/v1/xp/agents/{identity_id}");
                                 if let Ok(xp_resp) = client.get(&xp_url).send().await {
                                     if let Ok(xp) = xp_resp.json::<AgentXpResponse>().await {
                                         let _ = xp_tx.send(xp);

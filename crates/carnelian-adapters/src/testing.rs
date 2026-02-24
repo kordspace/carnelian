@@ -139,11 +139,8 @@ mod tests {
 
     #[test]
     fn test_create_test_channel_session() {
-        let session = create_test_channel_session(
-            ChannelType::Telegram,
-            "12345",
-            TrustLevel::Conversational,
-        );
+        let session =
+            create_test_channel_session(ChannelType::Telegram, "12345", TrustLevel::Conversational);
         assert_eq!(session.channel_type, "telegram");
         assert_eq!(session.channel_user_id, "12345");
         assert_eq!(session.trust_level, "conversational");

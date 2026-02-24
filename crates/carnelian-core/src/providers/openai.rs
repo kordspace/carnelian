@@ -11,7 +11,10 @@ use reqwest::Client;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap};
 use serde::{Deserialize, Serialize};
 
-use crate::model_router::{Choice, ChunkChoice, ChunkDelta, CompletionChunk, CompletionRequest, CompletionResponse, Message, UsageStats};
+use crate::model_router::{
+    Choice, ChunkChoice, ChunkDelta, CompletionChunk, CompletionRequest, CompletionResponse,
+    Message, UsageStats,
+};
 use crate::providers::Provider;
 use carnelian_common::{Error, Result};
 
@@ -27,7 +30,7 @@ impl OpenAiProvider {
     /// Create a new OpenAI provider
     pub fn new(api_key: impl Into<String>) -> Self {
         let api_key = api_key.into();
-        
+
         let mut headers = HeaderMap::new();
         headers.insert(
             AUTHORIZATION,
@@ -159,8 +162,14 @@ impl Provider for OpenAiProvider {
     async fn health_check(&self) -> Result<bool> {
         // Try to list models as health check
         let url = format!("{}/models", self.base_url);
-        
-        match self.client.get(&url).timeout(Duration::from_secs(10)).send().await {
+
+        match self
+            .client
+            .get(&url)
+            .timeout(Duration::from_secs(10))
+            .send()
+            .await
+        {
             Ok(resp) => Ok(resp.status().is_success()),
             Err(_) => Ok(false),
         }
@@ -168,26 +177,26 @@ impl Provider for OpenAiProvider {
 
     async fn list_models(&self) -> Result<Vec<String>> {
         let url = format!("{}/models", self.base_url);
-        
+
         let resp = self
             .client
             .get(&url)
             .send()
             .await
             .map_err(|e| Error::ModelRouting(format!("OpenAI list models failed: {e}")))?;
-        
+
         if !resp.status().is_success() {
             return Err(Error::ModelRouting(format!(
                 "OpenAI returned status {}",
                 resp.status()
             )));
         }
-        
+
         let data: OpenAiModelsResponse = resp
             .json()
             .await
             .map_err(|e| Error::ModelRouting(format!("Failed to parse OpenAI response: {e}")))?;
-        
+
         let models: Vec<String> = data.data.into_iter().map(|m| m.id).collect();
         Ok(models)
     }
@@ -199,7 +208,7 @@ impl Provider for OpenAiProvider {
 
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
         let url = format!("{}/chat/completions", self.base_url);
-        
+
         let openai_request = OpenAiRequest {
             model: request.model,
             messages: self.convert_messages(&request.messages),
@@ -232,16 +241,20 @@ impl Provider for OpenAiProvider {
         Ok(CompletionResponse {
             id: data.id,
             model: data.model,
-            choices: data.choices.into_iter().map(|c| Choice {
-                index: c.index,
-                message: Message {
-                    role: c.message.role,
-                    content: c.message.content,
-                    name: c.message.name,
-                    tool_call_id: None,
-                },
-                finish_reason: c.finish_reason,
-            }).collect(),
+            choices: data
+                .choices
+                .into_iter()
+                .map(|c| Choice {
+                    index: c.index,
+                    message: Message {
+                        role: c.message.role,
+                        content: c.message.content,
+                        name: c.message.name,
+                        tool_call_id: None,
+                    },
+                    finish_reason: c.finish_reason,
+                })
+                .collect(),
             usage: UsageStats {
                 prompt_tokens: data.usage.prompt_tokens,
                 completion_tokens: data.usage.completion_tokens,
@@ -257,7 +270,7 @@ impl Provider for OpenAiProvider {
     ) -> Result<BoxStream<'static, Result<CompletionChunk>>> {
         let url = format!("{}/chat/completions", self.base_url);
         let model = request.model.clone();
-        
+
         let openai_request = OpenAiRequest {
             model: request.model,
             messages: self.convert_messages(&request.messages),
@@ -294,21 +307,21 @@ impl Provider for OpenAiProvider {
                 match chunk_result {
                     Ok(bytes) => {
                         buffer.push_str(&String::from_utf8_lossy(&bytes));
-                        
+
                         // Process complete lines
                         while let Some(pos) = buffer.find("\n\n") {
                             let event = buffer[..pos].to_string();
                             buffer = buffer[pos + 2..].to_string();
-                            
+
                             // Parse SSE event
                             for line in event.lines() {
                                 if let Some(data) = line.strip_prefix("data: ") {
                                     let data = data.trim();
-                                    
+
                                     if data == "[DONE]" {
                                         return;
                                     }
-                                    
+
                                     match serde_json::from_str::<OpenAiStreamResponse>(data) {
                                         Ok(stream_resp) => {
                                             for choice in stream_resp.choices {

@@ -315,7 +315,9 @@ impl Ledger {
         if is_privileged_action(action_type) {
             if let (Some(actor), Some(xp_mgr)) = (actor_id, &self.xp_manager) {
                 let xp_amount = crate::xp::XpManager::calculate_ledger_xp(action_type);
-                let source = crate::xp::XpSource::LedgerSigning { ledger_event_id: event_id };
+                let source = crate::xp::XpSource::LedgerSigning {
+                    ledger_event_id: event_id,
+                };
                 if let Err(e) = xp_mgr.award_xp(actor, source, xp_amount, None).await {
                     tracing::warn!(error = %e, "Failed to award ledger XP");
                 }
@@ -662,22 +664,25 @@ impl Ledger {
         .map_err(Error::Database)?;
 
         if rows.is_empty() {
-            return Err(Error::Validation(
-                format!("No ledger events found in range {} to {}", from_event_id, to_event_id)
-            ));
+            return Err(Error::Validation(format!(
+                "No ledger events found in range {} to {}",
+                from_event_id, to_event_id
+            )));
         }
 
         // Compute merkle root over event hashes
         let mut hashes: Vec<[u8; 32]> = Vec::new();
         for row in &rows {
-            let event_hash: String = row.try_get("event_hash")
-                .map_err(|e| Error::DatabaseMessage(format!("Failed to extract event_hash: {}", e)))?;
+            let event_hash: String = row.try_get("event_hash").map_err(|e| {
+                Error::DatabaseMessage(format!("Failed to extract event_hash: {}", e))
+            })?;
             let hash_bytes = hex::decode(&event_hash)
                 .map_err(|e| Error::Validation(format!("Invalid event_hash hex: {}", e)))?;
             if hash_bytes.len() != 32 {
-                return Err(Error::Validation(
-                    format!("Event hash has wrong length: expected 32, got {}", hash_bytes.len())
-                ));
+                return Err(Error::Validation(format!(
+                    "Event hash has wrong length: expected 32, got {}",
+                    hash_bytes.len()
+                )));
             }
             let mut arr = [0u8; 32];
             arr.copy_from_slice(&hash_bytes);
@@ -697,7 +702,9 @@ impl Ledger {
         });
 
         // Store anchor
-        let anchor_id = chain_anchor.anchor_hash(&root_hash_hex, metadata.clone()).await?;
+        let anchor_id = chain_anchor
+            .anchor_hash(&root_hash_hex, metadata.clone())
+            .await?;
 
         // Log anchor event to ledger
         self.log_anchor_published(
@@ -707,7 +714,8 @@ impl Ledger {
             &root_hash_hex,
             rows.len() as i64,
             owner_signing_key,
-        ).await?;
+        )
+        .await?;
 
         tracing::info!(
             anchor_id = %anchor_id,
@@ -772,7 +780,8 @@ impl Ledger {
             None,
             owner_signing_key,
             None,
-        ).await
+        )
+        .await
     }
 }
 
