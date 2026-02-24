@@ -512,3 +512,290 @@ New event types for approval lifecycle:
 Approval and denial actions are cryptographically signed server-side using the owner's Ed25519 signing key (stored in `config_store` under key `owner_keypair`). The signature is recorded in the `approval_queue` table and logged to the tamper-resistant audit ledger.
 
 If no owner signing key is configured, approval/deny endpoints return `401 Unauthorized`.
+
+---
+
+## XP System
+
+### `GET /v1/xp/agents/{id}`
+
+Get agent XP, level, and progress toward the next level.
+
+**Path Parameter:** `id` (UUID) — Agent identity ID.
+
+**Response (200 OK):**
+
+```json
+{
+  "agent_id": "fedcba98-7654-3210-fedc-ba9876543210",
+  "level": 7,
+  "total_xp": 2450,
+  "xp_to_next_level": 550,
+  "progress_percent": 81.7
+}
+```
+
+**Errors:**
+- `404 Not Found` — Agent identity does not exist
+- `500 Internal Server Error` — Database failure
+
+### `GET /v1/xp/agents/{id}/history`
+
+Paginated list of XP events for an agent.
+
+**Path Parameter:** `id` (UUID) — Agent identity ID.
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `limit` | i64 | 50 | Maximum number of events to return (max 200) |
+| `offset` | i64 | 0 | Offset for pagination |
+
+**Response (200 OK):**
+
+```json
+{
+  "events": [
+    {
+      "event_id": 142,
+      "source": "task_complete",
+      "xp_amount": 25,
+      "task_id": "01936a1b-...",
+      "skill_id": null,
+      "metadata": {},
+      "created_at": "2025-01-15T12:47:03Z"
+    }
+  ],
+  "total": 142,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+### `GET /v1/xp/leaderboard`
+
+All agents ranked by total XP.
+
+**Response (200 OK):**
+
+```json
+{
+  "leaderboard": [
+    {
+      "rank": 1,
+      "agent_id": "fedcba98-7654-3210-fedc-ba9876543210",
+      "name": "Lian",
+      "level": 7,
+      "total_xp": 2450
+    },
+    {
+      "rank": 2,
+      "agent_id": "abcdef01-2345-6789-abcd-ef0123456789",
+      "name": "lian-beta",
+      "level": 6,
+      "total_xp": 1820
+    }
+  ]
+}
+```
+
+### `GET /v1/xp/skills/{id}`
+
+Skill metrics and level for a specific skill.
+
+**Path Parameter:** `id` (UUID) — Skill ID.
+
+**Response (200 OK):**
+
+```json
+{
+  "skill_id": "01936a1d-...",
+  "name": "code_review",
+  "level": 5,
+  "total_xp": 820,
+  "usage_count": 142,
+  "success_count": 138,
+  "success_rate": 97.2,
+  "avg_execution_ms": 3400
+}
+```
+
+**Errors:**
+- `404 Not Found` — Skill does not exist
+
+### `GET /v1/xp/skills/top`
+
+Top skills ranked by total XP earned.
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `limit` | i64 | 10 | Number of skills to return (max 50) |
+
+**Response (200 OK):**
+
+```json
+{
+  "skills": [
+    {
+      "skill_id": "01936a1d-...",
+      "name": "code_review",
+      "level": 5,
+      "total_xp": 820,
+      "usage_count": 142,
+      "success_rate": 97.2
+    }
+  ]
+}
+```
+
+### `POST /v1/xp/award`
+
+Manually award XP to an agent. Requires the `xp.award` capability.
+
+**Request Body:**
+
+```json
+{
+  "agent_id": "fedcba98-7654-3210-fedc-ba9876543210",
+  "amount": 25,
+  "reason": "Manual bonus for exceptional task completion"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `agent_id` | UUID | yes | Target agent identity |
+| `amount` | i32 | yes | XP amount to award (positive integer) |
+| `reason` | string | yes | Reason for the award (recorded in ledger) |
+
+**Response (200 OK):**
+
+```json
+{
+  "event_id": 143,
+  "new_total_xp": 2475,
+  "new_level": 7
+}
+```
+
+**Errors:**
+- `400 Bad Request` — Invalid amount or missing fields
+- `401 Unauthorized` — Missing `xp.award` capability
+- `404 Not Found` — Agent identity does not exist
+
+### XP WebSocket Events
+
+| EventType | Payload | Description |
+|-----------|---------|-------------|
+| `XpAwarded` | `{ "agent_id": "...", "amount": 25, "reason": "...", "new_total": 2475 }` | XP awarded to an agent |
+| `LevelUp` | `{ "agent_id": "...", "old_level": 6, "new_level": 7, "total_xp": 2450 }` | Agent reached a new level |
+
+---
+
+## Voice Gateway
+
+### `POST /v1/voice/configure`
+
+Set ElevenLabs API key and voice configuration.
+
+**Request Body:**
+
+```json
+{
+  "api_key": "sk-elevenlabs-...",
+  "voice_id": "21m00Tcm4TlvDq8ikWAM",
+  "model": "eleven_monolingual_v1"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `api_key` | string | yes | ElevenLabs API key (encrypted before storage) |
+| `voice_id` | string | yes | Default voice ID for TTS |
+| `model` | string | no | ElevenLabs model (default: `eleven_monolingual_v1`) |
+
+**Response (200 OK):**
+
+```json
+{
+  "configured": true
+}
+```
+
+**Errors:**
+- `401 Unauthorized` — Owner signing key not configured
+- `400 Bad Request` — Missing required fields
+
+### `POST /v1/voice/test`
+
+Test TTS with current configuration. Returns base64-encoded audio.
+
+**Request Body:**
+
+```json
+{
+  "text": "Hello, I am Lian.",
+  "voice_id": "21m00Tcm4TlvDq8ikWAM"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `text` | string | yes | Text to synthesize |
+| `voice_id` | string | no | Override voice ID (uses configured default if omitted) |
+
+**Response (200 OK):**
+
+```json
+{
+  "audio_base64": "UklGRi...",
+  "content_type": "audio/mpeg",
+  "duration_ms": 1250
+}
+```
+
+**Errors:**
+- `401 Unauthorized` — API key not configured
+- `503 Service Unavailable` — ElevenLabs API unreachable
+- `429 Too Many Requests` — ElevenLabs rate limit exceeded
+
+### `GET /v1/voice/voices`
+
+List available ElevenLabs voices.
+
+**Response (200 OK):**
+
+```json
+{
+  "voices": [
+    {
+      "voice_id": "21m00Tcm4TlvDq8ikWAM",
+      "name": "Rachel",
+      "preview_url": "https://api.elevenlabs.io/v1/voices/21m00Tcm4TlvDq8ikWAM/preview"
+    },
+    {
+      "voice_id": "AZnzlk1XvdvUeBnXmlld",
+      "name": "Domi",
+      "preview_url": "https://api.elevenlabs.io/v1/voices/AZnzlk1XvdvUeBnXmlld/preview"
+    }
+  ]
+}
+```
+
+**Errors:**
+- `401 Unauthorized` — API key not configured
+- `503 Service Unavailable` — ElevenLabs API unreachable
+- `429 Too Many Requests` — ElevenLabs rate limit exceeded
+
+### Voice Error Codes
+
+| Status | Description |
+|--------|-------------|
+| `200 OK` | Success |
+| `400 Bad Request` | Invalid request body |
+| `401 Unauthorized` | API key not configured (run `POST /v1/voice/configure` first) |
+| `429 Too Many Requests` | ElevenLabs rate limit — reduce request frequency or upgrade plan |
+| `503 Service Unavailable` | ElevenLabs API unreachable — check network connectivity |

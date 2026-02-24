@@ -209,3 +209,110 @@ The gemstone metaphor extends throughout the brand:
 - 🔥 **Fire** polishes the gem (the forge refines the system)
 - 💎 **Gem** is the precious result (reliable, valuable, enduring)
 - 🦎 **Lian** is the spirit within (the agent that brings it to life)
+
+---
+
+## Asset Inventory
+
+All brand assets live under the `assets/` directory at the repository root.
+
+### Logos (`assets/logos/`)
+
+| File | Format | Dimensions | Description |
+|------|--------|------------|-------------|
+| `carnelian-icon.svg` | SVG | 64×64 | Standalone faceted gemstone mark — no text |
+| `carnelian-logo-full.svg` | SVG | 280×64 | Icon + "Carnelian OS" wordmark + "🦎 Lian" sub-label (light variant, Ink text) |
+| `carnelian-logo-full-dark.svg` | SVG | 280×64 | Icon + wordmark + sub-label (dark variant, Bone text, Jade Glow sub-label) |
+| `carnelian-wordmark.svg` | SVG | 240×48 | Text-only: "🔥 Carnelian OS" in Carnelian Ember |
+
+### PNG Exports (`assets/logos/exports/`)
+
+Generated from `carnelian-icon.svg`. Regenerate after any logo revision using the commands below.
+
+| File | Dimensions | Use |
+|------|------------|-----|
+| `carnelian-icon-512.png` | 512×512 | App store / social avatar |
+| `carnelian-icon-256.png` | 256×256 | Desktop app icon |
+| `carnelian-icon-128.png` | 128×128 | Taskbar / dock |
+| `carnelian-icon-64.png` | 64×64 | Favicon / small badge |
+
+**Rasterisation commands** (requires `rsvg-convert` from librsvg, or Inkscape):
+
+```bash
+# Using rsvg-convert (recommended)
+rsvg-convert -w 512 -h 512 assets/logos/carnelian-icon.svg -o assets/logos/exports/carnelian-icon-512.png
+rsvg-convert -w 256 -h 256 assets/logos/carnelian-icon.svg -o assets/logos/exports/carnelian-icon-256.png
+rsvg-convert -w 128 -h 128 assets/logos/carnelian-icon.svg -o assets/logos/exports/carnelian-icon-128.png
+rsvg-convert -w 64  -h 64  assets/logos/carnelian-icon.svg -o assets/logos/exports/carnelian-icon-64.png
+
+# Using Inkscape (alternative)
+inkscape assets/logos/carnelian-icon.svg --export-type=png --export-width=512 --export-filename=assets/logos/exports/carnelian-icon-512.png
+inkscape assets/logos/carnelian-icon.svg --export-type=png --export-width=256 --export-filename=assets/logos/exports/carnelian-icon-256.png
+inkscape assets/logos/carnelian-icon.svg --export-type=png --export-width=128 --export-filename=assets/logos/exports/carnelian-icon-128.png
+inkscape assets/logos/carnelian-icon.svg --export-type=png --export-width=64  --export-filename=assets/logos/exports/carnelian-icon-64.png
+```
+
+### Branding Specs (`assets/branding/`)
+
+| File | Format | Description |
+|------|--------|-------------|
+| `color-palette.json` | JSON | Machine-readable colour tokens: core, forge, nightLab, and themed token sets |
+| `typography.md` | Markdown | Type scale, font stacks, weight reference, colour pairing per theme |
+| `brand-tokens.css` | CSS | Canonical CSS custom properties for colours and typography |
+
+### Social Media Templates (`assets/social/`)
+
+| File | Format | Dimensions | Description |
+|------|--------|------------|-------------|
+| `twitter-card-1200x630.svg` | SVG | 1200×630 | Twitter/X card: gem icon, title, tagline, URL |
+| `opengraph-1200x630.svg` | SVG | 1200×630 | OpenGraph card: same composition as Twitter card |
+| `github-preview-1280x640.svg` | SVG | 1280×640 | GitHub social preview: card + feature badge pills |
+
+### Screenshots (`assets/screenshots/`)
+
+| File | Format | Resolution | Description |
+|------|--------|------------|-------------|
+| `dashboard.png` | PNG | ≥1280×800 | Main dashboard: metric cards, system health, XP widget |
+| `xp-progression.png` | PNG | ≥1280×800 | XP Progression tab: level history chart, leaderboard, skill levels |
+| `task-execution.png` | PNG | ≥1280×800 | Active task: scheduler queue, run logs, worker status |
+| `skills-metrics.png` | PNG | ≥1280×800 | Skills metrics: top skills table, usage breakdown |
+
+> All screenshots should use the **Night Lab (dark) theme** for visual consistency in documentation.
+
+---
+
+## Logo Usage Guidelines
+
+### Do
+
+- Use the **full logo** (`carnelian-logo-full.svg`) on white/bone or dark/obsidian backgrounds.
+- Maintain **minimum clear space** equal to the gem icon height on all sides.
+- Use the **dark variant** (`carnelian-logo-full-dark.svg`) on dark backgrounds.
+- Use the **wordmark** (`carnelian-wordmark.svg`) for README badges and documentation headers where the icon is not needed.
+
+### Don't
+
+- **Recolour** the gem facets — the facet colours encode depth and are part of the identity.
+- **Stretch or distort** the SVG — always scale proportionally.
+- Place the **light logo on a coloured background** without sufficient contrast (minimum 4.5:1 ratio).
+- Use the 🔥 emoji as a **substitute for the SVG logo** in formal contexts (marketing, app stores, print).
+
+### Minimum Sizes
+
+| Variant | Minimum Width |
+|---------|---------------|
+| Full logo (icon + wordmark) | 120px wide |
+| Standalone icon | 24×24px |
+
+### File Selection Guide
+
+| Context | Recommended File |
+|---------|-----------------|
+| README header / badge | `carnelian-wordmark.svg` or shield.io badge |
+| App icon (desktop) | `carnelian-icon-256.png` |
+| Favicon | `carnelian-icon-64.png` |
+| Social card (Twitter/OG) | `twitter-card-1200x630.svg` or `opengraph-1200x630.svg` |
+| GitHub repo social preview | `github-preview-1280x640.svg` (rasterise to PNG for upload) |
+| Documentation (light bg) | `carnelian-logo-full.svg` |
+| Documentation (dark bg) | `carnelian-logo-full-dark.svg` |
+| Print / high-res | `carnelian-icon-512.png` or SVG source |
