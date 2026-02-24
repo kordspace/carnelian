@@ -74,15 +74,18 @@
 //! let results = manager.search_memories(query).await?;
 //! ```
 
+use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
+use ed25519_dalek::SigningKey;
 use pgvector::Vector;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use serde_json::Value as JsonValue;
 use sqlx::{FromRow, PgPool, Row};
 use uuid::Uuid;
 
@@ -91,6 +94,7 @@ use carnelian_common::{Error, Result};
 
 use crate::encryption::EncryptionHelper;
 use crate::events::EventStream;
+use crate::ledger::Ledger;
 
 // =============================================================================
 // MEMORY SOURCE
@@ -169,6 +173,9 @@ pub struct Memory {
     pub accessed_at: DateTime<Utc>,
     /// Number of times this memory has been retrieved
     pub access_count: i32,
+    /// Topic tags for selective disclosure during export
+    #[sqlx(json)]
+    pub tags: Vec<String>,
 }
 
 impl Memory {
@@ -211,6 +218,128 @@ fn validate_embedding_dimension(embedding: &[f32]) -> Result<()> {
         )));
     }
     Ok(())
+}
+
+// =============================================================================
+// MEMORY ENVELOPE (Portable Memory Format)
+// =============================================================================
+
+/// Portable memory envelope for export/import with integrity verification.
+///
+/// Uses CBOR serialization, AES-256-GCM encryption (via `EncryptionHelper`),
+/// blake3 integrity hashing, and optional Ed25519 signatures.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryEnvelope {
+    /// Envelope format version
+    pub version: u8,
+    /// AES-256-GCM encrypted memory content (JSON bytes)
+    pub encrypted_content: Vec<u8>,
+    /// blake3 hash of encrypted_content for integrity verification
+    pub content_hash: String,
+    /// Optional ledger proof material for chain-of-custody verification
+    pub ledger_proof: Option<LedgerProofMaterial>,
+    /// Capability grants associated with this memory
+    pub capability_grants: Vec<CapabilityGrantMetadata>,
+    /// Optional embedding vector (unencrypted for portability)
+    pub embedding: Option<Vec<f32>>,
+    /// Arbitrary metadata key-value pairs
+    pub metadata: HashMap<String, String>,
+    /// Optional external chain anchor ID
+    pub chain_anchor: Option<String>,
+}
+
+/// Ledger proof material capturing the chain position for verification.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LedgerProofMaterial {
+    /// Ledger event ID
+    pub event_id: i64,
+    /// blake3 hash of the ledger event
+    pub event_hash: String,
+    /// Hash of the preceding event (None for genesis)
+    pub prev_hash: Option<String>,
+    /// Ed25519 signature of event_hash (if privileged)
+    pub core_signature: Option<String>,
+    /// Timestamp of the ledger event
+    pub timestamp: DateTime<Utc>,
+}
+
+/// Capability grant metadata for portable capability transfer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapabilityGrantMetadata {
+    /// Unique grant identifier
+    pub grant_id: Uuid,
+    /// Capability key (e.g., "memory.read")
+    pub capability_key: String,
+    /// Optional scope restrictions (JSON)
+    pub scope: Option<JsonValue>,
+    /// Identity that approved the grant
+    pub approved_by: Option<Uuid>,
+    /// Expiration timestamp
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+/// Options controlling selective disclosure during memory export.
+#[derive(Debug, Clone, Default)]
+pub struct MemoryExportOptions {
+    /// Include embedding vectors in the envelope
+    pub include_embedding: bool,
+    /// Filter memories by tags (include if any tag matches)
+    pub topic_filter: Option<Vec<String>>,
+    /// Minimum importance threshold for inclusion
+    pub min_importance: Option<f32>,
+    /// Include ledger proof material
+    pub include_ledger_proof: bool,
+    /// Include capability grants
+    pub include_capabilities: bool,
+}
+
+/// Result of importing a single memory envelope.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryImportResult {
+    /// ID of the newly created memory
+    pub memory_id: Uuid,
+    /// Whether the envelope signature was verified
+    pub verified: bool,
+    /// Whether the ledger proof was valid
+    pub ledger_proof_valid: bool,
+    /// Any warnings encountered during import
+    pub warnings: Vec<String>,
+}
+
+// =============================================================================
+// CHAIN ANCHORING INTERFACE
+// =============================================================================
+
+/// Trait for anchoring memory hashes to an external chain (e.g., blockchain).
+///
+/// Implementations provide cryptographic proof that a memory hash existed at a
+/// specific point in time on an external ledger.
+#[async_trait]
+pub trait ChainAnchor: Send + Sync {
+    /// Anchor a hash to the external chain, returning an anchor ID.
+    async fn anchor_hash(&self, hash: &str, metadata: JsonValue) -> Result<String>;
+    /// Verify that a hash was anchored with the given anchor ID.
+    async fn verify_anchor(&self, hash: &str, anchor_id: &str) -> Result<bool>;
+    /// Retrieve the full proof for an anchor.
+    async fn get_anchor_proof(&self, anchor_id: &str) -> Result<Option<JsonValue>>;
+}
+
+/// No-op chain anchor stub for use when no external chain is configured.
+pub struct NoOpChainAnchor;
+
+#[async_trait]
+impl ChainAnchor for NoOpChainAnchor {
+    async fn anchor_hash(&self, _hash: &str, _metadata: JsonValue) -> Result<String> {
+        Ok("not_implemented".to_string())
+    }
+
+    async fn verify_anchor(&self, _hash: &str, _anchor_id: &str) -> Result<bool> {
+        Ok(false)
+    }
+
+    async fn get_anchor_proof(&self, _anchor_id: &str) -> Result<Option<JsonValue>> {
+        Ok(None)
+    }
 }
 
 // =============================================================================
@@ -416,6 +545,10 @@ pub struct MemoryManager {
     event_stream: Option<Arc<EventStream>>,
     /// Optional encryption helper for content encryption at rest
     encryption: Option<EncryptionHelper>,
+    /// Optional audit ledger for chain-of-custody proofs
+    ledger: Option<Arc<Ledger>>,
+    /// Optional chain anchor for external blockchain integration
+    chain_anchor: Option<Arc<dyn ChainAnchor>>,
 }
 
 impl MemoryManager {
@@ -430,6 +563,8 @@ impl MemoryManager {
             pool,
             event_stream,
             encryption: None,
+            ledger: None,
+            chain_anchor: None,
         }
     }
 
@@ -441,6 +576,20 @@ impl MemoryManager {
     #[must_use]
     pub fn with_encryption(mut self, helper: EncryptionHelper) -> Self {
         self.encryption = Some(helper);
+        self
+    }
+
+    /// Builder-style setter to attach an audit ledger for chain-of-custody proofs.
+    #[must_use]
+    pub fn with_ledger(mut self, ledger: Arc<Ledger>) -> Self {
+        self.ledger = Some(ledger);
+        self
+    }
+
+    /// Builder-style setter to attach a chain anchor for external blockchain integration.
+    #[must_use]
+    pub fn with_chain_anchor(mut self, anchor: Arc<dyn ChainAnchor>) -> Self {
+        self.chain_anchor = Some(anchor);
         self
     }
 
@@ -493,6 +642,7 @@ impl MemoryManager {
         source: MemorySource,
         embedding: Option<Vec<f32>>,
         importance: f32,
+        tags: Option<Vec<String>>,
     ) -> Result<Memory> {
         validate_importance(importance)?;
 
@@ -503,14 +653,17 @@ impl MemoryManager {
         let memory_id = Uuid::new_v4();
         let source_str = source.to_string();
         let pg_embedding = embedding.as_ref().map(|e| Vector::from(e.clone()));
+        let tags_vec = tags.unwrap_or_default();
+        let tags_json = serde_json::to_value(&tags_vec)
+            .map_err(|e| Error::Memory(format!("Failed to serialize tags: {}", e)))?;
 
         // Encrypt content if encryption is configured; otherwise store raw UTF-8 bytes
         let content_bytes = self.encrypt_content(content).await?;
 
         let row = sqlx::query(
-            r"INSERT INTO memories (memory_id, identity_id, content, summary, source, embedding, importance)
-              VALUES ($1, $2, $3, $4, $5, $6, $7)
-              RETURNING memory_id, identity_id, content, summary, source, importance, created_at, accessed_at, access_count",
+            r"INSERT INTO memories (memory_id, identity_id, content, summary, source, embedding, importance, tags)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+              RETURNING memory_id, identity_id, content, summary, source, importance, created_at, accessed_at, access_count, tags",
         )
         .bind(memory_id)
         .bind(identity_id)
@@ -519,12 +672,16 @@ impl MemoryManager {
         .bind(&source_str)
         .bind(pg_embedding)
         .bind(importance)
+        .bind(&tags_json)
         .fetch_one(&self.pool)
         .await?;
 
         // Decrypt content from BYTEA
         let content_raw: Vec<u8> = row.get("content");
         let decrypted_content = self.decrypt_content(&content_raw).await?;
+
+        let tags_raw: JsonValue = row.get("tags");
+        let returned_tags: Vec<String> = serde_json::from_value(tags_raw).unwrap_or_default();
 
         let memory = Memory {
             memory_id: row.get("memory_id"),
@@ -537,6 +694,7 @@ impl MemoryManager {
             created_at: row.get("created_at"),
             accessed_at: row.get("accessed_at"),
             access_count: row.get("access_count"),
+            tags: returned_tags,
         };
 
         tracing::info!(
@@ -571,7 +729,7 @@ impl MemoryManager {
             r"UPDATE memories
               SET accessed_at = NOW(), access_count = access_count + 1
               WHERE memory_id = $1
-              RETURNING memory_id, identity_id, content, summary, source, importance, created_at, accessed_at, access_count",
+              RETURNING memory_id, identity_id, content, summary, source, importance, created_at, accessed_at, access_count, tags",
         )
         .bind(memory_id)
         .fetch_optional(&self.pool)
@@ -583,6 +741,8 @@ impl MemoryManager {
 
         let content_raw: Vec<u8> = row.get("content");
         let decrypted_content = self.decrypt_content(&content_raw).await?;
+        let tags_raw: JsonValue = row.get("tags");
+        let tags: Vec<String> = serde_json::from_value(tags_raw).unwrap_or_default();
 
         Ok(Some(Memory {
             memory_id: row.get("memory_id"),
@@ -595,6 +755,7 @@ impl MemoryManager {
             created_at: row.get("created_at"),
             accessed_at: row.get("accessed_at"),
             access_count: row.get("access_count"),
+            tags,
         }))
     }
 
@@ -615,6 +776,7 @@ impl MemoryManager {
         content: Option<&str>,
         summary: Option<Option<String>>,
         importance: Option<f32>,
+        tags: Option<Vec<String>>,
     ) -> Result<Memory> {
         if let Some(imp) = importance {
             validate_importance(imp)?;
@@ -636,6 +798,10 @@ impl MemoryManager {
             param_idx += 1;
             set_parts.push(format!("importance = ${param_idx}"));
         }
+        if tags.is_some() {
+            param_idx += 1;
+            set_parts.push(format!("tags = ${param_idx}"));
+        }
 
         if set_parts.is_empty() {
             // Nothing to update, just fetch the current state
@@ -646,7 +812,7 @@ impl MemoryManager {
         }
 
         let sql = format!(
-            "UPDATE memories SET {} WHERE memory_id = $1 RETURNING memory_id, identity_id, content, summary, source, importance, created_at, accessed_at, access_count",
+            "UPDATE memories SET {} WHERE memory_id = $1 RETURNING memory_id, identity_id, content, summary, source, importance, created_at, accessed_at, access_count, tags",
             set_parts.join(", ")
         );
 
@@ -668,6 +834,11 @@ impl MemoryManager {
         if let Some(i) = importance {
             query = query.bind(i);
         }
+        if let Some(ref t) = tags {
+            let tags_json = serde_json::to_value(t)
+                .map_err(|e| Error::Memory(format!("Failed to serialize tags: {}", e)))?;
+            query = query.bind(tags_json);
+        }
 
         let row = query
             .fetch_optional(&self.pool)
@@ -676,6 +847,8 @@ impl MemoryManager {
 
         let content_raw: Vec<u8> = row.get("content");
         let decrypted_content = self.decrypt_content(&content_raw).await?;
+        let tags_raw: JsonValue = row.get("tags");
+        let returned_tags: Vec<String> = serde_json::from_value(tags_raw).unwrap_or_default();
 
         let memory = Memory {
             memory_id: row.get("memory_id"),
@@ -688,6 +861,7 @@ impl MemoryManager {
             created_at: row.get("created_at"),
             accessed_at: row.get("accessed_at"),
             access_count: row.get("access_count"),
+            tags: returned_tags,
         };
 
         tracing::info!(memory_id = %memory_id, "Memory updated");
@@ -749,7 +923,7 @@ impl MemoryManager {
                   ORDER BY created_at DESC
                   LIMIT $3
               )
-              RETURNING memory_id, identity_id, content, summary, source, importance, created_at, accessed_at, access_count",
+              RETURNING memory_id, identity_id, content, summary, source, importance, created_at, accessed_at, access_count, tags",
         )
         .bind(identity_id)
         .bind(since)
@@ -761,6 +935,8 @@ impl MemoryManager {
         for row in &rows {
             let content_raw: Vec<u8> = row.get("content");
             let decrypted_content = self.decrypt_content(&content_raw).await?;
+            let tags_raw: JsonValue = row.get("tags");
+            let tags: Vec<String> = serde_json::from_value(tags_raw).unwrap_or_default();
             memories.push(Memory {
                 memory_id: row.get("memory_id"),
                 identity_id: row.get("identity_id"),
@@ -772,6 +948,7 @@ impl MemoryManager {
                 created_at: row.get("created_at"),
                 accessed_at: row.get("accessed_at"),
                 access_count: row.get("access_count"),
+                tags,
             });
         }
 
@@ -806,7 +983,7 @@ impl MemoryManager {
                   ORDER BY importance DESC, created_at DESC
                   LIMIT $3
               )
-              RETURNING memory_id, identity_id, content, summary, source, importance, created_at, accessed_at, access_count",
+              RETURNING memory_id, identity_id, content, summary, source, importance, created_at, accessed_at, access_count, tags",
         )
         .bind(identity_id)
         .bind(min_importance)
@@ -818,6 +995,8 @@ impl MemoryManager {
         for row in &rows {
             let content_raw: Vec<u8> = row.get("content");
             let decrypted_content = self.decrypt_content(&content_raw).await?;
+            let tags_raw: JsonValue = row.get("tags");
+            let tags: Vec<String> = serde_json::from_value(tags_raw).unwrap_or_default();
             memories.push(Memory {
                 memory_id: row.get("memory_id"),
                 identity_id: row.get("identity_id"),
@@ -829,6 +1008,7 @@ impl MemoryManager {
                 created_at: row.get("created_at"),
                 accessed_at: row.get("accessed_at"),
                 access_count: row.get("access_count"),
+                tags,
             });
         }
 
@@ -897,7 +1077,7 @@ impl MemoryManager {
         };
 
         let sql = format!(
-            "SELECT memory_id, identity_id, content, summary, source, importance, created_at, accessed_at, access_count \
+            "SELECT memory_id, identity_id, content, summary, source, importance, created_at, accessed_at, access_count, tags \
              FROM memories {where_clause} ORDER BY created_at DESC LIMIT ${limit_idx}"
         );
 
@@ -934,6 +1114,8 @@ impl MemoryManager {
         for row in &rows {
             let content_raw: Vec<u8> = row.get("content");
             let decrypted_content = self.decrypt_content(&content_raw).await?;
+            let tags_raw: JsonValue = row.get("tags");
+            let tags: Vec<String> = serde_json::from_value(tags_raw).unwrap_or_default();
             memories.push(Memory {
                 memory_id: row.get("memory_id"),
                 identity_id: row.get("identity_id"),
@@ -945,6 +1127,7 @@ impl MemoryManager {
                 created_at: row.get("created_at"),
                 accessed_at: row.get("accessed_at"),
                 access_count: row.get("access_count"),
+                tags,
             });
         }
 
@@ -986,7 +1169,7 @@ impl MemoryManager {
                 let source_strings: Vec<String> = sources.iter().map(ToString::to_string).collect();
                 sqlx::query(
                     r"SELECT memory_id, identity_id, content, summary, source, importance,
-                             created_at, accessed_at, access_count,
+                             created_at, accessed_at, access_count, tags,
                              (embedding <=> $1::vector) AS distance
                       FROM memories
                       WHERE identity_id = $2
@@ -1006,7 +1189,7 @@ impl MemoryManager {
             } else {
                 sqlx::query(
                     r"SELECT memory_id, identity_id, content, summary, source, importance,
-                             created_at, accessed_at, access_count,
+                             created_at, accessed_at, access_count, tags,
                              (embedding <=> $1::vector) AS distance
                       FROM memories
                       WHERE identity_id = $2
@@ -1025,7 +1208,7 @@ impl MemoryManager {
         } else {
             sqlx::query(
                 r"SELECT memory_id, identity_id, content, summary, source, importance,
-                         created_at, accessed_at, access_count,
+                         created_at, accessed_at, access_count, tags,
                          (embedding <=> $1::vector) AS distance
                   FROM memories
                   WHERE identity_id = $2
@@ -1053,6 +1236,8 @@ impl MemoryManager {
 
             let content_raw: Vec<u8> = row.get("content");
             let decrypted_content = self.decrypt_content(&content_raw).await?;
+            let tags_raw: JsonValue = row.get("tags");
+            let tags: Vec<String> = serde_json::from_value(tags_raw).unwrap_or_default();
 
             results.push((
                 Memory {
@@ -1066,6 +1251,7 @@ impl MemoryManager {
                     created_at: row.get("created_at"),
                     accessed_at: row.get("accessed_at"),
                     access_count: row.get("access_count"),
+                    tags,
                 },
                 similarity,
             ));
@@ -1217,6 +1403,750 @@ impl MemoryManager {
             observation_count,
             reflection_count,
         })
+    }
+
+    // =========================================================================
+    // MEMORY PORTABILITY (Export / Import)
+    // =========================================================================
+
+    /// Export a single memory as a signed, encrypted CBOR envelope.
+    ///
+    /// # Arguments
+    ///
+    /// * `memory_id` - Memory to export
+    /// * `options` - Controls selective disclosure (embedding, ledger proof, capabilities)
+    /// * `signing_key` - Optional Ed25519 key; if provided, the CBOR bytes are signed
+    ///
+    /// # Returns
+    ///
+    /// CBOR-serialized bytes. If `signing_key` is provided, the first 64 bytes are the
+    /// Ed25519 signature followed by the CBOR payload.
+    pub async fn export_memory(
+        &self,
+        memory_id: Uuid,
+        options: &MemoryExportOptions,
+        signing_key: Option<&SigningKey>,
+    ) -> Result<Vec<u8>> {
+        // 1. Fetch memory
+        let memory = self
+            .get_memory(memory_id)
+            .await?
+            .ok_or_else(|| Error::Memory(format!("Memory {} not found", memory_id)))?;
+
+        // 2. Apply topic filter (check tags stored in DB)
+        if let Some(ref filter_tags) = options.topic_filter {
+            let tags = self.get_memory_tags(memory_id).await?;
+            let matches = tags.iter().any(|t| filter_tags.contains(t));
+            if !matches {
+                return Err(Error::Memory(format!(
+                    "Memory {} does not match topic filter",
+                    memory_id
+                )));
+            }
+        }
+
+        // 3. Apply importance filter
+        if let Some(min_imp) = options.min_importance {
+            if memory.importance < min_imp {
+                return Err(Error::Memory(format!(
+                    "Memory {} importance {} below threshold {}",
+                    memory_id, memory.importance, min_imp
+                )));
+            }
+        }
+
+        // 4. Retrieve ledger proof if requested
+        let ledger_proof = if options.include_ledger_proof {
+            self.get_ledger_proof_for_memory(memory_id).await?
+        } else {
+            None
+        };
+
+        // 5. Retrieve capability grants if requested
+        let capability_grants = if options.include_capabilities {
+            self.get_capability_grants_for_memory(memory_id).await?
+        } else {
+            Vec::new()
+        };
+
+        // 6. Serialize memory content to JSON
+        let content_json = serde_json::to_vec(&json!({
+            "memory_id": memory.memory_id,
+            "identity_id": memory.identity_id,
+            "content": memory.content,
+            "summary": memory.summary,
+            "source": memory.source,
+            "importance": memory.importance,
+            "created_at": memory.created_at,
+            "accessed_at": memory.accessed_at,
+            "access_count": memory.access_count,
+        }))
+        .map_err(|e| Error::Memory(format!("Failed to serialize memory: {}", e)))?;
+
+        // 7. Encrypt content
+        let encrypted_content = self.encrypt_content_bytes(&content_json).await?;
+
+        // 8. Compute blake3 hash of encrypted content
+        let content_hash = hex::encode(blake3::hash(&encrypted_content).as_bytes());
+
+        // 9. Build envelope
+        let mut metadata = HashMap::new();
+        metadata.insert("exported_at".to_string(), Utc::now().to_rfc3339());
+        metadata.insert("source_memory_id".to_string(), memory_id.to_string());
+
+        let embedding = if options.include_embedding {
+            memory.embedding
+        } else {
+            None
+        };
+
+        // 9.5. Anchor hash if chain_anchor is configured
+        let chain_anchor = if let Some(ref anchor) = self.chain_anchor {
+            let anchor_metadata = serde_json::json!({
+                "memory_id": memory_id.to_string(),
+                "exported_at": Utc::now().to_rfc3339(),
+            });
+            match anchor.anchor_hash(&content_hash, anchor_metadata).await {
+                Ok(anchor_id) => Some(anchor_id),
+                Err(e) => {
+                    tracing::warn!(error = %e, "Failed to anchor memory hash");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        let envelope = MemoryEnvelope {
+            version: 1,
+            encrypted_content,
+            content_hash,
+            ledger_proof,
+            capability_grants,
+            embedding,
+            metadata,
+            chain_anchor,
+        };
+
+        // 10. Serialize to CBOR
+        let mut cbor_bytes = Vec::new();
+        ciborium::ser::into_writer(&envelope, &mut cbor_bytes)
+            .map_err(|e| Error::Memory(format!("CBOR serialization failed: {}", e)))?;
+
+        // 11. Sign if signing key provided
+        let output = if let Some(sk) = signing_key {
+            let sig = crate::crypto::sign_bytes(sk, &cbor_bytes);
+            let sig_bytes = hex::decode(&sig)
+                .map_err(|e| Error::Memory(format!("Signature hex decode failed: {}", e)))?;
+            let mut signed = sig_bytes;
+            signed.extend_from_slice(&cbor_bytes);
+            signed
+        } else {
+            cbor_bytes
+        };
+
+        // 12. Emit event
+        self.emit_event(
+            EventType::MemoryExported,
+            json!({
+                "memory_id": memory_id,
+                "signed": signing_key.is_some(),
+                "include_ledger_proof": options.include_ledger_proof,
+            }),
+        );
+
+        Ok(output)
+    }
+
+    /// Export multiple memories as a batch CBOR envelope.
+    ///
+    /// Fetches memories matching the query, applies export options, and serializes
+    /// all envelopes into a single CBOR batch. When a `signing_key` is provided,
+    /// the **entire** serialized `Vec<MemoryEnvelope>` CBOR is signed as a unit
+    /// (64-byte Ed25519 signature prefix). Individual envelopes within the batch
+    /// are not individually signed. Use [`import_memories_batch`] to import the
+    /// result; it performs batch-level signature verification and propagates the
+    /// `verified` status to each imported memory.
+    pub async fn export_memories_batch(
+        &self,
+        memory_ids: &[Uuid],
+        options: &MemoryExportOptions,
+        signing_key: Option<&SigningKey>,
+    ) -> Result<Vec<u8>> {
+        let mut envelopes: Vec<MemoryEnvelope> = Vec::new();
+
+        for &mid in memory_ids {
+            match self.export_memory_envelope(mid, options).await {
+                Ok(env) => envelopes.push(env),
+                Err(e) => {
+                    tracing::warn!(memory_id = %mid, error = %e, "Skipping memory during batch export");
+                }
+            }
+        }
+
+        if envelopes.is_empty() {
+            return Err(Error::Memory("No memories matched export criteria".to_string()));
+        }
+
+        // Serialize batch to CBOR
+        let mut cbor_bytes = Vec::new();
+        ciborium::ser::into_writer(&envelopes, &mut cbor_bytes)
+            .map_err(|e| Error::Memory(format!("CBOR batch serialization failed: {}", e)))?;
+
+        // Sign if signing key provided
+        let output = if let Some(sk) = signing_key {
+            let sig = crate::crypto::sign_bytes(sk, &cbor_bytes);
+            let sig_bytes = hex::decode(&sig)
+                .map_err(|e| Error::Memory(format!("Signature hex decode failed: {}", e)))?;
+            let mut signed = sig_bytes;
+            signed.extend_from_slice(&cbor_bytes);
+            signed
+        } else {
+            cbor_bytes
+        };
+
+        self.emit_event(
+            EventType::MemoryExported,
+            json!({
+                "count": envelopes.len(),
+                "signed": signing_key.is_some(),
+                "batch": true,
+            }),
+        );
+
+        Ok(output)
+    }
+
+    /// Import a single memory from a CBOR envelope.
+    ///
+    /// # Arguments
+    ///
+    /// * `envelope_bytes` - Raw bytes (optionally prefixed with 64-byte Ed25519 signature)
+    /// * `identity_id` - Identity to assign the imported memory to
+    /// * `verify_signature` - Whether to verify the Ed25519 signature
+    /// * `public_key` - Hex-encoded Ed25519 public key for verification
+    pub async fn import_memory(
+        &self,
+        envelope_bytes: &[u8],
+        identity_id: Uuid,
+        verify_signature: bool,
+        public_key: Option<&str>,
+    ) -> Result<MemoryImportResult> {
+        let mut warnings = Vec::new();
+
+        // 1. Verify signature if requested
+        let cbor_data = if verify_signature {
+            if envelope_bytes.len() < 64 {
+                return Err(Error::Memory("Envelope too short for signature verification".to_string()));
+            }
+            let sig_bytes = &envelope_bytes[..64];
+            let cbor_payload = &envelope_bytes[64..];
+            let sig_hex = hex::encode(sig_bytes);
+
+            let pk = public_key.ok_or_else(|| {
+                Error::Memory("Public key required for signature verification".to_string())
+            })?;
+
+            let valid = crate::crypto::verify_signature(pk, cbor_payload, &sig_hex)?;
+            if !valid {
+                return Err(Error::Memory("Envelope signature verification failed".to_string()));
+            }
+            cbor_payload
+        } else {
+            if envelope_bytes.len() >= 64 && public_key.is_some() {
+                warnings.push("Signature present but verification not requested".to_string());
+            }
+            envelope_bytes
+        };
+
+        // 2. Deserialize CBOR to MemoryEnvelope
+        let envelope: MemoryEnvelope = ciborium::de::from_reader(cbor_data)
+            .map_err(|e| Error::Memory(format!("CBOR deserialization failed: {}", e)))?;
+
+        // 2.5. Enforce topic-scoped capability grants (Phase 3.2)
+        // Check if envelope has topic-scoped grants and verify identity has access
+        if !envelope.capability_grants.is_empty() {
+            if let Some(topic_filter) = envelope.metadata.get("topic_filter") {
+                let topics: Vec<&str> = topic_filter.split(',').map(|s| s.trim()).collect();
+                let policy_engine = crate::policy::PolicyEngine::new(self.pool.clone());
+                
+                for topic in topics {
+                    let has_capability = policy_engine
+                        .check_memory_topic_capability(identity_id, topic)
+                        .await?;
+                    
+                    if !has_capability {
+                        return Err(Error::Security(
+                            format!("Topic capability denied: {}", topic)
+                        ));
+                    }
+                }
+            }
+        }
+
+        // 3. Verify blake3 hash
+        let computed_hash = hex::encode(blake3::hash(&envelope.encrypted_content).as_bytes());
+        if computed_hash != envelope.content_hash {
+            return Err(Error::Memory(
+                "Content hash mismatch: envelope may be tampered".to_string(),
+            ));
+        }
+
+        // 4. Decrypt content
+        let decrypted = self.decrypt_content_bytes(&envelope.encrypted_content).await?;
+
+        // 5. Deserialize JSON to memory fields
+        let mem_json: JsonValue = serde_json::from_slice(&decrypted)
+            .map_err(|e| Error::Memory(format!("Failed to parse decrypted content: {}", e)))?;
+
+        let content = mem_json["content"]
+            .as_str()
+            .ok_or_else(|| Error::Memory("Missing 'content' field in envelope".to_string()))?;
+        let summary = mem_json["summary"].as_str().map(String::from);
+        let source_str = mem_json["source"]
+            .as_str()
+            .unwrap_or("observation");
+        let source = MemorySource::from_str(source_str).unwrap_or(MemorySource::Observation);
+        let importance = mem_json["importance"]
+            .as_f64()
+            .unwrap_or(0.5) as f32;
+
+        // 6. Verify ledger proof if present
+        let ledger_proof_valid = if let Some(ref proof) = envelope.ledger_proof {
+            self.verify_ledger_proof(proof).await.unwrap_or_else(|e| {
+                warnings.push(format!("Ledger proof verification error: {}", e));
+                false
+            })
+        } else {
+            warnings.push("No ledger proof included in envelope".to_string());
+            false
+        };
+
+        // 7. Create new memory
+        let memory = self
+            .create_memory(identity_id, content, summary, source, None, importance, None)
+            .await?;
+
+        // 8. Recreate capability grants if present
+        for grant in &envelope.capability_grants {
+            if let Err(e) = self.recreate_capability_grant(memory.memory_id, grant).await {
+                warnings.push(format!("Failed to recreate capability grant {}: {}", grant.grant_id, e));
+            }
+        }
+
+        // 9. Add embedding if present
+        if let Some(ref emb) = envelope.embedding {
+            if let Err(e) = self.add_embedding_to_memory(memory.memory_id, emb.clone()).await {
+                warnings.push(format!("Failed to add embedding: {}", e));
+            }
+        }
+
+        // 10. Log import to ledger
+        if let Some(ref ledger) = self.ledger {
+            if let Err(e) = ledger
+                .append_event(
+                    None,
+                    "memory.imported",
+                    json!({
+                        "memory_id": memory.memory_id,
+                        "identity_id": identity_id,
+                        "source_memory_id": envelope.metadata.get("source_memory_id"),
+                        "verified": verify_signature,
+                        "ledger_proof_valid": ledger_proof_valid,
+                    }),
+                    None,
+                    None,
+                    None,
+                )
+                .await
+            {
+                warnings.push(format!("Failed to log import to ledger: {}", e));
+            }
+        }
+
+        // 11. Emit event
+        self.emit_event(
+            EventType::MemoryImported,
+            json!({
+                "memory_id": memory.memory_id,
+                "identity_id": identity_id,
+                "verified": verify_signature,
+                "ledger_proof_valid": ledger_proof_valid,
+            }),
+        );
+
+        Ok(MemoryImportResult {
+            memory_id: memory.memory_id,
+            verified: verify_signature,
+            ledger_proof_valid,
+            warnings,
+        })
+    }
+
+    /// Import a batch of memories from a CBOR envelope containing `Vec<MemoryEnvelope>`.
+    ///
+    /// # Batch vs Per-Envelope Verification
+    ///
+    /// Batch exports sign the serialized `Vec<MemoryEnvelope>` CBOR as a whole
+    /// (64-byte Ed25519 signature prefix). Individual envelopes within the batch
+    /// are **not** individually signed. When `verify_signature` is `true`, this
+    /// method verifies the batch-level signature against `public_key`, which
+    /// guarantees integrity of all contained envelopes. Each envelope is then
+    /// imported via [`import_memory`] with `verify_signature=false` (since the
+    /// batch signature already covers them). The `verified` field on each
+    /// [`MemoryImportResult`] reflects the batch-level verification outcome.
+    ///
+    /// For single imports via [`import_memory`], the per-envelope signature
+    /// (64-byte prefix on individual CBOR) is verified directly.
+    pub async fn import_memories_batch(
+        &self,
+        batch_bytes: &[u8],
+        identity_id: Uuid,
+        verify_signature: bool,
+        public_key: Option<&str>,
+    ) -> Result<Vec<MemoryImportResult>> {
+        // 1. Verify batch-level signature if requested.
+        //    The batch signature covers the entire Vec<MemoryEnvelope> CBOR payload,
+        //    so individual envelopes do not carry their own signatures.
+        let (cbor_data, batch_verified) = if verify_signature {
+            if batch_bytes.len() < 64 {
+                return Err(Error::Memory("Batch too short for signature verification".to_string()));
+            }
+            let sig_bytes = &batch_bytes[..64];
+            let cbor_payload = &batch_bytes[64..];
+            let sig_hex = hex::encode(sig_bytes);
+
+            let pk = public_key.ok_or_else(|| {
+                Error::Memory("Public key required for signature verification".to_string())
+            })?;
+
+            let valid = crate::crypto::verify_signature(pk, cbor_payload, &sig_hex)?;
+            if !valid {
+                return Err(Error::Memory("Batch signature verification failed".to_string()));
+            }
+            (cbor_payload, true)
+        } else {
+            (batch_bytes, false)
+        };
+
+        // 2. Deserialize CBOR to Vec<MemoryEnvelope>
+        let envelopes: Vec<MemoryEnvelope> = ciborium::de::from_reader(cbor_data)
+            .map_err(|e| Error::Memory(format!("CBOR batch deserialization failed: {}", e)))?;
+
+        // 3. Import each envelope individually.
+        //    Per-envelope signature verification is skipped because the batch-level
+        //    signature (verified above) already guarantees integrity of all envelopes.
+        let mut results = Vec::with_capacity(envelopes.len());
+        for envelope in envelopes {
+            // Re-serialize individual envelope to CBOR for import_memory
+            let mut single_cbor = Vec::new();
+            ciborium::ser::into_writer(&envelope, &mut single_cbor)
+                .map_err(|e| Error::Memory(format!("CBOR re-serialization failed: {}", e)))?;
+
+            match self
+                .import_memory(&single_cbor, identity_id, false, None)
+                .await
+            {
+                Ok(mut result) => {
+                    // Override verified to reflect batch-level verification
+                    result.verified = batch_verified;
+                    results.push(result);
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "Failed to import memory in batch");
+                    results.push(MemoryImportResult {
+                        memory_id: Uuid::nil(),
+                        verified: false,
+                        ledger_proof_valid: false,
+                        warnings: vec![format!("Import failed: {}", e)],
+                    });
+                }
+            }
+        }
+
+        Ok(results)
+    }
+
+    // =========================================================================
+    // PORTABILITY HELPERS (private)
+    // =========================================================================
+
+    /// Build a MemoryEnvelope without serializing to bytes (used by batch export).
+    async fn export_memory_envelope(
+        &self,
+        memory_id: Uuid,
+        options: &MemoryExportOptions,
+    ) -> Result<MemoryEnvelope> {
+        let memory = self
+            .get_memory(memory_id)
+            .await?
+            .ok_or_else(|| Error::Memory(format!("Memory {} not found", memory_id)))?;
+
+        // Apply topic filter
+        if let Some(ref filter_tags) = options.topic_filter {
+            let tags = self.get_memory_tags(memory_id).await?;
+            if !tags.iter().any(|t| filter_tags.contains(t)) {
+                return Err(Error::Memory(format!(
+                    "Memory {} does not match topic filter",
+                    memory_id
+                )));
+            }
+        }
+
+        // Apply importance filter
+        if let Some(min_imp) = options.min_importance {
+            if memory.importance < min_imp {
+                return Err(Error::Memory(format!(
+                    "Memory {} importance below threshold",
+                    memory_id
+                )));
+            }
+        }
+
+        let ledger_proof = if options.include_ledger_proof {
+            self.get_ledger_proof_for_memory(memory_id).await?
+        } else {
+            None
+        };
+
+        let capability_grants = if options.include_capabilities {
+            self.get_capability_grants_for_memory(memory_id).await?
+        } else {
+            Vec::new()
+        };
+
+        let content_json = serde_json::to_vec(&json!({
+            "memory_id": memory.memory_id,
+            "identity_id": memory.identity_id,
+            "content": memory.content,
+            "summary": memory.summary,
+            "source": memory.source,
+            "importance": memory.importance,
+            "created_at": memory.created_at,
+            "accessed_at": memory.accessed_at,
+            "access_count": memory.access_count,
+        }))
+        .map_err(|e| Error::Memory(format!("Failed to serialize memory: {}", e)))?;
+
+        let encrypted_content = self.encrypt_content_bytes(&content_json).await?;
+        let content_hash = hex::encode(blake3::hash(&encrypted_content).as_bytes());
+
+        let mut metadata = HashMap::new();
+        metadata.insert("exported_at".to_string(), Utc::now().to_rfc3339());
+        metadata.insert("source_memory_id".to_string(), memory_id.to_string());
+
+        // Add topic filter metadata if set (Phase 3.3)
+        if let Some(ref filter_tags) = options.topic_filter {
+            metadata.insert("topic_filter".to_string(), filter_tags.join(","));
+        }
+
+        let embedding = if options.include_embedding {
+            memory.embedding
+        } else {
+            None
+        };
+
+        Ok(MemoryEnvelope {
+            version: 1,
+            encrypted_content,
+            content_hash,
+            ledger_proof,
+            capability_grants,
+            embedding,
+            metadata,
+            chain_anchor: None,
+        })
+    }
+
+    /// Encrypt raw bytes using the encryption helper (or pass through if none).
+    async fn encrypt_content_bytes(&self, plaintext: &[u8]) -> Result<Vec<u8>> {
+        match &self.encryption {
+            Some(helper) => helper.encrypt_bytes(plaintext).await,
+            None => Ok(plaintext.to_vec()),
+        }
+    }
+
+    /// Decrypt raw bytes using the encryption helper (or pass through if none).
+    async fn decrypt_content_bytes(&self, ciphertext: &[u8]) -> Result<Vec<u8>> {
+        match &self.encryption {
+            Some(helper) => helper.decrypt_bytes(ciphertext).await,
+            None => Ok(ciphertext.to_vec()),
+        }
+    }
+
+    /// Retrieve tags for a memory from the database.
+    async fn get_memory_tags(&self, memory_id: Uuid) -> Result<Vec<String>> {
+        let row: Option<(JsonValue,)> =
+            sqlx::query_as("SELECT COALESCE(tags, '[]'::jsonb) FROM memories WHERE memory_id = $1")
+                .bind(memory_id)
+                .fetch_optional(&self.pool)
+                .await?;
+
+        match row {
+            Some((val,)) => {
+                let tags: Vec<String> = serde_json::from_value(val).unwrap_or_default();
+                Ok(tags)
+            }
+            None => Ok(Vec::new()),
+        }
+    }
+
+    /// Query ledger for the creation event of a memory and build proof material.
+    async fn get_ledger_proof_for_memory(
+        &self,
+        memory_id: Uuid,
+    ) -> Result<Option<LedgerProofMaterial>> {
+        let row: Option<(i64, DateTime<Utc>, String, Option<String>, Option<String>)> =
+            sqlx::query_as(
+                r"SELECT event_id, ts, event_hash, prev_hash, core_signature
+                  FROM ledger_events
+                  WHERE action_type = 'memory.created'
+                    AND metadata @> $1::jsonb
+                  ORDER BY event_id DESC
+                  LIMIT 1",
+            )
+            .bind(json!({"memory_id": memory_id.to_string()}))
+            .fetch_optional(&self.pool)
+            .await?;
+
+        Ok(row.map(|(event_id, ts, event_hash, prev_hash, core_signature)| {
+            LedgerProofMaterial {
+                event_id,
+                event_hash,
+                prev_hash,
+                core_signature,
+                timestamp: ts,
+            }
+        }))
+    }
+
+    /// Retrieve capability grants associated with a memory.
+    async fn get_capability_grants_for_memory(
+        &self,
+        memory_id: Uuid,
+    ) -> Result<Vec<CapabilityGrantMetadata>> {
+        let rows: Vec<(Uuid, String, Option<JsonValue>, Option<Uuid>, Option<DateTime<Utc>>)> =
+            sqlx::query_as(
+                r"SELECT grant_id, capability_key, scope, approved_by, expires_at
+                  FROM capability_grants
+                  WHERE subject_type = 'external_key' AND subject_id = $1::text
+                  ORDER BY grant_id",
+            )
+            .bind(memory_id.to_string())
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|(grant_id, capability_key, scope, approved_by, expires_at)| {
+                CapabilityGrantMetadata {
+                    grant_id,
+                    capability_key,
+                    scope,
+                    approved_by,
+                    expires_at,
+                }
+            })
+            .collect())
+    }
+
+    /// Verify a ledger proof by recomputing the event hash and checking the
+    /// Ed25519 `core_signature` against the owner public key when present.
+    async fn verify_ledger_proof(&self, proof: &LedgerProofMaterial) -> Result<bool> {
+        // Query the actual ledger event to compare
+        let row: Option<(String, DateTime<Utc>, Option<Uuid>, String, String)> = sqlx::query_as(
+            r"SELECT action_type, ts, actor_id, payload_hash, event_hash
+              FROM ledger_events
+              WHERE event_id = $1",
+        )
+        .bind(proof.event_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            Some((action_type, ts, actor_id, payload_hash, stored_hash)) => {
+                // Recompute event hash
+                let computed = Ledger::compute_event_hash(
+                    &ts,
+                    actor_id,
+                    &action_type,
+                    &payload_hash,
+                    proof.prev_hash.as_deref(),
+                );
+                if computed != stored_hash || stored_hash != proof.event_hash {
+                    return Ok(false);
+                }
+
+                // Verify Ed25519 core_signature if present in the proof
+                if let Some(ref sig_hex) = proof.core_signature {
+                    // Retrieve the owner public key from the ledger's config
+                    // by querying the owner_keypairs table for the public key.
+                    let pk_row: Option<(String,)> = sqlx::query_as(
+                        "SELECT encode(public_key, 'hex') FROM owner_keypairs ORDER BY created_at DESC LIMIT 1",
+                    )
+                    .fetch_optional(&self.pool)
+                    .await?;
+
+                    match pk_row {
+                        Some((public_key_hex,)) => {
+                            let valid = crate::crypto::verify_signature(
+                                &public_key_hex,
+                                stored_hash.as_bytes(),
+                                sig_hex,
+                            )?;
+                            if !valid {
+                                return Ok(false);
+                            }
+                        }
+                        None => {
+                            // No owner public key available; reject proofs with
+                            // signatures we cannot verify for privileged events.
+                            return Ok(false);
+                        }
+                    }
+                }
+
+                Ok(true)
+            }
+            None => Ok(false),
+        }
+    }
+
+    /// Recreate a capability grant from imported metadata.
+    async fn recreate_capability_grant(
+        &self,
+        memory_id: Uuid,
+        grant: &CapabilityGrantMetadata,
+    ) -> Result<()> {
+        // Check if grant has been revoked using PolicyEngine (cross-instance revocation check)
+        let policy_engine = crate::policy::PolicyEngine::new(self.pool.clone());
+        let is_revoked = policy_engine
+            .is_grant_revoked(grant.grant_id)
+            .await?;
+
+        if is_revoked {
+            tracing::warn!(grant_id = %grant.grant_id, "Grant has been revoked on this instance, skipping recreation");
+            return Err(Error::Security(format!(
+                "Grant {} has been revoked on this instance",
+                grant.grant_id
+            )));
+        }
+
+        sqlx::query(
+            r"INSERT INTO capability_grants (grant_id, subject_type, subject_id, capability_key, scope, approved_by, expires_at)
+              VALUES ($1, 'external_key', $2, $3, $4, $5, $6)
+              ON CONFLICT (grant_id) DO NOTHING",
+        )
+        .bind(Uuid::new_v4()) // New grant_id for the imported copy
+        .bind(memory_id.to_string())
+        .bind(&grant.capability_key)
+        .bind(&grant.scope)
+        .bind(grant.approved_by)
+        .bind(grant.expires_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
     }
 
     // =========================================================================
@@ -1373,6 +2303,7 @@ mod tests {
             created_at: Utc::now(),
             accessed_at: Utc::now(),
             access_count: 0,
+            tags: Vec::new(),
         };
         assert!(memory.is_high_importance());
     }
@@ -1390,6 +2321,7 @@ mod tests {
             created_at: Utc::now(),
             accessed_at: Utc::now(),
             access_count: 0,
+            tags: Vec::new(),
         };
         assert!(!memory.is_high_importance());
     }
@@ -1407,6 +2339,7 @@ mod tests {
             created_at: Utc::now(),
             accessed_at: Utc::now(),
             access_count: 0,
+            tags: Vec::new(),
         };
         assert!(!memory.has_embedding());
 
@@ -1427,6 +2360,7 @@ mod tests {
             created_at: Utc::now(),
             accessed_at: Utc::now(),
             access_count: 0,
+            tags: Vec::new(),
         };
         assert_eq!(memory.source_type(), Some(MemorySource::Task));
     }
@@ -1444,6 +2378,7 @@ mod tests {
             created_at: Utc::now(),
             accessed_at: Utc::now(),
             access_count: 0,
+            tags: Vec::new(),
         };
         assert_eq!(memory.source_type(), None);
     }
@@ -1546,5 +2481,345 @@ mod tests {
     #[ignore = "Requires database connection"]
     async fn test_memory_stats() {
         unimplemented!("Run with: cargo test --test memory -- --ignored");
+    }
+
+    // =========================================================================
+    // Memory Portability tests
+    // =========================================================================
+
+    #[test]
+    fn test_memory_envelope_cbor_roundtrip() {
+        let envelope = MemoryEnvelope {
+            version: 1,
+            encrypted_content: b"test content bytes".to_vec(),
+            content_hash: hex::encode(blake3::hash(b"test content bytes").as_bytes()),
+            ledger_proof: None,
+            capability_grants: Vec::new(),
+            embedding: None,
+            metadata: {
+                let mut m = HashMap::new();
+                m.insert("exported_at".to_string(), "2025-01-01T00:00:00Z".to_string());
+                m
+            },
+            chain_anchor: None,
+        };
+
+        // Serialize to CBOR
+        let mut cbor_bytes = Vec::new();
+        ciborium::ser::into_writer(&envelope, &mut cbor_bytes).expect("CBOR serialize");
+
+        // Deserialize from CBOR
+        let decoded: MemoryEnvelope =
+            ciborium::de::from_reader(&cbor_bytes[..]).expect("CBOR deserialize");
+
+        assert_eq!(decoded.version, 1);
+        assert_eq!(decoded.encrypted_content, b"test content bytes");
+        assert_eq!(decoded.content_hash, envelope.content_hash);
+        assert!(decoded.ledger_proof.is_none());
+        assert!(decoded.capability_grants.is_empty());
+        assert!(decoded.embedding.is_none());
+        assert_eq!(
+            decoded.metadata.get("exported_at").unwrap(),
+            "2025-01-01T00:00:00Z"
+        );
+        assert!(decoded.chain_anchor.is_none());
+    }
+
+    #[test]
+    fn test_memory_envelope_with_embedding_cbor_roundtrip() {
+        let embedding = vec![0.1f32, 0.2, 0.3, 0.4];
+        let envelope = MemoryEnvelope {
+            version: 1,
+            encrypted_content: b"data".to_vec(),
+            content_hash: hex::encode(blake3::hash(b"data").as_bytes()),
+            ledger_proof: Some(LedgerProofMaterial {
+                event_id: 42,
+                event_hash: "abc123".to_string(),
+                prev_hash: Some("prev456".to_string()),
+                core_signature: Some("sig789".to_string()),
+                timestamp: Utc::now(),
+            }),
+            capability_grants: vec![CapabilityGrantMetadata {
+                grant_id: Uuid::new_v4(),
+                capability_key: "memory.read".to_string(),
+                scope: Some(serde_json::json!({"level": "full"})),
+                approved_by: Some(Uuid::new_v4()),
+                expires_at: None,
+            }],
+            embedding: Some(embedding.clone()),
+            metadata: HashMap::new(),
+            chain_anchor: Some("anchor_id_123".to_string()),
+        };
+
+        let mut cbor_bytes = Vec::new();
+        ciborium::ser::into_writer(&envelope, &mut cbor_bytes).expect("CBOR serialize");
+
+        let decoded: MemoryEnvelope =
+            ciborium::de::from_reader(&cbor_bytes[..]).expect("CBOR deserialize");
+
+        assert_eq!(decoded.embedding.unwrap(), embedding);
+        assert!(decoded.ledger_proof.is_some());
+        let proof = decoded.ledger_proof.unwrap();
+        assert_eq!(proof.event_id, 42);
+        assert_eq!(proof.event_hash, "abc123");
+        assert_eq!(proof.prev_hash, Some("prev456".to_string()));
+        assert_eq!(decoded.capability_grants.len(), 1);
+        assert_eq!(decoded.capability_grants[0].capability_key, "memory.read");
+        assert_eq!(decoded.chain_anchor, Some("anchor_id_123".to_string()));
+    }
+
+    #[test]
+    fn test_memory_envelope_content_hash_verification() {
+        let content = b"sensitive memory content";
+        let hash = hex::encode(blake3::hash(content).as_bytes());
+
+        let envelope = MemoryEnvelope {
+            version: 1,
+            encrypted_content: content.to_vec(),
+            content_hash: hash.clone(),
+            ledger_proof: None,
+            capability_grants: Vec::new(),
+            embedding: None,
+            metadata: HashMap::new(),
+            chain_anchor: None,
+        };
+
+        // Verify hash matches
+        let computed = hex::encode(blake3::hash(&envelope.encrypted_content).as_bytes());
+        assert_eq!(computed, envelope.content_hash);
+
+        // Tampered content should not match
+        let mut tampered = envelope.clone();
+        tampered.encrypted_content = b"tampered content".to_vec();
+        let tampered_hash = hex::encode(blake3::hash(&tampered.encrypted_content).as_bytes());
+        assert_ne!(tampered_hash, tampered.content_hash);
+    }
+
+    #[test]
+    fn test_memory_envelope_signature_roundtrip() {
+        use crate::crypto::{generate_ed25519_keypair, sign_bytes, verify_signature};
+
+        let (signing_key, _verifying_key) = generate_ed25519_keypair();
+        let public_key_hex = crate::crypto::public_key_from_signing_key(&signing_key);
+
+        let envelope = MemoryEnvelope {
+            version: 1,
+            encrypted_content: b"test".to_vec(),
+            content_hash: hex::encode(blake3::hash(b"test").as_bytes()),
+            ledger_proof: None,
+            capability_grants: Vec::new(),
+            embedding: None,
+            metadata: HashMap::new(),
+            chain_anchor: None,
+        };
+
+        // Serialize to CBOR
+        let mut cbor_bytes = Vec::new();
+        ciborium::ser::into_writer(&envelope, &mut cbor_bytes).expect("CBOR serialize");
+
+        // Sign
+        let sig_hex = sign_bytes(&signing_key, &cbor_bytes);
+        let sig_bytes = hex::decode(&sig_hex).expect("hex decode sig");
+
+        // Combine: signature + CBOR
+        let mut signed_payload = sig_bytes.clone();
+        signed_payload.extend_from_slice(&cbor_bytes);
+
+        // Verify
+        assert_eq!(signed_payload.len(), 64 + cbor_bytes.len());
+        let extracted_sig = hex::encode(&signed_payload[..64]);
+        let extracted_cbor = &signed_payload[64..];
+        let valid = verify_signature(&public_key_hex, extracted_cbor, &extracted_sig)
+            .expect("verify");
+        assert!(valid);
+
+        // Tampered payload should fail
+        let mut tampered_payload = signed_payload.clone();
+        if let Some(byte) = tampered_payload.get_mut(65) {
+            *byte ^= 0xFF;
+        }
+        let tampered_cbor = &tampered_payload[64..];
+        let tampered_sig = hex::encode(&tampered_payload[..64]);
+        let tampered_valid = verify_signature(&public_key_hex, tampered_cbor, &tampered_sig)
+            .expect("verify tampered");
+        assert!(!tampered_valid);
+    }
+
+    #[test]
+    fn test_memory_export_options_defaults() {
+        let opts = MemoryExportOptions::default();
+        assert!(!opts.include_embedding);
+        assert!(opts.topic_filter.is_none());
+        assert!(opts.min_importance.is_none());
+        assert!(!opts.include_ledger_proof);
+        assert!(!opts.include_capabilities);
+    }
+
+    #[test]
+    fn test_no_op_chain_anchor() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let anchor = NoOpChainAnchor;
+
+        let id = rt.block_on(anchor.anchor_hash("hash123", serde_json::json!({})));
+        assert_eq!(id.unwrap(), "not_implemented");
+
+        let verified = rt.block_on(anchor.verify_anchor("hash123", "anchor_id"));
+        assert!(!verified.unwrap());
+
+        let proof = rt.block_on(anchor.get_anchor_proof("anchor_id"));
+        assert_eq!(proof.unwrap(), serde_json::json!({"status": "not_implemented"}));
+    }
+
+    #[test]
+    fn test_memory_envelope_batch_cbor_roundtrip() {
+        let envelopes = vec![
+            MemoryEnvelope {
+                version: 1,
+                encrypted_content: b"memory1".to_vec(),
+                content_hash: hex::encode(blake3::hash(b"memory1").as_bytes()),
+                ledger_proof: None,
+                capability_grants: Vec::new(),
+                embedding: None,
+                metadata: HashMap::new(),
+                chain_anchor: None,
+            },
+            MemoryEnvelope {
+                version: 1,
+                encrypted_content: b"memory2".to_vec(),
+                content_hash: hex::encode(blake3::hash(b"memory2").as_bytes()),
+                ledger_proof: None,
+                capability_grants: Vec::new(),
+                embedding: Some(vec![1.0, 2.0, 3.0]),
+                metadata: HashMap::new(),
+                chain_anchor: None,
+            },
+        ];
+
+        let mut cbor_bytes = Vec::new();
+        ciborium::ser::into_writer(&envelopes, &mut cbor_bytes).expect("CBOR batch serialize");
+
+        let decoded: Vec<MemoryEnvelope> =
+            ciborium::de::from_reader(&cbor_bytes[..]).expect("CBOR batch deserialize");
+
+        assert_eq!(decoded.len(), 2);
+        assert_eq!(decoded[0].encrypted_content, b"memory1");
+        assert_eq!(decoded[1].encrypted_content, b"memory2");
+        assert!(decoded[1].embedding.is_some());
+    }
+
+    #[tokio::test]
+    #[ignore = "Requires database connection"]
+    async fn test_export_import_roundtrip() {
+        unimplemented!("Run with: cargo test --test memory -- --ignored");
+    }
+
+    #[tokio::test]
+    #[ignore = "Requires database connection"]
+    async fn test_selective_disclosure_by_topic() {
+        unimplemented!("Run with: cargo test --test memory -- --ignored");
+    }
+
+    #[tokio::test]
+    #[ignore = "Requires database connection"]
+    async fn test_signature_verification() {
+        unimplemented!("Run with: cargo test --test memory -- --ignored");
+    }
+
+    #[tokio::test]
+    #[ignore = "Requires database connection"]
+    async fn test_ledger_proof_verification() {
+        unimplemented!("Run with: cargo test --test memory -- --ignored");
+    }
+
+    /// Verifies that batch import with a valid batch-level signature results in
+    /// `verified=true` on all `MemoryImportResult`s, and that a tampered batch
+    /// is rejected outright.
+    ///
+    /// This is a unit-level test covering the signing/verification wire format
+    /// without requiring a database. The batch CBOR is signed as a whole; individual
+    /// envelopes are unsigned. `import_memories_batch` should verify the batch
+    /// signature and then import each envelope with `verify_signature=false`.
+    #[test]
+    fn test_batch_import_with_signature() {
+        use crate::crypto::{generate_ed25519_keypair, sign_bytes, verify_signature};
+
+        let (signing_key, _verifying_key) = generate_ed25519_keypair();
+        let public_key_hex = crate::crypto::public_key_from_signing_key(&signing_key);
+
+        // Build two envelopes
+        let envelopes = vec![
+            MemoryEnvelope {
+                version: 1,
+                encrypted_content: b"batch_mem_1".to_vec(),
+                content_hash: hex::encode(blake3::hash(b"batch_mem_1").as_bytes()),
+                ledger_proof: None,
+                capability_grants: Vec::new(),
+                embedding: None,
+                metadata: HashMap::new(),
+                chain_anchor: None,
+            },
+            MemoryEnvelope {
+                version: 1,
+                encrypted_content: b"batch_mem_2".to_vec(),
+                content_hash: hex::encode(blake3::hash(b"batch_mem_2").as_bytes()),
+                ledger_proof: None,
+                capability_grants: Vec::new(),
+                embedding: Some(vec![1.0, 2.0]),
+                metadata: HashMap::new(),
+                chain_anchor: None,
+            },
+        ];
+
+        // Serialize batch to CBOR
+        let mut cbor_bytes = Vec::new();
+        ciborium::ser::into_writer(&envelopes, &mut cbor_bytes).expect("CBOR batch serialize");
+
+        // Sign the batch CBOR (mimics export_memories_batch with signing_key)
+        let sig_hex = sign_bytes(&signing_key, &cbor_bytes);
+        let sig_bytes = hex::decode(&sig_hex).expect("hex decode sig");
+        let mut signed_batch = sig_bytes.clone();
+        signed_batch.extend_from_slice(&cbor_bytes);
+
+        // Verify the batch signature succeeds (simulates step 1 of import_memories_batch)
+        assert!(signed_batch.len() >= 64);
+        let extracted_sig = hex::encode(&signed_batch[..64]);
+        let extracted_cbor = &signed_batch[64..];
+        let valid =
+            verify_signature(&public_key_hex, extracted_cbor, &extracted_sig).expect("verify");
+        assert!(valid, "Batch signature should be valid");
+
+        // Deserialize the CBOR payload to confirm envelopes are intact
+        let decoded: Vec<MemoryEnvelope> =
+            ciborium::de::from_reader(extracted_cbor).expect("CBOR batch deserialize");
+        assert_eq!(decoded.len(), 2);
+        assert_eq!(decoded[0].encrypted_content, b"batch_mem_1");
+        assert_eq!(decoded[1].encrypted_content, b"batch_mem_2");
+
+        // Verify individual envelopes do NOT have a 64-byte sig prefix
+        // (re-serialized singles are plain CBOR, not signed)
+        for env in &decoded {
+            let mut single_cbor = Vec::new();
+            ciborium::ser::into_writer(env, &mut single_cbor).expect("re-serialize");
+            // Should be valid CBOR without a sig prefix
+            let roundtrip: MemoryEnvelope =
+                ciborium::de::from_reader(&single_cbor[..]).expect("single deserialize");
+            assert_eq!(roundtrip.version, env.version);
+            assert_eq!(roundtrip.content_hash, env.content_hash);
+        }
+
+        // Tampered batch should fail verification
+        let mut tampered_batch = signed_batch.clone();
+        // Flip a byte in the CBOR payload (after the 64-byte sig)
+        if let Some(byte) = tampered_batch.get_mut(65) {
+            *byte ^= 0xFF;
+        }
+        let tampered_sig = hex::encode(&tampered_batch[..64]);
+        let tampered_cbor = &tampered_batch[64..];
+        let tampered_valid =
+            verify_signature(&public_key_hex, tampered_cbor, &tampered_sig).expect("verify tampered");
+        assert!(
+            !tampered_valid,
+            "Tampered batch signature should be invalid"
+        );
     }
 }

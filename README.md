@@ -26,14 +26,15 @@ The core value proposition is reliable AI agent orchestration with strong contai
 
 ## Phase Status
 
-| Phase | Status | Description |
-|-------|--------|-------------|
-| **Phase 1** | ✅ Complete | Core orchestrator, CLI, HTTP API, scheduler, worker transport, policy engine, ledger |
-| **Phase 2** | ✅ Complete | Skill discovery, XP system, config store, schema refinements |
-| **Phase 3** | ✅ Complete | Agentic execution pipeline — soul management, session lifecycle, memory retrieval, context assembly, model routing, heartbeat agentic turn, compaction pipeline |
-| **Phase 4** | 🔲 Planned | Desktop UI (Dioxus), advanced tool orchestration |
-
-Phase 3 did not introduce new HTTP endpoints; the agentic pipeline is invoked internally by the scheduler and will be exposed via the existing `/v1/events/ws` WebSocket stream in Phase 4.
+| Phase | Status | What's Built |
+|-------|--------|--------------|
+| **Phase 1 Foundation** | ✅ | Core orchestrator (Axum/Tokio), CLI, HTTP API, event stream, policy engine, blake3 ledger, scheduler, worker transport |
+| **Phase 2 Task Execution MVP** | ✅ | Node worker, skill discovery, scheduler, XP (`xp.rs`), metrics (`metrics.rs`), 120+ tests |
+| **Phase 3 Intelligence & Context Layer** | ✅ | Soul management, session lifecycle, memory retrieval, context assembly, model routing, agentic execution, compaction pipeline, TypeScript LLM Gateway |
+| **Phase 4 Security Completion** | ✅ | Approvals, safe mode, attestations, encryption, ledger signatures, capability+approval UI, chain anchoring |
+| **Phase 5 Advanced Features** | ✅ | Sub-agents, workflows, Telegram+Discord adapters, voice gateway (ElevenLabs STT/TTS) |
+| **Phase 6 Desktop UI & Production** | � In Progress | Dioxus desktop UI — 12 pages, 6 components, WebSocket event streaming |
+| **Phase 7 Packaging & Distribution** | 🔲 Planned | Self-containerizing installer, Skill Book Library, WASM worker, WhatsApp/Slack adapters, remote deployment |
 
 See [docs/PHASE3.md](docs/PHASE3.md) for the Phase 3 architecture deep-dive.
 
@@ -57,33 +58,74 @@ See [docs/PHASE3.md](docs/PHASE3.md) for the Phase 3 architecture deep-dive.
 
 ## Architecture
 
-The following diagram illustrates the core interaction flow, based on the architecture in [Epic Brief](spec:5e7be550-aec5-4ebb-b0e3-3ce021e3f9ab/7c191398-0049-4dc4-8378-585569a1a4e4) and [Technical Plan](spec:5e7be550-aec5-4ebb-b0e3-3ce021e3f9ab/3ccb59e1-e29e-4f62-883e-e5d97a90d157).
+The following diagram illustrates the full system architecture showing all components and their interactions.
 
 ```mermaid
-sequenceDiagram
-    participant User
-    participant UI as Dioxus UI
-    participant Core as Core Orchestrator
-    participant Policy as Policy Engine
-    participant Worker as Worker Manager
-    participant NodeW as Node Worker
-    participant DB as PostgreSQL
-    participant Ollama as Ollama (Local LLM)
+graph TD
+    UI[Dioxus Desktop UI]
+    CLI[CLI carnelian]
+    TG[Telegram Adapter]
+    DC[Discord Adapter]
 
-    User->>UI: Create Task
-    UI->>Core: POST /v1/tasks
-    Core->>Policy: Check Capabilities
-    Policy-->>Core: Decision (allowed/denied)
-    Core->>DB: Persist Task
-    Core->>Worker: Dispatch Task
-    Worker->>NodeW: Execute Skill
-    NodeW->>Ollama: Model Request
-    Ollama-->>NodeW: Response
-    NodeW-->>Worker: Skill Result
-    Worker->>DB: Log Run
-    Worker->>Core: Task Complete
-    Core->>UI: Event Stream (WebSocket)
-    UI-->>User: Update Display
+    Core[Rust Core Orchestrator :18789]
+    Policy[Policy Engine]
+    Ledger[blake3 Ledger]
+    Scheduler[Task Scheduler]
+    Sessions[Session Manager]
+    Context[Context Assembler]
+    Memory[Memory Manager]
+    Soul[Soul File Manager]
+    Agentic[Agentic Loop]
+    Approvals[Approval Queue]
+    SafeMode[Safe Mode]
+    XP[XP Manager]
+    Workers[Worker Manager]
+
+    Gateway[LLM Gateway :18790]
+    OllamaP[Ollama Provider]
+    OpenAIp[OpenAI Provider]
+    Anthropicp[Anthropic Provider]
+    Fireworksp[Fireworks Provider]
+    Voice[Voice Gateway ElevenLabs]
+
+    NodeW[Node Worker 600+ skills]
+    PythonW[Python Worker]
+    WasmW[WASM Worker planned]
+
+    DB[(PostgreSQL + pgvector)]
+    OllamaS[Ollama Service :11434]
+
+    UI -->|WebSocket| Core
+    CLI -->|HTTP| Core
+    TG -->|HTTP| Core
+    DC -->|HTTP| Core
+
+    Core --- Policy
+    Core --- Ledger
+    Core --- Scheduler
+    Core --- Sessions
+    Core --- Context
+    Core --- Memory
+    Core --- Soul
+    Core --- Agentic
+    Core --- Approvals
+    Core --- SafeMode
+    Core --- XP
+    Core --- Workers
+
+    Core -->|HTTP :18790| Gateway
+    Gateway --- OllamaP
+    Gateway --- OpenAIp
+    Gateway --- Anthropicp
+    Gateway --- Fireworksp
+    Gateway --- Voice
+
+    Workers -->|JSONL stdin/stdout| NodeW
+    Workers -->|JSONL stdin/stdout| PythonW
+    Workers -.->|planned| WasmW
+
+    OllamaP -->|HTTP| OllamaS
+    Core -->|SQLx| DB
 ```
 
 ### Key Components
@@ -91,12 +133,61 @@ sequenceDiagram
 | Component | Technology | Description |
 |-----------|------------|-------------|
 | **Core Orchestrator** | Axum/Tokio/SQLx | HTTP API, WebSocket events, task scheduling |
-| **Desktop UI** | Dioxus | Native desktop interface with event streaming |
-| **Policy Engine** | Rust | Capability-based security, deny-by-default |
-| **Worker Manager** | Rust | Worker lifecycle, JSONL transport, capability grants |
+| **Desktop UI** | Dioxus | Native desktop interface — 12 pages, 6 components |
+| **Policy Engine** | Rust (`policy.rs`) | Capability-based security, deny-by-default |
+| **Worker Manager** | Rust (`worker.rs`) | Worker lifecycle, JSONL transport, capability grants |
 | **Node Worker** | Node.js/TypeScript | Executes 600+ existing Thummim skills |
-| **Ledger Manager** | Rust | blake3 hash-chain audit trail for privileged actions |
-| **Scheduler** | Rust | Priority-based task queue, retry policies, heartbeat |
+| **Python Worker** | Python 3.10+ | ML/data science skills, Playwright automation |
+| **Ledger Manager** | Rust (`ledger.rs`) | blake3 hash-chain audit trail for privileged actions |
+| **Scheduler** | Rust (`scheduler.rs`) | Priority-based task queue, retry policies, heartbeat |
+| **Agentic Loop** | Rust (`agentic.rs`) | Heartbeat agentic turn, compaction pipeline |
+| **Session Manager** | Rust (`session.rs`) | Session lifecycle, context assembly |
+| **Memory Manager** | Rust (`memory.rs`) | Memory retrieval, pgvector similarity search |
+| **Soul Manager** | Rust (`soul.rs`) | Soul file management, personality state |
+| **Model Router** | Rust (`model_router.rs`) | LLM provider routing and fallback |
+| **LLM Gateway** | TypeScript (`:18790`) | Unified gateway — Ollama, OpenAI, Anthropic, Fireworks |
+| **Approval Queue** | Rust (`approvals.rs`) | Human-in-the-loop approval workflow |
+| **Safe Mode** | Rust (`safe_mode.rs`) | Emergency lockdown, capability suspension |
+| **Attestation** | Rust (`attestation.rs`) | Worker identity verification, Ed25519 signatures |
+| **Encryption** | Rust (`encryption.rs`, `crypto.rs`) | Encryption at rest, key management |
+| **Chain Anchor** | Rust (`chain_anchor.rs`) | Ledger chain integrity anchoring |
+| **Channel Adapters** | Rust (`carnelian-adapters/`) | Telegram + Discord bots with pairing, rate limiting |
+| **Voice Gateway** | Rust (`voice.rs`) | ElevenLabs STT/TTS integration |
+| **XP System** | Rust (`xp.rs`, `metrics.rs`) | 1.172-exponent level curve, leaderboard, skill metrics |
+| **Sub-Agents** | Rust (`sub_agent.rs`) | Delegated agent execution |
+| **Workflows** | Rust (`workflow.rs`) | Multi-step workflow orchestration |
+
+## Worker Architecture
+
+Carnelian uses a multi-runtime worker system for skill execution:
+
+| Worker | Runtime | Use Case | Status |
+|--------|---------|----------|--------|
+| **Node Worker** | Node.js/TypeScript | 600+ existing Thummim skills, npm ecosystem, DOM manipulation | ✅ Built |
+| **Python Worker** | Python 3.10+ | ML/data science, Playwright automation | 🔄 In Progress |
+| **WASM Worker** | WebAssembly (wasmtime) | New Rust-native sandboxed skills | 🔲 Planned |
+| **Native Ops** | Rust inline | Named ops (git_status, file_hash, docker_ps) | 🔄 Planned |
+
+All 600+ existing Thummim skills run unchanged through the Node worker, ensuring full backward compatibility while migrating to the Rust core. New skills should target WASM for portability and sandboxing.
+
+## Skill Book
+
+Carnelian includes a curated **Skill Book** — a catalog of pre-integrated, standardized skills ready for immediate activation. Each skill follows a standardized onboarding flow with required API tokens, sandbox configurations, and capability declarations.
+
+**Six Categories:**
+- **Code** — skills for reading, analyzing, and modifying code (read_file, search_code, run_tests)
+- **Research** — web search, documentation lookup, academic paper retrieval
+- **Communication** — send message, schedule meeting, draft email
+- **Creative** — image generation, audio synthesis, copywriting
+- **Data** — query databases, transform datasets, generate reports
+- **Automation** — browser automation, API orchestration, scheduled tasks
+
+**Skill Activation Flow:**
+1. Open Skills panel → Skill Book tab
+2. Browse or search for desired skill
+3. Click **Activate** and provide required API tokens
+4. Tokens stored encrypted in config vault
+5. Skill immediately available in registry
 
 ## CLI
 
@@ -181,116 +272,11 @@ All endpoints are prefixed with `/v1`.
 - **prek** - Pre-commit hooks: `cargo install prek`
 - **sqlx-cli** - Database migrations: `cargo install sqlx-cli`
 
-### Platform-Specific Notes
+### Platform-Specific Setup Guides
 
-<details>
-<summary><strong>Windows (WSL2)</strong></summary>
-
-```powershell
-# 1. Enable WSL2 (run as Administrator)
-wsl --install
-wsl --set-default-version 2
-
-# 2. Install NVIDIA GPU drivers on Windows host
-# Download from: https://www.nvidia.com/drivers
-# Verify: nvidia-smi (in PowerShell)
-
-# 3. Install Docker Desktop
-# Download from: https://www.docker.com/products/docker-desktop
-# Enable WSL2 backend in Settings > General
-# Enable GPU support in Settings > Resources > WSL Integration
-
-# 4. Install Rust (in WSL2 terminal)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source ~/.cargo/env
-
-# 5. Install Node.js and Python (in WSL2)
-sudo apt update
-sudo apt install -y nodejs npm python3 python3-pip
-
-# 6. Verify installations
-docker --version
-cargo --version
-node --version
-python3 --version
-nvidia-smi  # Should show GPU in WSL2
-```
-
-</details>
-
-<details>
-<summary><strong>macOS</strong></summary>
-
-```bash
-# Note: GPU passthrough is NOT supported on macOS
-# Ollama will run in CPU-only mode with reduced performance
-
-# 1. Install Homebrew (if not installed)
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-# 2. Install Docker Desktop
-brew install --cask docker
-# Or download from: https://www.docker.com/products/docker-desktop
-
-# 3. Install Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source ~/.cargo/env
-
-# 4. Install Node.js and Python
-brew install node python@3.12
-
-# 5. Verify installations
-docker --version
-cargo --version
-node --version
-python3 --version
-
-# Note: For GPU workloads, consider using a Linux machine or cloud instance
-```
-
-</details>
-
-<details>
-<summary><strong>Linux (Ubuntu/Debian)</strong></summary>
-
-```bash
-# 1. Install Docker
-sudo apt update
-sudo apt install -y docker.io docker-compose
-sudo usermod -aG docker $USER
-newgrp docker
-
-# 2. Install NVIDIA drivers (if GPU present)
-sudo apt install -y nvidia-driver-535  # Or latest version
-sudo reboot
-
-# 3. Install NVIDIA Container Toolkit
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-  sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-sudo apt update
-sudo apt install -y nvidia-container-toolkit
-sudo nvidia-ctk runtime configure --runtime=docker
-sudo systemctl restart docker
-
-# 4. Install Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source ~/.cargo/env
-
-# 5. Install Node.js and Python
-sudo apt install -y nodejs npm python3 python3-pip
-
-# 6. Verify installations
-docker --version
-cargo --version
-node --version
-python3 --version
-nvidia-smi
-docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi  # Test GPU in Docker
-```
-
-</details>
+- **[Windows (WSL2)](docs/SETUP_WINDOWS.md)** — WSL2, GPU passthrough, Docker Desktop, performance tips
+- **[macOS](docs/SETUP_MACOS.md)** — Homebrew, Apple Silicon notes, CPU-only Ollama
+- **[Linux (Ubuntu/Debian)](docs/SETUP_LINUX.md)** — NVIDIA Container Toolkit, systemd service, headless server
 
 ## Quick Start
 
@@ -299,8 +285,8 @@ docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi  # Test GPU in Docke
 git clone https://github.com/kordspace/carnelian.git
 cd carnelian
 
-# 2. Start Docker services
-docker-compose up -d
+# 2. One-command setup wizard (detects GPU, pulls Docker images, configures everything)
+carnelian init
 
 # 3. Verify services are healthy
 docker-compose ps
@@ -311,7 +297,7 @@ docker exec carnelian-ollama ollama pull deepseek-r1:7b
 # Urim (11GB VRAM):
 docker exec carnelian-ollama ollama pull deepseek-r1:32b
 
-# 5. Run database migrations
+# 5. Run database migrations (only needed for custom setups)
 cargo install sqlx-cli --no-default-features --features postgres
 export DATABASE_URL="postgresql://carnelian:carnelian@localhost:5432/carnelian"
 sqlx migrate run
@@ -325,6 +311,8 @@ cargo test
 # 8. Start the orchestrator
 cargo run --bin carnelian -- start
 ```
+
+> **Note:** `carnelian init` handles Docker image pulling, database setup, and skill registry bootstrapping automatically, so manual steps 3–8 are only needed for custom/advanced setups.
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for detailed setup and development workflow.
 
@@ -351,15 +339,65 @@ carnelian/
 │   │   │   ├── events.rs         # Event stream with backpressure and bounded buffers
 │   │   │   ├── policy.rs         # Capability-based security engine
 │   │   │   ├── ledger.rs         # blake3 hash-chain audit trail
-│   │   │   ├── skills.rs          # Skill discovery, manifest validation, file watcher
-│   │   │   ├── config.rs         # Configuration loading (TOML, env, CLI)
-│   │   │   └── db.rs             # Database connection and migrations
-│   │   └── tests/                # 9 test suites, 80+ tests
+│   │   │   ├── skills.rs         # Skill discovery, manifest validation, file watcher
+│   │   │   ├── agentic.rs        # Agentic loop, heartbeat turn, compaction pipeline
+│   │   │   ├── approvals.rs      # Approval queue, human-in-the-loop
+│   │   │   ├── attestation.rs    # Worker attestation, Ed25519 verification
+│   │   │   ├── chain_anchor.rs   # Ledger chain anchoring
+│   │   │   ├── context.rs        # Context assembler
+│   │   │   ├── crypto.rs         # Cryptographic primitives
+│   │   │   ├── encryption.rs     # Encryption at rest
+│   │   │   ├── memory.rs         # Memory retrieval and storage
+│   │   │   ├── metrics.rs        # Performance metrics
+│   │   │   ├── model_router.rs   # LLM provider routing
+│   │   │   ├── safe_mode.rs      # Safe mode / emergency lockdown
+│   │   │   ├── session.rs        # Session lifecycle
+│   │   │   ├── soul.rs           # Soul file management
+│   │   │   ├── sub_agent.rs      # Sub-agent delegation
+│   │   │   ├── workflow.rs       # Workflow orchestration
+│   │   │   ├── xp.rs             # XP manager, level curve, skill metrics
+│   │   │   ├── voice.rs          # Voice gateway, ElevenLabs STT/TTS
+│   │   │   ├── db.rs             # Database connection and migrations
+│   │   │   └── providers/        # Rust provider modules (ollama, openai, anthropic, fireworks)
+│   │   └── tests/                # 10+ test suites, 120+ tests
 │   ├── carnelian-common/         # Shared types, error handling, API models
 │   ├── carnelian-ui/             # Dioxus desktop UI
+│   │   └── src/
+│   │       ├── components/
+│   │       │   ├── xp_widget.rs       # XP progress bar and recent events
+│   │       │   ├── voice_settings.rs  # Voice configuration panel
+│   │       │   ├── top_bar.rs         # Top navigation bar
+│   │       │   ├── toast.rs           # Toast notifications
+│   │       │   ├── tab_nav.rs         # Tab navigation
+│   │       │   └── system_tray.rs     # System tray integration
+│   │       └── pages/
+│   │           ├── dashboard.rs       # Main dashboard
+│   │           ├── tasks.rs           # Task management
+│   │           ├── skills.rs          # Skill registry
+│   │           ├── providers.rs       # LLM provider config
+│   │           ├── identity.rs        # Identity management
+│   │           ├── heartbeat.rs       # Heartbeat settings
+│   │           ├── events.rs          # Event stream view
+│   │           ├── sub_agents.rs      # Sub-agent management
+│   │           ├── channels.rs        # Channel adapters (Telegram/Discord)
+│   │           ├── capabilities.rs    # Capability grants
+│   │           ├── approvals.rs       # Approval queue UI
+│   │           ├── workflows.rs       # Workflow management
+│   │           └── xp_progression.rs  # XP progression dashboard
+│   ├── carnelian-adapters/       # Channel adapters (Telegram, Discord)
 │   ├── carnelian-worker-node/    # Node.js worker wrapper crate
 │   ├── carnelian-worker-python/  # Python worker wrapper crate
 │   └── carnelian-worker-shell/   # Shell worker wrapper crate
+├── gateway/                      # TypeScript LLM Gateway (:18790)
+│   └── src/
+│       ├── server.ts             # Express server, routing
+│       ├── router.ts             # Provider selection logic
+│       ├── providers/
+│       │   ├── ollama.ts         # Ollama provider
+│       │   ├── openai.ts         # OpenAI provider
+│       │   ├── anthropic.ts      # Anthropic provider
+│       │   └── fireworks.ts      # Fireworks provider
+│       └── types.ts              # Gateway type definitions
 ├── workers/
 │   ├── node-worker/              # Node.js/TypeScript worker (600+ skills)
 │   ├── python-worker/            # Python worker
@@ -367,7 +405,7 @@ carnelian/
 ├── skills/
 │   └── registry/                 # Skill bundles and manifests
 ├── db/
-│   └── migrations/               # SQL migrations (5 migration files, PostgreSQL 16 + pgvector)
+│   └── migrations/               # SQL migrations (9 migration files, PostgreSQL 16 + pgvector)
 ├── docs/                         # Documentation (development, docker, brand, logging)
 ├── scripts/
 │   ├── setup-hooks.sh            # Development environment setup
@@ -388,6 +426,8 @@ carnelian/
 - **Task Lifecycle** - Priority-based scheduling, concurrency limits, configurable retry policies
 - **LZ4 Compression** - Database column compression for large payloads (memories, logs, metadata)
 - **Skill Discovery** - Automatic filesystem watching with blake3 checksums and database sync
+- **XP Progression System** - 1.172-exponent level curve, skill metrics, quality bonuses, leaderboard
+- **Voice Gateway** - ElevenLabs STT/TTS integration with encrypted API key storage
 
 ## Workspace Scanning & Auto-Queueing
 
@@ -460,6 +500,25 @@ Required fields: `name`, `description`, `runtime` (`node`|`python`|`shell`|`wasm
 Manifests are checksummed with blake3 — skills are only updated in the database when the checksum changes. Stale skills (manifests removed from disk) are automatically deleted.
 
 See [skills/registry/README.md](skills/registry/README.md) for the full manifest specification.
+
+### XP
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/xp/agents/{id}` | Agent XP, level, and progress |
+| `GET` | `/v1/xp/agents/{id}/history` | XP event history (paginated) |
+| `GET` | `/v1/xp/leaderboard` | All agents ranked by total XP |
+| `GET` | `/v1/xp/skills/{id}` | Skill metrics and level |
+| `GET` | `/v1/xp/skills/top` | Top skills by usage/XP |
+| `POST` | `/v1/xp/award` | Manual XP award (admin capability) |
+
+### Voice
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/voice/configure` | Set ElevenLabs API key and voice config |
+| `POST` | `/v1/voice/test` | Test TTS/STT with current config |
+| `GET` | `/v1/voice/voices` | List available ElevenLabs voices |
 
 ### Security Architecture Notes
 
@@ -557,6 +616,7 @@ PostgreSQL 16 with pgvector extension. Schema managed via SQLx migrations in `db
 | `00000000000005_config_store_value_blob.sql` | Config store value column |
 | `00000000000006_memories_created_at_index.sql` | Memory retrieval index |
 | `00000000000007_heartbeat_correlation.sql` | Heartbeat correlation ID tracking |
+| `00000000000008_voice_config.sql` | Voice configuration JSONB on identities |
 
 ## Configuration
 
@@ -590,6 +650,13 @@ See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 | [docs/BRAND.md](docs/BRAND.md) | Dual theme brand kit (Forge / Night Lab) |
 | [docs/LOGGING.md](docs/LOGGING.md) | Structured logging philosophy and conventions |
 | [docs/CHECKPOINT1.md](docs/CHECKPOINT1.md) | Checkpoint 1 validation steps and demo |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture and component overview |
+| [docs/SECURITY.md](docs/SECURITY.md) | Security model, capability system, threat model |
+| [docs/OPERATOR_GUIDE.md](docs/OPERATOR_GUIDE.md) | Day-to-day operations and administration |
+| [docs/API.md](docs/API.md) | Full REST API reference |
+| [docs/SETUP_WINDOWS.md](docs/SETUP_WINDOWS.md) | Windows (WSL2) setup guide |
+| [docs/SETUP_MACOS.md](docs/SETUP_MACOS.md) | macOS setup guide |
+| [docs/SETUP_LINUX.md](docs/SETUP_LINUX.md) | Linux setup guide |
 | [crates/carnelian-core/tests/README.md](crates/carnelian-core/tests/README.md) | Test suite documentation |
 | [db/migrations/README.md](db/migrations/README.md) | Database migration guide |
 

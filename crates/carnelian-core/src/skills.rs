@@ -34,6 +34,12 @@ use sqlx::PgPool;
 
 use crate::events::EventStream;
 
+// pub mod native_loader;
+pub mod skill_trait;
+pub mod wasm_runtime;
+
+pub use skill_trait::{Skill, SkillContext, SkillInput, SkillOutput, HealthStatus, BoxedSkill};
+
 // =============================================================================
 // MANIFEST SCHEMA
 // =============================================================================

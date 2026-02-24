@@ -59,10 +59,12 @@ use chrono::{DateTime, Timelike, Utc};
 use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
-use sqlx::{FromRow, PgPool};
+use sqlx::{FromRow, PgPool, Row};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
+
+use crate::memory::ChainAnchor;
 
 /// Check whether an action type is considered privileged and requires Ed25519 signing.
 ///
@@ -118,6 +120,8 @@ pub struct Ledger {
     pool: PgPool,
     /// Most recent event_hash, cached in memory for efficient chaining
     last_hash: Arc<RwLock<Option<String>>>,
+    /// Optional XP manager for awarding XP on privileged actions
+    xp_manager: Option<Arc<crate::xp::XpManager>>,
 }
 
 impl Ledger {
@@ -130,7 +134,13 @@ impl Ledger {
         Self {
             pool,
             last_hash: Arc::new(RwLock::new(None)),
+            xp_manager: None,
         }
+    }
+
+    /// Set the XP manager for awarding XP on privileged ledger actions.
+    pub fn set_xp_manager(&mut self, xp_manager: Arc<crate::xp::XpManager>) {
+        self.xp_manager = Some(xp_manager);
     }
 
     /// Load the most recent `event_hash` from the database into memory.
@@ -300,6 +310,17 @@ impl Ledger {
             signed = core_signature.is_some(),
             "Ledger event appended"
         );
+
+        // Award XP for privileged actions (fire-and-forget)
+        if is_privileged_action(action_type) {
+            if let (Some(actor), Some(xp_mgr)) = (actor_id, &self.xp_manager) {
+                let xp_amount = crate::xp::XpManager::calculate_ledger_xp(action_type);
+                let source = crate::xp::XpSource::LedgerSigning { ledger_event_id: event_id };
+                if let Err(e) = xp_mgr.award_xp(actor, source, xp_amount, None).await {
+                    tracing::warn!(error = %e, "Failed to award ledger XP");
+                }
+            }
+        }
 
         Ok(event_id)
     }
@@ -606,6 +627,152 @@ impl Ledger {
         .map_err(Error::Database)?;
 
         Ok(rows)
+    }
+
+    // ── Anchor Methods ────────────────────────────────────────────────────
+
+    /// Publish a ledger slice anchor to a chain anchor service.
+    ///
+    /// Computes a blake3 merkle root over all event hashes in the slice
+    /// and stores the anchor for external verification.
+    ///
+    /// # Arguments
+    /// - `from_event_id`: Starting event ID (inclusive)
+    /// - `to_event_id`: Ending event ID (inclusive)
+    /// - `chain_anchor`: Implementation of ChainAnchor trait
+    /// - `owner_signing_key`: Optional key to sign the anchor event
+    ///
+    /// # Returns
+    /// - The anchor ID (UUID) of the stored anchor
+    pub async fn publish_ledger_anchor(
+        &self,
+        from_event_id: i64,
+        to_event_id: i64,
+        chain_anchor: &dyn ChainAnchor,
+        owner_signing_key: Option<&SigningKey>,
+    ) -> Result<String> {
+        // Fetch events in the slice
+        let rows = sqlx::query(
+            "SELECT event_id, event_hash FROM ledger_events WHERE event_id >= $1 AND event_id <= $2 ORDER BY event_id ASC"
+        )
+        .bind(from_event_id)
+        .bind(to_event_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Error::Database)?;
+
+        if rows.is_empty() {
+            return Err(Error::Validation(
+                format!("No ledger events found in range {} to {}", from_event_id, to_event_id)
+            ));
+        }
+
+        // Compute merkle root over event hashes
+        let mut hashes: Vec<[u8; 32]> = Vec::new();
+        for row in &rows {
+            let event_hash: String = row.try_get("event_hash")
+                .map_err(|e| Error::DatabaseMessage(format!("Failed to extract event_hash: {}", e)))?;
+            let hash_bytes = hex::decode(&event_hash)
+                .map_err(|e| Error::Validation(format!("Invalid event_hash hex: {}", e)))?;
+            if hash_bytes.len() != 32 {
+                return Err(Error::Validation(
+                    format!("Event hash has wrong length: expected 32, got {}", hash_bytes.len())
+                ));
+            }
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&hash_bytes);
+            hashes.push(arr);
+        }
+
+        // Compute merkle root using blake3 pairwise hashing
+        let root_hash = Self::compute_merkle_root(&hashes);
+        let root_hash_hex = hex::encode(&root_hash);
+
+        // Prepare metadata
+        let metadata = serde_json::json!({
+            "ledger_event_from": from_event_id,
+            "ledger_event_to": to_event_id,
+            "event_count": rows.len(),
+            "merkle_root": root_hash_hex,
+        });
+
+        // Store anchor
+        let anchor_id = chain_anchor.anchor_hash(&root_hash_hex, metadata.clone()).await?;
+
+        // Log anchor event to ledger
+        self.log_anchor_published(
+            from_event_id,
+            to_event_id,
+            &anchor_id,
+            &root_hash_hex,
+            rows.len() as i64,
+            owner_signing_key,
+        ).await?;
+
+        tracing::info!(
+            anchor_id = %anchor_id,
+            from_event = from_event_id,
+            to_event = to_event_id,
+            event_count = rows.len(),
+            merkle_root = %root_hash_hex,
+            "Ledger slice anchored"
+        );
+
+        Ok(anchor_id)
+    }
+
+    /// Compute a merkle root from a list of blake3 hashes.
+    fn compute_merkle_root(hashes: &[[u8; 32]]) -> [u8; 32] {
+        if hashes.is_empty() {
+            return blake3::hash(b"").into();
+        }
+        if hashes.len() == 1 {
+            return hashes[0];
+        }
+
+        let mut level: Vec<[u8; 32]> = hashes.to_vec();
+        while level.len() > 1 {
+            let mut next_level: Vec<[u8; 32]> = Vec::new();
+            for i in (0..level.len()).step_by(2) {
+                let left = level[i];
+                let right = if i + 1 < level.len() {
+                    level[i + 1]
+                } else {
+                    left // Duplicate last element if odd
+                };
+                let combined = [&left[..], &right[..]].concat();
+                let hash = blake3::hash(&combined);
+                next_level.push(hash.into());
+            }
+            level = next_level;
+        }
+        level[0]
+    }
+
+    /// Log an anchor publication event to the ledger.
+    async fn log_anchor_published(
+        &self,
+        from_event_id: i64,
+        to_event_id: i64,
+        anchor_id: &str,
+        merkle_root: &str,
+        event_count: i64,
+        owner_signing_key: Option<&SigningKey>,
+    ) -> Result<i64> {
+        self.append_event(
+            None,
+            "ledger.anchor_published",
+            serde_json::json!({
+                "from_event_id": from_event_id,
+                "to_event_id": to_event_id,
+                "anchor_id": anchor_id,
+                "merkle_root": merkle_root,
+                "event_count": event_count,
+            }),
+            None,
+            owner_signing_key,
+            None,
+        ).await
     }
 }
 

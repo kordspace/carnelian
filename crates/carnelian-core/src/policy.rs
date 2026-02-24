@@ -40,6 +40,19 @@ pub struct CapabilityGrant {
     pub expires_at: Option<DateTime<Utc>>,
 }
 
+/// Represents a revoked capability grant for cross-instance sync
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct RevokedGrantInfo {
+    /// Grant ID that was revoked
+    pub grant_id: Uuid,
+    /// When the grant was revoked
+    pub revoked_at: DateTime<Utc>,
+    /// Identity that revoked the grant
+    pub revoked_by: Option<Uuid>,
+    /// Reason for revocation
+    pub reason: Option<String>,
+}
+
 /// Policy engine for capability-based security
 pub struct PolicyEngine {
     pool: PgPool,
@@ -255,6 +268,21 @@ impl PolicyEngine {
         if revoked {
             tracing::info!(grant_id = %grant_id, "Capability revoked");
 
+            // Insert into revoked_capability_grants for cross-instance sync
+            if let Err(e) = sqlx::query!(
+                r#"INSERT INTO revoked_capability_grants (grant_id, revoked_by, reason)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (grant_id) DO NOTHING"#,
+                grant_id,
+                revoked_by,
+                Some("explicit_revocation"),
+            )
+            .execute(&self.pool)
+            .await
+            {
+                tracing::warn!(error = %e, grant_id = %grant_id, "Failed to record grant revocation");
+            }
+
             // Emit revocation event
             if let Some(stream) = event_stream {
                 stream.publish(EventEnvelope::new(
@@ -278,6 +306,42 @@ impl PolicyEngine {
         }
 
         Ok(revoked)
+    }
+
+    /// Check if a grant has been revoked (for cross-instance revocation checking)
+    pub async fn is_grant_revoked(&self, grant_id: Uuid) -> Result<bool> {
+        let exists: Option<(bool,)> = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM revoked_capability_grants WHERE grant_id = $1)"
+        )
+        .bind(grant_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Error::Database)?;
+
+        Ok(exists.map(|(e,)| e).unwrap_or(false))
+    }
+
+    /// List revoked grants since a given timestamp (for cross-instance sync)
+    pub async fn list_revoked_since(
+        &self,
+        since: DateTime<Utc>,
+    ) -> Result<Vec<RevokedGrantInfo>> {
+        let rows = sqlx::query_as::<_, RevokedGrantInfo>(
+            r#"SELECT 
+                grant_id,
+                revoked_at,
+                revoked_by,
+                reason
+            FROM revoked_capability_grants
+            WHERE revoked_at > $1
+            ORDER BY revoked_at DESC"#,
+        )
+        .bind(since)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Error::Database)?;
+
+        Ok(rows)
     }
 
     /// List all valid (non-expired) grants for a subject
@@ -475,6 +539,38 @@ impl PolicyEngine {
         }
 
         Ok(())
+    }
+
+    /// Check if an identity has a capability grant with a specific topic in scope.
+    ///
+    /// This checks for grants where:
+    /// - capability_key = 'memory.read'
+    /// - scope JSON contains the specified topic in a "topics" array
+    /// - grant is not expired
+    ///
+    /// Used during memory import to enforce topic-scoped capability grants.
+    pub async fn check_memory_topic_capability(
+        &self,
+        identity_id: Uuid,
+        topic: &str,
+    ) -> Result<bool> {
+        let exists: Option<(bool,)> = sqlx::query_as(
+            r#"SELECT EXISTS(
+                SELECT 1 FROM capability_grants
+                WHERE subject_type = 'identity'
+                  AND subject_id = $1
+                  AND capability_key = 'memory.read'
+                  AND (expires_at IS NULL OR expires_at > NOW())
+                  AND scope @> jsonb_build_object('topics', jsonb_build_array($2))
+            )"#
+        )
+        .bind(identity_id.to_string())
+        .bind(topic)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Error::Database)?;
+
+        Ok(exists.map(|(e,)| e).unwrap_or(false))
     }
 }
 
