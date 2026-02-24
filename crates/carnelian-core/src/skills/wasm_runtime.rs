@@ -7,11 +7,11 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use tracing::{error, info, warn};
-use wasmtime::{Config, Engine, Linker, Module, Store, TypedFunc};
-use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
+use tracing::{info, warn};
+use wasmtime::{Config, Engine, Linker, Module};
+use wasmtime_wasi::WasiCtx;
 
-use crate::skills::skill_trait::{HealthStatus, SkillInput, SkillOutput};
+use crate::skills::skill_trait::{SkillInput, SkillOutput};
 use carnelian_common::{Error, Result};
 
 /// State for WASM skill execution

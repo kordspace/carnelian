@@ -166,12 +166,12 @@ impl WorkflowEngine {
             .map_err(|e| Error::Worker(format!("Failed to serialize steps: {e}")))?;
 
         let row = sqlx::query(
-            r#"
+            r"
             INSERT INTO workflows (name, description, created_by, skill_chain, enabled)
             VALUES ($1, $2, $3, $4, true)
             RETURNING workflow_id, name, description, created_by, skill_chain,
                       enabled, created_at, updated_at
-            "#,
+            ",
         )
         .bind(&name)
         .bind(&description)
@@ -205,12 +205,12 @@ impl WorkflowEngine {
     /// Get a workflow by ID.
     pub async fn get_workflow(&self, workflow_id: Uuid) -> Result<Option<WorkflowDefinition>> {
         let row = sqlx::query(
-            r#"
+            r"
             SELECT workflow_id, name, description, created_by, skill_chain,
                    enabled, created_at, updated_at
             FROM workflows
             WHERE workflow_id = $1
-            "#,
+            ",
         )
         .bind(workflow_id)
         .fetch_optional(&self.pool)
@@ -227,24 +227,24 @@ impl WorkflowEngine {
     pub async fn list_workflows(&self, enabled_only: bool) -> Result<Vec<WorkflowDefinition>> {
         let rows = if enabled_only {
             sqlx::query(
-                r#"
+                r"
                 SELECT workflow_id, name, description, created_by, skill_chain,
                        enabled, created_at, updated_at
                 FROM workflows
                 WHERE enabled = true
                 ORDER BY created_at DESC
-                "#,
+                ",
             )
             .fetch_all(&self.pool)
             .await
         } else {
             sqlx::query(
-                r#"
+                r"
                 SELECT workflow_id, name, description, created_by, skill_chain,
                        enabled, created_at, updated_at
                 FROM workflows
                 ORDER BY created_at DESC
-                "#,
+                ",
             )
             .fetch_all(&self.pool)
             .await
@@ -284,13 +284,13 @@ impl WorkflowEngine {
             .map_err(|e| Error::Worker(format!("Failed to serialize steps: {e}")))?;
 
         let row = sqlx::query(
-            r#"
+            r"
             UPDATE workflows
             SET name = $1, description = $2, skill_chain = $3, updated_at = NOW()
             WHERE workflow_id = $4
             RETURNING workflow_id, name, description, created_by, skill_chain,
                       enabled, created_at, updated_at
-            "#,
+            ",
         )
         .bind(&final_name)
         .bind(&final_description)
@@ -810,10 +810,10 @@ impl WorkflowEngine {
         let description = serde_json::to_string(&resolved_input).unwrap_or_default();
 
         let insert_result = sqlx::query(
-            r#"
+            r"
             INSERT INTO tasks (task_id, title, description, skill_id, state, priority, correlation_id)
             VALUES ($1, $2, $3, $4, 'pending', 5, $5)
-            "#,
+            ",
         )
         .bind(task_id)
         .bind(&title)
@@ -1266,10 +1266,10 @@ impl WorkflowEngine {
         .to_string();
 
         sqlx::query(
-            r#"
+            r"
             INSERT INTO tasks (task_id, title, description, state, priority, correlation_id)
             VALUES ($1, $2, $3, 'pending', $4, $5)
-            "#,
+            ",
         )
         .bind(task_id)
         .bind(format!("Workflow: {}", workflow.name))
@@ -1392,10 +1392,10 @@ impl WorkflowEngine {
         // Create a parent task for the workflow execution if one doesn't exist
         let task_id = Uuid::now_v7();
         let _ = sqlx::query(
-            r#"
+            r"
             INSERT INTO tasks (task_id, title, description, state, priority, correlation_id)
             VALUES ($1, $2, $3, $4, 0, $5)
-            "#,
+            ",
         )
         .bind(task_id)
         .bind(format!("Workflow execution: {}", workflow.name))
@@ -1419,10 +1419,10 @@ impl WorkflowEngine {
         };
 
         let _ = sqlx::query(
-            r#"
+            r"
             INSERT INTO task_runs (run_id, task_id, attempt, state, started_at, ended_at, result, correlation_id)
             VALUES ($1, $2, 1, $3, NOW() - INTERVAL '1 millisecond' * $4, NOW(), $5, $6)
-            "#,
+            ",
         )
         .bind(Uuid::now_v7())
         .bind(task_id)

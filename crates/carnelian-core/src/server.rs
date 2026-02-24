@@ -5759,6 +5759,11 @@ mod tests {
         )));
         let xp_manager = Arc::new(crate::xp::XpManager::new(pool.clone()));
         let voice_gateway = Arc::new(crate::voice::VoiceGateway::new(pool.clone()));
+        let skill_book = Arc::new(crate::skill_book::SkillBook::new(
+            std::path::PathBuf::from("skill_book"),
+            std::path::PathBuf::from("skill_registry"),
+            config.clone(),
+        ));
         AppState::new(
             config,
             event_stream,
@@ -5774,6 +5779,7 @@ mod tests {
             workflow_engine,
             xp_manager,
             voice_gateway,
+            skill_book,
         )
     }
 

@@ -8,7 +8,6 @@ use std::time::Duration;
 use async_trait::async_trait;
 use futures_util::stream::{BoxStream, StreamExt};
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::model_router::{
@@ -325,7 +324,8 @@ impl Provider for OllamaProvider {
                                     }
                                 }
                                 Err(e) => {
-                                    tracing::debug!(error = %e, line = %line, "Failed to parse Ollama stream line");
+                                    use tracing::{info, warn};
+                                    warn!(error = %e, line = %line, "Failed to parse Ollama stream line");
                                 }
                             }
                         }

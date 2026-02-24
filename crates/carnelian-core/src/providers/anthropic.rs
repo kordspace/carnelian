@@ -10,7 +10,6 @@ use futures_util::stream::{BoxStream, StreamExt};
 use reqwest::Client;
 use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
 use crate::model_router::{
     Choice, ChunkChoice, ChunkDelta, CompletionChunk, CompletionRequest, CompletionResponse,

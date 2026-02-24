@@ -54,11 +54,11 @@ impl ChainAnchor for LocalDbChainAnchor {
             .unwrap_or(0);
 
         let row = sqlx::query(
-            r#"
+            r"
             INSERT INTO chain_anchors (hash, ledger_event_from, ledger_event_to, metadata)
             VALUES ($1, $2, $3, $4)
             RETURNING anchor_id
-            "#,
+            ",
         )
         .bind(hash)
         .bind(from_event)
@@ -146,12 +146,12 @@ impl ChainAnchor for LocalDbChainAnchor {
             .map_err(|e| Error::Validation(format!("Invalid anchor_id UUID: {}", e)))?;
 
         let row = sqlx::query(
-            r#"
+            r"
             SELECT anchor_id, hash, ledger_event_from, ledger_event_to, 
                    published_at, metadata, verified
             FROM chain_anchors 
             WHERE anchor_id = $1
-            "#,
+            ",
         )
         .bind(anchor_uuid)
         .fetch_optional(&self.pool)
@@ -207,13 +207,13 @@ pub async fn find_anchors_by_event_range(
     to_event: i64,
 ) -> Result<Vec<HashMap<String, Value>>> {
     let rows = sqlx::query(
-        r#"
+        r"
         SELECT anchor_id, hash, ledger_event_from, ledger_event_to, 
                published_at, metadata, verified
         FROM chain_anchors 
         WHERE ledger_event_from <= $2 AND ledger_event_to >= $1
         ORDER BY ledger_event_from ASC
-        "#,
+        ",
     )
     .bind(to_event)
     .bind(from_event)
@@ -275,13 +275,13 @@ pub async fn find_anchors_by_event_range(
 /// List recent anchors (for discovery and sync).
 pub async fn list_recent_anchors(pool: &PgPool, limit: i64) -> Result<Vec<HashMap<String, Value>>> {
     let rows = sqlx::query(
-        r#"
+        r"
         SELECT anchor_id, hash, ledger_event_from, ledger_event_to, 
                published_at, metadata, verified
         FROM chain_anchors 
         ORDER BY published_at DESC
         LIMIT $1
-        "#,
+        ",
     )
     .bind(limit)
     .fetch_all(pool)

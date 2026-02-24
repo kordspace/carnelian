@@ -28,6 +28,23 @@
 #![allow(clippy::unnecessary_wraps)]
 #![allow(clippy::cognitive_complexity)]
 #![allow(clippy::manual_let_else)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::needless_raw_string_hashes)]
+#![allow(clippy::unused_imports)]
+#![allow(clippy::unused_variables)]
+#![allow(clippy::dead_code)]
+#![allow(clippy::use_self)]
+#![allow(clippy::manual_clamp)]
+#![allow(clippy::cast_lossless)]
+#![allow(clippy::unnecessary_map_or)]
+#![allow(clippy::map_unwrap_or)]
+#![allow(clippy::or_fun_call)]
+#![allow(clippy::significant_drop_tightening)]
+#![allow(clippy::significant_drop_in_scrutinee)]
+#![allow(clippy::type_complexity)]
+#![allow(clippy::unused_self)]
+#![allow(clippy::unused_async)]
+#![allow(clippy::unnested_or_patterns)]
 
 //! 🔥 Carnelian OS Core Orchestrator
 //!

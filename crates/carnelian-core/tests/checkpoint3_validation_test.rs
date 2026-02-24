@@ -11,10 +11,11 @@ use carnelian_common::types::{
 use carnelian_core::chain_anchor::LocalDbChainAnchor;
 use carnelian_core::ledger::Ledger;
 use carnelian_core::memory::{ChainAnchor, MemoryManager, MemorySource};
+use carnelian_core::model_router::ModelRouter;
 use carnelian_core::policy::PolicyEngine;
 use carnelian_core::voice::VoiceGateway;
 use carnelian_core::xp::XpManager;
-use carnelian_core::{AppState, Config, EventStream, Scheduler};
+use carnelian_core::{AppState, Config, EventStream, SafeModeGuard, Scheduler, WorkerManager};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
@@ -264,10 +265,30 @@ async fn test_complete_feature_set_task_execution() {
         .expect("Failed to start container");
     let pool = setup_test_db(&container).await.expect("Failed to setup DB");
 
-    let event_stream = Arc::new(EventStream::new(1000));
+    let event_stream = Arc::new(EventStream::new(1000, 100));
+    let config = Arc::new(Config::default());
+    let ledger = Arc::new(Ledger::new(pool.clone()));
+    let safe_mode_guard = Arc::new(SafeModeGuard::new(pool.clone(), ledger.clone()));
+    let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
+    let model_router = Arc::new(ModelRouter::new(
+        pool.clone(),
+        "http://localhost:18790".to_string(),
+        policy_engine.clone(),
+        ledger.clone(),
+    ));
+    let worker_manager = Arc::new(tokio::sync::Mutex::new(WorkerManager::new(
+        config.clone(),
+        event_stream.clone(),
+    )));
     let scheduler = Arc::new(tokio::sync::Mutex::new(Scheduler::new(
         pool.clone(),
         event_stream.clone(),
+        Duration::from_secs(3600),
+        worker_manager.clone(),
+        config.clone(),
+        model_router.clone(),
+        ledger.clone(),
+        safe_mode_guard.clone(),
     )));
 
     // Start scheduler

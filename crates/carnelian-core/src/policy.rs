@@ -324,14 +324,14 @@ impl PolicyEngine {
     /// List revoked grants since a given timestamp (for cross-instance sync)
     pub async fn list_revoked_since(&self, since: DateTime<Utc>) -> Result<Vec<RevokedGrantInfo>> {
         let rows = sqlx::query_as::<_, RevokedGrantInfo>(
-            r#"SELECT 
+            r"SELECT 
                 grant_id,
                 revoked_at,
                 revoked_by,
                 reason
             FROM revoked_capability_grants
             WHERE revoked_at > $1
-            ORDER BY revoked_at DESC"#,
+            ORDER BY revoked_at DESC",
         )
         .bind(since)
         .fetch_all(&self.pool)
@@ -552,14 +552,14 @@ impl PolicyEngine {
         topic: &str,
     ) -> Result<bool> {
         let exists: Option<(bool,)> = sqlx::query_as(
-            r#"SELECT EXISTS(
+            r"SELECT EXISTS(
                 SELECT 1 FROM capability_grants
                 WHERE subject_type = 'identity'
                   AND subject_id = $1
                   AND capability_key = 'memory.read'
                   AND (expires_at IS NULL OR expires_at > NOW())
                   AND scope @> jsonb_build_object('topics', jsonb_build_array($2))
-            )"#,
+            )",
         )
         .bind(identity_id.to_string())
         .bind(topic)
