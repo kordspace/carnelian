@@ -1858,7 +1858,7 @@ impl AgenticEngine {
 
             match self
                 .memory_manager
-                .create_memory(identity_id, &content, None, source, None, importance)
+                .create_memory(identity_id, &content, None, source, None, importance, None)
                 .await
             {
                 Ok(_) => created_count += 1,

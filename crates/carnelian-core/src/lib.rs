@@ -85,6 +85,7 @@
 pub mod agentic;
 pub mod approvals;
 pub mod attestation;
+pub mod chain_anchor;
 pub mod config;
 pub mod context;
 pub mod crypto;
@@ -96,13 +97,18 @@ pub mod memory;
 pub mod metrics;
 pub mod model_router;
 pub mod policy;
+pub mod providers;
 pub mod safe_mode;
 pub mod scheduler;
 pub mod server;
 pub mod session;
 pub mod skills;
 pub mod soul;
+pub mod sub_agent;
 pub mod worker;
+pub mod workflow;
+pub mod voice;
+pub mod xp;
 
 use std::env;
 use tracing_subscriber::{
@@ -136,7 +142,11 @@ pub use server::{AppState, Server};
 pub use session::{Session, SessionKey, SessionManager, SessionMessage, TokenCounters};
 pub use skills::{SkillDiscovery, SkillManifest};
 pub use soul::SoulManager;
+pub use sub_agent::{SubAgent, SubAgentManager, CreateSubAgentRequest, UpdateSubAgentRequest, IdentityPack};
 pub use worker::WorkerManager;
+pub use workflow::WorkflowEngine;
+pub use voice::VoiceGateway;
+pub use xp::XpManager;
 
 /// Core orchestrator version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

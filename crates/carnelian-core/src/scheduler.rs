@@ -64,6 +64,7 @@ use crate::ledger::Ledger;
 use crate::metrics::MetricsCollector;
 use crate::model_router::{CompletionRequest, Message, ModelRouter};
 use crate::worker::WorkerManager;
+use crate::workflow::WorkflowEngine;
 use carnelian_common::types::{
     EventEnvelope, EventLevel, EventType, InvokeRequest, InvokeStatus, RunId,
 };
@@ -114,6 +115,10 @@ pub struct Scheduler {
     ledger: Arc<Ledger>,
     /// Safe mode guard for blocking side-effect operations
     safe_mode_guard: Arc<crate::safe_mode::SafeModeGuard>,
+    /// Workflow engine for executing workflow-dispatch tasks and auto skill chaining
+    workflow_engine: Option<Arc<WorkflowEngine>>,
+    /// XP manager for awarding experience points on task completion
+    xp_manager: Option<Arc<crate::xp::XpManager>>,
 }
 
 impl Scheduler {
@@ -161,7 +166,19 @@ impl Scheduler {
             model_router,
             ledger,
             safe_mode_guard,
+            workflow_engine: None,
+            xp_manager: None,
         }
+    }
+
+    /// Set the workflow engine for workflow-dispatch and auto skill chaining.
+    pub fn set_workflow_engine(&mut self, engine: Arc<WorkflowEngine>) {
+        self.workflow_engine = Some(engine);
+    }
+
+    /// Set the XP manager for awarding experience points on task completion.
+    pub fn set_xp_manager(&mut self, xp_manager: Arc<crate::xp::XpManager>) {
+        self.xp_manager = Some(xp_manager);
     }
 
     /// Set a shared metrics collector (called from server to share with AppState).
@@ -203,6 +220,8 @@ impl Scheduler {
         let model_router = self.model_router.clone();
         let ledger = self.ledger.clone();
         let safe_mode_guard = self.safe_mode_guard.clone();
+        let workflow_engine = self.workflow_engine.clone();
+        let xp_manager = self.xp_manager.clone();
 
         tokio::spawn(async move {
             Self::run_heartbeat_loop(
@@ -217,6 +236,8 @@ impl Scheduler {
                 model_router,
                 ledger,
                 safe_mode_guard,
+                workflow_engine,
+                xp_manager,
             )
             .await;
         });
@@ -255,10 +276,14 @@ impl Scheduler {
         model_router: Arc<ModelRouter>,
         ledger: Arc<Ledger>,
         safe_mode_guard: Arc<crate::safe_mode::SafeModeGuard>,
+        workflow_engine: Option<Arc<WorkflowEngine>>,
+        xp_manager: Option<Arc<crate::xp::XpManager>>,
     ) {
         let mut ticker = tokio::time::interval(interval);
         // Skip the first immediate tick
         ticker.tick().await;
+
+        let mut last_quality_check: Option<chrono::DateTime<chrono::Utc>> = None;
 
         loop {
             tokio::select! {
@@ -281,8 +306,24 @@ impl Scheduler {
                         &active_tasks,
                         &metrics,
                         &safe_mode_guard,
+                        &workflow_engine,
+                        &xp_manager,
                     ).await {
                         tracing::warn!(error = %e, "Task queue polling failed");
+                    }
+
+                    // Daily quality bonus cron
+                    if let Some(xp_mgr) = &xp_manager {
+                        let should_run = last_quality_check
+                            .map(|t| chrono::Utc::now() - t > chrono::Duration::hours(24))
+                            .unwrap_or(true);
+                        if should_run {
+                            if let Err(e) = xp_mgr.run_quality_bonus_check(&pool).await {
+                                tracing::warn!(error = %e, "Quality bonus check failed");
+                            } else {
+                                last_quality_check = Some(chrono::Utc::now());
+                            }
+                        }
                     }
                 }
                 _ = shutdown_rx.changed() => {
@@ -693,6 +734,8 @@ impl Scheduler {
         active_tasks: &Arc<tokio::sync::Mutex<HashMap<Uuid, tokio::task::JoinHandle<()>>>>,
         metrics: &Arc<MetricsCollector>,
         safe_mode_guard: &Arc<crate::safe_mode::SafeModeGuard>,
+        workflow_engine: &Option<Arc<WorkflowEngine>>,
+        xp_manager: &Option<Arc<crate::xp::XpManager>>,
     ) -> Result<()> {
         // If safe mode is active, skip dequeuing entirely — tasks stay pending
         if safe_mode_guard.is_enabled().await.unwrap_or(false) {
@@ -747,6 +790,9 @@ impl Scheduler {
             let metrics = metrics.clone();
             let safe_mode_guard = safe_mode_guard.clone();
 
+            let workflow_engine = workflow_engine.clone();
+            let xp_manager = xp_manager.clone();
+
             let handle = tokio::spawn(async move {
                 if let Err(e) = Self::execute_task(
                     task_id,
@@ -758,6 +804,8 @@ impl Scheduler {
                     &active_tasks_clone,
                     &metrics,
                     &safe_mode_guard,
+                    &workflow_engine,
+                    &xp_manager,
                 )
                 .await
                 {
@@ -820,6 +868,8 @@ impl Scheduler {
         active_tasks: &Arc<tokio::sync::Mutex<HashMap<Uuid, tokio::task::JoinHandle<()>>>>,
         metrics: &Arc<MetricsCollector>,
         safe_mode_guard: &Arc<crate::safe_mode::SafeModeGuard>,
+        workflow_engine: &Option<Arc<WorkflowEngine>>,
+        xp_manager: &Option<Arc<crate::xp::XpManager>>,
     ) -> Result<()> {
         // Safe mode is checked in poll_task_queue before dequeuing, but
         // re-check here as a defence-in-depth measure in case the flag was
@@ -827,6 +877,200 @@ impl Scheduler {
         safe_mode_guard.check_or_block("task_execution").await?;
 
         let exec_start = std::time::Instant::now();
+
+        // ── Workflow dispatch detection ──────────────────────────────────
+        // Before normal skill execution, check if this task is a workflow
+        // dispatch or if it has no skill and can be auto-chained.
+        if let Some(wf_engine) = workflow_engine {
+            // Fetch the task description to check for workflow dispatch marker
+            let task_desc: Option<String> =
+                sqlx::query_scalar(r"SELECT description FROM tasks WHERE task_id = $1")
+                    .bind(task_id)
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(Error::Database)?;
+
+            let desc_str = task_desc.unwrap_or_default();
+
+            // Check if this is a workflow-dispatch task
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&desc_str) {
+                if parsed
+                    .get("_workflow_dispatch")
+                    .and_then(|d| d.as_bool())
+                    == Some(true)
+                {
+                    tracing::info!(
+                        task_id = %task_id,
+                        "Detected workflow-dispatch task, delegating to WorkflowEngine"
+                    );
+
+                    // Mark task as running
+                    sqlx::query(
+                        r"UPDATE tasks SET state = 'running', updated_at = NOW() WHERE task_id = $1",
+                    )
+                    .bind(task_id)
+                    .execute(pool)
+                    .await
+                    .map_err(Error::Database)?;
+
+                    match wf_engine.try_execute_workflow_task(task_id).await {
+                        Ok(Some(result)) => {
+                            let final_state = if result.status == "success" {
+                                "completed"
+                            } else {
+                                "failed"
+                            };
+                            let _ = sqlx::query(
+                                r"UPDATE tasks SET state = $1, updated_at = NOW() WHERE task_id = $2",
+                            )
+                            .bind(final_state)
+                            .bind(task_id)
+                            .execute(pool)
+                            .await;
+
+                            let duration_ms = exec_start.elapsed().as_millis() as i64;
+                            if final_state == "completed" {
+                                event_stream.publish(
+                                    EventEnvelope::new(
+                                        EventLevel::Info,
+                                        EventType::TaskCompleted,
+                                        json!({
+                                            "task_id": task_id,
+                                            "workflow_dispatch": true,
+                                            "duration_ms": duration_ms,
+                                        }),
+                                    )
+                                    .with_actor_id(task_id.to_string()),
+                                );
+                            } else {
+                                event_stream.publish(
+                                    EventEnvelope::new(
+                                        EventLevel::Warn,
+                                        EventType::TaskFailed,
+                                        json!({
+                                            "task_id": task_id,
+                                            "workflow_dispatch": true,
+                                            "duration_ms": duration_ms,
+                                            "error": result.execution_summary,
+                                        }),
+                                    )
+                                    .with_actor_id(task_id.to_string()),
+                                );
+                            }
+                            return Ok(());
+                        }
+                        Ok(None) => {
+                            // Not actually a workflow dispatch (shouldn't happen), fall through
+                            tracing::warn!(
+                                task_id = %task_id,
+                                "Task had _workflow_dispatch marker but try_execute returned None"
+                            );
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                task_id = %task_id,
+                                error = %e,
+                                "Workflow dispatch execution failed"
+                            );
+                            let _ = sqlx::query(
+                                r"UPDATE tasks SET state = 'failed', updated_at = NOW() WHERE task_id = $1",
+                            )
+                            .bind(task_id)
+                            .execute(pool)
+                            .await;
+
+                            event_stream.publish(
+                                EventEnvelope::new(
+                                    EventLevel::Warn,
+                                    EventType::TaskFailed,
+                                    json!({
+                                        "task_id": task_id,
+                                        "workflow_dispatch": true,
+                                        "error": e.to_string(),
+                                    }),
+                                )
+                                .with_actor_id(task_id.to_string()),
+                            );
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+
+            // If no skill_id is set, try auto skill chaining
+            if skill_id.is_none() {
+                tracing::info!(
+                    task_id = %task_id,
+                    "No skill_id set, attempting auto skill chaining"
+                );
+
+                // Mark task as running
+                sqlx::query(
+                    r"UPDATE tasks SET state = 'running', updated_at = NOW() WHERE task_id = $1",
+                )
+                .bind(task_id)
+                .execute(pool)
+                .await
+                .map_err(Error::Database)?;
+
+                match wf_engine.execute_task_with_chaining(task_id).await {
+                    Ok(result) => {
+                        let final_state = if result.status == "success" {
+                            "completed"
+                        } else {
+                            "failed"
+                        };
+                        let _ = sqlx::query(
+                            r"UPDATE tasks SET state = $1, updated_at = NOW() WHERE task_id = $2",
+                        )
+                        .bind(final_state)
+                        .bind(task_id)
+                        .execute(pool)
+                        .await;
+
+                        let duration_ms = exec_start.elapsed().as_millis() as i64;
+                        event_stream.publish(
+                            EventEnvelope::new(
+                                EventLevel::Info,
+                                if final_state == "completed" {
+                                    EventType::TaskCompleted
+                                } else {
+                                    EventType::TaskFailed
+                                },
+                                json!({
+                                    "task_id": task_id,
+                                    "auto_chained": true,
+                                    "duration_ms": duration_ms,
+                                    "workflow_status": result.status,
+                                }),
+                            )
+                            .with_actor_id(task_id.to_string()),
+                        );
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        // Chaining failed (e.g. no matching skills) — fall through
+                        // to the normal "skill not found" path below, resetting
+                        // the task back to running for the standard flow.
+                        tracing::debug!(
+                            task_id = %task_id,
+                            error = %e,
+                            "Auto skill chaining failed, falling through to normal execution"
+                        );
+                        // Reset task state back to pending so the normal flow
+                        // can set it to running again with proper bookkeeping.
+                        let _ = sqlx::query(
+                            r"UPDATE tasks SET state = 'pending', updated_at = NOW() WHERE task_id = $1",
+                        )
+                        .bind(task_id)
+                        .execute(pool)
+                        .await;
+                    }
+                }
+            }
+        }
+
+        // ── Normal skill-based execution ─────────────────────────────────
 
         // Update task state to 'running'
         sqlx::query(r"UPDATE tasks SET state = 'running', updated_at = NOW() WHERE task_id = $1")
@@ -1067,6 +1311,41 @@ impl Scheduler {
                             duration_ms = duration_ms,
                             "Task completed successfully"
                         );
+
+                        // Award task completion XP
+                        if let Some(xp_mgr) = xp_manager {
+                            let assigned_to: Option<Uuid> = sqlx::query_scalar(
+                                "SELECT assigned_to FROM tasks WHERE task_id = $1",
+                            )
+                            .bind(task_id)
+                            .fetch_optional(pool)
+                            .await
+                            .ok()
+                            .flatten();
+
+                            if let Some(agent_id) = assigned_to {
+                                let mut total_xp = crate::xp::XpManager::calculate_task_xp(duration_ms);
+
+                                // First skill use bonus
+                                if let Some(sid) = skill_id {
+                                    if let Ok(true) = xp_mgr.is_first_skill_use(agent_id, sid).await {
+                                        total_xp += 10;
+                                    }
+                                }
+
+                                let source = crate::xp::XpSource::TaskCompletion { task_id, skill_id };
+                                if let Err(e) = xp_mgr.award_xp(agent_id, source, total_xp, None).await {
+                                    tracing::warn!(error = %e, task_id = %task_id, "Failed to award task XP");
+                                }
+                            }
+
+                            // Update skill metrics on success
+                            if let Some(sid) = skill_id {
+                                if let Err(e) = xp_mgr.update_skill_metrics(sid, duration_ms, true).await {
+                                    tracing::warn!(error = %e, skill_id = %sid, "Failed to update skill metrics");
+                                }
+                            }
+                        }
                     }
                     InvokeStatus::Failed | InvokeStatus::Timeout => {
                         let error_msg = resp
@@ -1099,6 +1378,15 @@ impl Scheduler {
                         .bind(run_id.0)
                         .execute(pool)
                         .await;
+
+                        // Track skill failure metrics
+                        if let Some(xp_mgr) = xp_manager {
+                            if let Some(sid) = skill_id {
+                                if let Err(e) = xp_mgr.update_skill_metrics(sid, duration_ms, false).await {
+                                    tracing::warn!(error = %e, skill_id = %sid, "Failed to update skill metrics on failure");
+                                }
+                            }
+                        }
 
                         Self::handle_task_failure(
                             task_id,

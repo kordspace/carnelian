@@ -228,6 +228,10 @@ async fn test_full_server_startup() {
     let status: serde_json::Value = status_resp.json().await.unwrap();
     assert!(status["workers"].is_array());
     assert!(status["queue_depth"].is_number());
+    assert!(status.get("identity_id").is_some());
+    assert!(status["version"].is_string());
+    assert!(status["machine_profile"].is_string());
+    assert!(status.get("uptime_seconds").is_some());
 
     // Clean up
     server_handle.abort();

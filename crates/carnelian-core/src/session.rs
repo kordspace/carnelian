@@ -1372,6 +1372,7 @@ impl SessionManager {
                                 MemorySource::Conversation,
                                 None,
                                 importance,
+                                None,
                             )
                             .await
                         {

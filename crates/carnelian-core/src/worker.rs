@@ -104,6 +104,22 @@ impl std::fmt::Display for WorkerRuntime {
     }
 }
 
+impl std::str::FromStr for WorkerRuntime {
+    type Err = carnelian_common::Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "node" => Ok(Self::Node),
+            "python" => Ok(Self::Python),
+            "shell" => Ok(Self::Shell),
+            "wasm" => Ok(Self::Wasm),
+            other => Err(carnelian_common::Error::Config(format!(
+                "Unknown worker runtime: {other}"
+            ))),
+        }
+    }
+}
+
 /// Worker status
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkerStatus {
@@ -1739,6 +1755,123 @@ impl WorkerManager {
 
             Ok(true)
         }
+    }
+
+    /// Spawn a worker process for a sub-agent with a scoped identity pack.
+    ///
+    /// The identity pack is serialized as JSON and passed to the worker process
+    /// via the `CARNELIAN_IDENTITY_PACK` environment variable. This provides the
+    /// worker with the sub-agent's identity context including granted capabilities.
+    ///
+    /// # Arguments
+    ///
+    /// * `sub_agent_id` - UUID of the sub-agent identity
+    /// * `runtime` - Worker runtime type (Node, Python, Shell)
+    /// * `identity_pack` - Scoped identity context for the worker process
+    ///
+    /// # Returns
+    ///
+    /// The unique worker ID assigned to the spawned worker.
+    pub async fn spawn_sub_agent_worker(
+        &mut self,
+        sub_agent_id: Uuid,
+        runtime: WorkerRuntime,
+        identity_pack: crate::sub_agent::IdentityPack,
+    ) -> Result<String> {
+        if let Some(ref guard) = self.safe_mode_guard {
+            guard.check_or_block("worker_spawn").await?;
+        }
+
+        let max_workers = self.config.machine_config().max_workers;
+        let current_count = self.workers.read().await.len();
+
+        if current_count >= max_workers as usize {
+            return Err(Error::Config(format!(
+                "Max workers limit reached ({}/{})",
+                current_count, max_workers
+            )));
+        }
+
+        let worker_id = format!("sub-agent-{}", sub_agent_id);
+        let api_url = format!("http://localhost:{}", self.config.http_port);
+
+        let identity_pack_json = serde_json::to_string(&identity_pack).map_err(|e| {
+            Error::Config(format!("Failed to serialize identity pack: {}", e))
+        })?;
+
+        let mut cmd = match runtime {
+            WorkerRuntime::Node => {
+                let mut c = tokio::process::Command::new("node");
+                c.args(["workers/node-worker/dist/index.js"]);
+                c
+            }
+            WorkerRuntime::Python => {
+                let mut c = tokio::process::Command::new("python");
+                c.args(["workers/python-worker/worker.py"]);
+                c
+            }
+            WorkerRuntime::Shell => {
+                let mut c = tokio::process::Command::new("bash");
+                c.args(["workers/shell-worker/worker.sh"]);
+                c
+            }
+            WorkerRuntime::Wasm => {
+                return Err(Error::Config("Wasm runtime not yet supported".to_string()));
+            }
+        };
+
+        cmd.env("WORKER_ID", &worker_id)
+            .env("CARNELIAN_API_URL", &api_url)
+            .env("CARNELIAN_IDENTITY_PACK", &identity_pack_json)
+            .env("CARNELIAN_SUB_AGENT_ID", sub_agent_id.to_string())
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        let process = cmd.spawn().map_err(|e| {
+            Error::Config(format!(
+                "Failed to spawn sub-agent worker {}: {}",
+                worker_id, e
+            ))
+        })?;
+
+        let worker = Worker {
+            id: worker_id.clone(),
+            runtime,
+            process: Some(process),
+            status: WorkerStatus::Running,
+            current_task: None,
+            started_at: Utc::now(),
+            last_health_check: None,
+            transport: None,
+            last_attestation: None,
+            quarantined: false,
+            last_attestation_verified: None,
+        };
+
+        self.workers
+            .write()
+            .await
+            .insert(worker_id.clone(), worker);
+
+        self.event_stream.publish(EventEnvelope::new(
+            EventLevel::Info,
+            EventType::WorkerStarted,
+            json!({
+                "worker_id": worker_id,
+                "runtime": runtime.to_string(),
+                "sub_agent_id": sub_agent_id,
+            }),
+        ));
+
+        tracing::info!(
+            worker_id = %worker_id,
+            sub_agent_id = %sub_agent_id,
+            runtime = %runtime,
+            "Sub-agent worker spawned"
+        );
+
+        Ok(worker_id)
     }
 
     /// Get worker status information for the status endpoint.

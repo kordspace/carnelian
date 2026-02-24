@@ -121,6 +121,10 @@ pub struct Config {
     #[serde(default)]
     pub owner_keypair_path: Option<PathBuf>,
 
+    /// Agent/display name for the AI assistant (default: "Lian")
+    #[serde(default = "default_agent_name")]
+    pub agent_name: String,
+
     /// Hex-encoded Ed25519 public key (32 bytes)
     #[serde(skip)]
     pub owner_public_key: Option<String>,
@@ -224,6 +228,18 @@ pub struct Config {
     /// Workspace paths to scan for TASK:/TODO: markers during heartbeat (default: ["."])
     #[serde(default = "default_workspace_scan_paths")]
     pub workspace_scan_paths: Vec<PathBuf>,
+
+    /// Whether the Telegram channel adapter is enabled (default: false)
+    #[serde(default)]
+    pub adapter_telegram_enabled: bool,
+
+    /// Whether the Discord channel adapter is enabled (default: false)
+    #[serde(default)]
+    pub adapter_discord_enabled: bool,
+
+    /// Spam detection threshold for channel adapters (default: 0.8)
+    #[serde(default = "default_adapter_spam_threshold")]
+    pub adapter_spam_threshold: f32,
 
     /// Database pool (not serialized, initialized separately)
     #[serde(skip)]
@@ -353,12 +369,20 @@ fn default_workspace_scan_paths() -> Vec<PathBuf> {
     vec![PathBuf::from(".")]
 }
 
+fn default_adapter_spam_threshold() -> f32 {
+    0.8
+}
+
 fn default_skills_registry_path() -> PathBuf {
     PathBuf::from("./skills/registry")
 }
 
 fn default_souls_path() -> PathBuf {
     PathBuf::from("./souls")
+}
+
+fn default_agent_name() -> String {
+    "Lian".to_string()
 }
 
 fn default_session_expiry_hours() -> u32 {
@@ -385,15 +409,15 @@ fn default_tool_clear_age_secs() -> i64 {
 ///
 /// # Variants
 ///
-/// - `Thummim`: RTX 2080 Super (8GB VRAM), 32GB RAM - constrained profile
-/// - `Urim`: RTX 2080 Ti (11GB VRAM), 64GB RAM - high-end profile
+/// - `Standard`: Entry-level profile (8GB VRAM, 32GB RAM) - good for most tasks
+/// - `Performance`: High-end profile (11GB+ VRAM, 64GB RAM) - for demanding workloads
 /// - `Custom`: User-defined settings via `custom_machine_config`
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum MachineProfile {
     #[default]
-    Thummim,
-    Urim,
+    Standard,
+    Performance,
     Custom,
 }
 
@@ -402,11 +426,11 @@ impl FromStr for MachineProfile {
 
     fn from_str(s: &str) -> Result<Self> {
         match s.to_lowercase().as_str() {
-            "thummim" => Ok(Self::Thummim),
-            "urim" => Ok(Self::Urim),
+            "standard" | "thummim" => Ok(Self::Standard), // thummim for backward compatibility
+            "performance" | "urim" => Ok(Self::Performance), // urim for backward compatibility
             "custom" => Ok(Self::Custom),
             _ => Err(Error::Config(format!(
-                "Invalid machine profile '{}'. Valid values: thummim, urim, custom",
+                "Invalid machine profile '{}'. Valid values: standard, performance, custom",
                 s
             ))),
         }
@@ -424,6 +448,7 @@ impl Default for Config {
             machine_profile: MachineProfile::default(),
             log_level: default_log_level(),
             owner_keypair_path: None,
+            agent_name: default_agent_name(),
             owner_public_key: None,
             db_max_connections: default_max_connections(),
             db_connection_timeout_secs: default_connection_timeout(),
@@ -450,6 +475,9 @@ impl Default for Config {
             task_retry_delay_secs: default_task_retry_delay_secs(),
             max_tasks_per_heartbeat: default_max_tasks_per_heartbeat(),
             workspace_scan_paths: default_workspace_scan_paths(),
+            adapter_telegram_enabled: false,
+            adapter_discord_enabled: false,
+            adapter_spam_threshold: default_adapter_spam_threshold(),
             db_pool: None,
             owner_signing_key: None,
         }
@@ -679,6 +707,11 @@ impl Config {
         // CARNELIAN_SOULS_PATH — override path to soul files directory
         if let Ok(path) = std::env::var("CARNELIAN_SOULS_PATH") {
             self.souls_path = PathBuf::from(path);
+        }
+
+        // CARNELIAN_AGENT_NAME — custom agent/assistant display name
+        if let Ok(name) = std::env::var("CARNELIAN_AGENT_NAME") {
+            self.agent_name = name;
         }
 
         // SESSION_EXPIRY_HOURS — default session TTL in hours (0 = never)
@@ -1144,6 +1177,24 @@ impl Config {
         Ok(plaintext)
     }
 
+    /// Get the OpenAI API key from environment variable.
+    #[must_use]
+    pub fn openai_api_key(&self) -> Option<String> {
+        std::env::var("OPENAI_API_KEY").ok()
+    }
+
+    /// Get the Anthropic API key from environment variable.
+    #[must_use]
+    pub fn anthropic_api_key(&self) -> Option<String> {
+        std::env::var("ANTHROPIC_API_KEY").ok()
+    }
+
+    /// Get the Fireworks API key from environment variable.
+    #[must_use]
+    pub fn fireworks_api_key(&self) -> Option<String> {
+        std::env::var("FIREWORKS_API_KEY").ok()
+    }
+
     /// Check if owner keypair is loaded.
     #[must_use]
     pub fn has_owner_keypair(&self) -> bool {
@@ -1263,20 +1314,20 @@ impl Config {
     ///
     /// | Profile | Max Workers | Max Memory | GPU | Default Model |
     /// |---------|-------------|------------|-----|---------------|
-    /// | Thummim | 4 | 28GB | Yes | deepseek-r1:7b |
-    /// | Urim | 8 | 56GB | Yes | deepseek-r1:32b |
+    /// | Standard | 4 | 28GB | Yes | deepseek-r1:7b |
+    /// | Performance | 8 | 56GB | Yes | deepseek-r1:32b |
     /// | Custom | 2 | 8GB | No | deepseek-r1:7b |
     #[must_use]
     pub fn machine_config(&self) -> MachineConfig {
         match self.machine_profile {
-            MachineProfile::Thummim => MachineConfig {
+            MachineProfile::Standard => MachineConfig {
                 max_workers: 4,
                 max_memory_mb: 28672, // 28GB, leaving 4GB for system
                 gpu_enabled: true,
                 default_model: "deepseek-r1:7b".to_string(),
                 auto_restart_workers: true,
             },
-            MachineProfile::Urim => MachineConfig {
+            MachineProfile::Performance => MachineConfig {
                 max_workers: 8,
                 max_memory_mb: 57344, // 56GB, leaving 8GB for system
                 gpu_enabled: true,
@@ -1618,27 +1669,33 @@ mod tests {
         let config = Config::default();
         assert_eq!(config.http_port, 18789);
         assert_eq!(config.log_level, "INFO");
-        assert_eq!(config.machine_profile, MachineProfile::Thummim);
+        assert_eq!(config.machine_profile, MachineProfile::Standard);
         assert!(config.validate().is_ok());
     }
 
     #[test]
     fn test_machine_profile_parsing() {
         assert_eq!(
-            MachineProfile::from_str("thummim").unwrap(),
-            MachineProfile::Thummim
+            MachineProfile::from_str("standard").unwrap(),
+            MachineProfile::Standard
         );
         assert_eq!(
-            MachineProfile::from_str("THUMMIM").unwrap(),
-            MachineProfile::Thummim
+            MachineProfile::from_str("STANDARD").unwrap(),
+            MachineProfile::Standard
         );
+        // Backward compatibility
+        assert_eq!(
+            MachineProfile::from_str("thummim").unwrap(),
+            MachineProfile::Standard
+        );
+        assert_eq!(
+            MachineProfile::from_str("performance").unwrap(),
+            MachineProfile::Performance
+        );
+        // Backward compatibility
         assert_eq!(
             MachineProfile::from_str("urim").unwrap(),
-            MachineProfile::Urim
-        );
-        assert_eq!(
-            MachineProfile::from_str("Urim").unwrap(),
-            MachineProfile::Urim
+            MachineProfile::Performance
         );
         assert_eq!(
             MachineProfile::from_str("custom").unwrap(),
@@ -1648,9 +1705,9 @@ mod tests {
     }
 
     #[test]
-    fn test_machine_config_thummim() {
+    fn test_machine_config_standard() {
         let config = Config {
-            machine_profile: MachineProfile::Thummim,
+            machine_profile: MachineProfile::Standard,
             ..Default::default()
         };
         let machine = config.machine_config();
@@ -1661,9 +1718,9 @@ mod tests {
     }
 
     #[test]
-    fn test_machine_config_urim() {
+    fn test_machine_config_performance() {
         let config = Config {
-            machine_profile: MachineProfile::Urim,
+            machine_profile: MachineProfile::Performance,
             ..Default::default()
         };
         let machine = config.machine_config();
