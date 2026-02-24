@@ -145,6 +145,10 @@ pub enum EventType {
     MemoryDeleted,
     MemorySearchPerformed,
     MemoryEmbeddingAdded,
+    MemoryExported,
+    MemoryImported,
+    MemoryExportFailed,
+    MemoryImportFailed,
 
     // Gateway operations
     GatewayRequestStart,
@@ -192,6 +196,22 @@ pub enum EventType {
 
     // Workspace scanning
     TaskAutoQueued,
+
+    // Sub-agent lifecycle
+    SubAgentCreated,
+    SubAgentUpdated,
+    SubAgentTerminated,
+    SubAgentPaused,
+    SubAgentResumed,
+
+    // Workflow lifecycle
+    WorkflowCreated,
+    WorkflowUpdated,
+    WorkflowDeleted,
+    WorkflowExecutionStarted,
+    WorkflowStepCompleted,
+    WorkflowExecutionCompleted,
+    WorkflowExecutionFailed,
 
     // Custom event type for extensibility
     Custom(String),
@@ -769,6 +789,8 @@ pub struct CreateMemoryRequest {
     pub summary: Option<String>,
     pub source: String,
     pub importance: f32,
+    #[serde(default)]
+    pub tags: Option<Vec<String>>,
 }
 
 /// Response body after creating a memory.
@@ -787,6 +809,7 @@ pub struct MemoryDetail {
     pub summary: Option<String>,
     pub source: String,
     pub importance: f32,
+    pub tags: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub accessed_at: DateTime<Utc>,
     pub access_count: i32,
@@ -802,6 +825,65 @@ pub struct ListMemoriesResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetMemoryResponse {
     pub memory: MemoryDetail,
+}
+
+// =============================================================================
+// MEMORY PORTABILITY API TYPES
+// =============================================================================
+
+/// Request body for `POST /v1/memories/export`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportMemoryRequest {
+    pub memory_ids: Vec<Uuid>,
+    #[serde(default)]
+    pub include_embedding: bool,
+    #[serde(default)]
+    pub topic_filter: Option<Vec<String>>,
+    #[serde(default)]
+    pub min_importance: Option<f32>,
+    #[serde(default)]
+    pub include_ledger_proof: bool,
+    #[serde(default)]
+    pub include_capabilities: bool,
+    #[serde(default)]
+    pub sign_export: bool,
+}
+
+/// Response body for `POST /v1/memories/export`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportMemoryResponse {
+    pub envelope_base64: String,
+    pub memory_count: usize,
+    pub signed: bool,
+    pub export_timestamp: DateTime<Utc>,
+}
+
+/// Request body for `POST /v1/memories/import`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportMemoryRequest {
+    pub envelope_base64: String,
+    pub identity_id: Uuid,
+    #[serde(default)]
+    pub verify_signature: bool,
+    #[serde(default)]
+    pub public_key: Option<String>,
+}
+
+/// Single import result for API responses.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryImportResultApi {
+    pub memory_id: Uuid,
+    pub verified: bool,
+    pub ledger_proof_valid: bool,
+    pub warnings: Vec<String>,
+}
+
+/// Response body for `POST /v1/memories/import`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportMemoryResponse {
+    pub results: Vec<MemoryImportResultApi>,
+    pub successful_count: usize,
+    pub failed_count: usize,
 }
 
 // =============================================================================
@@ -874,4 +956,535 @@ pub struct OllamaStatusResponse {
     pub url: String,
     pub available_models: Vec<String>,
     pub error: Option<String>,
+}
+
+// =============================================================================
+// SUB-AGENT TYPES
+// =============================================================================
+
+/// Detail record for a sub-agent, returned by list/get endpoints.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SubAgentDetail {
+    pub sub_agent_id: Uuid,
+    pub parent_id: Uuid,
+    pub created_by: Uuid,
+    pub model_provider: Option<Uuid>,
+    pub name: String,
+    pub role: String,
+    pub directives: Option<JsonValue>,
+    pub ephemeral: bool,
+    pub created_at: DateTime<Utc>,
+    pub last_active_at: DateTime<Utc>,
+    pub terminated_at: Option<DateTime<Utc>>,
+}
+
+/// Response body for `GET /v1/sub-agents`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListSubAgentsResponse {
+    pub sub_agents: Vec<SubAgentDetail>,
+}
+
+/// Request body for `POST /v1/sub-agents`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateSubAgentApiRequest {
+    pub name: String,
+    pub role: String,
+    #[serde(default)]
+    pub parent_id: Option<Uuid>,
+    #[serde(default)]
+    pub directives: Option<JsonValue>,
+    #[serde(default)]
+    pub model_provider: Option<Uuid>,
+    #[serde(default)]
+    pub ephemeral: bool,
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+    #[serde(default = "default_sub_agent_runtime")]
+    pub runtime: String,
+}
+
+fn default_sub_agent_runtime() -> String {
+    "node".to_string()
+}
+
+/// Request body for `PUT /v1/sub-agents/{id}`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateSubAgentApiRequest {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub role: Option<String>,
+    #[serde(default)]
+    pub directives: Option<JsonValue>,
+    #[serde(default)]
+    pub model_provider: Option<Uuid>,
+    #[serde(default)]
+    pub capabilities: Option<Vec<String>>,
+}
+
+/// Response body for `POST /v1/sub-agents` (creation).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateSubAgentResponse {
+    pub sub_agent_id: Uuid,
+    pub worker_id: Option<String>,
+    pub worker_warning: Option<String>,
+    pub name: String,
+    pub role: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Response body for pause/resume actions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubAgentActionResponse {
+    pub status: String,
+    #[serde(default)]
+    pub worker_id: Option<String>,
+    #[serde(default)]
+    pub worker_warning: Option<String>,
+}
+
+// =============================================================================
+// WORKFLOW TYPES
+// =============================================================================
+
+/// A single step in a workflow definition.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkflowStepDef {
+    pub step_id: String,
+    pub skill_name: String,
+    #[serde(default)]
+    pub input_mapping: Option<JsonValue>,
+    #[serde(default)]
+    pub depends_on: Vec<String>,
+    #[serde(default)]
+    pub condition: Option<JsonValue>,
+    #[serde(default)]
+    pub retry_policy: Option<WorkflowRetryPolicy>,
+    #[serde(default)]
+    pub continue_on_error: bool,
+}
+
+/// Retry policy for a workflow step.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkflowRetryPolicy {
+    pub max_attempts: u32,
+    #[serde(default = "default_retry_delay_secs")]
+    pub delay_secs: u64,
+}
+
+fn default_retry_delay_secs() -> u64 {
+    5
+}
+
+/// Detail record for a workflow, returned by list/get endpoints.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkflowDetail {
+    pub workflow_id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub created_by: Option<Uuid>,
+    pub steps: Vec<WorkflowStepDef>,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Response for listing workflows.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListWorkflowsResponse {
+    pub workflows: Vec<WorkflowDetail>,
+}
+
+/// Request body for `POST /v1/workflows`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateWorkflowRequest {
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub steps: Vec<WorkflowStepDef>,
+}
+
+/// Request body for `PUT /v1/workflows/{id}`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateWorkflowRequest {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub steps: Option<Vec<WorkflowStepDef>>,
+}
+
+/// Request body for `POST /v1/workflows/{id}/execute`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecuteWorkflowRequest {
+    #[serde(default = "default_empty_json")]
+    pub input: JsonValue,
+    #[serde(default)]
+    pub correlation_id: Option<Uuid>,
+}
+
+fn default_empty_json() -> JsonValue {
+    JsonValue::Object(serde_json::Map::new())
+}
+
+/// Query parameters for listing workflows.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListWorkflowsParams {
+    #[serde(default)]
+    pub enabled_only: bool,
+}
+
+/// Result of a single workflow step execution.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepResultDetail {
+    pub step_id: String,
+    pub skill_name: String,
+    pub status: String,
+    pub output: Option<JsonValue>,
+    pub error: Option<String>,
+    pub duration_ms: u64,
+}
+
+/// Response body for workflow execution.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowExecutionResponse {
+    pub workflow_id: Uuid,
+    pub workflow_name: String,
+    pub status: String,
+    pub steps: Vec<StepResultDetail>,
+    pub total_duration_ms: u64,
+    pub successful_steps: usize,
+    pub failed_steps: usize,
+    pub execution_summary: String,
+    #[serde(default)]
+    pub correlation_id: Option<Uuid>,
+}
+
+// =============================================================================
+// CHANNEL API TYPES
+// =============================================================================
+
+/// Detail view of a channel session, returned by list/get endpoints.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ChannelDetail {
+    pub session_id: Uuid,
+    pub channel_type: String,
+    pub channel_user_id: String,
+    pub trust_level: String,
+    pub identity_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub last_seen_at: DateTime<Utc>,
+    pub metadata: JsonValue,
+    #[serde(default)]
+    pub adapter_running: bool,
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub last_message_text: Option<String>,
+    #[serde(default)]
+    pub last_message_at: Option<DateTime<Utc>>,
+}
+
+/// Response body for `GET /v1/channels`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListChannelsResponse {
+    pub channels: Vec<ChannelDetail>,
+}
+
+/// Request body for `POST /v1/channels`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateChannelApiRequest {
+    pub channel_type: String,
+    pub channel_user_id: String,
+    #[serde(default)]
+    pub bot_token: Option<String>,
+    #[serde(default = "default_trust_level")]
+    pub trust_level: String,
+    #[serde(default)]
+    pub identity_id: Option<Uuid>,
+    #[serde(default = "default_empty_json")]
+    pub metadata: JsonValue,
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
+}
+
+fn default_trust_level() -> String {
+    "conversational".to_string()
+}
+
+fn default_enabled() -> bool {
+    true
+}
+
+/// Response body after creating a channel.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateChannelResponse {
+    pub session_id: Uuid,
+    pub channel_type: String,
+    pub channel_user_id: String,
+    pub status: String,
+}
+
+/// Request body for `PUT /v1/channels/{id}`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateChannelApiRequest {
+    #[serde(default)]
+    pub trust_level: Option<String>,
+    #[serde(default)]
+    pub bot_token: Option<String>,
+    #[serde(default)]
+    pub metadata: Option<JsonValue>,
+    #[serde(default)]
+    pub enabled: Option<bool>,
+}
+
+/// Request body for `POST /v1/channels/{id}/pair`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PairChannelApiRequest {
+    #[serde(default)]
+    pub trust_level: Option<String>,
+}
+
+/// Response body after initiating pairing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PairChannelResponse {
+    pub pairing_token: Uuid,
+    pub expires_at: String,
+    #[serde(default)]
+    pub requested_trust_level: Option<String>,
+    #[serde(default)]
+    pub instructions: Option<String>,
+}
+
+// =============================================================================
+// XP API TYPES
+// =============================================================================
+
+/// Response body for `GET /v1/xp/agents/:id`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentXpResponse {
+    pub identity_id: Uuid,
+    pub total_xp: i64,
+    pub level: i32,
+    pub xp_to_next_level: i64,
+    pub progress_pct: f64,
+    pub milestone_feature: Option<String>,
+}
+
+/// A single XP event row from `xp_events`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct XpEventDetail {
+    pub event_id: i64,
+    pub source: String,
+    pub xp_amount: i32,
+    pub task_id: Option<Uuid>,
+    pub skill_id: Option<Uuid>,
+    pub ledger_event_id: Option<i64>,
+    pub metadata: JsonValue,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Query parameters for paginated XP history requests.
+#[derive(Debug, Clone, Deserialize)]
+pub struct XpHistoryQuery {
+    #[serde(default = "default_xp_page")]
+    pub page: u32,
+    #[serde(default = "default_xp_page_size")]
+    pub page_size: u32,
+}
+
+impl XpHistoryQuery {
+    /// Hard upper-bound on `page_size` to prevent unbounded queries.
+    pub const MAX_PAGE_SIZE: u32 = 500;
+}
+
+const fn default_xp_page() -> u32 {
+    1
+}
+const fn default_xp_page_size() -> u32 {
+    50
+}
+
+/// Paginated response for `GET /v1/xp/agents/:id/history`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct XpHistoryResponse {
+    pub events: Vec<XpEventDetail>,
+    pub page: u32,
+    pub page_size: u32,
+    pub total: i64,
+}
+
+/// A single entry on the XP leaderboard.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LeaderboardEntry {
+    pub rank: i64,
+    pub identity_id: Uuid,
+    pub name: String,
+    pub total_xp: i64,
+    pub level: i32,
+}
+
+/// Response body for `GET /v1/xp/leaderboard`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct XpLeaderboardResponse {
+    pub entries: Vec<LeaderboardEntry>,
+}
+
+/// Detail view of skill metrics.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillMetricsDetail {
+    pub skill_id: Uuid,
+    pub skill_name: String,
+    pub usage_count: i32,
+    pub success_count: i32,
+    pub failure_count: i32,
+    pub success_rate: f64,
+    pub avg_duration_ms: i32,
+    pub total_xp_earned: i64,
+    pub skill_level: i32,
+    pub last_used_at: Option<DateTime<Utc>>,
+}
+
+/// Query parameters for top skills endpoint.
+#[derive(Debug, Clone, Deserialize)]
+pub struct TopSkillsQuery {
+    #[serde(default = "default_top_skills_limit")]
+    pub limit: i64,
+}
+
+const fn default_top_skills_limit() -> i64 {
+    10
+}
+
+/// Response body for `GET /v1/xp/skills/top`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TopSkillsResponse {
+    pub skills: Vec<SkillMetricsDetail>,
+}
+
+/// Request body for `POST /v1/xp/award`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AwardXpRequest {
+    pub identity_id: Uuid,
+    pub xp_amount: i32,
+    pub source: String,
+    #[serde(default)]
+    pub task_id: Option<Uuid>,
+    #[serde(default)]
+    pub skill_id: Option<Uuid>,
+    #[serde(default)]
+    pub ledger_event_id: Option<i64>,
+    #[serde(default)]
+    pub metadata: Option<JsonValue>,
+    pub signature: String,
+}
+
+/// Response body for `POST /v1/xp/award`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AwardXpResponse {
+    pub identity_id: Uuid,
+    pub xp_awarded: i32,
+    pub new_total_xp: i64,
+    pub level_up: Option<i32>,
+}
+
+// =============================================================================
+// VOICE API TYPES
+// =============================================================================
+
+/// A single voice entry from ElevenLabs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VoiceInfo {
+    pub voice_id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub preview_url: Option<String>,
+    pub labels: std::collections::HashMap<String, String>,
+}
+
+/// Response body for `GET /v1/voice/voices`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListVoicesResponse {
+    pub voices: Vec<VoiceInfo>,
+}
+
+/// Request body for `POST /v1/voice/configure`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigureVoiceRequest {
+    pub api_key: String,
+    pub default_voice_id: Option<String>,
+    pub identity_id: Option<Uuid>,
+}
+
+/// Response body for `POST /v1/voice/configure`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigureVoiceResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+/// Request body for `POST /v1/voice/test`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestVoiceRequest {
+    pub text: String,
+    pub voice_id: String,
+}
+
+/// Response body for `POST /v1/voice/test`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestVoiceResponse {
+    pub audio_base64: String,
+    pub content_type: String,
+}
+
+/// Request body for `POST /v1/voice/transcribe`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TranscribeVoiceRequest {
+    pub audio_base64: String,
+}
+
+/// Response body for `POST /v1/voice/transcribe`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TranscribeVoiceResponse {
+    pub text: String,
+}
+
+// =============================================================================
+// LEDGER ANCHOR API TYPES
+// =============================================================================
+
+/// Request body for `POST /v1/ledger/anchor`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublishAnchorRequest {
+    pub from_event_id: i64,
+    pub to_event_id: i64,
+}
+
+/// Response body for `POST /v1/ledger/anchor`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublishAnchorResponse {
+    pub anchor_id: String,
+    pub merkle_root: String,
+    pub event_count: i64,
+}
+
+/// Response body for `GET /v1/ledger/anchor/{id}`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnchorProofResponse {
+    pub anchor_id: String,
+    pub hash: String,
+    pub ledger_event_from: i64,
+    pub ledger_event_to: i64,
+    pub published_at: String,
+    pub metadata: serde_json::Value,
+    pub verified: bool,
+}
+
+/// Response body for `GET /v1/ledger/anchor/{id}/verify`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerifyAnchorResponse {
+    pub anchor_id: String,
+    pub hash: String,
+    pub verified: bool,
 }

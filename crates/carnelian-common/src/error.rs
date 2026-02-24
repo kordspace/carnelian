@@ -11,6 +11,12 @@ pub enum Error {
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
 
+    #[error("Database error: {0}")]
+    DatabaseMessage(String),
+
+    #[error("Validation error: {0}")]
+    Validation(String),
+
     #[error("Migration error: {0}")]
     Migration(#[from] sqlx::migrate::MigrateError),
 
@@ -72,6 +78,18 @@ pub enum Error {
 
     #[error("Safe mode active: {0}")]
     SafeModeActive(String),
+
+    #[error("Channel error: {0}")]
+    Channel(String),
+
+    #[error("Rate limit exceeded: {0}")]
+    RateLimitExceeded(String),
+
+    #[error("Pairing failed: {0}")]
+    PairingFailed(String),
+
+    #[error("Bot API error: {0}")]
+    BotApiError(String),
 }
 
 impl<T> From<tokio::sync::broadcast::error::SendError<T>> for Error {

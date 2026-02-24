@@ -2,9 +2,11 @@
 //!
 //! Shared types, error handling, and utilities used across all crates.
 
+pub mod channel;
 pub mod error;
 pub mod types;
 
+pub use channel::{ChannelAdapter, ChannelAdapterFactory};
 pub use error::{Error, Result};
 
 /// Carnelian version
