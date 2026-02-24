@@ -1049,7 +1049,7 @@ pub struct SubAgentActionResponse {
 // =============================================================================
 
 /// A single step in a workflow definition.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowStepDef {
     pub step_id: String,
     pub skill_name: String,
