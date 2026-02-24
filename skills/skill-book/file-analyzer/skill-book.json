@@ -1,0 +1,9 @@
+{
+  "id": "file-analyzer",
+  "name": "File Analyzer",
+  "description": "Analyze file contents, extract metadata, and summarize documents",
+  "category": "automation",
+  "runtime": "node",
+  "version": "1.0.0",
+  "required_config": []
+}

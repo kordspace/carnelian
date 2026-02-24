@@ -1,0 +1,15 @@
+{
+  "id": "github-pr-review",
+  "name": "GitHub PR Review",
+  "description": "Automated code review for GitHub pull requests with inline comments and suggestions",
+  "category": "code",
+  "runtime": "node",
+  "version": "1.0.0",
+  "required_config": [
+    {
+      "key": "GITHUB_TOKEN",
+      "label": "GitHub Personal Access Token",
+      "secret": true
+    }
+  ]
+}

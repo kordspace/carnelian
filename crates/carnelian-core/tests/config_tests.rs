@@ -27,7 +27,7 @@ fn test_load_from_toml_file() {
     let config_path = fixtures_path().join("machine.toml");
     let config = Config::load_from_file(&config_path).expect("Failed to load config from TOML");
 
-    assert_eq!(config.machine_profile, MachineProfile::Urim);
+    assert_eq!(config.machine_profile, MachineProfile::Performance);
     assert_eq!(config.http_port, 19000);
     assert_eq!(
         config.database_url,
@@ -118,7 +118,7 @@ fn test_machine_config_profiles() {
 
     // Test Urim profile
     let mut config = Config::default();
-    config.machine_profile = MachineProfile::Urim;
+    config.machine_profile = MachineProfile::Performance;
     let machine = config.machine_config();
     assert_eq!(machine.max_workers, 8);
     assert_eq!(machine.max_memory_mb, 57344);

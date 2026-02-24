@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 
 use crate::store::EventStreamStore;
 use crate::websocket::ConnectionState;
+use crate::Route;
 
 /// Format an uptime duration in seconds into a human-readable string.
 fn format_uptime(seconds: u64) -> String {
@@ -106,13 +107,14 @@ pub fn TopBar() -> Element {
                         span { class: "xp-progress-label", "{total_xp} XP" }
                     }
                 }
+                let navigator = use_navigator();
                 button {
                     class: "btn-icon",
                     title: "Settings",
                     onclick: move |_| {
-                        tracing::info!("Settings clicked");
+                        navigator.push(Route::Settings {});
                     },
-                    "\u{2699}\u{FE0F}"
+                    "⚙️"
                 }
             }
         }

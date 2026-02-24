@@ -90,6 +90,10 @@ tokio-util = { version = "0.7", features = ["codec"] }
 # Platform-specific
 libc = "0.2"
 walkdir = "2.5"
+# Docker API client
+bollard = "0.17"
+# System information
+sysinfo = "0.32"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

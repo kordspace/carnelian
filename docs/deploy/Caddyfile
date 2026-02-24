@@ -1,0 +1,40 @@
+# Caddy configuration for Carnelian OS
+# Automatic HTTPS with Let's Encrypt
+
+your-domain.com {
+    # Reverse proxy to Carnelian
+    reverse_proxy localhost:18789
+    
+    # WebSocket support
+    @websocket {
+        header Connection *Upgrade*
+        header Upgrade websocket
+    }
+    reverse_proxy @websocket localhost:18789
+    
+    # Security headers
+    header {
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+    
+    # Compression
+    encode gzip zstd
+    
+    # Logging
+    log {
+        output file /var/log/caddy/carnelian.log {
+            roll_size 100mb
+            roll_keep 10
+            roll_keep_for 720h
+        }
+    }
+}
+
+# Optional: Local/internal access without HTTPS
+:18790 {
+    bind 127.0.0.1
+    reverse_proxy localhost:18789
+}

@@ -2703,7 +2703,7 @@ mod tests {
         let proof = rt.block_on(anchor.get_anchor_proof("anchor_id"));
         assert_eq!(
             proof.unwrap(),
-            serde_json::json!({"status": "not_implemented"})
+            Some(serde_json::json!({"status": "not_implemented"}))
         );
     }
 

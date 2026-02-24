@@ -1,5 +1,6 @@
 //! UI components for the Carnelian desktop application.
 
+pub mod first_run_wizard;
 pub mod system_tray;
 pub mod tab_nav;
 pub mod toast;

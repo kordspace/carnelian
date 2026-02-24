@@ -1488,3 +1488,111 @@ pub struct VerifyAnchorResponse {
     pub hash: String,
     pub verified: bool,
 }
+
+// =============================================================================
+// LEDGER VIEWER API TYPES
+// =============================================================================
+
+/// Single ledger event detail for the ledger viewer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LedgerEventDetail {
+    pub event_id: i64,
+    pub timestamp: String,
+    pub actor_id: String,
+    pub action_type: String,
+    pub payload_hash: String,
+    pub event_hash: String,
+    pub signature: Option<String>,
+}
+
+/// Response body for `GET /v1/ledger/events`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListLedgerEventsResponse {
+    pub events: Vec<LedgerEventDetail>,
+    pub total: i64,
+    pub offset: i64,
+    pub limit: i64,
+}
+
+/// Response body for `GET /v1/ledger/verify`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LedgerVerifyResponse {
+    pub intact: bool,
+    pub event_count: u64,
+    pub first_event_id: Option<i64>,
+    pub last_event_id: Option<i64>,
+}
+
+// =============================================================================
+// SETUP STATUS API TYPES
+// =============================================================================
+
+/// Response body for `GET /v1/config/setup-status`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetupStatusResponse {
+    pub setup_complete: bool,
+    pub machine_toml_exists: bool,
+}
+
+/// Request body for `POST /v1/config/setup-complete`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetupCompleteRequest {}
+
+/// Response body for `POST /v1/config/setup-complete`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetupCompleteResponse {
+    pub success: bool,
+}
+
+// =============================================================================
+// SKILL BOOK API TYPES
+// =============================================================================
+
+/// Configuration field required for a skill.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillConfigField {
+    pub key: String,
+    pub label: String,
+    pub secret: bool,
+}
+
+/// Single skill entry in the Skill Book catalog.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillBookEntry {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub category: String,
+    pub runtime: String,
+    pub version: String,
+    pub required_config: Vec<SkillConfigField>,
+    pub activated: bool,
+}
+
+/// Skill Book catalog response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillBookCatalog {
+    pub skills: Vec<SkillBookEntry>,
+    pub categories: Vec<String>,
+}
+
+/// Request to activate a skill from the Skill Book.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActivateSkillRequest {
+    pub config: std::collections::HashMap<String, String>,
+}
+
+/// Response from skill activation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActivateSkillResponse {
+    pub skill_id: String,
+    pub activated: bool,
+}
+
+/// Response from skill deactivation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeactivateSkillResponse {
+    pub skill_id: String,
+    pub deactivated: bool,
+}
+

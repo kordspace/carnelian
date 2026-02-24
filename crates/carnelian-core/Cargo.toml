@@ -46,6 +46,8 @@ ciborium = "0.2"
 base64 = "0.22"
 which = "6.0"
 walkdir = { workspace = true }
+bollard = { workspace = true }
+sysinfo = { workspace = true }
 async-stream = "0.3"
 libloading = "0.8"
 wasmtime = "27.0"

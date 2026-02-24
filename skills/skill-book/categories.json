@@ -1,0 +1,40 @@
+{
+  "categories": [
+    {
+      "id": "code",
+      "name": "Code",
+      "description": "Software development, code review, and engineering tasks",
+      "icon": "💻"
+    },
+    {
+      "id": "research",
+      "name": "Research",
+      "description": "Information gathering, analysis, and knowledge synthesis",
+      "icon": "🔍"
+    },
+    {
+      "id": "communication",
+      "name": "Communication",
+      "description": "Messaging, notifications, and channel management",
+      "icon": "💬"
+    },
+    {
+      "id": "creative",
+      "name": "Creative",
+      "description": "Content generation, design, and creative tasks",
+      "icon": "🎨"
+    },
+    {
+      "id": "data",
+      "name": "Data",
+      "description": "Data analysis, processing, and visualization",
+      "icon": "📊"
+    },
+    {
+      "id": "automation",
+      "name": "Automation",
+      "description": "Workflow automation and system integration",
+      "icon": "⚙️"
+    }
+  ]
+}

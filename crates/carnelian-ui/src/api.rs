@@ -9,16 +9,16 @@ use carnelian_common::types::{
     CancelTaskResponse, ChannelDetail, ConfigureVoiceRequest, ConfigureVoiceResponse,
     CreateChannelApiRequest, CreateChannelResponse, CreateSubAgentApiRequest,
     CreateSubAgentResponse, CreateTaskRequest, CreateTaskResponse, CreateWorkflowRequest,
-    ExecuteWorkflowRequest, GrantCapabilityRequest, GrantCapabilityResponse, HeartbeatRecord,
-    HeartbeatStatusResponse, IdentityResponse, ListApprovalsResponse, ListCapabilitiesResponse,
-    ListChannelsResponse, ListProvidersResponse, ListRunsResponse, ListSkillsResponse,
-    ListSubAgentsResponse, ListTasksResponse, ListVoicesResponse, ListWorkflowsResponse,
-    MetricsSnapshot, OllamaStatusResponse, PaginatedRunLogsResponse, PairChannelApiRequest,
-    PairChannelResponse, RevokeCapabilityResponse, RunDetail, SkillMetricsDetail,
-    SkillRefreshResponse, SkillToggleResponse, SubAgentActionResponse, SubAgentDetail, TaskDetail,
-    TestVoiceRequest, TestVoiceResponse, TopSkillsResponse, UpdateChannelApiRequest,
-    UpdateSubAgentApiRequest, UpdateWorkflowRequest, WorkflowDetail, WorkflowExecutionResponse,
-    XpHistoryResponse, XpLeaderboardResponse,
+    DetailedHealthResponse, ExecuteWorkflowRequest, GrantCapabilityRequest, GrantCapabilityResponse,
+    HeartbeatRecord, HeartbeatStatusResponse, IdentityResponse, ListApprovalsResponse,
+    ListCapabilitiesResponse, ListChannelsResponse, ListProvidersResponse, ListRunsResponse,
+    ListSkillsResponse, ListSubAgentsResponse, ListTasksResponse, ListVoicesResponse,
+    ListWorkflowsResponse, MetricsSnapshot, OllamaStatusResponse, PaginatedRunLogsResponse,
+    PairChannelApiRequest, PairChannelResponse, RevokeCapabilityResponse, RunDetail,
+    SkillMetricsDetail, SkillRefreshResponse, SkillToggleResponse, StatusResponse,
+    SubAgentActionResponse, SubAgentDetail, TaskDetail, TestVoiceRequest, TestVoiceResponse,
+    TopSkillsResponse, UpdateChannelApiRequest, UpdateSubAgentApiRequest, UpdateWorkflowRequest,
+    WorkflowDetail, WorkflowExecutionResponse, XpHistoryResponse, XpLeaderboardResponse,
 };
 use uuid::Uuid;
 
@@ -368,6 +368,32 @@ pub async fn get_heartbeat_status() -> Result<HeartbeatStatusResponse, String> {
         .await
         .map_err(|e| format!("Request failed: {e}"))?
         .json::<HeartbeatStatusResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+// ── Health & Status Operations ───────────────────────────────
+
+/// Get detailed health information.
+pub async fn get_detailed_health() -> Result<DetailedHealthResponse, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/health/detailed"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<DetailedHealthResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Get system status (workers, models, queue depth).
+pub async fn get_system_status() -> Result<StatusResponse, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/status"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<StatusResponse>()
         .await
         .map_err(|e| format!("Parse failed: {e}"))
 }
@@ -873,6 +899,143 @@ pub async fn list_voices() -> Result<ListVoicesResponse, String> {
         .await
         .map_err(|e| format!("Request failed: {e}"))?
         .json::<ListVoicesResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+// ── Ledger Operations ────────────────────────────────────────
+
+use carnelian_common::types::{LedgerVerifyResponse, ListLedgerEventsResponse};
+
+/// List ledger events with optional filters.
+pub async fn list_ledger_events(
+    limit: i64,
+    offset: i64,
+    action_type: Option<String>,
+    actor_id: Option<String>,
+    from_ts: Option<String>,
+    to_ts: Option<String>,
+) -> Result<ListLedgerEventsResponse, String> {
+    let mut url = format!("{API_BASE_URL}/v1/ledger/events?limit={limit}&offset={offset}");
+    if let Some(at) = action_type {
+        url.push_str(&format!("&action_type={}", at));
+    }
+    if let Some(aid) = actor_id {
+        url.push_str(&format!("&actor_id={}", aid));
+    }
+    if let Some(from) = from_ts {
+        url.push_str(&format!("&from_ts={}", from));
+    }
+    if let Some(to) = to_ts {
+        url.push_str(&format!("&to_ts={}", to));
+    }
+    client()
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<ListLedgerEventsResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Verify ledger chain integrity.
+pub async fn verify_ledger_chain() -> Result<LedgerVerifyResponse, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/ledger/verify"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<LedgerVerifyResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+// ── Setup Status Operations ────────────────────────────────
+
+use carnelian_common::types::{SetupCompleteResponse, SetupStatusResponse};
+
+/// Get setup status.
+pub async fn get_setup_status() -> Result<SetupStatusResponse, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/config/setup-status"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<SetupStatusResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Mark setup as complete.
+pub async fn mark_setup_complete() -> Result<SetupCompleteResponse, String> {
+    client()
+        .post(format!("{API_BASE_URL}/v1/config/setup-complete"))
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<SetupCompleteResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+// ── Skill Book Operations ─────────────────────────────────
+
+use carnelian_common::types::{
+    ActivateSkillRequest, ActivateSkillResponse, DeactivateSkillResponse, SkillBookCatalog,
+    SkillBookEntry,
+};
+
+/// List all skills in the Skill Book catalog.
+pub async fn list_skill_book() -> Result<SkillBookCatalog, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/skill-book"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<SkillBookCatalog>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Get a single Skill Book entry.
+pub async fn get_skill_book_entry(skill_id: &str) -> Result<SkillBookEntry, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/skill-book/{skill_id}"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<SkillBookEntry>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Activate a skill from the Skill Book.
+pub async fn activate_skill(
+    skill_id: &str,
+    config: std::collections::HashMap<String, String>,
+) -> Result<ActivateSkillResponse, String> {
+    let request = ActivateSkillRequest { config };
+    client()
+        .post(format!("{API_BASE_URL}/v1/skill-book/{skill_id}/activate"))
+        .json(&request)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<ActivateSkillResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Deactivate a skill.
+pub async fn deactivate_skill(skill_id: &str) -> Result<DeactivateSkillResponse, String> {
+    client()
+        .delete(format!("{API_BASE_URL}/v1/skill-book/{skill_id}/deactivate"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<DeactivateSkillResponse>()
         .await
         .map_err(|e| format!("Parse failed: {e}"))
 }

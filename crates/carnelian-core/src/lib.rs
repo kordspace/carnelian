@@ -102,6 +102,7 @@ pub mod safe_mode;
 pub mod scheduler;
 pub mod server;
 pub mod session;
+pub mod skill_book;
 pub mod skills;
 pub mod soul;
 pub mod sub_agent;

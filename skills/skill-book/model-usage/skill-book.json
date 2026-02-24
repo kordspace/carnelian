@@ -1,0 +1,9 @@
+{
+  "id": "model-usage",
+  "name": "Model Usage Analytics",
+  "description": "Track and analyze LLM usage patterns, costs, and performance metrics",
+  "category": "data",
+  "runtime": "node",
+  "version": "1.0.0",
+  "required_config": []
+}

@@ -1,0 +1,9 @@
+{
+  "id": "code-review",
+  "name": "Code Review",
+  "description": "General code review and quality analysis for any codebase",
+  "category": "code",
+  "runtime": "node",
+  "version": "1.0.0",
+  "required_config": []
+}

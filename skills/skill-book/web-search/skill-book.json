@@ -1,0 +1,15 @@
+{
+  "id": "web-search",
+  "name": "Web Search",
+  "description": "Search the web for information, news, and research with result summarization",
+  "category": "research",
+  "runtime": "node",
+  "version": "1.0.0",
+  "required_config": [
+    {
+      "key": "SEARCH_API_KEY",
+      "label": "Search API Key (Serper, Bing, or similar)",
+      "secret": true
+    }
+  ]
+}

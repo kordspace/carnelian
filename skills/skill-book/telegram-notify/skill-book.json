@@ -1,0 +1,15 @@
+{
+  "id": "telegram-notify",
+  "name": "Telegram Notifications",
+  "description": "Send notifications and alerts via Telegram bot",
+  "category": "communication",
+  "runtime": "node",
+  "version": "1.0.0",
+  "required_config": [
+    {
+      "key": "TELEGRAM_BOT_TOKEN",
+      "label": "Telegram Bot Token",
+      "secret": true
+    }
+  ]
+}

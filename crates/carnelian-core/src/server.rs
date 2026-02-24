@@ -175,6 +175,8 @@ pub struct AppState {
     pub xp_manager: Arc<crate::xp::XpManager>,
     /// Voice gateway for ElevenLabs speech-to-text and text-to-speech
     pub voice_gateway: Arc<crate::voice::VoiceGateway>,
+    /// Skill Book for curated skill catalog and activation
+    pub skill_book: Arc<crate::skill_book::SkillBook>,
     /// Active channel adapters keyed by session_id
     pub channel_adapters: Arc<RwLock<HashMap<Uuid, Arc<dyn ChannelAdapter>>>>,
     /// Factory for building channel adapters from configuration.
@@ -205,6 +207,7 @@ impl AppState {
         workflow_engine: Arc<crate::workflow::WorkflowEngine>,
         xp_manager: Arc<crate::xp::XpManager>,
         voice_gateway: Arc<crate::voice::VoiceGateway>,
+        skill_book: Arc<crate::skill_book::SkillBook>,
     ) -> Self {
         Self {
             config,
@@ -222,6 +225,7 @@ impl AppState {
             workflow_engine,
             xp_manager,
             voice_gateway,
+            skill_book,
             channel_adapters: Arc::new(RwLock::new(HashMap::new())),
             channel_adapter_factory: None,
             correlation_counter: Arc::new(AtomicU64::new(0)),
@@ -415,6 +419,17 @@ impl Server {
             Arc::new(crate::voice::VoiceGateway::new(pool.clone()))
         };
 
+        // Create Skill Book for curated skill catalog
+        let skill_book = {
+            let skill_book_path = std::path::PathBuf::from("skills/skill-book");
+            let registry_path = self.config.skills_registry_path.clone();
+            Arc::new(crate::skill_book::SkillBook::new(
+                skill_book_path,
+                registry_path,
+                self.config.clone(),
+            ))
+        };
+
         let state = AppState::new(
             self.config.clone(),
             self.event_stream.clone(),
@@ -430,6 +445,7 @@ impl Server {
             workflow_engine,
             xp_manager,
             voice_gateway,
+            skill_book,
         );
 
         // Share the metrics collector and workflow engine with the scheduler
@@ -702,6 +718,19 @@ fn build_router(state: AppState) -> Router {
             "/v1/ledger/anchor/{id}/verify",
             get(verify_ledger_anchor_handler),
         )
+        // Ledger viewer endpoints
+        .route("/v1/ledger/events", get(list_ledger_events_handler))
+        .route("/v1/ledger/verify", get(verify_ledger_chain_handler))
+        // Setup status endpoints
+        .route("/v1/config/setup-status", get(get_setup_status_handler))
+        .route("/v1/config/setup-complete", post(post_setup_complete_handler))
+        // Skill Book endpoints
+        .route("/v1/skill-book", get(list_skill_book_handler))
+        .route("/v1/skill-book/:id", get(get_skill_book_entry_handler))
+        .route("/v1/skill-book/:id/activate", post(activate_skill_handler))
+        .route("/v1/skill-book/:id/deactivate", delete(deactivate_skill_handler))
+        // API Key endpoint (localhost-only via middleware)
+        .route("/v1/config/api-key", get(get_api_key_handler))
         // Revocation sync endpoint
         .route(
             "/v1/memory/revoked-grants",
@@ -6099,10 +6128,31 @@ pub struct RevokedGrantResponse {
     pub reason: Option<String>,
 }
 
-/// List revoked grants for cross-instance sync
-async fn list_revoked_grants_handler(
+/// Query parameters for `GET /v1/ledger/events`.
+#[derive(Debug, Deserialize)]
+struct LedgerEventsQuery {
+    #[serde(default = "default_ledger_limit")]
+    limit: i64,
+    #[serde(default)]
+    offset: i64,
+    #[serde(default)]
+    action_type: Option<String>,
+    #[serde(default)]
+    actor_id: Option<String>,
+    #[serde(default)]
+    from_ts: Option<String>,
+    #[serde(default)]
+    to_ts: Option<String>,
+}
+
+fn default_ledger_limit() -> i64 {
+    50
+}
+
+/// List ledger events via `GET /v1/ledger/events`.
+async fn list_ledger_events_handler(
     State(state): State<AppState>,
-    Query(params): Query<ListRevokedGrantsQuery>,
+    Query(params): Query<LedgerEventsQuery>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
@@ -6115,49 +6165,364 @@ async fn list_revoked_grants_handler(
         }
     };
 
-    // Parse since timestamp or default to 24 hours ago
-    let since = match params.since {
-        Some(s) => match chrono::DateTime::parse_from_rfc3339(&s) {
-            Ok(dt) => dt.with_timezone(&chrono::Utc),
+    let limit = params.limit.clamp(1, 100);
+    let offset = params.offset.max(0);
+
+    // Build the base query
+    let mut sql = String::from(
+        r"SELECT event_id, timestamp, actor_id, action_type, payload_hash, event_hash, signature 
+          FROM ledger_events WHERE 1=1"
+    );
+    let mut binds: Vec<Box<dyn std::any::Any>> = Vec::new();
+
+    // Add filters
+    if let Some(ref action_type) = params.action_type {
+        sql.push_str(" AND action_type = $");
+        sql.push_str(&(binds.len() + 1).to_string());
+        binds.push(Box::new(action_type.clone()));
+    }
+    if let Some(ref actor_id) = params.actor_id {
+        sql.push_str(" AND actor_id = $");
+        sql.push_str(&(binds.len() + 1).to_string());
+        binds.push(Box::new(actor_id.clone()));
+    }
+    if let Some(ref from_ts) = params.from_ts {
+        sql.push_str(" AND timestamp >= $");
+        sql.push_str(&(binds.len() + 1).to_string());
+        binds.push(Box::new(from_ts.clone()));
+    }
+    if let Some(ref to_ts) = params.to_ts {
+        sql.push_str(" AND timestamp <= $");
+        sql.push_str(&(binds.len() + 1).to_string());
+        binds.push(Box::new(to_ts.clone()));
+    }
+
+    // Count total for pagination
+    let count_sql = sql.replace(
+        "SELECT event_id, timestamp, actor_id, action_type, payload_hash, event_hash, signature",
+        "SELECT COUNT(*)"
+    );
+    
+    let total: i64 = match sqlx::query_scalar(&count_sql)
+        .fetch_one(pool)
+        .await {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::warn!(error = %e, "Failed to count ledger events");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Database error: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    // Add ordering and pagination
+    sql.push_str(&format!(" ORDER BY event_id DESC LIMIT {} OFFSET {}", limit, offset));
+
+    // Execute query
+    let rows: Vec<(i64, chrono::DateTime<chrono::Utc>, String, String, String, String, Option<String>)> = 
+        match sqlx::query_as(&sql).fetch_all(pool).await {
+            Ok(r) => r,
             Err(e) => {
+                tracing::warn!(error = %e, "Failed to fetch ledger events");
                 return (
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({"error": format!("Invalid 'since' timestamp: {}", e)})),
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": format!("Database error: {}", e)})),
                 )
                     .into_response();
             }
-        },
-        None => chrono::Utc::now() - chrono::Duration::hours(24),
+        };
+
+    let events: Vec<carnelian_common::types::LedgerEventDetail> = rows
+        .into_iter()
+        .map(|(event_id, timestamp, actor_id, action_type, payload_hash, event_hash, signature)| {
+            carnelian_common::types::LedgerEventDetail {
+                event_id,
+                timestamp: timestamp.to_rfc3339(),
+                actor_id,
+                action_type,
+                payload_hash,
+                event_hash,
+                signature,
+            }
+        })
+        .collect();
+
+    let response = carnelian_common::types::ListLedgerEventsResponse {
+        events,
+        total,
+        offset,
+        limit,
     };
 
-    let policy_engine = crate::policy::PolicyEngine::new(pool.clone());
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(response).unwrap_or_default()),
+    )
+        .into_response()
+}
 
-    match policy_engine.list_revoked_since(since).await {
-        Ok(revoked) => {
-            let grants: Vec<RevokedGrantResponse> = revoked
-                .into_iter()
-                .map(|info| RevokedGrantResponse {
-                    grant_id: info.grant_id.to_string(),
-                    revoked_at: info.revoked_at.to_rfc3339(),
-                    revoked_by: info.revoked_by.map(|u| u.to_string()),
-                    reason: info.reason,
-                })
-                .collect();
-
-            let response = RevokedGrantsResponse { grants };
+/// Verify ledger chain integrity via `GET /v1/ledger/verify`.
+async fn verify_ledger_chain_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match state.ledger.verify_chain(None).await {
+        Ok(intact) => {
+            let (event_count, first_event_id, last_event_id) =
+                if let Ok(pool) = state.config.pool() {
+                    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ledger_events")
+                        .fetch_one(pool)
+                        .await
+                        .unwrap_or(0);
+                    let first: Option<i64> =
+                        sqlx::query_scalar("SELECT MIN(event_id) FROM ledger_events")
+                            .fetch_one(pool)
+                            .await
+                            .unwrap_or(None);
+                    let last: Option<i64> =
+                        sqlx::query_scalar("SELECT MAX(event_id) FROM ledger_events")
+                            .fetch_one(pool)
+                            .await
+                            .unwrap_or(None);
+                    (count as u64, first, last)
+                } else {
+                    (0u64, None, None)
+                };
+            let response = carnelian_common::types::LedgerVerifyResponse {
+                intact,
+                event_count,
+                first_event_id,
+                last_event_id,
+            };
             (
                 StatusCode::OK,
-                Json(serde_json::to_value(response).unwrap()),
+                Json(serde_json::to_value(response).unwrap_or_default()),
             )
                 .into_response()
         }
         Err(e) => {
-            tracing::warn!(error = %e, "Failed to list revoked grants");
+            tracing::warn!(error = %e, "Failed to verify ledger chain");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("Failed to list revoked grants: {}", e)})),
+                Json(json!({"error": format!("Verification failed: {}", e)})),
             )
                 .into_response()
         }
     }
 }
+
+/// Get setup status via `GET /v1/config/setup-status`.
+async fn get_setup_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "database unavailable"})),
+            )
+                .into_response();
+        }
+    };
+
+    // Check if setup_complete key exists in config_store
+    let setup_complete: Option<String> = sqlx::query_scalar(
+        "SELECT value FROM config_store WHERE key = 'setup_complete'",
+    )
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten();
+
+    // Check if machine.toml exists
+    let machine_toml_exists = std::path::Path::new("machine.toml").exists()
+        || std::path::Path::new("/etc/carnelian/machine.toml").exists()
+        || std::env::var("CARNELIAN_CONFIG_PATH").is_ok();
+
+    let response = carnelian_common::types::SetupStatusResponse {
+        setup_complete: setup_complete.is_some(),
+        machine_toml_exists,
+    };
+
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(response).unwrap_or_default()),
+    )
+        .into_response()
+}
+
+/// Mark setup as complete via `POST /v1/config/setup-complete`.
+async fn post_setup_complete_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "database unavailable"})),
+            )
+                .into_response();
+        }
+    };
+
+    // Insert setup_complete = true into config_store
+    let result = sqlx::query(
+        "INSERT INTO config_store (key, value) VALUES ('setup_complete', 'true') ON CONFLICT (key) DO UPDATE SET value = 'true'",
+    )
+    .execute(pool)
+    .await;
+
+    match result {
+        Ok(_) => {
+            let response = carnelian_common::types::SetupCompleteResponse { success: true };
+            (
+                StatusCode::OK,
+                Json(serde_json::to_value(response).unwrap_or_default()),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "Failed to mark setup complete");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to update config: {}", e)})),
+            )
+                .into_response()
+        }
+    }
+}
+
+// =============================================================================
+// SKILL BOOK HANDLERS
+// =============================================================================
+
+/// List all skills in the Skill Book catalog via `GET /v1/skill-book`.
+async fn list_skill_book_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match state.skill_book.load_catalog() {
+        Ok(catalog) => {
+            (
+                StatusCode::OK,
+                Json(serde_json::to_value(catalog).unwrap_or_default()),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "Failed to load Skill Book catalog");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to load catalog: {}", e)})),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// Get a single Skill Book entry via `GET /v1/skill-book/:id`.
+async fn get_skill_book_entry_handler(
+    State(state): State<AppState>,
+    Path(skill_id): Path<String>,
+) -> impl IntoResponse {
+    match state.skill_book.get_entry(&skill_id) {
+        Ok(entry) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(entry).unwrap_or_default()),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Skill not found: {}", e)})),
+        )
+            .into_response(),
+    }
+}
+
+/// Activate a skill from the Skill Book via `POST /v1/skill-book/:id/activate`.
+async fn activate_skill_handler(
+    State(state): State<AppState>,
+    Path(skill_id): Path<String>,
+    Json(body): Json<carnelian_common::types::ActivateSkillRequest>,
+) -> impl IntoResponse {
+    match state.skill_book.activate(&skill_id, body.config).await {
+        Ok(response) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(response).unwrap_or_default()),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("Failed to activate skill: {}", e)})),
+        )
+            .into_response(),
+    }
+}
+
+/// Deactivate a skill via `DELETE /v1/skill-book/:id/deactivate`.
+async fn deactivate_skill_handler(
+    State(state): State<AppState>,
+    Path(skill_id): Path<String>,
+) -> impl IntoResponse {
+    match state.skill_book.deactivate(&skill_id).await {
+        Ok(response) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(response).unwrap_or_default()),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("Failed to deactivate skill: {}", e)})),
+        )
+            .into_response(),
+    }
+}
+
+// =============================================================================
+// API KEY HANDLER (LOCALHOST-ONLY)
+// =============================================================================
+
+/// Get API key for remote clients via `GET /v1/config/api-key`.
+/// Restricted to localhost-only access.
+async fn get_api_key_handler(State(state): State<AppState>) -> impl IntoResponse {
+    // Get owner signing key hash as API key
+    let api_key = state
+        .config
+        .owner_signing_key()
+        .as_ref()
+        .map(|key| {
+            let public_key = key.verifying_key();
+            let key_bytes = public_key.as_bytes();
+            format!("crn_{}", hex::encode(&key_bytes[..16]))
+        })
+        .unwrap_or_else(|| "not_configured".to_string());
+
+    Json(json!({
+        "api_key": api_key,
+        "note": "Include this in the X-Carnelian-Key header for remote access"
+    }))
+}
+
+/// Middleware layer that restricts access to localhost only.
+pub async fn localhost_only<B>(
+    req: axum::http::Request<B>,
+    next: axum::middleware::Next<B>,
+) -> impl IntoResponse {
+    // Check if request is from localhost
+    let remote_addr = req
+        .extensions()
+        .get::<std::net::SocketAddr>()
+        .map(|addr| addr.ip().to_string())
+        .unwrap_or_default();
+
+    let is_localhost = remote_addr == "127.0.0.1" 
+        || remote_addr == "::1" 
+        || remote_addr == "localhost";
+
+    if !is_localhost {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "error": "This endpoint is only accessible from localhost"
+            })),
+        )
+            .into_response();
+    }
+
+    next.run(req).await
+}
+

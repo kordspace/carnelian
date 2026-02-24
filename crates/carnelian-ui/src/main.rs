@@ -44,12 +44,18 @@ pub enum Route {
     SubAgents {},
     #[route("/channels")]
     Channels {},
+    #[route("/ledger")]
+    Ledger {},
     #[route("/workflows")]
     Workflows {},
     #[route("/xp")]
     XpProgression {},
     #[route("/voice")]
     VoiceSettingsPage {},
+    #[route("/settings")]
+    Settings {},
+    #[route("/skill-book")]
+    SkillBook {},
 }
 
 #[tokio::main]
@@ -64,15 +70,53 @@ async fn main() {
 /// Root application component.
 ///
 /// Initializes the `EventStreamStore` context provider, starts
-/// background WebSocket and status-polling tasks, and renders
-/// the router.
+/// background WebSocket and status-polling tasks, checks setup
+/// status, and renders the router (or FirstRunWizard if setup
+/// is not complete).
 fn app() -> Element {
     let store = use_context_provider(store::EventStreamStore::new);
     use_hook(move || store.start());
 
+    // Check setup status
+    let mut setup_complete = use_signal(|| true); // Default to true to avoid flash
+    let mut show_wizard = use_signal(|| false);
+
+    use_hook({
+        let mut setup_complete = setup_complete.clone();
+        let mut show_wizard = show_wizard.clone();
+        move || {
+            spawn(async move {
+                match api::get_setup_status().await {
+                    Ok(status) => {
+                        setup_complete.set(status.setup_complete);
+                        show_wizard.set(!status.setup_complete);
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Failed to check setup status");
+                        // If we can't check, assume complete to avoid blocking
+                        setup_complete.set(true);
+                        show_wizard.set(false);
+                    }
+                }
+            });
+        }
+    });
+
+    let complete_wizard = {
+        let mut show_wizard = show_wizard.clone();
+        move || {
+            show_wizard.set(false);
+        }
+    };
+
     rsx! {
         style { {theme::GLOBAL_CSS} }
         SystemTray {}
+        if *show_wizard.read() {
+            components::first_run_wizard::FirstRunWizard {
+                on_complete: complete_wizard,
+            }
+        }
         Router::<Route> {}
     }
 }
@@ -160,6 +204,12 @@ fn Channels() -> Element {
     pages::channels::Channels()
 }
 
+/// Ledger page (delegates to `pages::ledger`).
+#[component]
+fn Ledger() -> Element {
+    pages::ledger::Ledger()
+}
+
 /// Workflows page (delegates to `pages::workflows`).
 #[component]
 fn Workflows() -> Element {
@@ -180,4 +230,16 @@ fn VoiceSettingsPage() -> Element {
             components::voice_settings::VoiceSettings {}
         }
     }
+}
+
+/// Settings page (delegates to `pages::settings`).
+#[component]
+fn Settings() -> Element {
+    pages::settings::Settings()
+}
+
+/// Skill Book page (delegates to `pages::skill_book`).
+#[component]
+fn SkillBook() -> Element {
+    pages::skill_book::SkillBook()
 }

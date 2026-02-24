@@ -10,11 +10,11 @@ use carnelian_common::types::{
 };
 use carnelian_core::chain_anchor::LocalDbChainAnchor;
 use carnelian_core::ledger::Ledger;
-use carnelian_core::memory::{MemoryManager, MemorySource};
+use carnelian_core::memory::{ChainAnchor, MemoryManager, MemorySource};
 use carnelian_core::policy::PolicyEngine;
 use carnelian_core::voice::VoiceGateway;
 use carnelian_core::xp::XpManager;
-use carnelian_core::{AppState, Config, EventStream, Ledger, MemoryManager, Scheduler};
+use carnelian_core::{AppState, Config, EventStream, Scheduler};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
@@ -29,7 +29,6 @@ fn create_postgres_container() -> GenericImage {
         .with_env_var("POSTGRES_USER", "carnelian")
         .with_env_var("POSTGRES_PASSWORD", "carnelian")
         .with_env_var("POSTGRES_DB", "carnelian")
-        .with_exposed_port(5432)
 }
 
 /// Allocate a random port for testing
@@ -40,10 +39,10 @@ fn allocate_random_port() -> u16 {
 /// Setup test database and run migrations
 async fn setup_test_db(container: &ContainerAsync<GenericImage>) -> Result<PgPool> {
     let host = container.get_host().await.map_err(|e| {
-        carnelian_common::Error::Database(format!("Failed to get container host: {}", e))
+        carnelian_common::Error::DatabaseMessage(format!("Failed to get container host: {}", e))
     })?;
     let port = container.get_host_port_ipv4(5432).await.map_err(|e| {
-        carnelian_common::Error::Database(format!("Failed to get container port: {}", e))
+        carnelian_common::Error::DatabaseMessage(format!("Failed to get container port: {}", e))
     })?;
 
     let db_url = format!(
@@ -55,13 +54,13 @@ async fn setup_test_db(container: &ContainerAsync<GenericImage>) -> Result<PgPoo
         .max_connections(5)
         .connect(&db_url)
         .await
-        .map_err(|e| carnelian_common::Error::Database(format!("Failed to connect: {}", e)))?;
+        .map_err(|e| carnelian_common::Error::DatabaseMessage(format!("Failed to connect: {}", e)))?;
 
     // Run migrations
     sqlx::migrate!("../db/migrations")
         .run(&pool)
         .await
-        .map_err(|e| carnelian_common::Error::Database(format!("Migration failed: {}", e)))?;
+        .map_err(|e| carnelian_common::Error::DatabaseMessage(format!("Migration failed: {}", e)))?;
 
     Ok(pool)
 }
@@ -87,7 +86,7 @@ async fn test_cross_instance_memory_export_import_roundtrip() {
         .create_memory(
             identity_id,
             "Test content for export/import",
-            Some("Test summary"),
+            Some("Test summary".to_string()),
             MemorySource::Observation,
             None,
             0.8,
@@ -240,12 +239,7 @@ async fn test_voice_configure_and_test_endpoints() {
     let voice_gateway = VoiceGateway::new(pool.clone());
 
     // Test configuration (without actual API key)
-    let config_result = voice_gateway
-        .configure(
-            "test-api-key".to_string(),
-            Some("test-agent-id".to_string()),
-        )
-        .await;
+    let config_result = voice_gateway.load_api_key(None).await;
 
     // Configuration should succeed (validation only)
     tracing::info!("Voice configuration result: {:?}", config_result);

@@ -1,10 +1,14 @@
-# 🔥 Carnelian OS
+<p align="center">
+  <img src="assets/logos/carnelian-logo.svg" alt="Carnelian OS" width="400">
+</p>
 
-[![CI](https://github.com/kordspace/carnelian/actions/workflows/ci.yml/badge.svg)](https://github.com/kordspace/carnelian/actions/workflows/ci.yml)
-[![🔥 Carnelian OS](https://img.shields.io/badge/🔥-Carnelian%20OS-D24B2A)](https://github.com/kordspace/carnelian)
-[![🦎 Lian](https://img.shields.io/badge/🦎-Lian-7C4DFF)](https://github.com/kordspace/carnelian)
+<p align="center">
+  <a href="https://github.com/kordspace/carnelian/actions/workflows/ci.yml"><img src="https://github.com/kordspace/carnelian/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/kordspace/carnelian"><img src="https://img.shields.io/badge/🔥-Carnelian%20OS-D24B2A" alt="Carnelian OS"></a>
+  <a href="https://github.com/kordspace/carnelian"><img src="https://img.shields.io/badge/🦎-Lian-7C4DFF" alt="Lian"></a>
+</p>
 
-A local-first AI agent mainframe built in Rust with capability-based security and event-stream architecture.
+<p align="center">A local-first AI agent mainframe built in Rust with capability-based security and event-stream architecture.</p>
 
 > 💎 *Carnelian is a gemstone — warm, fiery, and grounding. The name reflects both the system's Rust foundation and its role as a precious, reliable core.*
 
@@ -15,6 +19,13 @@ A local-first AI agent mainframe built in Rust with capability-based security an
 | 🔥 | **Carnelian OS** | System/runtime — the forge that refines and executes |
 | 🦎 | **Lian** | Agent personality — the spirit that reasons and decides |
 | 💎 | **Core** | Architectural foundations — security, ledger, guarantees |
+
+### Brand Assets
+
+- **Logo**: [`assets/logos/carnelian-logo.svg`](assets/logos/carnelian-logo.svg) — Full logo with wordmark
+- **Icon**: [`assets/logos/carnelian-icon.svg`](assets/logos/carnelian-icon.svg) — Icon only (16×16 to 256×256)
+- **Wordmark**: [`assets/logos/carnelian-wordmark.svg`](assets/logos/carnelian-wordmark.svg) — Text only
+- **Color Palette**: [`assets/branding/color-palette.md`](assets/branding/color-palette.md) — Brand colors and usage guidelines
 
 See [docs/BRAND.md](docs/BRAND.md) for the complete dual-theme brand kit (Forge/Night Lab).
 
