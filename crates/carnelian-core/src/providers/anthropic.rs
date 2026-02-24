@@ -315,7 +315,7 @@ impl Provider for AnthropicProvider {
         };
 
         let client = self.client.clone();
-        let provider_name = self.name.clone();
+        let _provider_name = self.name.clone();
 
         let stream = async_stream::stream! {
             let resp = match client.post(&url).json(&anthropic_request).send().await {
@@ -337,7 +337,7 @@ impl Provider for AnthropicProvider {
 
             let mut stream = resp.bytes_stream();
             let mut buffer = String::new();
-            let mut stream_id = format!("anthropic-stream-{}-{}", model, uuid::Uuid::now_v7());
+            let stream_id = format!("anthropic-stream-{}-{}", model, uuid::Uuid::now_v7());
             let mut accumulated_content = String::new();
 
             while let Some(chunk_result) = stream.next().await {
@@ -351,12 +351,12 @@ impl Provider for AnthropicProvider {
                             buffer = buffer[pos + 2..].to_string();
 
                             // Parse SSE event
-                            let mut event_type = String::new();
+                            let mut _event_type = String::new();
                             let mut event_data = String::new();
 
                             for line in event_text.lines() {
                                 if let Some(et) = line.strip_prefix("event: ") {
-                                    event_type = et.to_string();
+                                    _event_type.push_str(et);
                                 } else if let Some(data) = line.strip_prefix("data: ") {
                                     event_data = data.to_string();
                                 }
@@ -410,7 +410,8 @@ impl Provider for AnthropicProvider {
                                     }
                                 }
                                 Err(e) => {
-                                    tracing::debug!(error = %e, data = %event_data, "Failed to parse Anthropic stream event");
+                                    use tracing::warn;
+                                    warn!(error = %e, data = %event_data, "Failed to parse Anthropic stream event");
                                 }
                             }
                         }

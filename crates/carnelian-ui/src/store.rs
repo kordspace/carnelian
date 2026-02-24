@@ -147,6 +147,8 @@ pub struct EventStreamStore {
     pub channel_state: Signal<ChannelState>,
     pub xp_state: Signal<XpState>,
     pub toast_notifications: Signal<Vec<ToastNotification>>,
+    /// Running total of events received (used to trigger reactive refreshes).
+    pub event_count: Signal<u64>,
 }
 
 impl EventStreamStore {
@@ -167,6 +169,7 @@ impl EventStreamStore {
             channel_state: Signal::new(ChannelState::default()),
             xp_state: Signal::new(XpState::default()),
             toast_notifications: Signal::new(Vec::new()),
+            event_count: Signal::new(0u64),
         }
     }
 
@@ -208,6 +211,7 @@ impl EventStreamStore {
     /// for approval lifecycle events.
     fn bridge_events(&self, mut rx: mpsc::UnboundedReceiver<EventEnvelope>) {
         let mut events = self.events;
+        let mut event_count = self.event_count;
         let mut approval_notifications = self.approval_notifications;
         let mut heartbeat_state = self.heartbeat_state;
         let mut identity_state = self.identity_state;
@@ -375,6 +379,7 @@ impl EventStreamStore {
                 if buf.len() > MAX_EVENTS {
                     buf.pop_front();
                 }
+                *event_count.write() += 1;
             }
         });
     }

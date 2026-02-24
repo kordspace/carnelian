@@ -18,6 +18,7 @@
 
 use std::path::PathBuf;
 use std::time::Duration;
+use sysinfo::System;
 
 use carnelian_common::types::{CreateTaskRequest, CreateTaskResponse, EventEnvelope, EventLevel};
 use clap::{Parser, Subcommand};
@@ -29,6 +30,12 @@ use uuid::Uuid;
 use carnelian_core::{
     Config, EventStream, Ledger, ModelRouter, PolicyEngine, Scheduler, Server, WorkerManager,
 };
+
+use bollard::Docker;
+use bollard::image::CreateImageOptions;
+use bollard::container::{CreateContainerOptions, StartContainerOptions, Config as ContainerConfig, HostConfig, PortBinding};
+use bollard::models::{HostConfig as HostConfigModel, PortMap};
+use futures_util::stream::TryStreamExt;
 
 /// 🔥 Carnelian OS - Local-first AI agent mainframe
 #[derive(Parser)]
@@ -125,8 +132,12 @@ enum Commands {
     /// Initialize Carnelian configuration (interactive setup wizard)
     Init,
 
-    /// Launch the desktop UI
-    Ui,
+    /// Launch the desktop UI (or web UI with --web flag)
+    Ui {
+        /// Launch web UI instead of desktop
+        #[arg(long)]
+        web: bool,
+    },
 
     /// Generate a new owner keypair
     Keygen {
@@ -204,7 +215,7 @@ async fn main() {
         }
         Commands::Task { command, url } => handle_task_command(command, &resolve_url(url)).await,
         Commands::Init => handle_init(cli.config, cli.log_level, cli.database_url).await,
-        Commands::Ui => handle_ui().await,
+        Commands::Ui { web } => handle_ui(web).await,
         Commands::Keygen { output } => handle_keygen(output).await,
         Commands::Key { command } => {
             handle_key(command, cli.config, cli.log_level, cli.database_url).await
@@ -991,13 +1002,14 @@ fn format_event(event: &EventEnvelope) -> String {
     format!("{color_code}[{ts}] {level_str} {event_type}{meta}{payload}{reset}")
 }
 
-/// Handle the `init` command - Interactive setup wizard
+/// Handle the `init` command - Interactive setup wizard with Docker and hardware detection
 async fn handle_init(
     _config_path: Option<PathBuf>,
     _log_level_override: Option<String>,
     _database_url_override: Option<String>,
 ) -> carnelian_common::Result<()> {
     use std::io::{Write, stdin, stdout};
+    use sysinfo::{System, RefreshKind, MemoryKind};
 
     // Welcome banner
     println!("╔═══════════════════════════════════════════════════════════════╗");
@@ -1009,70 +1021,132 @@ async fn handle_init(
     println!("╚═══════════════════════════════════════════════════════════════╝");
     println!();
 
-    // Prerequisite check
-    print!("Checking prerequisites... ");
-    stdout().flush().unwrap();
+    // Hardware detection with sysinfo
+    println!("Detecting hardware...");
+    let mut sys = System::new_with_specifics(
+        RefreshKind::new()
+            .with_memory(MemoryKind::RAM)
+    );
+    sys.refresh_all();
 
-    // Check Docker
-    let docker_ok = std::process::Command::new("docker")
-        .args(["info"])
+    let total_ram_gb = sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
+    println!("  RAM: {:.1} GB", total_ram_gb);
+
+    // Detect GPU presence (basic check)
+    let has_gpu = std::process::Command::new("nvidia-smi")
         .output()
         .map(|o| o.status.success())
-        .unwrap_or(false);
-
-    if !docker_ok {
-        println!("⚠ WARNING");
-        println!("  Docker is not running or not installed.");
-        println!("  Please install and start Docker before continuing.");
-        println!();
+        .unwrap_or(false) || 
+        std::process::Command::new("rocm-smi")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+    
+    if has_gpu {
+        println!("  GPU: Detected");
     } else {
-        println!("✓ OK");
+        println!("  GPU: Not detected (CPU inference only)");
     }
-
-    // Machine profile
     println!();
-    print!("Select machine profile [thummim/urim/custom] (default: thummim): ");
+
+    // Prerequisite check - Docker via bollard
+    print!("Checking Docker... ");
+    stdout().flush().unwrap();
+
+    let docker = match Docker::connect_with_local_defaults() {
+        Ok(d) => {
+            // Test connection
+            match d.version().await {
+                Ok(_) => {
+                    println!("✓ OK");
+                    Some(d)
+                }
+                Err(e) => {
+                    println!("⚠ Docker connection failed: {}", e);
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            println!("⚠ Docker not available: {}", e);
+            println!("  Please install and start Docker before continuing.");
+            println!("  Visit: https://docs.docker.com/get-docker/");
+            None
+        }
+    };
+
+    // Smart profile suggestion based on hardware
+    let suggested_profile = if total_ram_gb >= 32.0 && has_gpu {
+        "thummim"
+    } else if total_ram_gb >= 16.0 {
+        "urim"
+    } else {
+        "custom"
+    };
+
+    println!();
+    println!("Suggested profile: {} (based on {:.1}GB RAM {} GPU)",
+        suggested_profile, total_ram_gb, if has_gpu {"with"} else {"without"});
+    print!("Select machine profile [thummim/urim/custom] (default: {}): ", suggested_profile);
     stdout().flush().unwrap();
     let mut profile = String::new();
     stdin().read_line(&mut profile).unwrap();
     let profile = profile.trim();
     let machine_profile = if profile.is_empty() {
-        "thummim"
+        suggested_profile
     } else {
         profile
     };
 
+    // Container setup if Docker is available
+    let mut auto_setup_containers = false;
+    if docker.is_some() {
+        println!();
+        print!("Auto-setup PostgreSQL and Ollama containers? [Y/n]: ");
+        stdout().flush().unwrap();
+        let mut setup = String::new();
+        stdin().read_line(&mut setup).unwrap();
+        auto_setup_containers = setup.trim().to_lowercase() != "n";
+    }
+
+    // Default ports and URLs
+    let (postgres_port, ollama_port, http_port) = match machine_profile {
+        "thummim" => (5432, 11434, 18789),
+        "urim" => (5432, 11434, 18789),
+        _ => (5432, 11434, 18789),
+    };
+
     // Database URL
-    print!("Database URL [postgresql://carnelian:carnelian@localhost:5432/carnelian]: ");
+    print!("Database URL [postgresql://carnelian:carnelian@localhost:{}/carnelian]: ", postgres_port);
     stdout().flush().unwrap();
     let mut db_url = String::new();
     stdin().read_line(&mut db_url).unwrap();
     let database_url = if db_url.trim().is_empty() {
-        "postgresql://carnelian:carnelian@localhost:5432/carnelian".to_string()
+        format!("postgresql://carnelian:carnelian@localhost:{}/carnelian", postgres_port)
     } else {
         db_url.trim().to_string()
     };
 
     // Ollama URL
-    print!("Ollama URL [http://localhost:11434]: ");
+    print!("Ollama URL [http://localhost:{}]: ", ollama_port);
     stdout().flush().unwrap();
     let mut ollama_url = String::new();
     stdin().read_line(&mut ollama_url).unwrap();
     let ollama_url = if ollama_url.trim().is_empty() {
-        "http://localhost:11434".to_string()
+        format!("http://localhost:{}", ollama_port)
     } else {
         ollama_url.trim().to_string()
     };
 
     // HTTP port
-    print!("HTTP port [18789]: ");
+    print!("HTTP port [{}]: ", http_port);
     stdout().flush().unwrap();
     let mut port_str = String::new();
     stdin().read_line(&mut port_str).unwrap();
     let http_port = if port_str.trim().is_empty() {
-        18789
+        http_port
     } else {
-        port_str.trim().parse::<u16>().unwrap_or(18789)
+        port_str.trim().parse::<u16>().unwrap_or(http_port)
     };
 
     // Workspace paths
@@ -1192,6 +1266,46 @@ async fn handle_init(
         )?;
     }
 
+    // Docker container setup
+    if auto_setup_containers {
+        println!();
+        println!("Setting up Docker containers...");
+        if let Some(ref docker) = docker {
+            // Pull PostgreSQL image
+            println!("  Pulling PostgreSQL image...");
+            let pg_options = CreateImageOptions {
+                from_image: "postgres",
+                tag: "16-alpine",
+                ..Default::default()
+            };
+            let mut pg_stream = docker.create_image(Some(pg_options), None, None);
+            while let Some(progress) = pg_stream.try_next().await.ok().flatten() {
+                if let Some(status) = progress.status {
+                    println!("    {}", status);
+                }
+            }
+
+            // Pull Ollama image
+            println!("  Pulling Ollama image...");
+            let ollama_options = CreateImageOptions {
+                from_image: "ollama/ollama",
+                tag: "latest",
+                ..Default::default()
+            };
+            let mut ollama_stream = docker.create_image(Some(ollama_options), None, None);
+            while let Some(progress) = ollama_stream.try_next().await.ok().flatten() {
+                if let Some(status) = progress.status {
+                    println!("    {}", status);
+                }
+            }
+
+            println!("✓ Images pulled successfully");
+            println!("  To start containers:");
+            println!("    docker run -d --name carnelian-postgres -p {}:5432 -e POSTGRES_USER=carnelian -e POSTGRES_PASSWORD=carnelian -e POSTGRES_DB=carnelian postgres:16-alpine", postgres_port);
+            println!("    docker run -d --name carnelian-ollama -p {}:11434 ollama/ollama:latest", ollama_port);
+        }
+    }
+
     // Run migrations
     println!();
     print!("Run database migrations now? [Y/n]: ");
@@ -1206,7 +1320,12 @@ async fn handle_init(
         println!("Connecting to database...");
         if let Err(e) = config.connect_database().await {
             println!("⚠ Failed to connect to database: {}", e);
-            println!("  Make sure PostgreSQL is running: docker-compose up -d carnelian-postgres");
+            if auto_setup_containers {
+                println!("  Make sure containers are started:");
+                println!("    docker start carnelian-postgres");
+            } else {
+                println!("  Make sure PostgreSQL is running");
+            }
         } else {
             println!("Running migrations...");
             if let Ok(pool) = config.pool() {
@@ -1479,9 +1598,22 @@ async fn handle_key_rotate(
     Ok(())
 }
 
-/// Handle the `ui` command - Launch desktop UI
-async fn handle_ui() -> carnelian_common::Result<()> {
-    // Determine UI binary path
+/// Handle the `ui` command - Launch desktop UI or web UI
+async fn handle_ui(web: bool) -> carnelian_common::Result<()> {
+    if web {
+        // Serve web UI
+        println!("🔥 Starting Carnelian Web UI server...");
+        
+        // For now, print instructions for web UI
+        // In production, this would compile Dioxus to WASM and serve it
+        println!("Web UI feature requires Dioxus web target compilation.");
+        println!("To build: cargo build --release -p carnelian-ui --features web");
+        println!("Then serve the static files from target/dx/carnelian-ui/release/web/public");
+        
+        return Ok(());
+    }
+    
+    // Desktop UI launch
     let ui_binary = if let Ok(exe_path) = std::env::current_exe() {
         let same_dir = exe_path
             .parent()

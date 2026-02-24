@@ -5,6 +5,43 @@ use dioxus::prelude::*;
 
 use crate::store::{EventStreamStore, ToastKind};
 
+// ── Generic toast types used by page components ──────────────────────────────
+
+/// Severity level for a generic page-level toast notification.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ToastType {
+    Success,
+    Error,
+    Warning,
+    Info,
+}
+
+/// A generic page-level toast notification data struct.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Toast {
+    pub id: String,
+    pub message: String,
+    pub toast_type: ToastType,
+    pub duration_secs: u32,
+}
+
+/// Display component for a single generic toast notification.
+#[component]
+pub fn Toast(toast: Toast) -> Element {
+    let (icon, extra_class) = match toast.toast_type {
+        ToastType::Success => ("✅", "toast-success"),
+        ToastType::Error => ("❌", "toast-error"),
+        ToastType::Warning => ("⚠️", "toast-warning"),
+        ToastType::Info => ("ℹ️", "toast-info"),
+    };
+    rsx! {
+        div { class: "toast {extra_class}",
+            span { class: "toast-icon", "{icon}" }
+            span { class: "toast-message", " {toast.message}" }
+        }
+    }
+}
+
 /// Fixed-position overlay that renders transient toast notifications.
 #[component]
 pub fn ToastOverlay() -> Element {

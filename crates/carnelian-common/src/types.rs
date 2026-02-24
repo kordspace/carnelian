@@ -917,7 +917,7 @@ pub struct HeartbeatStatusResponse {
 // =============================================================================
 
 /// Response body for `GET /v1/identity`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IdentityResponse {
     pub identity_id: Uuid,
     pub name: String,
@@ -925,6 +925,7 @@ pub struct IdentityResponse {
     pub identity_type: String,
     pub soul_file_path: Option<String>,
     pub directive_count: usize,
+    pub public_key: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -1595,4 +1596,61 @@ pub struct ActivateSkillResponse {
 pub struct DeactivateSkillResponse {
     pub skill_id: String,
     pub deactivated: bool,
+}
+
+// =============================================================================
+// HEALTH & STATUS RESPONSE TYPES
+// =============================================================================
+
+/// Worker information included in the system status response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkerInfo {
+    /// Worker identifier
+    pub id: String,
+    /// Worker runtime type (e.g., "node", "python")
+    pub runtime: String,
+    /// Worker status
+    pub status: String,
+    /// Currently executing task, if any
+    pub current_task: Option<String>,
+}
+
+/// Response body for `GET /v1/status`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StatusResponse {
+    /// Active workers
+    pub workers: Vec<WorkerInfo>,
+    /// Available models
+    pub models: Vec<String>,
+    /// Number of tasks in queue
+    pub queue_depth: u32,
+    /// UUID of the core identity
+    pub identity_id: Option<Uuid>,
+    /// App version string
+    pub version: String,
+    /// Current machine profile name
+    pub machine_profile: String,
+    /// Seconds since server started
+    pub uptime_seconds: Option<u64>,
+}
+
+/// Response body for `GET /v1/health/detailed`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DetailedHealthResponse {
+    /// Overall health status: "healthy" or "degraded"
+    pub status: String,
+    /// Application version
+    pub version: String,
+    /// Database connection status: "connected" or "disconnected"
+    pub database: String,
+    /// Seconds since server start
+    pub uptime_seconds: u64,
+    /// Timestamp of the last heartbeat, if any
+    pub last_heartbeat_at: Option<DateTime<Utc>>,
+    /// Whether the scheduler is running
+    pub scheduler_running: bool,
+    /// Whether the worker manager is active
+    pub worker_manager_active: bool,
+    /// Number of active event stream subscribers
+    pub event_stream_subscriber_count: usize,
 }

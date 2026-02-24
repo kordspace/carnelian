@@ -196,6 +196,7 @@ async fn test_memory_encrypted_content_unencrypted_embedding() {
             MemorySource::Conversation,
             None,
             0.9,
+            None,
         )
         .await
         .expect("create memory");
@@ -256,6 +257,7 @@ async fn test_embeddings_remain_unencrypted() {
             MemorySource::Observation,
             None,
             0.5,
+            None,
         )
         .await
         .expect("create memory");

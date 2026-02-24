@@ -3,6 +3,29 @@
 //! Defines color palette, typography, and CSS utility classes
 //! for a translucent dark theme with blur effects.
 
+/// UI theme selection used as Dioxus context.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Theme {
+    pub dark: bool,
+}
+
+impl Theme {
+    pub fn new_dark() -> Self {
+        Self { dark: true }
+    }
+
+    /// Return the CSS class for this theme.
+    pub fn to_class(&self) -> &'static str {
+        if self.dark { "theme-dark" } else { "theme-light" }
+    }
+}
+
+impl Default for Theme {
+    fn default() -> Self {
+        Self::new_dark()
+    }
+}
+
 // Color palette — used by CSS and available for future component styling.
 #[allow(dead_code)]
 pub const BG_PRIMARY: &str = "rgba(10, 10, 20, 0.85)";

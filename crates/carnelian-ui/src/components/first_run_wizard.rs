@@ -380,24 +380,28 @@ fn Step4Workspace(workspace_path: Signal<String>, model_provider: Signal<String>
 /// Step 5: Starter Skills
 #[component]
 fn Step5StarterSkills(selected_skills: Signal<Vec<(&'static str, bool)>>) -> Element {
+    let skills_snapshot: Vec<(&'static str, bool)> = selected_skills.read().clone();
     rsx! {
         div { class: "wizard-step",
             h3 { "Step 5: Starter Skills" }
             p { "Select recommended skills to activate now" }
 
             div { class: "skills-checklist",
-                for (skill_id, checked) in selected_skills.read().iter() {
+                for (skill_id, checked) in skills_snapshot {
                     label {
                         class: "skill-checkbox",
                         key: "{skill_id}",
                         input {
                             r#type: "checkbox",
-                            checked: *checked,
-                            onchange: move |_| {
-                                let mut skills = selected_skills.read().clone();
-                                if let Some(idx) = skills.iter().position(|(id, _)| id == skill_id) {
-                                    skills[idx].1 = !skills[idx].1;
-                                    selected_skills.set(skills);
+                            checked: checked,
+                            onchange: {
+                                let skill_id = skill_id;
+                                move |_| {
+                                    let mut skills = selected_skills.read().clone();
+                                    if let Some(idx) = skills.iter().position(|(id, _)| *id == skill_id) {
+                                        skills[idx].1 = !skills[idx].1;
+                                        selected_skills.set(skills);
+                                    }
                                 }
                             },
                         }

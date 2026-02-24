@@ -231,7 +231,7 @@ impl Provider for OllamaProvider {
     ) -> Result<BoxStream<'static, Result<CompletionChunk>>> {
         let (system, conversation) = self.convert_messages(&request.messages);
         let prompt = self.build_prompt(system, conversation);
-        let prompt_chars = prompt.len();
+        let _prompt_chars = prompt.len();
 
         let url = format!("{}/api/generate", self.base_url);
         let model = request.model.clone();
@@ -247,7 +247,7 @@ impl Provider for OllamaProvider {
         });
 
         let client = self.client.clone();
-        let provider_name = self.name.clone();
+        let _provider_name = self.name.clone();
 
         let stream = async_stream::stream! {
             let resp = match client.post(&url).json(&body).send().await {
@@ -269,7 +269,7 @@ impl Provider for OllamaProvider {
 
             let mut stream = resp.bytes_stream();
             let mut accumulated = String::new();
-            let mut chunk_id = format!("ollama-stream-{}-{}", model, uuid::Uuid::now_v7());
+            let chunk_id = format!("ollama-stream-{}-{}", model, uuid::Uuid::now_v7());
             let mut chunk_index = 0;
 
             while let Some(chunk_result) = stream.next().await {
@@ -324,7 +324,7 @@ impl Provider for OllamaProvider {
                                     }
                                 }
                                 Err(e) => {
-                                    use tracing::{info, warn};
+                                    use tracing::warn;
                                     warn!(error = %e, line = %line, "Failed to parse Ollama stream line");
                                 }
                             }

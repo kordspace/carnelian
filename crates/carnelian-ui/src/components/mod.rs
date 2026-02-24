@@ -7,3 +7,5 @@ pub mod toast;
 pub mod top_bar;
 pub mod voice_settings;
 pub mod xp_widget;
+
+pub use toast::{Toast, ToastType};

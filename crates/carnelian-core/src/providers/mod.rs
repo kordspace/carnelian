@@ -96,8 +96,9 @@ impl ProviderRegistry {
     pub async fn health_check_all(&self) -> Vec<(String, bool)> {
         let mut results = Vec::new();
         for provider in &self.providers {
+            let _provider_name = provider.name().to_string();
             let healthy = provider.health_check().await.unwrap_or(false);
-            results.push((provider.name().to_string(), healthy));
+            results.push((_provider_name, healthy));
         }
         results
     }

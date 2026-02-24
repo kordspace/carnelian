@@ -269,7 +269,7 @@ impl Provider for OpenAiProvider {
         request: CompletionRequest,
     ) -> Result<BoxStream<'static, Result<CompletionChunk>>> {
         let url = format!("{}/chat/completions", self.base_url);
-        let model = request.model.clone();
+        let _model = request.model.clone();
 
         let openai_request = OpenAiRequest {
             model: request.model,
@@ -280,7 +280,7 @@ impl Provider for OpenAiProvider {
         };
 
         let client = self.client.clone();
-        let provider_name = self.name.clone();
+        let _provider_name = self.name.clone();
 
         let stream = async_stream::stream! {
             let resp = match client.post(&url).json(&openai_request).send().await {

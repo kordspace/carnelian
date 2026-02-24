@@ -25,7 +25,7 @@ use tokio::time::Instant;
 use uuid::Uuid;
 
 /// PostgreSQL test container configuration
-fn create_postgres_container() -> GenericImage {
+fn create_postgres_container() -> testcontainers::ContainerRequest<GenericImage> {
     GenericImage::new("pgvector/pgvector", "pg16")
         .with_env_var("POSTGRES_USER", "carnelian")
         .with_env_var("POSTGRES_PASSWORD", "carnelian")
@@ -371,6 +371,7 @@ async fn test_complete_feature_set_capability_enforcement() {
             None,
             None,
             None,
+            None,
         )
         .await
         .expect("Failed to grant capability");
@@ -472,7 +473,7 @@ async fn test_security_safe_mode_blocks_side_effects() {
         carnelian_core::safe_mode::SafeModeGuard::new(pool.clone(), Arc::new(ledger));
 
     // Check initial safe mode state
-    let is_enabled = safe_mode_guard.is_enabled().await;
+    let is_enabled = safe_mode_guard.is_enabled().await.unwrap_or(false);
 
     tracing::info!("Safe mode initially enabled: {}", is_enabled);
 
@@ -482,16 +483,16 @@ async fn test_security_safe_mode_blocks_side_effects() {
         .await
         .expect("Failed to enable safe mode");
 
-    let is_enabled = safe_mode_guard.is_enabled().await;
+    let is_enabled = safe_mode_guard.is_enabled().await.expect("check safe mode");
     assert!(is_enabled, "Safe mode should be enabled");
 
     // Disable safe mode
     safe_mode_guard
-        .disable(None)
+        .disable(None, None)
         .await
         .expect("Failed to disable safe mode");
 
-    let is_enabled = safe_mode_guard.is_enabled().await;
+    let is_enabled = safe_mode_guard.is_enabled().await.expect("check safe mode");
     assert!(!is_enabled, "Safe mode should be disabled");
 
     tracing::info!("✓ Security safe mode test passed");

@@ -244,7 +244,7 @@ impl Provider for FireworksProvider {
         request: CompletionRequest,
     ) -> Result<BoxStream<'static, Result<CompletionChunk>>> {
         let url = format!("{}/chat/completions", self.base_url);
-        let model = request.model.clone();
+        let _model = request.model.clone();
 
         let fireworks_request = FireworksRequest {
             model: request.model,
@@ -255,7 +255,7 @@ impl Provider for FireworksProvider {
         };
 
         let client = self.client.clone();
-        let provider_name = self.name.clone();
+        let _provider_name = self.name.clone();
 
         let stream = async_stream::stream! {
             let resp = match client.post(&url).json(&fireworks_request).send().await {

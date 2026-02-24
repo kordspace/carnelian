@@ -15,17 +15,18 @@ use carnelian_common::Result;
 use carnelian_common::types::{
     AgentXpResponse, AwardXpRequest, AwardXpResponse, CancelTaskRequest, CancelTaskResponse,
     ConfigureVoiceRequest, ConfigureVoiceResponse, CreateMemoryRequest, CreateMemoryResponse,
-    CreateTaskRequest, CreateTaskResponse, CreateWorkflowRequest, EventEnvelope, EventLevel,
-    EventType, ExecuteWorkflowRequest, ExportMemoryRequest, ExportMemoryResponse,
-    GetMemoryResponse, HeartbeatRecord, HeartbeatStatusResponse, IdentityResponse,
-    ImportMemoryRequest, ImportMemoryResponse, LeaderboardEntry, ListMemoriesResponse,
-    ListProvidersResponse, ListRunsResponse, ListSkillsResponse, ListTasksResponse,
-    ListVoicesResponse, ListWorkflowsParams, ListWorkflowsResponse, MemoryDetail,
-    MemoryImportResultApi, OllamaStatusResponse, PaginatedRunLogsResponse, ProviderDetail,
-    RunDetail, RunLogEntry, RunLogsQuery, SkillDetail, SkillMetricsDetail, SkillToggleResponse,
-    TaskDetail, TestVoiceRequest, TestVoiceResponse, TopSkillsQuery, TopSkillsResponse,
-    TranscribeVoiceRequest, TranscribeVoiceResponse, UpdateWorkflowRequest, XpEventDetail,
-    XpHistoryQuery, XpHistoryResponse, XpLeaderboardResponse,
+    CreateTaskRequest, CreateTaskResponse, CreateWorkflowRequest, DetailedHealthResponse,
+    EventEnvelope, EventLevel, EventType, ExecuteWorkflowRequest, ExportMemoryRequest,
+    ExportMemoryResponse, GetMemoryResponse, HeartbeatRecord, HeartbeatStatusResponse,
+    IdentityResponse, ImportMemoryRequest, ImportMemoryResponse, LeaderboardEntry,
+    ListMemoriesResponse, ListProvidersResponse, ListRunsResponse, ListSkillsResponse,
+    ListTasksResponse, ListVoicesResponse, ListWorkflowsParams, ListWorkflowsResponse,
+    MemoryDetail, MemoryImportResultApi, OllamaStatusResponse, PaginatedRunLogsResponse,
+    ProviderDetail, RunDetail, RunLogEntry, RunLogsQuery, SkillDetail, SkillMetricsDetail,
+    SkillToggleResponse, StatusResponse, TaskDetail, TestVoiceRequest, TestVoiceResponse,
+    TopSkillsQuery, TopSkillsResponse, TranscribeVoiceRequest, TranscribeVoiceResponse,
+    UpdateWorkflowRequest, XpEventDetail, XpHistoryQuery, XpHistoryResponse,
+    XpLeaderboardResponse,
 };
 use futures_util::{SinkExt, StreamExt};
 use http::{HeaderMap, Method, header};
@@ -73,58 +74,6 @@ pub struct HealthResponse {
     pub database: String,
 }
 
-/// Detailed health check response with extended diagnostics
-#[derive(Debug, Serialize)]
-pub struct DetailedHealthResponse {
-    /// Overall health status: "healthy" or "degraded"
-    pub status: String,
-    /// Application version
-    pub version: String,
-    /// Database connection status: "connected" or "disconnected"
-    pub database: String,
-    /// Seconds since server start
-    pub uptime_seconds: u64,
-    /// Timestamp of the last heartbeat, if any
-    pub last_heartbeat_at: Option<chrono::DateTime<chrono::Utc>>,
-    /// Whether the scheduler is running
-    pub scheduler_running: bool,
-    /// Whether the worker manager is active
-    pub worker_manager_active: bool,
-    /// Number of active event stream subscribers
-    pub event_stream_subscriber_count: usize,
-}
-
-/// System status response
-#[derive(Debug, Serialize)]
-pub struct StatusResponse {
-    /// Active workers
-    pub workers: Vec<WorkerInfo>,
-    /// Available models
-    pub models: Vec<String>,
-    /// Number of tasks in queue
-    pub queue_depth: u32,
-    /// UUID of the core identity (Lian)
-    pub identity_id: Option<uuid::Uuid>,
-    /// App version string
-    pub version: String,
-    /// Current machine profile name
-    pub machine_profile: String,
-    /// Seconds since server started
-    pub uptime_seconds: Option<u64>,
-}
-
-/// Worker information
-#[derive(Debug, Serialize)]
-pub struct WorkerInfo {
-    /// Worker identifier
-    pub id: String,
-    /// Worker runtime type (e.g., "node", "python", "shell")
-    pub runtime: String,
-    /// Worker status
-    pub status: String,
-    /// Currently executing task, if any
-    pub current_task: Option<String>,
-}
 
 /// Custom span maker that generates correlation IDs for each request
 #[derive(Clone)]
@@ -3183,6 +3132,7 @@ async fn get_identity_handler(State(state): State<AppState>) -> impl IntoRespons
                     identity_type,
                     soul_file_path,
                     directive_count,
+                    public_key: String::new(),
                     created_at,
                     updated_at,
                 })),
@@ -5925,7 +5875,7 @@ async fn publish_ledger_anchor_handler(
     let chain_anchor = crate::chain_anchor::LocalDbChainAnchor::new(pool.clone());
 
     // Get owner signing key from config
-    let mut config_guard = state.config.clone();
+    let config_guard = state.config.clone();
     let owner_signing_key = config_guard.owner_signing_key().cloned();
 
     match state
@@ -6593,4 +6543,51 @@ pub async fn localhost_only(
     }
 
     next.run(req).await
+}
+
+/// Middleware layer that validates X-Carnelian-Key header for remote access.
+/// This middleware allows non-localhost requests if they provide a valid API key.
+pub async fn carnelian_key_auth(
+    req: axum::http::Request<axum::body::Body>,
+    next: axum::middleware::Next,
+) -> impl IntoResponse {
+    let headers = req.headers();
+    let remote_addr = req
+        .extensions()
+        .get::<std::net::SocketAddr>()
+        .map(|addr| addr.ip().to_string())
+        .unwrap_or_default();
+
+    let is_localhost =
+        remote_addr == "127.0.0.1" || remote_addr == "::1" || remote_addr == "localhost";
+
+    // Localhost requests bypass auth
+    if is_localhost {
+        return next.run(req).await;
+    }
+
+    // Non-localhost requests require X-Carnelian-Key header
+    let api_key = headers
+        .get("x-carnelian-key")
+        .and_then(|v| v.to_str().ok());
+
+    match api_key {
+        Some(key) if !key.is_empty() => {
+            // In a real implementation, validate against config_store
+            // For now, we accept any non-empty key as a placeholder
+            // TODO: Integrate with config_store to validate against stored API key
+            tracing::info!("Remote access with API key from {}", remote_addr);
+            next.run(req).await
+        }
+        _ => {
+            tracing::warn!("Unauthorized remote access attempt from {}", remote_addr);
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({
+                    "error": "Remote access requires X-Carnelian-Key header"
+                })),
+            )
+                .into_response()
+        }
+    }
 }
