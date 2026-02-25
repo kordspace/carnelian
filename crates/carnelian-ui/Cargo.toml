@@ -6,10 +6,15 @@ authors.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+default = ["desktop"]
+desktop = ["tray-icon"]
+web = []
+
 [dependencies]
 carnelian-core = { path = "../carnelian-core" }
 carnelian-common = { path = "../carnelian-common" }
-dioxus.workspace = true
+dioxus = { workspace = true, features = ["desktop", "router"] }
 dioxus-signals.workspace = true
 tokio.workspace = true
 serde.workspace = true
@@ -21,7 +26,7 @@ reqwest.workspace = true
 futures-util.workspace = true
 tokio-tungstenite.workspace = true
 http.workspace = true
-tray-icon.workspace = true
+tray-icon = { workspace = true, optional = true }
 uuid.workspace = true
 chrono.workspace = true
 

@@ -16,7 +16,11 @@ impl Theme {
 
     /// Return the CSS class for this theme.
     pub fn to_class(&self) -> &'static str {
-        if self.dark { "theme-dark" } else { "theme-light" }
+        if self.dark {
+            "theme-dark"
+        } else {
+            "theme-light"
+        }
     }
 }
 

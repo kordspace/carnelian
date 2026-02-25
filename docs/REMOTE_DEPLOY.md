@@ -176,7 +176,16 @@ curl -H "X-Carnelian-Key: your-api-key" \
 
 For the UI, you can:
 1. Access via web browser at `https://your-domain.com`
-2. Use `--web` flag to serve UI from the server: `carnelian ui --web`
+2. Build and serve web UI from the server:
+
+```bash
+# Build web UI
+cargo install dioxus-cli
+dx build --platform web -p carnelian-ui --release
+
+# Then start core (serves /ui automatically)
+carnelian start
+```
 
 ## Security Considerations
 

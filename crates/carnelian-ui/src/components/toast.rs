@@ -18,7 +18,7 @@ pub enum ToastType {
 
 /// A generic page-level toast notification data struct.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Toast {
+pub struct ToastMessage {
     pub id: String,
     pub message: String,
     pub toast_type: ToastType,
@@ -27,7 +27,7 @@ pub struct Toast {
 
 /// Display component for a single generic toast notification.
 #[component]
-pub fn Toast(toast: Toast) -> Element {
+pub fn Toast(toast: ToastMessage) -> Element {
     let (icon, extra_class) = match toast.toast_type {
         ToastType::Success => ("✅", "toast-success"),
         ToastType::Error => ("❌", "toast-error"),

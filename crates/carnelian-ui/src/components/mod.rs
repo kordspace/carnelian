@@ -8,4 +8,4 @@ pub mod top_bar;
 pub mod voice_settings;
 pub mod xp_widget;
 
-pub use toast::{Toast, ToastType};
+pub use toast::{Toast, ToastMessage, ToastType};

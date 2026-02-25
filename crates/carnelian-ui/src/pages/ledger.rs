@@ -9,7 +9,7 @@
 use dioxus::prelude::*;
 
 use crate::api;
-use crate::components::{Toast, ToastType};
+use crate::components::{Toast, ToastMessage, ToastType};
 use crate::store::EventStreamStore;
 use crate::theme::Theme;
 use carnelian_common::types::{LedgerEventDetail, LedgerVerifyResponse};
@@ -124,7 +124,7 @@ pub fn Ledger() -> Element {
             spawn(async move {
                 match api::verify_ledger_chain().await {
                     Ok(result) => {
-                        let toast = Toast {
+                        let toast = ToastMessage {
                             id: uuid::Uuid::now_v7().to_string(),
                             message: if result.intact {
                                 "✅ Ledger chain integrity verified — all events intact".to_string()
@@ -142,7 +142,7 @@ pub fn Ledger() -> Element {
                         verify_result.set(Some(result));
                     }
                     Err(e) => {
-                        let toast = Toast {
+                        let toast = ToastMessage {
                             id: uuid::Uuid::now_v7().to_string(),
                             message: format!("Failed to verify ledger: {}", e),
                             toast_type: ToastType::Error,

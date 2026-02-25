@@ -10,7 +10,7 @@
 use dioxus::prelude::*;
 
 use crate::api;
-use crate::components::{Toast, ToastType};
+use crate::components::{Toast, ToastMessage, ToastType};
 use crate::store::EventStreamStore;
 use crate::theme::Theme;
 use carnelian_common::types::{DetailedHealthResponse, IdentityResponse, SetupStatusResponse};
@@ -97,11 +97,35 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
     let complete_wizard = {
         let on_complete = props.on_complete.clone();
         let mut toasts = toasts.clone();
+        let selected_skills = selected_skills.clone();
         move || {
             spawn(async move {
+                // First, activate selected starter skills
+                let skills_to_activate: Vec<&str> = selected_skills
+                    .read()
+                    .iter()
+                    .filter(|(_, checked)| *checked)
+                    .map(|(id, _)| *id)
+                    .collect();
+
+                for skill_id in skills_to_activate {
+                    let config = std::collections::HashMap::new();
+                    if let Err(e) = api::activate_skill(skill_id, config).await {
+                        tracing::warn!(error = %e, skill_id = skill_id, "Failed to activate skill");
+                        let toast = ToastMessage {
+                            id: uuid::Uuid::now_v7().to_string(),
+                            message: format!("⚠️ Failed to activate {}: {}", skill_name(skill_id), e),
+                            toast_type: ToastType::Warning,
+                            duration_secs: 5,
+                        };
+                        toasts.push(toast);
+                    }
+                }
+
+                // Then mark setup complete
                 match api::mark_setup_complete().await {
                     Ok(_) => {
-                        let toast = Toast {
+                        let toast = ToastMessage {
                             id: uuid::Uuid::now_v7().to_string(),
                             message: "🎉 Setup complete! Welcome to Carnelian OS".to_string(),
                             toast_type: ToastType::Success,
@@ -111,7 +135,7 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
                         on_complete.call(());
                     }
                     Err(e) => {
-                        let toast = Toast {
+                        let toast = ToastMessage {
                             id: uuid::Uuid::now_v7().to_string(),
                             message: format!("Failed to complete setup: {}", e),
                             toast_type: ToastType::Error,

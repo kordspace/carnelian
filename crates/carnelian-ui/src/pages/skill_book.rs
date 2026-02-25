@@ -10,7 +10,7 @@ use dioxus::prelude::*;
 use std::collections::HashMap;
 
 use crate::api;
-use crate::components::{Toast, ToastType};
+use crate::components::{Toast, ToastMessage, ToastType};
 use crate::store::EventStreamStore;
 use crate::theme::Theme;
 use carnelian_common::types::{SkillBookCatalog, SkillBookEntry};
@@ -106,7 +106,7 @@ pub fn SkillBook() -> Element {
                 spawn(async move {
                     match api::activate_skill(&skill_id, config).await {
                         Ok(_) => {
-                            let toast = Toast {
+                            let toast = ToastMessage {
                                 id: uuid::Uuid::now_v7().to_string(),
                                 message: format!("✅ {} activated successfully", skill_id),
                                 toast_type: ToastType::Success,
@@ -117,7 +117,7 @@ pub fn SkillBook() -> Element {
                             load_catalog();
                         }
                         Err(e) => {
-                            let toast = Toast {
+                            let toast = ToastMessage {
                                 id: uuid::Uuid::now_v7().to_string(),
                                 message: format!("❌ Failed to activate: {}", e),
                                 toast_type: ToastType::Error,
@@ -139,7 +139,7 @@ pub fn SkillBook() -> Element {
             spawn(async move {
                 match api::deactivate_skill(&skill_id).await {
                     Ok(_) => {
-                        let toast = Toast {
+                        let toast = ToastMessage {
                             id: uuid::Uuid::now_v7().to_string(),
                             message: format!("✅ {} deactivated", skill_id),
                             toast_type: ToastType::Success,
@@ -149,7 +149,7 @@ pub fn SkillBook() -> Element {
                         load_catalog();
                     }
                     Err(e) => {
-                        let toast = Toast {
+                        let toast = ToastMessage {
                             id: uuid::Uuid::now_v7().to_string(),
                             message: format!("❌ Failed to deactivate: {}", e),
                             toast_type: ToastType::Error,

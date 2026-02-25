@@ -13,6 +13,7 @@ mod websocket;
 
 use dioxus::prelude::*;
 
+#[cfg(feature = "desktop")]
 use components::system_tray::SystemTray;
 use components::tab_nav::TabNav;
 use components::toast::ToastOverlay;
@@ -62,6 +63,7 @@ pub enum Route {
 async fn main() {
     tracing_subscriber::fmt::init();
 
+    #[cfg(feature = "desktop")]
     components::system_tray::init_system_tray();
 
     dioxus::launch(app);
@@ -111,6 +113,7 @@ fn app() -> Element {
 
     rsx! {
         style { {theme::GLOBAL_CSS} }
+        #[cfg(feature = "desktop")]
         SystemTray {}
         if *show_wizard.read() {
             components::first_run_wizard::FirstRunWizard {

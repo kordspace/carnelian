@@ -25,8 +25,7 @@ use carnelian_common::types::{
     ProviderDetail, RunDetail, RunLogEntry, RunLogsQuery, SkillDetail, SkillMetricsDetail,
     SkillToggleResponse, StatusResponse, TaskDetail, TestVoiceRequest, TestVoiceResponse,
     TopSkillsQuery, TopSkillsResponse, TranscribeVoiceRequest, TranscribeVoiceResponse,
-    UpdateWorkflowRequest, XpEventDetail, XpHistoryQuery, XpHistoryResponse,
-    XpLeaderboardResponse,
+    UpdateWorkflowRequest, XpEventDetail, XpHistoryQuery, XpHistoryResponse, XpLeaderboardResponse,
 };
 use futures_util::{SinkExt, StreamExt};
 use http::{HeaderMap, Method, header};
@@ -40,6 +39,7 @@ use tower_http::{
     compression::CompressionLayer,
     cors::CorsLayer,
     limit::RequestBodyLimitLayer,
+    services::ServeDir,
     timeout::TimeoutLayer,
     trace::{DefaultOnResponse, MakeSpan, TraceLayer},
 };
@@ -73,7 +73,6 @@ pub struct HealthResponse {
     /// Database connection status: "connected" or "disconnected"
     pub database: String,
 }
-
 
 /// Custom span maker that generates correlation IDs for each request
 #[derive(Clone)]
@@ -552,9 +551,13 @@ const ALLOWED_ORIGINS: [&str; 4] = [
 /// Build the Axum router with all routes and middleware.
 #[allow(deprecated)] // TimeoutLayer::new is deprecated but simpler than with_status_code
 fn build_router(state: AppState) -> Router {
-    Router::new()
+    // Health endpoint - exempt from auth (must be first)
+    let health_routes = Router::new()
         .route("/v1/health", get(health_handler))
-        .route("/v1/health/detailed", get(detailed_health_handler))
+        .route("/v1/health/detailed", get(detailed_health_handler));
+
+    // All other routes - protected by auth middleware
+    let protected_routes = Router::new()
         .route("/v1/status", get(status_handler))
         .route("/v1/events", post(publish_event_handler))
         .route("/v1/events/ws", get(ws_handler))
@@ -691,6 +694,17 @@ fn build_router(state: AppState) -> Router {
             "/v1/memory/revoked-grants",
             get(list_revoked_grants_handler),
         )
+        // Apply auth middleware to all protected routes
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            carnelian_key_auth,
+        ));
+
+    // Merge health routes (unprotected) with protected routes
+    health_routes
+        .merge(protected_routes)
+        // Web UI static files (served at /ui)
+        .nest_service("/ui", ServeDir::new("target/dx/carnelian-ui/release/web/public"))
         // 10MB request body limit
         .layer(RequestBodyLimitLayer::new(10 * 1024 * 1024))
         // 30-second timeout
@@ -6568,9 +6582,7 @@ pub async fn carnelian_key_auth(
     }
 
     // Non-localhost requests require X-Carnelian-Key header
-    let api_key = headers
-        .get("x-carnelian-key")
-        .and_then(|v| v.to_str().ok());
+    let api_key = headers.get("x-carnelian-key").and_then(|v| v.to_str().ok());
 
     match api_key {
         Some(key) if !key.is_empty() => {

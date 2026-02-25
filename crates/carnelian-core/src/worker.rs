@@ -61,7 +61,10 @@
 use crate::config::Config;
 use crate::events::EventStream;
 use crate::ledger::Ledger;
-use carnelian_common::types::{WorkerInfo, CancelRequest, EventEnvelope, EventLevel, EventType, HealthResponse, InvokeRequest, InvokeResponse, InvokeStatus, RunId, StreamEvent, TransportMessage};
+use carnelian_common::types::{
+    CancelRequest, EventEnvelope, EventLevel, EventType, HealthResponse, InvokeRequest,
+    InvokeResponse, InvokeStatus, RunId, StreamEvent, TransportMessage, WorkerInfo,
+};
 use carnelian_common::{Error, Result};
 use chrono::{DateTime, Utc};
 use serde_json::json;

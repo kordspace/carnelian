@@ -32,8 +32,11 @@ use carnelian_core::{
 };
 
 use bollard::Docker;
+use bollard::container::{
+    Config as ContainerConfig, CreateContainerOptions, HostConfig, PortBinding,
+    StartContainerOptions,
+};
 use bollard::image::CreateImageOptions;
-use bollard::container::{CreateContainerOptions, StartContainerOptions, Config as ContainerConfig, HostConfig, PortBinding};
 use bollard::models::{HostConfig as HostConfigModel, PortMap};
 use futures_util::stream::TryStreamExt;
 
@@ -1009,7 +1012,7 @@ async fn handle_init(
     _database_url_override: Option<String>,
 ) -> carnelian_common::Result<()> {
     use std::io::{Write, stdin, stdout};
-    use sysinfo::{System, RefreshKind, MemoryKind};
+    use sysinfo::{MemoryKind, RefreshKind, System};
 
     // Welcome banner
     println!("╔═══════════════════════════════════════════════════════════════╗");
@@ -1023,10 +1026,7 @@ async fn handle_init(
 
     // Hardware detection with sysinfo
     println!("Detecting hardware...");
-    let mut sys = System::new_with_specifics(
-        RefreshKind::new()
-            .with_memory(MemoryKind::RAM)
-    );
+    let mut sys = System::new_with_specifics(RefreshKind::new().with_memory(MemoryKind::RAM));
     sys.refresh_all();
 
     let total_ram_gb = sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
@@ -1036,12 +1036,12 @@ async fn handle_init(
     let has_gpu = std::process::Command::new("nvidia-smi")
         .output()
         .map(|o| o.status.success())
-        .unwrap_or(false) || 
-        std::process::Command::new("rocm-smi")
+        .unwrap_or(false)
+        || std::process::Command::new("rocm-smi")
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false);
-    
+
     if has_gpu {
         println!("  GPU: Detected");
     } else {
@@ -1085,9 +1085,16 @@ async fn handle_init(
     };
 
     println!();
-    println!("Suggested profile: {} (based on {:.1}GB RAM {} GPU)",
-        suggested_profile, total_ram_gb, if has_gpu {"with"} else {"without"});
-    print!("Select machine profile [thummim/urim/custom] (default: {}): ", suggested_profile);
+    println!(
+        "Suggested profile: {} (based on {:.1}GB RAM {} GPU)",
+        suggested_profile,
+        total_ram_gb,
+        if has_gpu { "with" } else { "without" }
+    );
+    print!(
+        "Select machine profile [thummim/urim/custom] (default: {}): ",
+        suggested_profile
+    );
     stdout().flush().unwrap();
     let mut profile = String::new();
     stdin().read_line(&mut profile).unwrap();
@@ -1117,12 +1124,18 @@ async fn handle_init(
     };
 
     // Database URL
-    print!("Database URL [postgresql://carnelian:carnelian@localhost:{}/carnelian]: ", postgres_port);
+    print!(
+        "Database URL [postgresql://carnelian:carnelian@localhost:{}/carnelian]: ",
+        postgres_port
+    );
     stdout().flush().unwrap();
     let mut db_url = String::new();
     stdin().read_line(&mut db_url).unwrap();
     let database_url = if db_url.trim().is_empty() {
-        format!("postgresql://carnelian:carnelian@localhost:{}/carnelian", postgres_port)
+        format!(
+            "postgresql://carnelian:carnelian@localhost:{}/carnelian",
+            postgres_port
+        )
     } else {
         db_url.trim().to_string()
     };
@@ -1327,17 +1340,26 @@ async fn handle_init(
                 ..Default::default()
             };
 
-            match docker.create_container(
-                Some(CreateContainerOptions {
-                    name: "carnelian-postgres",
-                    platform: None,
-                }),
-                pg_config,
-            ).await {
+            match docker
+                .create_container(
+                    Some(CreateContainerOptions {
+                        name: "carnelian-postgres",
+                        platform: None,
+                    }),
+                    pg_config,
+                )
+                .await
+            {
                 Ok(_) => {
                     println!("    ✓ PostgreSQL container created");
-                    match docker.start_container("carnelian-postgres", None::<StartContainerOptions>).await {
-                        Ok(_) => println!("    ✓ PostgreSQL container started on port {}", postgres_port),
+                    match docker
+                        .start_container("carnelian-postgres", None::<StartContainerOptions>)
+                        .await
+                    {
+                        Ok(_) => println!(
+                            "    ✓ PostgreSQL container started on port {}",
+                            postgres_port
+                        ),
                         Err(e) => println!("    ⚠ Failed to start PostgreSQL container: {}", e),
                     }
                 }
@@ -1365,16 +1387,22 @@ async fn handle_init(
                 ..Default::default()
             };
 
-            match docker.create_container(
-                Some(CreateContainerOptions {
-                    name: "carnelian-ollama",
-                    platform: None,
-                }),
-                ollama_config,
-            ).await {
+            match docker
+                .create_container(
+                    Some(CreateContainerOptions {
+                        name: "carnelian-ollama",
+                        platform: None,
+                    }),
+                    ollama_config,
+                )
+                .await
+            {
                 Ok(_) => {
                     println!("    ✓ Ollama container created");
-                    match docker.start_container("carnelian-ollama", None::<StartContainerOptions>).await {
+                    match docker
+                        .start_container("carnelian-ollama", None::<StartContainerOptions>)
+                        .await
+                    {
                         Ok(_) => println!("    ✓ Ollama container started on port {}", ollama_port),
                         Err(e) => println!("    ⚠ Failed to start Ollama container: {}", e),
                     }
@@ -1415,6 +1443,81 @@ async fn handle_init(
                 match carnelian_core::db::run_migrations(pool, None).await {
                     Ok(_) => println!("✓ Migrations completed"),
                     Err(e) => println!("⚠ Migration error: {}", e),
+                }
+            }
+        }
+    }
+
+    // Docker-compose up option (alternative to direct container management)
+    if docker.is_some() && !auto_setup_containers {
+        println!();
+        print!("Start services with docker-compose? [Y/n]: ");
+        stdout().flush().unwrap();
+        let mut compose_up = String::new();
+        stdin().read_line(&mut compose_up).unwrap();
+        if compose_up.trim().to_lowercase() != "n" {
+            println!("Starting services with docker-compose...");
+            match std::process::Command::new("docker-compose")
+                .args(["-f", "docker-compose.yml", "up", "-d", "carnelian-postgres", "carnelian-ollama"])
+                .status()
+            {
+                Ok(status) if status.success() => {
+                    println!("✓ Services started with docker-compose");
+                }
+                Ok(_) => {
+                    println!("⚠ docker-compose up failed - you may need to run it manually");
+                }
+                Err(e) => {
+                    println!("⚠ Failed to run docker-compose: {}", e);
+                }
+            }
+        }
+    }
+
+    // Starter skills activation
+    println!();
+    println!("Available starter skills:");
+    println!("  - file-analyzer: Analyze files and extract metadata");
+    println!("  - code-review: Review code for quality and issues");
+    println!("  - model-usage: Track and optimize AI model usage");
+    print!("Activate starter skills? [Y/n]: ");
+    stdout().flush().unwrap();
+    let mut activate_skills = String::new();
+    stdin().read_line(&mut activate_skills).unwrap();
+    if activate_skills.trim().to_lowercase() != "n" {
+        let starter_skills = vec!["file-analyzer", "code-review", "model-usage"];
+        let skill_book_path = PathBuf::from("skills/skill-book");
+        let registry_path = PathBuf::from("skills/registry");
+        
+        // Create registry directory if it doesn't exist
+        if let Err(e) = std::fs::create_dir_all(&registry_path) {
+            println!("⚠ Failed to create registry directory: {}", e);
+        } else {
+            for skill_id in starter_skills {
+                let skill_src = skill_book_path.join(skill_id);
+                let skill_dst = registry_path.join(skill_id);
+                
+                if skill_src.exists() {
+                    match std::fs::create_dir_all(&skill_dst) {
+                        Ok(_) => {
+                            // Copy skill files
+                            if let Ok(entries) = std::fs::read_dir(&skill_src) {
+                                for entry in entries.flatten() {
+                                    let src_path = entry.path();
+                                    let dst_path = skill_dst.join(entry.file_name());
+                                    if src_path.is_file() {
+                                        let _ = std::fs::copy(&src_path, &dst_path);
+                                    }
+                                }
+                            }
+                            println!("  ✓ Activated {}", skill_id);
+                        }
+                        Err(e) => {
+                            println!("  ⚠ Failed to activate {}: {}", skill_id, e);
+                        }
+                    }
+                } else {
+                    println!("  ℹ Skill {} not found in skill-book (skipped)", skill_id);
                 }
             }
         }
@@ -1686,22 +1789,29 @@ async fn handle_ui(web: bool) -> carnelian_common::Result<()> {
     if web {
         // Serve web UI
         println!("🔥 Starting Carnelian Web UI server...");
-        
+
         // Determine the web UI directory
         let web_dir = std::path::PathBuf::from("target/dx/carnelian-ui/release/web/public");
-        
+
         if !web_dir.exists() {
             println!("⚠ Web UI directory not found: {}", web_dir.display());
             println!("  Building web UI...");
-            
+
             // Attempt to build the web UI using dx
             let build_result = std::process::Command::new("dx")
-                .args(["build", "--release", "-p", "carnelian-ui", "--platform", "web"])
+                .args([
+                    "build",
+                    "--release",
+                    "-p",
+                    "carnelian-ui",
+                    "--platform",
+                    "web",
+                ])
                 .current_dir(".")
                 .stdout(std::process::Stdio::inherit())
                 .stderr(std::process::Stdio::inherit())
                 .status();
-            
+
             match build_result {
                 Ok(status) if status.success() => {
                     println!("✓ Web UI built successfully");
@@ -1718,29 +1828,29 @@ async fn handle_ui(web: bool) -> carnelian_common::Result<()> {
                 }
             }
         }
-        
+
         // Serve the web UI
         let port = std::env::var("CARNELIAN_WEB_PORT")
             .ok()
             .and_then(|p| p.parse::<u16>().ok())
             .unwrap_or(8080);
-        
+
         let addr = format!("0.0.0.0:{}", port);
-        
+
         println!("  Serving web UI from: {}", web_dir.display());
         println!("  Web UI available at: http://{}", addr);
         println!("  Press Ctrl+C to stop the server");
-        
+
         // Use a simple static file server
         let serve_result = serve_web_ui(&web_dir, port).await;
-        
+
         if let Err(e) = serve_result {
             println!("⚠ Failed to serve web UI: {}", e);
         }
-        
+
         return Ok(());
     }
-    
+
     // Desktop UI launch
     let ui_binary = if let Ok(exe_path) = std::env::current_exe() {
         let same_dir = exe_path
@@ -1796,26 +1906,21 @@ async fn handle_ui(web: bool) -> carnelian_common::Result<()> {
 }
 
 /// Serve web UI static files
-async fn serve_web_ui(
-    web_dir: &std::path::Path,
-    port: u16,
-) -> carnelian_common::Result<()> {
+async fn serve_web_ui(web_dir: &std::path::Path, port: u16) -> carnelian_common::Result<()> {
     use axum::{
-        routing::get,
         Router,
-        response::{Html, IntoResponse},
         extract::Path,
         http::StatusCode,
+        response::{Html, IntoResponse},
+        routing::get,
     };
-    use tower_http::services::ServeDir;
     use tokio::net::TcpListener;
+    use tower_http::services::ServeDir;
 
     // Create router with static file serving
     let app = Router::new()
         .nest_service("/", ServeDir::new(web_dir))
-        .fallback(|| async {
-            (StatusCode::NOT_FOUND, "404 - Not Found")
-        });
+        .fallback(|| async { (StatusCode::NOT_FOUND, "404 - Not Found") });
 
     let addr = format!("0.0.0.0:{}", port);
     let listener = TcpListener::bind(&addr).await.map_err(|e| {
@@ -1823,7 +1928,7 @@ async fn serve_web_ui(
     })?;
 
     println!("Web UI server listening on http://{}", addr);
-    
+
     axum::serve(listener, app)
         .await
         .map_err(|e| carnelian_common::Error::Connection(format!("Server error: {}", e)))?;

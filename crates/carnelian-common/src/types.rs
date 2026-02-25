@@ -1635,7 +1635,7 @@ pub struct StatusResponse {
 }
 
 /// Response body for `GET /v1/health/detailed`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DetailedHealthResponse {
     /// Overall health status: "healthy" or "degraded"
     pub status: String,
