@@ -8,22 +8,21 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use tracing::{info, warn};
-use wasmtime::{Config, Engine, Linker, Module};
-use wasmtime_wasi::WasiCtx;
+use wasmtime::{Config, Engine, Linker, Module, Store};
+use wasmtime_wasi::p1::{WasiP1Ctx, add_to_linker_async as wasi_p1_add_to_linker};
+use wasmtime_wasi::{WasiCtxBuilder, p2::pipe::{MemoryInputPipe, MemoryOutputPipe}};
 
 use crate::skills::skill_trait::{SkillInput, SkillOutput};
 use carnelian_common::{Error, Result};
+use serde_json::Value;
 
 /// State for WASM skill execution
 pub struct WasmState {
-    /// WASI context for system access
-    wasi: WasiCtx,
+    /// WASI context for system access (P1 for module-based WASM)
+    wasi: WasiP1Ctx,
 
     /// Granted capabilities
     capabilities: Vec<String>,
-
-    /// Output buffer for results
-    output_buffer: Arc<Mutex<Vec<u8>>>,
 }
 
 /// A WASM-based skill instance
@@ -77,10 +76,10 @@ impl WasmSkillRuntime {
                 .map_err(|e| Error::Worker(format!("Failed to create WASM engine: {}", e)))?,
         );
 
-        // Create linker with WASI - disabled for now due to API changes in v27
-        let linker = Linker::new(&engine);
-        // TODO: Update to wasmtime-wasi v27 API when ready
-        // wasmtime_wasi::add_to_linker(&mut linker, |state: &mut WasmState| &mut state.wasi)
+        // Create linker with WASI P1
+        let mut linker = Linker::new(&engine);
+        wasi_p1_add_to_linker(&mut linker, |s: &mut WasmState| &mut s.wasi)
+            .map_err(|e| Error::Worker(format!("Failed to add WASI P1 to linker: {}", e)))?;
 
         Ok(Self {
             engine,
@@ -153,15 +152,138 @@ impl WasmSkillRuntime {
     /// Invoke a WASM skill
     pub async fn invoke(
         &self,
-        _skill_id: &str,
-        _input: SkillInput,
-        _capabilities: Vec<String>,
+        skill_id: &str,
+        input: SkillInput,
+        capabilities: Vec<String>,
     ) -> Result<SkillOutput> {
-        // WASM skill execution temporarily disabled due to wasmtime-wasi v27 API changes
-        // This will be re-enabled when the API is stabilized
-        Err(Error::Worker(
-            "WASM skill execution is not yet implemented".to_string(),
-        ))
+        // Step 1: Look up the skill
+        let skill = {
+            let skills = self.skills.lock().unwrap();
+            skills.get(skill_id).map(|s| s.clone_skill()).ok_or_else(|| {
+                Error::Worker(format!("WASM skill '{}' not found", skill_id))
+            })?
+        };
+
+        // Step 2: Read output limit
+        let max_output_bytes: usize = std::env::var("CARNELIAN_MAX_OUTPUT_BYTES")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(1_048_576); // 1 MB default
+
+        // Step 3: Create I/O pipes
+        let stdout_pipe = MemoryOutputPipe::new(max_output_bytes);
+        let input_bytes = serde_json::to_vec(&input.data)
+            .map_err(|e| Error::Worker(format!("Failed to serialize input: {}", e)))?;
+        let stdin_pipe = MemoryInputPipe::new(input_bytes);
+
+        // Step 4: Build WasiP1Ctx with capability-based access
+        let mut wasi_builder = WasiCtxBuilder::new()
+            .stdin(stdin_pipe)
+            .stdout(stdout_pipe.clone());
+
+        // Network: deny by default, allow if capability granted
+        if capabilities.contains(&"network".to_string()) {
+            wasi_builder = wasi_builder.inherit_network();
+        }
+
+        // Filesystem: allow read if capability granted
+        if capabilities.contains(&"fs.read".to_string()) {
+            wasi_builder = wasi_builder
+                .preopened_dir(
+                    std::path::PathBuf::from("."),
+                    ".",
+                    wasmtime_wasi::DirPerms::READ,
+                    wasmtime_wasi::FilePerms::READ,
+                )
+                .map_err(|e| Error::Worker(format!("Failed to preopen dir: {}", e)))?;
+        }
+
+        let wasi = wasi_builder.build_p1();
+
+        // Step 5: Create Store with WasmState
+        let mut store = Store::new(&skill.engine, WasmState { wasi, capabilities });
+
+        // Step 6: Set epoch deadline for timeout
+        store.set_epoch_deadline(skill.timeout_secs);
+
+        // Step 7: Spawn epoch ticker for timeout enforcement
+        let engine_clone = skill.engine.clone();
+        let (cancel_tx, mut cancel_rx) = tokio::sync::oneshot::channel();
+        let epoch_ticker = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
+            loop {
+                tokio::select! {
+                    _ = interval.tick() => {
+                        engine_clone.increment_epoch();
+                    }
+                    _ = &mut cancel_rx => {
+                        break;
+                    }
+                }
+            }
+        });
+
+        // Step 8: Instantiate and call the module
+        let result: Result<(), Error> = async {
+            let instance = self
+                .linker
+                .instantiate_async(&mut store, &skill.module)
+                .await
+                .map_err(|e| Error::Worker(format!("Failed to instantiate WASM: {}", e)))?;
+
+            // Try "invoke" first, fall back to "_start"
+            let func = instance
+                .get_typed_func::<(), ()>(&mut store, "invoke")
+                .or_else(|_| instance.get_typed_func::<(), ()>(&mut store, "_start"))
+                .map_err(|e| Error::Worker(format!("No 'invoke' or '_start' function found: {}", e)))?;
+
+            func.call_async(&mut store, ()).await.map_err(|e| {
+                Error::Worker(format!("WASM execution failed: {}", e))
+            })?;
+
+            Ok(())
+        }
+        .await;
+
+        // Step 9: Cancel epoch ticker
+        let _ = cancel_tx.send(());
+        let _ = epoch_ticker.await;
+
+        // Step 10: Capture stdout and check truncation
+        let output_bytes = stdout_pipe.contents();
+        let truncated = output_bytes.len() >= max_output_bytes;
+
+        // Step 11: Parse output
+        let output_str = String::from_utf8_lossy(&output_bytes);
+        let data = serde_json::from_slice(&output_bytes).unwrap_or_else(|_| {
+            serde_json::json!({
+                "output": output_str.to_string()
+            })
+        });
+
+        // Step 12: Build result
+        match result {
+            Ok(_) => Ok(SkillOutput {
+                success: true,
+                data,
+                error: None,
+                metadata: if truncated {
+                    Some(serde_json::json!({ "truncated": "true" }))
+                } else {
+                    None
+                },
+            }),
+            Err(e) => Ok(SkillOutput {
+                success: false,
+                data: serde_json::json!({}),
+                error: Some(e.to_string()),
+                metadata: if truncated {
+                    Some(serde_json::json!({ "truncated": "true" }))
+                } else {
+                    None
+                },
+            }),
+        }
     }
 
     /// Unload a WASM skill
@@ -170,6 +292,12 @@ impl WasmSkillRuntime {
         skills.remove(skill_id);
         info!(skill_id = %skill_id, "WASM skill unloaded");
         Ok(())
+    }
+
+    /// Get a loaded skill by ID
+    pub fn get_skill(&self, skill_id: &str) -> Option<WasmSkill> {
+        let skills = self.skills.lock().unwrap();
+        skills.get(skill_id).cloned()
     }
 
     /// List loaded WASM skills
@@ -224,9 +352,9 @@ impl Default for WasmSkillRuntime {
     }
 }
 
-// Clone implementation for WasmSkill (without engine)
-impl WasmSkill {
-    fn clone_skill(&self) -> Self {
+// Clone implementation for WasmSkill
+impl Clone for WasmSkill {
+    fn clone(&self) -> Self {
         Self {
             id: self.id.clone(),
             name: self.name.clone(),

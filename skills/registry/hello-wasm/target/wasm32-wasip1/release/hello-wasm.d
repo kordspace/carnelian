@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\hello-wasm\target\wasm32-wasip1\release\hello-wasm.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\hello-wasm\src\main.rs

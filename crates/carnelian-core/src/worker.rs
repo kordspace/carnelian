@@ -61,12 +61,12 @@
 use crate::config::Config;
 use crate::events::EventStream;
 use crate::ledger::Ledger;
+use crate::skills::wasm_runtime::WasmSkillRuntime;
 use carnelian_common::types::{
     CancelRequest, EventEnvelope, EventLevel, EventType, HealthResponse, InvokeRequest,
     InvokeResponse, InvokeStatus, RunId, StreamEvent, TransportMessage, WorkerInfo,
 };
 use carnelian_common::{Error, Result};
-use carnelian_worker_python::PythonWorkerTransport;
 use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::PgPool;
@@ -771,6 +771,165 @@ impl WorkerTransport for ProcessJsonlTransport {
     }
 }
 
+/// WASM worker transport for in-process WASM execution
+pub struct WasmWorkerTransport {
+    worker_id: String,
+    runtime: Arc<WasmSkillRuntime>,
+    event_stream: Arc<EventStream>,
+    active_runs: Arc<RwLock<HashMap<RunId, mpsc::Sender<StreamEvent>>>>,
+    created_at: std::time::Instant,
+    config: Arc<Config>,
+}
+
+impl WasmWorkerTransport {
+    /// Create a new WasmWorkerTransport
+    pub fn new(
+        worker_id: String,
+        runtime: Arc<WasmSkillRuntime>,
+        event_stream: Arc<EventStream>,
+        config: Arc<Config>,
+    ) -> Self {
+        Self {
+            worker_id,
+            runtime,
+            event_stream,
+            active_runs: Arc::new(RwLock::new(HashMap::new())),
+            created_at: std::time::Instant::now(),
+            config,
+        }
+    }
+}
+
+#[async_trait]
+impl WorkerTransport for WasmWorkerTransport {
+    async fn invoke(&self, request: InvokeRequest) -> Result<InvokeResponse> {
+        let run_id = request.run_id.clone();
+        let skill_name = request.skill_name.clone();
+        
+        // Emit SkillInvokeStart event
+        self.event_stream.publish(EventEnvelope::new(
+            EventLevel::Info,
+            EventType::SkillInvokeStart,
+            json!({
+                "worker_id": self.worker_id,
+                "run_id": run_id,
+                "skill_name": skill_name,
+            }),
+        ));
+
+        // Derive WASM path
+        let wasm_path = format!("skills/registry/{}/{}.wasm", skill_name, skill_name);
+        let skill_json_path = format!("skills/registry/{}/skill.json", skill_name);
+
+        // Load skill if not already loaded
+        let skill_id = format!("{}/{}-worker", skill_name, self.worker_id);
+        if !self.runtime.is_loaded(&skill_id) {
+            if let Err(e) = self.runtime.load(std::path::Path::new(&wasm_path), &skill_id) {
+                tracing::warn!(error = %e, "Failed to preload WASM skill, will attempt on invoke");
+            }
+        }
+
+        // Read capabilities from skill.json
+        let capabilities = match std::fs::read_to_string(&skill_json_path) {
+            Ok(content) => {
+                serde_json::from_str::<serde_json::Value>(&content)
+                    .ok()
+                    .and_then(|v| v.get("capabilities_required").cloned())
+                    .and_then(|v| v.as_array().map(|arr| {
+                        arr.iter()
+                            .filter_map(|s| s.as_str().map(String::from))
+                            .collect::<Vec<_>>()
+                    }))
+                    .unwrap_or_default()
+            }
+            Err(_) => Vec::new(),
+        };
+
+        // Convert input to SkillInput
+        let skill_input = crate::skills::skill_trait::SkillInput {
+            data: request.input,
+        };
+
+        // Call WASM runtime
+        let start_time = std::time::Instant::now();
+        let output = match self.runtime.invoke(&skill_id, skill_input, capabilities).await {
+            Ok(out) => out,
+            Err(e) => {
+                // Emit SkillInvokeFailed event
+                self.event_stream.publish(EventEnvelope::new(
+                    EventLevel::Error,
+                    EventType::SkillInvokeFailed,
+                    json!({
+                        "worker_id": self.worker_id,
+                        "run_id": run_id,
+                        "skill_name": skill_name,
+                        "error": e.to_string(),
+                    }),
+                ));
+                return Err(e);
+            }
+        };
+
+        let duration_ms = start_time.elapsed().as_millis() as u64;
+
+        // Emit SkillInvokeEnd event
+        self.event_stream.publish(EventEnvelope::new(
+            EventLevel::Info,
+            EventType::SkillInvokeEnd,
+            json!({
+                "worker_id": self.worker_id,
+                "run_id": run_id,
+                "skill_name": skill_name,
+                "success": output.success,
+            }),
+        ));
+
+        // Check if output was truncated from metadata
+        let truncated = output.metadata.get("truncated")
+            .and_then(|v| v.parse::<bool>().ok())
+            .unwrap_or(false);
+
+        Ok(InvokeResponse {
+            run_id,
+            status: if output.success { InvokeStatus::Success } else { InvokeStatus::Failed },
+            result: output.data,
+            error: output.error,
+            exit_code: output.metadata.get("exit_code").and_then(|v| v.parse::<i32>().ok()),
+            duration_ms,
+            truncated,
+        })
+    }
+
+    async fn stream_events(&self, run_id: RunId) -> Result<mpsc::Receiver<StreamEvent>> {
+        let (tx, rx) = mpsc::channel(256);
+        let mut active_runs = self.active_runs.write().await;
+        active_runs.insert(run_id, tx);
+        Ok(rx)
+    }
+
+    async fn cancel(&self, run_id: RunId, _reason: String) -> Result<()> {
+        let mut active_runs = self.active_runs.write().await;
+        active_runs.remove(&run_id);
+        // Epoch interruption handles the actual timeout
+        Ok(())
+    }
+
+    async fn health(&self) -> Result<HealthResponse> {
+        Ok(HealthResponse {
+            healthy: true,
+            worker_id: self.worker_id.clone(),
+            uptime_secs: self.created_at.elapsed().as_secs(),
+            attestation: None,
+        })
+    }
+
+    async fn shutdown(&self) -> Result<()> {
+        let mut active_runs = self.active_runs.write().await;
+        active_runs.clear();
+        Ok(())
+    }
+}
+
 /// Result of a single health check on a worker.
 #[allow(dead_code)]
 struct HealthCheckResult {
@@ -1060,15 +1219,96 @@ impl WorkerManager {
 
         let worker_id = self.next_worker_id(runtime);
 
-        // Handle Python runtime specially using PythonWorkerTransport
+        // Handle Python runtime specially (inline to avoid circular dependency)
         if runtime == WorkerRuntime::Python {
-            let (transport, stderr) = PythonWorkerTransport::spawn(
+            // Step 1: Detect Python binary
+            let python_bin = which::which("python3")
+                .or_else(|_| which::which("python"))
+                .map_err(|e| {
+                    Error::Connection(format!(
+                        "Failed to find Python binary (tried 'python3', then 'python'): {}",
+                        e
+                    ))
+                })?;
+            tracing::info!("Using Python binary: {}", python_bin.display());
+
+            // Step 2: Pre-install requirements if present
+            let req_path = std::path::PathBuf::from("workers/python-worker/requirements.txt");
+            if req_path.exists() {
+                tracing::info!(
+                    "Installing Python worker requirements from {}",
+                    req_path.display()
+                );
+                let status = tokio::process::Command::new(&python_bin)
+                    .args([
+                        "-m", "pip", "install", "-r",
+                        req_path.to_str().unwrap(),
+                        "--quiet",
+                        "--disable-pip-version-check",
+                    ])
+                    .status()
+                    .await
+                    .map_err(|e| {
+                        Error::Connection(format!("Failed to spawn pip install command: {}", e))
+                    })?;
+
+                if status.success() {
+                    tracing::info!("Python worker requirements installed successfully");
+                } else {
+                    let code = status.code().unwrap_or(-1);
+                    tracing::warn!("pip install failed with exit code: {}", code);
+                    return Err(Error::Connection(format!(
+                        "pip install failed with exit code: {}",
+                        code
+                    )));
+                }
+            }
+
+            // Step 3: Compute attestation env vars
+            let api_url = format!("http://localhost:{}", self.config.http_port);
+            let ledger_head = self
+                .get_expected_ledger_head()
+                .await
+                .unwrap_or_else(|_| "genesis".to_string());
+            let config_version = self
+                .get_expected_config_version()
+                .await
+                .unwrap_or_else(|_| "v1".to_string());
+            let build_checksum = self.get_expected_build_checksum(runtime);
+
+            // Step 4: Build spawn command with detected binary
+            let mut cmd = tokio::process::Command::new(&python_bin);
+            cmd.arg("workers/python-worker/worker.py")
+                .env("WORKER_ID", &worker_id)
+                .env("CARNELIAN_API_URL", &api_url)
+                .env("CARNELIAN_LEDGER_HEAD", &ledger_head)
+                .env("CARNELIAN_CONFIG_VERSION", &config_version)
+                .env("CARNELIAN_BUILD_CHECKSUM", &build_checksum)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+
+            // Step 5: Spawn the child process
+            let child = cmd.spawn().map_err(|e| {
+                tracing::error!(
+                    worker_id = %worker_id,
+                    runtime = %runtime,
+                    error = %e,
+                    "Failed to spawn Python worker process"
+                );
+                Error::Connection(format!("Failed to spawn Python worker: {}", e))
+            })?;
+
+            // Step 6: Create transport from the spawned process
+            let (transport, stderr) = ProcessJsonlTransport::new(
                 worker_id.clone(),
+                child,
                 self.config.clone(),
                 self.event_stream.clone(),
-            ).await.map_err(|e| Error::Connection(format!("Failed to spawn Python worker: {}", e)))?;
+            )?;
             let transport: Arc<dyn WorkerTransport> = Arc::new(transport);
 
+            // Step 7: Register worker (same as other runtimes)
             let worker = Worker {
                 id: worker_id.clone(),
                 runtime,
@@ -1126,9 +1366,7 @@ impl WorkerManager {
                 c
             }
             WorkerRuntime::Python => {
-                let mut c = tokio::process::Command::new("python");
-                c.args(["workers/python-worker/worker.py"]);
-                c
+                unreachable!("Python runtime should have been handled earlier")
             }
             WorkerRuntime::Shell => {
                 let mut c = tokio::process::Command::new("bash");
@@ -1136,7 +1374,50 @@ impl WorkerManager {
                 c
             }
             WorkerRuntime::Wasm => {
-                return Err(Error::Config("Wasm runtime not yet supported".to_string()));
+                // Create WASM runtime and transport
+                let wasm_runtime = Arc::new(crate::skills::wasm_runtime::WasmSkillRuntime::new()?);
+                let transport = WasmWorkerTransport::new(
+                    worker_id.clone(),
+                    wasm_runtime,
+                    self.event_stream.clone(),
+                    self.config.clone(),
+                );
+                let transport: Arc<dyn WorkerTransport> = Arc::new(transport);
+
+                // Register worker with transport
+                let worker = Worker {
+                    id: worker_id.clone(),
+                    runtime,
+                    process: None,
+                    status: WorkerStatus::Running,
+                    current_task: None,
+                    started_at: Utc::now(),
+                    last_health_check: None,
+                    transport: Some(transport),
+                    last_attestation: None,
+                    quarantined: false,
+                    last_attestation_verified: None,
+                };
+
+                self.workers.write().await.insert(worker_id.clone(), worker);
+
+                // Emit WorkerStarted event
+                self.event_stream.publish(EventEnvelope::new(
+                    EventLevel::Info,
+                    EventType::WorkerStarted,
+                    json!({
+                        "worker_id": worker_id,
+                        "runtime": runtime.to_string(),
+                    }),
+                ));
+
+                tracing::info!(
+                    worker_id = %worker_id,
+                    runtime = %runtime,
+                    "Worker spawned"
+                );
+
+                return Ok(worker_id);
             }
         };
 

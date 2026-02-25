@@ -1,0 +1,16 @@
+{
+  "name": "hello-wasm",
+  "description": "Minimal WASM smoke-test skill that echoes its input",
+  "runtime": "wasm",
+  "version": "0.1.0",
+  "capabilities_required": [],
+  "sandbox": {
+    "network": "disabled",
+    "max_memory_mb": 32,
+    "max_cpu_percent": 10
+  },
+  "openclaw_compat": {
+    "emoji": "🦀",
+    "tags": ["utility", "testing", "wasm"]
+  }
+}

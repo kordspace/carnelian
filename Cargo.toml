@@ -9,6 +9,9 @@ members = [
     "crates/carnelian-common",
     "crates/carnelian-adapters",
 ]
+exclude = [
+    "skills/registry",
+]
 
 [workspace.package]
 version = "0.1.0"
