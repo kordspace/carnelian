@@ -49,6 +49,22 @@ agent_name = "Lian"
 http_port = 18789
 
 # =============================================================================
+# CORS Configuration
+# =============================================================================
+# Allowed origins for the HTTP API and Web UI (/ui).
+# Defaults to localhost dev origins only (localhost:3000, localhost:5173).
+# Extend this list to allow remote browser access.
+#
+# Can be overridden with CARNELIAN_CORS_ORIGINS environment variable
+# (comma-separated list).
+
+# cors_origins = [
+#   "http://localhost:3000",
+#   "http://localhost:5173",
+#   "https://my-carnelian-server.example.com",
+# ]
+
+# =============================================================================
 # Skill Execution Configuration
 # =============================================================================
 # Timeouts and output limits for worker skill invocations.

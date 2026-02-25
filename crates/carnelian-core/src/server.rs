@@ -609,14 +609,6 @@ impl Server {
     }
 }
 
-/// Allowed origins for CORS (local UI development)
-const ALLOWED_ORIGINS: [&str; 4] = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:5173",
-];
-
 /// Build the Axum router with all routes and middleware.
 #[allow(deprecated)] // TimeoutLayer::new is deprecated but simpler than with_status_code
 fn build_router(state: AppState) -> Router {
@@ -780,11 +772,11 @@ fn build_router(state: AppState) -> Router {
         .layer(TimeoutLayer::new(Duration::from_secs(30)))
         // Compression (gzip, brotli)
         .layer(CompressionLayer::new())
-        // CORS restricted to local UI development origins
+        // CORS restricted to configured origins (defaults to localhost dev origins)
         .layer(
             CorsLayer::new()
                 .allow_origin(
-                    ALLOWED_ORIGINS
+                    state.config.cors_origins
                         .iter()
                         .filter_map(|s| s.parse().ok())
                         .collect::<Vec<_>>(),

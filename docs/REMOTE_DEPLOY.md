@@ -187,6 +187,27 @@ dx build --platform web -p carnelian-ui --release
 carnelian start
 ```
 
+## CORS Configuration for Remote Web UI
+
+By default, Carnelian only allows CORS requests from `localhost` origins.
+To access the Web UI (`/ui`) from a remote browser, add your server's origin.
+
+**Via `machine.toml`:**
+```toml
+cors_origins = [
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "https://your-domain.com",
+]
+```
+
+**Via environment variable** (replaces the default list entirely):
+```bash
+CARNELIAN_CORS_ORIGINS=https://your-domain.com,http://192.168.1.100:18789
+```
+
+> Always use HTTPS origins in production to prevent mixed-content browser errors.
+
 ## Security Considerations
 
 - Always use HTTPS in production

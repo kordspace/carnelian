@@ -241,6 +241,11 @@ pub struct Config {
     #[serde(default = "default_adapter_spam_threshold")]
     pub adapter_spam_threshold: f32,
 
+    /// Allowed CORS origins for HTTP API and Web UI access.
+    /// Default: localhost dev origins only. Set to allow remote browser access.
+    #[serde(default = "default_cors_origins")]
+    pub cors_origins: Vec<String>,
+
     /// Database pool (not serialized, initialized separately)
     #[serde(skip)]
     db_pool: Option<Arc<PgPool>>,
@@ -373,6 +378,15 @@ fn default_adapter_spam_threshold() -> f32 {
     0.8
 }
 
+fn default_cors_origins() -> Vec<String> {
+    vec![
+        "http://localhost:3000".to_string(),
+        "http://localhost:5173".to_string(),
+        "http://127.0.0.1:3000".to_string(),
+        "http://127.0.0.1:5173".to_string(),
+    ]
+}
+
 fn default_skills_registry_path() -> PathBuf {
     PathBuf::from("./skills/registry")
 }
@@ -478,6 +492,7 @@ impl Default for Config {
             adapter_telegram_enabled: false,
             adapter_discord_enabled: false,
             adapter_spam_threshold: default_adapter_spam_threshold(),
+            cors_origins: default_cors_origins(),
             db_pool: None,
             owner_signing_key: None,
         }
@@ -712,6 +727,11 @@ impl Config {
         // CARNELIAN_AGENT_NAME — custom agent/assistant display name
         if let Ok(name) = std::env::var("CARNELIAN_AGENT_NAME") {
             self.agent_name = name;
+        }
+
+        // CARNELIAN_CORS_ORIGINS — comma-separated list of allowed CORS origins
+        if let Ok(val) = std::env::var("CARNELIAN_CORS_ORIGINS") {
+            self.cors_origins = val.split(',').map(|s| s.trim().to_string()).collect();
         }
 
         // SESSION_EXPIRY_HOURS — default session TTL in hours (0 = never)
