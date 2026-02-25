@@ -8,11 +8,14 @@ rust-version.workspace = true
 
 [dependencies]
 carnelian-common = { path = "../carnelian-common" }
+carnelian-core = { path = "../carnelian-core" }
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
+which = "6.0"
+async-trait.workspace = true
 
 [lints]
 workspace = true
