@@ -731,7 +731,14 @@ impl Config {
 
         // CARNELIAN_CORS_ORIGINS — comma-separated list of allowed CORS origins
         if let Ok(val) = std::env::var("CARNELIAN_CORS_ORIGINS") {
-            self.cors_origins = val.split(',').map(|s| s.trim().to_string()).collect();
+            let origins: Vec<String> = val
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if !origins.is_empty() {
+                self.cors_origins = origins;
+            }
         }
 
         // SESSION_EXPIRY_HOURS — default session TTL in hours (0 = never)
