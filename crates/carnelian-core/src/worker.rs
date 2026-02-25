@@ -66,6 +66,7 @@ use carnelian_common::types::{
     InvokeResponse, InvokeStatus, RunId, StreamEvent, TransportMessage, WorkerInfo,
 };
 use carnelian_common::{Error, Result};
+use carnelian_worker_python::PythonWorkerTransport;
 use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::PgPool;
@@ -1058,6 +1059,64 @@ impl WorkerManager {
         }
 
         let worker_id = self.next_worker_id(runtime);
+
+        // Handle Python runtime specially using PythonWorkerTransport
+        if runtime == WorkerRuntime::Python {
+            let (transport, stderr) = PythonWorkerTransport::spawn(
+                worker_id.clone(),
+                self.config.clone(),
+                self.event_stream.clone(),
+            ).await.map_err(|e| Error::Connection(format!("Failed to spawn Python worker: {}", e)))?;
+            let transport: Arc<dyn WorkerTransport> = Arc::new(transport);
+
+            let worker = Worker {
+                id: worker_id.clone(),
+                runtime,
+                process: None,
+                status: WorkerStatus::Starting,
+                current_task: None,
+                started_at: Utc::now(),
+                last_health_check: None,
+                transport: Some(transport),
+                last_attestation: None,
+                quarantined: false,
+                last_attestation_verified: None,
+            };
+
+            self.workers.write().await.insert(worker_id.clone(), worker);
+
+            // Spawn stderr handler if available
+            if let Some(stderr) = stderr {
+                Self::spawn_stderr_handler(worker_id.clone(), stderr);
+            }
+
+            // Emit WorkerStarted event
+            self.event_stream.publish(EventEnvelope::new(
+                EventLevel::Info,
+                EventType::WorkerStarted,
+                json!({
+                    "worker_id": worker_id,
+                    "runtime": runtime.to_string(),
+                }),
+            ));
+
+            tracing::info!(
+                worker_id = %worker_id,
+                runtime = %runtime,
+                "Worker spawned"
+            );
+
+            // Update status to Running after successful spawn
+            {
+                let mut workers = self.workers.write().await;
+                if let Some(w) = workers.get_mut(&worker_id) {
+                    w.status = WorkerStatus::Running;
+                }
+            }
+
+            return Ok(worker_id);
+        }
+
         let api_url = format!("http://localhost:{}", self.config.http_port);
 
         let mut cmd = match runtime {

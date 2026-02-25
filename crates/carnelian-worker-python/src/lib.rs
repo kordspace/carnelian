@@ -88,7 +88,7 @@ impl PythonWorkerTransport {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .env("WORKER_ID", &worker_id)
-            .env("CARNELIAN_API_URL", &config.http_bind_addr.to_string())
+            .env("CARNELIAN_API_URL", format!("http://localhost:{}", config.http_port))
             .env("RUST_LOG", std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()));
         
         // Step 4: Spawn the child process
@@ -96,8 +96,7 @@ impl PythonWorkerTransport {
             .context("Failed to spawn Python worker process")?;
         
         // Step 5: Create ProcessJsonlTransport and wrap it
-        let transport = ProcessJsonlTransport::new(worker_id, child, config, event_stream).await?;
-        let stderr = transport.child_stderr();
+        let (transport, stderr) = ProcessJsonlTransport::new(worker_id, child, config, event_stream)?;
         let wrapper = Self {
             inner: Arc::new(transport),
         };
