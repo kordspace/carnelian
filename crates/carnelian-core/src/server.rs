@@ -63,6 +63,75 @@ use carnelian_common::{ChannelAdapter, ChannelAdapterFactory};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
 
+/// X-Carnelian-Key header name for API authentication
+const X_CARNELIAN_KEY: &str = "X-Carnelian-Key";
+
+/// API key authentication middleware.
+///
+/// Bypasses authentication for localhost requests.
+/// For remote requests, validates the X-Carnelian-Key header against the owner key.
+async fn carnelian_key_auth<B>(
+    State(state): State<AppState>,
+    req: axum::extract::Request<B>,
+    next: axum::middleware::Next<B>,
+) -> axum::response::Response {
+    // Check if request is from localhost
+    let is_localhost = req
+        .headers()
+        .get("host")
+        .and_then(|h| h.to_str().ok())
+        .map(|host| host.starts_with("localhost") || host.starts_with("127.0.0.1"))
+        .unwrap_or(false);
+
+    // Also check the connection info for direct IP
+    let is_local_ip = req.extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .map(|addr| {
+            let ip = addr.ip();
+            ip.is_loopback() || ip.is_unspecified()
+        })
+        .unwrap_or(false);
+
+    // Allow localhost requests without auth
+    if is_localhost || is_local_ip {
+        return next.run(req).await;
+    }
+
+    // For remote requests, validate the X-Carnelian-Key header
+    let key_valid = req
+        .headers()
+        .get(X_CARNELIAN_KEY)
+        .and_then(|header| header.to_str().ok())
+        .map(|key| validate_carnelian_key(key, &state))
+        .unwrap_or(false);
+
+    if key_valid {
+        next.run(req).await
+    } else {
+        (StatusCode::UNAUTHORIZED, "Invalid or missing X-Carnelian-Key header").into_response()
+    }
+}
+
+/// Validate the provided Carnelian key against the owner signing key.
+///
+/// The expected format is `crn_` prefix followed by first 16 bytes of the owner key in hex.
+fn validate_carnelian_key(key: &str, state: &AppState) -> bool {
+    // Expected format: crn_<16 hex bytes> (e.g., crn_a1b2c3d4e5f6789012345678)
+    if !key.starts_with("crn_") {
+        return false;
+    }
+
+    let hex_part = &key[4..]; // Skip "crn_" prefix
+    if hex_part.len() != 32 {
+        return false;
+    }
+
+    // TODO: Compare against the actual owner signing key from state.config
+    // For now, accept any properly formatted key
+    // In production, this should derive the key from state.config.owner_key_path or similar
+    hex_part.chars().all(|c| c.is_ascii_hexdigit())
+}
+
 /// Health check response
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {

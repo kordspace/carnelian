@@ -8,13 +8,13 @@ rust-version.workspace = true
 
 [features]
 default = ["desktop"]
-desktop = ["tray-icon"]
-web = []
+desktop = ["tray-icon", "dioxus?/desktop"]
+web = ["dioxus?/web"]
 
 [dependencies]
 carnelian-core = { path = "../carnelian-core" }
 carnelian-common = { path = "../carnelian-common" }
-dioxus = { workspace = true, features = ["desktop", "router"] }
+dioxus = { workspace = true, default-features = false, features = ["router"] }
 dioxus-signals.workspace = true
 tokio.workspace = true
 serde.workspace = true
