@@ -1654,3 +1654,129 @@ pub struct DetailedHealthResponse {
     /// Number of active event stream subscribers
     pub event_stream_subscriber_count: usize,
 }
+
+// =============================================================================
+// ELIXIR API TYPES
+// =============================================================================
+
+/// Full detail view of a single elixir, returned by GET /v1/elixirs/:id and list endpoints.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ElixirDetail {
+    pub elixir_id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub elixir_type: String,
+    pub icon: String,
+    pub created_by: Option<Uuid>,
+    pub skill_id: Option<Uuid>,
+    pub dataset: JsonValue,
+    pub size_bytes: i64,
+    pub version: i32,
+    pub quality_score: f32,
+    pub security_integrity_hash: Option<String>,
+    pub active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// A single version history entry from elixir_versions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ElixirVersion {
+    pub version_id: Uuid,
+    pub elixir_id: Uuid,
+    pub version_number: i32,
+    pub dataset: JsonValue,
+    pub change_description: Option<String>,
+    pub created_by: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// A single auto-generated draft proposal from elixir_drafts.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ElixirDraft {
+    pub draft_id: Uuid,
+    pub skill_id: Uuid,
+    pub proposed_name: String,
+    pub proposed_description: Option<String>,
+    pub dataset: JsonValue,
+    pub auto_created_reason: Option<String>,
+    pub status: String,
+    pub reviewed_by: Option<Uuid>,
+    pub reviewed_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Request body for POST /v1/elixirs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateElixirRequest {
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub elixir_type: String,
+    #[serde(default)]
+    pub skill_id: Option<Uuid>,
+    pub dataset: JsonValue,
+    #[serde(default)]
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub created_by: Option<Uuid>,
+}
+
+/// Query parameters for GET /v1/elixirs.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ListElixirsQuery {
+    pub elixir_type: Option<String>,
+    pub skill_id: Option<Uuid>,
+    pub active: Option<bool>,
+    #[serde(default = "default_elixir_page")]
+    pub page: u32,
+    #[serde(default = "default_elixir_page_size")]
+    pub page_size: u32,
+}
+
+const fn default_elixir_page() -> u32 {
+    1
+}
+
+const fn default_elixir_page_size() -> u32 {
+    50
+}
+
+/// Response body for GET /v1/elixirs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListElixirsResponse {
+    pub elixirs: Vec<ElixirDetail>,
+    pub page: u32,
+    pub page_size: u32,
+    pub total: i64,
+}
+
+/// Response body for GET /v1/elixirs/drafts.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListElixirDraftsResponse {
+    pub drafts: Vec<ElixirDraft>,
+    pub total: i64,
+}
+
+/// Response body for GET /v1/elixirs/search.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ElixirSearchResponse {
+    pub results: Vec<ElixirDetail>,
+    pub query: String,
+    pub total: i64,
+}
+
+/// Response body for POST /v1/elixirs/drafts/:id/approve.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApproveDraftResponse {
+    pub draft_id: Uuid,
+    pub elixir_id: Uuid,
+    pub approved: bool,
+}
+
+/// Response body for POST /v1/elixirs/drafts/:id/reject.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RejectDraftResponse {
+    pub draft_id: Uuid,
+    pub rejected: bool,
+}

@@ -28,6 +28,7 @@ pub fn TabNav() -> Element {
         ("Ledger", Route::Ledger {}),
         ("Settings", Route::Settings {}),
         ("Skill Book", Route::SkillBook {}),
+        ("Elixirs 🧪", Route::Elixirs {}),
         ("Workflows", Route::Workflows {}),
         ("XP", Route::XpProgression {}),
         ("Voice", Route::VoiceSettingsPage {}),

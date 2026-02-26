@@ -1,0 +1,15 @@
+{
+  "id": "browser-automation",
+  "name": "Browser Automation",
+  "description": "Control the OpenClaw browser control server (status/start/stop/tabs/snapshot/screenshot/navigate/act). Routes to the local browser control HTTP server.",
+  "category": "automation",
+  "runtime": "shell",
+  "version": "1.0.0",
+  "required_config": [
+    {
+      "key": "OPENCLAW_BROWSER_URL",
+      "label": "OpenClaw Browser Control URL",
+      "secret": false
+    }
+  ]
+}

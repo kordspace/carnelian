@@ -1,0 +1,9 @@
+{
+  "id": "file-delete",
+  "name": "File Delete",
+  "description": "Delete a file from the local filesystem (owner approval required)",
+  "category": "code",
+  "runtime": "native",
+  "version": "1.0.0",
+  "required_config": []
+}

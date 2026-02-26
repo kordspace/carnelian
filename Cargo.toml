@@ -5,9 +5,10 @@ members = [
     "crates/carnelian-ui",
     "crates/carnelian-worker-node",
     "crates/carnelian-worker-python",
-    "crates/carnelian-worker-shell",
+    "crates/carnelian-worker-native",
     "crates/carnelian-common",
     "crates/carnelian-adapters",
+    "crates/carnelian-bin",
 ]
 exclude = [
     "skills/registry",

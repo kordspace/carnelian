@@ -1,0 +1,15 @@
+[package]
+name = "code-format"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde_json = "1.0"
+prettyplease = "0.2"
+syn = { version = "2", features = ["full"] }
+proc-macro2 = "1"
+serde_yaml = "0.9"
+
+[profile.release]
+opt-level = 3
+lto = true

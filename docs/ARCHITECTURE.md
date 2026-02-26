@@ -20,6 +20,9 @@ graph TD
     XP[XP Manager\nLevel Curve · Skill Metrics]
     Voice[Voice Gateway\nElevenLabs STT/TTS]
     NodeW[Node Worker\n600+ Skills]
+    PythonW[Python Worker\nPython 3.10+]
+    WasmW[WASM Worker\nwasmtime · WASI P1]
+    NativeW[Native Ops Worker\ngit · blake3 · docker · walkdir]
     DB[(PostgreSQL 16\npgvector)]
     Ollama[Ollama\nLocal LLM]
 
@@ -32,6 +35,9 @@ graph TD
     Core --> Voice
     Scheduler --> Worker
     Worker --> NodeW
+    Worker --> PythonW
+    Worker --> WasmW
+    Worker --> NativeW
     Agentic --> DB
     XP --> DB
     Voice -->|ElevenLabs API| Voice
@@ -54,6 +60,9 @@ graph TD
 | **Event Stream** | `carnelian-core/src/events.rs` | Rust | Bounded-buffer pub/sub, priority sampling, backpressure |
 | **Desktop UI** | `carnelian-ui/` | Dioxus | Native desktop interface with real-time event streaming |
 | **Node Worker** | `workers/node-worker/` | Node.js/TypeScript | Executes 600+ existing Thummim skills |
+| **Python Worker** | `carnelian-worker-python/` + `workers/python-worker/` | Python 3.10+, JSONL | ML/data science skills, Playwright automation |
+| **WASM Worker** | `carnelian-core/src/skills/wasm_runtime.rs` | wasmtime 27, WASI P1 | Sandboxed WASM skill execution with epoch timeout |
+| **Native Ops Worker** | `carnelian-worker-native/src/lib.rs` | Rust inline (no subprocess) | `git_status`, `file_hash`, `docker_ps`, `dir_list` — capability-gated |
 
 ---
 

@@ -33,14 +33,20 @@
 pub mod config;
 pub mod db;
 pub mod discord;
+pub mod factory;
 pub mod rate_limiter;
+pub mod slack;
 pub mod spam_detector;
 pub mod telegram;
 pub mod testing;
 pub mod types;
+pub mod whatsapp;
 
 pub use config::AdapterConfig;
 pub use types::{ChannelConfig, ChannelSession, ChannelType, TrustLevel};
+pub use whatsapp::WhatsAppAdapter;
+pub use slack::SlackAdapter;
+pub use factory::DefaultAdapterFactory;
 
 // Re-export the ChannelAdapter trait from carnelian-common so both
 // carnelian-core and carnelian-adapters share the same trait definition
@@ -65,4 +71,20 @@ pub mod events {
     pub const CHANNEL_RATE_LIMITED: &str = "ChannelRateLimited";
     /// Custom event type string for spam detection.
     pub const CHANNEL_SPAM_DETECTED: &str = "ChannelSpamDetected";
+
+    // WhatsApp platform events
+    /// Meta hub challenge verification event.
+    pub const WHATSAPP_WEBHOOK_VERIFIED: &str = "WhatsAppWebhookVerified";
+    /// Incoming WhatsApp message received.
+    pub const WHATSAPP_MESSAGE_RECEIVED: &str = "WhatsAppMessageReceived";
+    /// Outgoing WhatsApp message sent.
+    pub const WHATSAPP_MESSAGE_SENT: &str = "WhatsAppMessageSent";
+
+    // Slack platform events
+    /// Slack URL verification handshake event.
+    pub const SLACK_URL_VERIFIED: &str = "SlackUrlVerified";
+    /// Incoming Slack message received.
+    pub const SLACK_MESSAGE_RECEIVED: &str = "SlackMessageReceived";
+    /// Outgoing Slack message sent.
+    pub const SLACK_MESSAGE_SENT: &str = "SlackMessageSent";
 }

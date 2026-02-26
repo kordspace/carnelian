@@ -1,8 +1,10 @@
 //! Skills registry panel — list, filter, enable/disable, refresh,
 //! and view manifest details.
 
-use carnelian_common::types::{EventType, SkillDetail};
+use carnelian_common::types::{CreateElixirRequest, EventType, ListElixirsQuery, SkillDetail};
 use dioxus::prelude::*;
+use std::collections::{HashMap, HashSet};
+use uuid::Uuid;
 
 use crate::store::EventStreamStore;
 
@@ -19,6 +21,41 @@ pub fn Skills() -> Element {
         crate::api::list_skills()
             .await
             .map(|r| r.skills)
+            .unwrap_or_default()
+    });
+
+    // Fetch active elixirs to show badges
+    let elixirs_resource = use_resource(move || async move {
+        let _ = refresh();
+        let query = ListElixirsQuery {
+            elixir_type: None,
+            skill_id: None,
+            active: Some(true),
+            page: 1,
+            page_size: 1000,
+        };
+        crate::api::elixirs_list(query)
+            .await
+            .map(|r| {
+                r.elixirs
+                    .iter()
+                    .filter_map(|e| e.skill_id)
+                    .collect::<HashSet<Uuid>>()
+            })
+            .unwrap_or_default()
+    });
+
+    // Fetch skill metrics to get usage counts
+    let metrics_resource = use_resource(move || async move {
+        let _ = refresh();
+        crate::api::get_top_skills(1000)
+            .await
+            .map(|r| {
+                r.skills
+                    .into_iter()
+                    .map(|m| (m.skill_id, m.usage_count))
+                    .collect::<HashMap<Uuid, i64>>()
+            })
             .unwrap_or_default()
     });
 
@@ -51,12 +88,23 @@ pub fn Skills() -> Element {
     let sort_asc = use_signal(|| true);
     let mut selected_skill = use_signal(|| Option::<SkillDetail>::None);
     let mut refreshing = use_signal(|| false);
+    let mut create_elixir_for = use_signal(|| Option::<Uuid>::None);
 
     // ── Derived: filtered + sorted ──────────────────────────
     let skills_read = skills_resource.read();
     let all_skills: Vec<SkillDetail> = (*skills_read)
         .as_ref()
         .map_or_else(Vec::new, std::clone::Clone::clone);
+
+    let elixirs_read = elixirs_resource.read();
+    let skills_with_elixirs: HashSet<Uuid> = (*elixirs_read)
+        .as_ref()
+        .map_or_else(HashSet::new, std::clone::Clone::clone);
+
+    let metrics_read = metrics_resource.read();
+    let skill_metrics: HashMap<Uuid, i64> = (*metrics_read)
+        .as_ref()
+        .map_or_else(HashMap::new, std::clone::Clone::clone);
 
     let filtered = filter_skills(
         &all_skills,
@@ -150,7 +198,7 @@ pub fn Skills() -> Element {
                         }
                         tbody {
                             for skill in sorted {
-                                { render_skill_row(skill, &refresh, &selected_skill) }
+                                { render_skill_row(skill, &refresh, &selected_skill, &skills_with_elixirs, &skill_metrics, &create_elixir_for) }
                             }
                         }
                     }
@@ -162,6 +210,20 @@ pub fn Skills() -> Element {
                 SkillManifestModal {
                     skill: skill.clone(),
                     on_close: move || selected_skill.set(None),
+                }
+            }
+
+            // ── Create Elixir modal ─────────────────────────
+            if let Some(skill_id) = *create_elixir_for.read() {
+                if let Some(skill) = all_skills.iter().find(|s| s.skill_id == skill_id) {
+                    CreateElixirModal {
+                        skill: skill.clone(),
+                        on_close: move || create_elixir_for.set(None),
+                        on_created: move || {
+                            create_elixir_for.set(None);
+                            refresh += 1;
+                        },
+                    }
                 }
             }
         }
@@ -249,6 +311,9 @@ fn render_skill_row(
     skill: &SkillDetail,
     refresh: &Signal<u64>,
     selected: &Signal<Option<SkillDetail>>,
+    skills_with_elixirs: &HashSet<Uuid>,
+    skill_metrics: &HashMap<Uuid, i64>,
+    create_elixir_for: &Signal<Option<Uuid>>,
 ) -> Element {
     let enabled_badge = if skill.enabled {
         "badge-status badge-enabled"
@@ -264,11 +329,21 @@ fn render_skill_row(
     let skill_clone = skill.clone();
     let mut selected = *selected;
     let mut refresh = *refresh;
+    let mut create_modal = *create_elixir_for;
+    
+    let has_elixir = skills_with_elixirs.contains(&skill_id);
+    let usage_count = skill_metrics.get(&skill_id).copied().unwrap_or(0);
+    let can_create_elixir = usage_count >= 100 && !has_elixir;
 
     rsx! {
         tr {
             td {
-                div { "{skill.name}" }
+                div {
+                    "{skill.name}"
+                    if has_elixir {
+                        span { style: "margin-left: 8px;", "🧪" }
+                    }
+                }
                 div { class: "text-secondary", style: "font-size:12px;", "{desc}" }
             }
             td { "{skill.runtime}" }
@@ -298,6 +373,13 @@ fn render_skill_row(
                         move |_| selected.set(Some(skill_clone.clone()))
                     },
                     "Manifest"
+                }
+                if can_create_elixir {
+                    button {
+                        class: "btn-primary btn-sm",
+                        onclick: move |_| create_modal.set(Some(skill_id)),
+                        "🧪 Create Elixir"
+                    }
                 }
             }
         }
@@ -335,6 +417,148 @@ fn SkillManifestModal(skill: SkillDetail, on_close: EventHandler) -> Element {
                         class: "btn-secondary",
                         onclick: move |_| on_close.call(()),
                         "Close"
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── Create Elixir Modal ─────────────────────────────────────
+
+#[component]
+fn CreateElixirModal(skill: SkillDetail, on_close: EventHandler, on_created: EventHandler) -> Element {
+    let mut name = use_signal(|| format!("{} Elixir", skill.name));
+    let mut description = use_signal(|| skill.description.clone().unwrap_or_default());
+    let mut elixir_type = use_signal(|| "prompt".to_string());
+    let mut dataset = use_signal(|| "{}".to_string());
+    let mut creating = use_signal(|| false);
+    let mut error = use_signal(|| Option::<String>::None);
+
+    let submit = move |_| {
+        let name_val = name.read().clone();
+        let desc_val = description.read().clone();
+        let type_val = elixir_type.read().clone();
+        let dataset_val = dataset.read().clone();
+        let skill_id = skill.skill_id;
+
+        if name_val.is_empty() {
+            error.set(Some("Name is required".to_string()));
+            return;
+        }
+
+        let dataset_json = match serde_json::from_str(&dataset_val) {
+            Ok(json) => json,
+            Err(e) => {
+                error.set(Some(format!("Invalid JSON dataset: {}", e)));
+                return;
+            }
+        };
+
+        creating.set(true);
+        error.set(None);
+
+        spawn(async move {
+            let request = CreateElixirRequest {
+                name: name_val,
+                description: if desc_val.is_empty() { None } else { Some(desc_val) },
+                elixir_type: type_val,
+                skill_id: Some(skill_id),
+                dataset: dataset_json,
+                icon: Some("🧪".to_string()),
+                created_by: None,
+            };
+
+            match crate::api::elixirs_create(request).await {
+                Ok(_) => {
+                    on_created.call(());
+                }
+                Err(e) => {
+                    error.set(Some(format!("Failed to create elixir: {}", e)));
+                    creating.set(false);
+                }
+            }
+        });
+    };
+
+    rsx! {
+        div {
+            class: "modal-overlay",
+            role: "dialog",
+            aria_label: "Create Elixir",
+            onclick: move |_| on_close.call(()),
+            div {
+                class: "modal-content",
+                onclick: move |e| e.stop_propagation(),
+                div { class: "modal-header",
+                    h2 { "🧪 Create Elixir for {skill.name}" }
+                    button {
+                        class: "btn-icon",
+                        onclick: move |_| on_close.call(()),
+                        "\u{2715}"
+                    }
+                }
+                div { class: "modal-body",
+                    if let Some(err) = error.read().as_ref() {
+                        div { class: "error-message", "{err}" }
+                    }
+
+                    div { class: "form-group",
+                        label { "Name" }
+                        input {
+                            r#type: "text",
+                            value: "{name}",
+                            oninput: move |e| name.set(e.value()),
+                            disabled: *creating.read(),
+                        }
+                    }
+
+                    div { class: "form-group",
+                        label { "Description" }
+                        textarea {
+                            value: "{description}",
+                            oninput: move |e| description.set(e.value()),
+                            disabled: *creating.read(),
+                            rows: 3,
+                        }
+                    }
+
+                    div { class: "form-group",
+                        label { "Type" }
+                        select {
+                            value: "{elixir_type}",
+                            onchange: move |e| elixir_type.set(e.value()),
+                            disabled: *creating.read(),
+                            option { value: "prompt", "Prompt" }
+                            option { value: "context", "Context" }
+                            option { value: "tool", "Tool" }
+                            option { value: "workflow", "Workflow" }
+                        }
+                    }
+
+                    div { class: "form-group",
+                        label { "Dataset (JSON)" }
+                        textarea {
+                            value: "{dataset}",
+                            oninput: move |e| dataset.set(e.value()),
+                            disabled: *creating.read(),
+                            rows: 6,
+                            placeholder: r#"{{"examples": [], "metadata": {}}"#,
+                        }
+                    }
+                }
+                div { class: "modal-footer",
+                    button {
+                        class: "btn-secondary",
+                        onclick: move |_| on_close.call(()),
+                        disabled: *creating.read(),
+                        "Cancel"
+                    }
+                    button {
+                        class: "btn-primary",
+                        onclick: submit,
+                        disabled: *creating.read(),
+                        if *creating.read() { "Creating..." } else { "Create Elixir" }
                     }
                 }
             }

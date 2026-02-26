@@ -1,0 +1,9 @@
+{
+  "id": "process-list",
+  "name": "Process List",
+  "description": "List running processes on the host system",
+  "category": "automation",
+  "runtime": "native",
+  "version": "1.0.0",
+  "required_config": []
+}

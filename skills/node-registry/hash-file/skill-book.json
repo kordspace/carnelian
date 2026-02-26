@@ -1,0 +1,9 @@
+{
+  "id": "hash-file",
+  "name": "Hash File",
+  "description": "Computes a BLAKE3 hash of provided content inside a WASM sandbox",
+  "category": "code",
+  "runtime": "wasm",
+  "version": "0.1.0",
+  "required_config": []
+}

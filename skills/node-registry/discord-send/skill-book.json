@@ -1,0 +1,15 @@
+{
+  "id": "discord-send",
+  "name": "Discord Send",
+  "description": "Send a message to a Discord channel via the Discord REST API",
+  "category": "communication",
+  "runtime": "node",
+  "version": "1.0.0",
+  "required_config": [
+    {
+      "key": "DISCORD_TOKEN",
+      "label": "Discord Bot Token",
+      "secret": true
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "id": "git-commit",
+  "name": "Git Commit",
+  "description": "Stage and commit changes to a git repository (owner approval required)",
+  "category": "code",
+  "runtime": "native",
+  "version": "1.0.0",
+  "required_config": []
+}

@@ -1,0 +1,61 @@
+[package]
+name = "carnelian-bin"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "carnelian"
+path = "src/main.rs"
+
+[dependencies]
+carnelian-core = { path = "../carnelian-core" }
+carnelian-adapters = { path = "../carnelian-adapters" }
+carnelian-common = { path = "../carnelian-common" }
+
+# Async runtime
+tokio = { workspace = true }
+
+# CLI
+clap = { workspace = true }
+
+# Logging & tracing
+tracing = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# HTTP client
+reqwest = { workspace = true }
+
+# WebSocket
+tokio-tungstenite = { workspace = true }
+futures-util = { workspace = true }
+
+# Time
+duration = { workspace = true }
+
+# UUID
+uuid = { workspace = true }
+
+# Docker API client
+bollard = { workspace = true }
+
+# System information
+sysinfo = { workspace = true }
+
+# Database
+sqlx = { workspace = true }
+
+# Configuration
+dotenvy = { workspace = true }
+
+[lints]
+workspace = true

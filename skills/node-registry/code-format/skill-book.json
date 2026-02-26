@@ -1,0 +1,9 @@
+{
+  "id": "code-format",
+  "name": "Code Format",
+  "description": "Formats source code (Rust, JSON, YAML, generic) inside a WASM sandbox",
+  "category": "code",
+  "runtime": "wasm",
+  "version": "0.1.0",
+  "required_config": []
+}

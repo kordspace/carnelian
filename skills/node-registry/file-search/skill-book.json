@@ -1,0 +1,9 @@
+{
+  "id": "file-search",
+  "name": "File Search",
+  "description": "Search file contents using ripgrep patterns",
+  "category": "code",
+  "runtime": "native",
+  "version": "1.0.0",
+  "required_config": []
+}

@@ -19,6 +19,12 @@ chrono.workspace = true
 sqlx.workspace = true
 tracing.workspace = true
 async-trait.workspace = true
+reqwest.workspace = true
+
+# HMAC-SHA256 for Slack request signing verification
+hmac = "0.12"
+sha2 = "0.10"
+hex.workspace = true
 
 # Telegram bot framework
 teloxide = { version = "0.13", features = ["macros"] }

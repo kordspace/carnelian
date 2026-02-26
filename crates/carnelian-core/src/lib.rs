@@ -127,6 +127,7 @@ pub mod voice;
 pub mod worker;
 pub mod workflow;
 pub mod xp;
+pub mod elixir;
 
 use std::env;
 use tracing_subscriber::{
@@ -167,6 +168,7 @@ pub use voice::VoiceGateway;
 pub use worker::WorkerManager;
 pub use workflow::WorkflowEngine;
 pub use xp::XpManager;
+pub use elixir::ElixirManager;
 
 /// Core orchestrator version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

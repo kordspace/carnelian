@@ -1,0 +1,9 @@
+{
+  "id": "env-get",
+  "name": "Env Get",
+  "description": "Read an allowlisted environment variable from the host",
+  "category": "automation",
+  "runtime": "native",
+  "version": "1.0.0",
+  "required_config": []
+}

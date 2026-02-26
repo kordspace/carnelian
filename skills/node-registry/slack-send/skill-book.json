@@ -1,0 +1,15 @@
+{
+  "id": "slack-send",
+  "name": "Slack Send",
+  "description": "Send a message to a Slack channel or DM via the Slack Web API",
+  "category": "communication",
+  "runtime": "node",
+  "version": "1.0.0",
+  "required_config": [
+    {
+      "key": "SLACK_BOT_TOKEN",
+      "label": "Slack Bot Token",
+      "secret": true
+    }
+  ]
+}

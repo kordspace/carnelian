@@ -1,0 +1,9 @@
+{
+  "id": "file-read",
+  "name": "File Read",
+  "description": "Read file contents from the local filesystem, bounded by max_bytes",
+  "category": "code",
+  "runtime": "native",
+  "version": "1.0.0",
+  "required_config": []
+}

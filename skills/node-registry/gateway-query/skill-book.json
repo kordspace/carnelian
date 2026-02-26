@@ -1,0 +1,20 @@
+{
+  "id": "gateway-query",
+  "name": "Gateway Query",
+  "description": "Query and manage Gateway configuration (restart/config.get/config.schema/config.apply/config.patch/update.run).",
+  "category": "code",
+  "runtime": "node",
+  "version": "1.0.0",
+  "required_config": [
+    {
+      "key": "GATEWAY_URL",
+      "label": "Gateway WebSocket URL",
+      "secret": false
+    },
+    {
+      "key": "GATEWAY_TOKEN",
+      "label": "Gateway Token",
+      "secret": true
+    }
+  ]
+}

@@ -4,4 +4,5 @@
 [toolchain]
 channel = "1.85"
 components = ["rustfmt", "clippy", "rust-src"]
+targets = ["wasm32-wasip1"]
 profile = "minimal"

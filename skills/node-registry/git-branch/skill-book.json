@@ -1,0 +1,9 @@
+{
+  "id": "git-branch",
+  "name": "Git Branch",
+  "description": "List or inspect branches in a git repository",
+  "category": "code",
+  "runtime": "native",
+  "version": "1.0.0",
+  "required_config": []
+}

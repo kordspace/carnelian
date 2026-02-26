@@ -1,0 +1,20 @@
+{
+  "id": "message-send",
+  "name": "Message Send",
+  "description": "Send a message to any configured channel (Discord, Telegram, Slack, WhatsApp, iMessage, etc.) through the Carnelian gateway unified message API",
+  "category": "communication",
+  "runtime": "node",
+  "version": "1.0.0",
+  "required_config": [
+    {
+      "key": "CARNELIAN_GATEWAY_URL",
+      "label": "Carnelian Gateway URL",
+      "secret": false
+    },
+    {
+      "key": "CARNELIAN_GATEWAY_TOKEN",
+      "label": "Carnelian Gateway Token",
+      "secret": true
+    }
+  ]
+}

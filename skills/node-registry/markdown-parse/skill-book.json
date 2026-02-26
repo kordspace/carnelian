@@ -1,0 +1,9 @@
+{
+  "id": "markdown-parse",
+  "name": "Markdown Parse",
+  "description": "Converts Markdown text to HTML inside a WASM sandbox",
+  "category": "code",
+  "runtime": "wasm",
+  "version": "0.1.0",
+  "required_config": []
+}

@@ -1,0 +1,15 @@
+{
+  "id": "telegram-send",
+  "name": "Telegram Send",
+  "description": "Send a message to a Telegram chat via the Telegram Bot API",
+  "category": "communication",
+  "runtime": "node",
+  "version": "1.0.0",
+  "required_config": [
+    {
+      "key": "TELEGRAM_BOT_TOKEN",
+      "label": "Telegram Bot Token",
+      "secret": true
+    }
+  ]
+}

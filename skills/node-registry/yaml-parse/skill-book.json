@@ -1,0 +1,9 @@
+{
+  "id": "yaml-parse",
+  "name": "YAML Parse",
+  "description": "Converts between YAML and JSON inside a WASM sandbox",
+  "category": "data",
+  "runtime": "wasm",
+  "version": "0.1.0",
+  "required_config": []
+}

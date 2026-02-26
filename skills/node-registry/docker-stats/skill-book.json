@@ -1,0 +1,9 @@
+{
+  "id": "docker-stats",
+  "name": "Docker Stats",
+  "description": "Retrieve live resource usage statistics for a Docker container",
+  "category": "automation",
+  "runtime": "native",
+  "version": "1.0.0",
+  "required_config": []
+}

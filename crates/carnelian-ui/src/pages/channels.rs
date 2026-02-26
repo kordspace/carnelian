@@ -368,6 +368,11 @@ fn ChannelWizardModal(on_close: EventHandler, on_created: EventHandler) -> Eleme
     let mut pairing_token = use_signal(|| Option::<String>::None);
     let mut pairing_expires = use_signal(|| Option::<String>::None);
 
+    // Additional signals for WhatsApp and Slack credentials
+    let mut whatsapp_phone_number_id = use_signal(String::new);
+    let mut whatsapp_verify_token = use_signal(String::new);
+    let mut slack_signing_secret = use_signal(String::new);
+
     let step = *current_step.read();
 
     rsx! {
@@ -420,30 +425,135 @@ fn ChannelWizardModal(on_close: EventHandler, on_created: EventHandler) -> Eleme
                                 oninput: move |e| channel_user_id.set(e.value()),
                             }
                         }
-                        div { class: "form-group",
-                            label { class: "form-label", "Bot Token" }
-                            div { style: "display: flex; gap: 8px; align-items: center;",
-                                input {
-                                    class: "form-input",
-                                    r#type: if *show_token.read() { "text" } else { "password" },
-                                    placeholder: "Paste your bot token here",
-                                    value: "{bot_token}",
-                                    oninput: move |e| bot_token.set(e.value()),
-                                    style: "flex: 1;",
+                        // Channel-type-conditional credential fields
+                        {match channel_type.read().as_str() {
+                            "whatsapp" => rsx! {
+                                div { class: "form-group",
+                                    label { class: "form-label", "Phone Number ID" }
+                                    input {
+                                        class: "form-input",
+                                        r#type: "text",
+                                        placeholder: "Meta Phone Number ID (e.g. 123456789012345)",
+                                        value: "{whatsapp_phone_number_id}",
+                                        oninput: move |e| whatsapp_phone_number_id.set(e.value()),
+                                    }
                                 }
-                                button {
-                                    class: "btn-secondary btn-sm",
-                                    onclick: move |_| {
-                                        let v = *show_token.read();
-                                        show_token.set(!v);
-                                    },
-                                    if *show_token.read() { "Hide" } else { "Show" }
+                                div { class: "form-group",
+                                    label { class: "form-label", "Access Token" }
+                                    div { style: "display: flex; gap: 8px; align-items: center;",
+                                        input {
+                                            class: "form-input",
+                                            r#type: if *show_token.read() { "text" } else { "password" },
+                                            placeholder: "Paste your WhatsApp access token here",
+                                            value: "{bot_token}",
+                                            oninput: move |e| bot_token.set(e.value()),
+                                            style: "flex: 1;",
+                                        }
+                                        button {
+                                            class: "btn-secondary btn-sm",
+                                            onclick: move |_| {
+                                                let v = *show_token.read();
+                                                show_token.set(!v);
+                                            },
+                                            if *show_token.read() { "Hide" } else { "Show" }
+                                        }
+                                    }
+                                    p { style: "color: #8E8E93; font-size: 12px; margin-top: 4px;",
+                                        "\u{1F512} Bot tokens are encrypted at rest. Never share your tokens."
+                                    }
                                 }
-                            }
-                            p { style: "color: #8E8E93; font-size: 12px; margin-top: 4px;",
-                                "\u{1F512} Bot tokens are encrypted at rest. Never share your tokens."
-                            }
-                        }
+                                div { class: "form-group",
+                                    label { class: "form-label", "Verify Token" }
+                                    input {
+                                        class: "form-input",
+                                        r#type: "text",
+                                        placeholder: "Webhook verify token (for Meta verification)",
+                                        value: "{whatsapp_verify_token}",
+                                        oninput: move |e| whatsapp_verify_token.set(e.value()),
+                                    }
+                                    p { style: "color: #8E8E93; font-size: 12px; margin-top: 4px;",
+                                        "\u{1F512} Bot tokens are encrypted at rest. Never share your tokens."
+                                    }
+                                }
+                            },
+                            "slack" => rsx! {
+                                div { class: "form-group",
+                                    label { class: "form-label", "Bot Token" }
+                                    div { style: "display: flex; gap: 8px; align-items: center;",
+                                        input {
+                                            class: "form-input",
+                                            r#type: if *show_token.read() { "text" } else { "password" },
+                                            placeholder: "Paste your Slack bot token here (xoxb-...)",
+                                            value: "{bot_token}",
+                                            oninput: move |e| bot_token.set(e.value()),
+                                            style: "flex: 1;",
+                                        }
+                                        button {
+                                            class: "btn-secondary btn-sm",
+                                            onclick: move |_| {
+                                                let v = *show_token.read();
+                                                show_token.set(!v);
+                                            },
+                                            if *show_token.read() { "Hide" } else { "Show" }
+                                        }
+                                    }
+                                    p { style: "color: #8E8E93; font-size: 12px; margin-top: 4px;",
+                                        "\u{1F512} Bot tokens are encrypted at rest. Never share your tokens."
+                                    }
+                                }
+                                div { class: "form-group",
+                                    label { class: "form-label", "Signing Secret" }
+                                    div { style: "display: flex; gap: 8px; align-items: center;",
+                                        input {
+                                            class: "form-input",
+                                            r#type: if *show_token.read() { "text" } else { "password" },
+                                            placeholder: "Paste your Slack signing secret here",
+                                            value: "{slack_signing_secret}",
+                                            oninput: move |e| slack_signing_secret.set(e.value()),
+                                            style: "flex: 1;",
+                                        }
+                                        button {
+                                            class: "btn-secondary btn-sm",
+                                            onclick: move |_| {
+                                                let v = *show_token.read();
+                                                show_token.set(!v);
+                                            },
+                                            if *show_token.read() { "Hide" } else { "Show" }
+                                        }
+                                    }
+                                    p { style: "color: #8E8E93; font-size: 12px; margin-top: 4px;",
+                                        "\u{1F512} Bot tokens are encrypted at rest. Never share your tokens."
+                                    }
+                                }
+                            },
+                            _ => rsx! {
+                                // Default for telegram and discord
+                                div { class: "form-group",
+                                    label { class: "form-label", "Bot Token" }
+                                    div { style: "display: flex; gap: 8px; align-items: center;",
+                                        input {
+                                            class: "form-input",
+                                            r#type: if *show_token.read() { "text" } else { "password" },
+                                            placeholder: "Paste your bot token here",
+                                            value: "{bot_token}",
+                                            oninput: move |e| bot_token.set(e.value()),
+                                            style: "flex: 1;",
+                                        }
+                                        button {
+                                            class: "btn-secondary btn-sm",
+                                            onclick: move |_| {
+                                                let v = *show_token.read();
+                                                show_token.set(!v);
+                                            },
+                                            if *show_token.read() { "Hide" } else { "Show" }
+                                        }
+                                    }
+                                    p { style: "color: #8E8E93; font-size: 12px; margin-top: 4px;",
+                                        "\u{1F512} Bot tokens are encrypted at rest. Never share your tokens."
+                                    }
+                                }
+                            },
+                        }}
                     }
 
                     // Step 3: Set Trust Level
@@ -495,6 +605,8 @@ fn ChannelWizardModal(on_close: EventHandler, on_created: EventHandler) -> Eleme
                                     match channel_type.read().as_str() {
                                         "telegram" => "Send /pair {token} to your Telegram bot to complete pairing.",
                                         "discord" => "Send !pair {token} in your Discord channel to complete pairing.",
+                                        "whatsapp" => "Send /pair {token} to your WhatsApp bot to complete pairing.",
+                                        "slack" => "Run /carnelian pair {token} in your Slack workspace to complete pairing.",
                                         _ => "Use the pairing token in your channel to complete pairing.",
                                     }
                                 }
@@ -533,9 +645,39 @@ fn ChannelWizardModal(on_close: EventHandler, on_created: EventHandler) -> Eleme
                                             error_msg.set(Some("Channel User ID is required.".to_string()));
                                             return;
                                         }
-                                        if bot_token.read().trim().is_empty() {
-                                            error_msg.set(Some("Bot Token is required.".to_string()));
-                                            return;
+                                        // Channel-type-specific validation
+                                        match channel_type.read().as_str() {
+                                            "whatsapp" => {
+                                                if whatsapp_phone_number_id.read().trim().is_empty() {
+                                                    error_msg.set(Some("Phone Number ID is required for WhatsApp.".to_string()));
+                                                    return;
+                                                }
+                                                if bot_token.read().trim().is_empty() {
+                                                    error_msg.set(Some("Access Token is required for WhatsApp.".to_string()));
+                                                    return;
+                                                }
+                                                if whatsapp_verify_token.read().trim().is_empty() {
+                                                    error_msg.set(Some("Verify Token is required for WhatsApp.".to_string()));
+                                                    return;
+                                                }
+                                            }
+                                            "slack" => {
+                                                if bot_token.read().trim().is_empty() {
+                                                    error_msg.set(Some("Bot Token is required for Slack.".to_string()));
+                                                    return;
+                                                }
+                                                if slack_signing_secret.read().trim().is_empty() {
+                                                    error_msg.set(Some("Signing Secret is required for Slack.".to_string()));
+                                                    return;
+                                                }
+                                            }
+                                            _ => {
+                                                // telegram / discord
+                                                if bot_token.read().trim().is_empty() {
+                                                    error_msg.set(Some("Bot Token is required.".to_string()));
+                                                    return;
+                                                }
+                                            }
                                         }
                                     }
                                     _ => {}
@@ -557,14 +699,29 @@ fn ChannelWizardModal(on_close: EventHandler, on_created: EventHandler) -> Eleme
                                 let cuid = channel_user_id.read().clone();
                                 let token = bot_token.read().clone();
                                 let tl = trust_level.read().clone();
+                                // Read additional credentials before moving into async block
+                                let phone_number_id = whatsapp_phone_number_id.read().clone();
+                                let verify_token = whatsapp_verify_token.read().clone();
+                                let signing_secret = slack_signing_secret.read().clone();
                                 spawn(async move {
+                                    // Build metadata based on channel type
+                                    let metadata = match ct.as_str() {
+                                        "whatsapp" => json!({
+                                            "phone_number_id": phone_number_id,
+                                            "verify_token": verify_token
+                                        }),
+                                        "slack" => json!({
+                                            "signing_secret": signing_secret
+                                        }),
+                                        _ => json!({}),
+                                    };
                                     let req = CreateChannelApiRequest {
                                         channel_type: ct,
                                         channel_user_id: cuid,
                                         bot_token: Some(token),
                                         trust_level: tl,
                                         identity_id: None,
-                                        metadata: json!({}),
+                                        metadata,
                                         enabled: false,
                                     };
                                     match crate::api::create_channel(req).await {

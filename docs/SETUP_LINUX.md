@@ -131,31 +131,40 @@ cargo install prek
 git clone https://github.com/kordspace/carnelian.git
 cd carnelian
 
-# 2. Start Docker services (PostgreSQL + Ollama)
-docker compose up -d
+# 2. Build the project
+cargo build --release
 
-# 3. Verify services are healthy
-docker compose ps
+# 3. Run the interactive setup wizard
+# This detects your hardware, sets up Docker containers, creates the database,
+# generates your owner keypair, and activates starter skills.
+# GPU VRAM detection will determine whether you get 'urim' (≥10GB) or 'thummim' (≥6GB).
+carnelian init
 
-# 4. Download a model
-# For 8GB VRAM (Thummim profile):
-docker exec carnelian-ollama ollama pull deepseek-r1:7b
-# For 11GB+ VRAM (Urim profile):
-docker exec carnelian-ollama ollama pull deepseek-r1:32b
-
-# 5. Run database migrations
-export DATABASE_URL="postgresql://carnelian:carnelian@localhost:5432/carnelian"
-sqlx migrate run
-
-# 6. Build the workspace
-cargo build
-
-# 7. Run tests
-cargo test
-
-# 8. Start the orchestrator
-cargo run --bin carnelian -- start
+# 4. Start the system
+carnelian start
 ```
+
+> **Non-interactive (CI/scripted):** `carnelian init --non-interactive`
+> 
+> For automated deployments, use the `--non-interactive` flag to skip all prompts.
+> See [INSTALL.md](INSTALL.md) for detailed CI/CD setup options.
+
+### Post-Init Setup
+
+After running `carnelian init`, your system is ready. The wizard automatically:
+- Starts PostgreSQL and Ollama Docker containers
+- Runs database migrations
+- Pulls appropriate models for your GPU profile (`deepseek-r1:7b` for Thummim, `deepseek-r1:32b` for Urim)
+- Generates and secures your owner keypair
+- Activates starter skills
+
+Access the dashboard at: http://localhost:18789
+
+### Linux-Specific Notes
+
+- **NVIDIA GPU users**: The wizard will detect your VRAM and suggest the optimal profile
+- **CPU-only users**: You'll get the "custom" profile with a 7B model
+- ** systemd**: For production deployments, consider setting up systemd services for auto-start
 
 ---
 

@@ -13,19 +13,22 @@ use axum::{
 use base64::Engine as _;
 use carnelian_common::Result;
 use carnelian_common::types::{
-    AgentXpResponse, AwardXpRequest, AwardXpResponse, CancelTaskRequest, CancelTaskResponse,
-    ConfigureVoiceRequest, ConfigureVoiceResponse, CreateMemoryRequest, CreateMemoryResponse,
-    CreateTaskRequest, CreateTaskResponse, CreateWorkflowRequest, DetailedHealthResponse,
-    EventEnvelope, EventLevel, EventType, ExecuteWorkflowRequest, ExportMemoryRequest,
-    ExportMemoryResponse, GetMemoryResponse, HeartbeatRecord, HeartbeatStatusResponse,
-    IdentityResponse, ImportMemoryRequest, ImportMemoryResponse, LeaderboardEntry,
+    AgentXpResponse, ApproveDraftResponse, AwardXpRequest, AwardXpResponse, CancelTaskRequest,
+    CancelTaskResponse, ConfigureVoiceRequest, ConfigureVoiceResponse, CreateElixirRequest,
+    CreateMemoryRequest, CreateMemoryResponse, CreateTaskRequest, CreateTaskResponse,
+    CreateWorkflowRequest, DetailedHealthResponse, ElixirDetail, ElixirDraft,
+    ElixirSearchResponse, EventEnvelope, EventLevel, EventType, ExecuteWorkflowRequest,
+    ExportMemoryRequest, ExportMemoryResponse, GetMemoryResponse, HeartbeatRecord,
+    HeartbeatStatusResponse, IdentityResponse, ImportMemoryRequest, ImportMemoryResponse,
+    LeaderboardEntry, ListElixirDraftsResponse, ListElixirsQuery, ListElixirsResponse,
     ListMemoriesResponse, ListProvidersResponse, ListRunsResponse, ListSkillsResponse,
     ListTasksResponse, ListVoicesResponse, ListWorkflowsParams, ListWorkflowsResponse,
     MemoryDetail, MemoryImportResultApi, OllamaStatusResponse, PaginatedRunLogsResponse,
-    ProviderDetail, RunDetail, RunLogEntry, RunLogsQuery, SkillDetail, SkillMetricsDetail,
-    SkillToggleResponse, StatusResponse, TaskDetail, TestVoiceRequest, TestVoiceResponse,
-    TopSkillsQuery, TopSkillsResponse, TranscribeVoiceRequest, TranscribeVoiceResponse,
-    UpdateWorkflowRequest, XpEventDetail, XpHistoryQuery, XpHistoryResponse, XpLeaderboardResponse,
+    ProviderDetail, RejectDraftResponse, RunDetail, RunLogEntry, RunLogsQuery, SkillDetail,
+    SkillMetricsDetail, SkillToggleResponse, StatusResponse, TaskDetail, TestVoiceRequest,
+    TestVoiceResponse, TopSkillsQuery, TopSkillsResponse, TranscribeVoiceRequest,
+    TranscribeVoiceResponse, UpdateWorkflowRequest, XpEventDetail, XpHistoryQuery,
+    XpHistoryResponse, XpLeaderboardResponse,
 };
 use futures_util::{SinkExt, StreamExt};
 use http::{HeaderMap, Method, header};
@@ -194,6 +197,8 @@ pub struct AppState {
     pub voice_gateway: Arc<crate::voice::VoiceGateway>,
     /// Skill Book for curated skill catalog and activation
     pub skill_book: Arc<crate::skill_book::SkillBook>,
+    /// Elixir manager for knowledge artifact lifecycle
+    pub elixir_manager: Arc<crate::elixir::ElixirManager>,
     /// Active channel adapters keyed by session_id
     pub channel_adapters: Arc<RwLock<HashMap<Uuid, Arc<dyn ChannelAdapter>>>>,
     /// Factory for building channel adapters from configuration.
@@ -225,6 +230,7 @@ impl AppState {
         xp_manager: Arc<crate::xp::XpManager>,
         voice_gateway: Arc<crate::voice::VoiceGateway>,
         skill_book: Arc<crate::skill_book::SkillBook>,
+        elixir_manager: Arc<crate::elixir::ElixirManager>,
     ) -> Self {
         Self {
             config,
@@ -243,6 +249,7 @@ impl AppState {
             xp_manager,
             voice_gateway,
             skill_book,
+            elixir_manager,
             channel_adapters: Arc::new(RwLock::new(HashMap::new())),
             channel_adapter_factory: None,
             correlation_counter: Arc::new(AtomicU64::new(0)),
@@ -291,6 +298,10 @@ pub struct Server {
     scheduler: Arc<tokio::sync::Mutex<Scheduler>>,
     /// Worker process manager
     worker_manager: Arc<tokio::sync::Mutex<WorkerManager>>,
+    /// Channel adapter factory for building adapters
+    adapter_factory: Option<Arc<dyn ChannelAdapterFactory>>,
+    /// Session manager for conversation persistence (injected from binary)
+    session_manager: Option<Arc<SessionManager>>,
 }
 
 impl Server {
@@ -311,7 +322,21 @@ impl Server {
             ledger,
             scheduler,
             worker_manager,
+            adapter_factory: None,
+            session_manager: None,
         }
+    }
+
+    /// Set the channel adapter factory for building adapters.
+    pub fn with_adapter_factory(mut self, factory: Arc<dyn ChannelAdapterFactory>) -> Self {
+        self.adapter_factory = Some(factory);
+        self
+    }
+
+    /// Set the session manager for conversation persistence.
+    pub fn with_session_manager(mut self, session_manager: Arc<SessionManager>) -> Self {
+        self.session_manager = Some(session_manager);
+        self
     }
 
     /// Get the HTTP port from configuration.
@@ -370,7 +395,7 @@ impl Server {
         }
 
         // Create session manager with safe mode guard wired in
-        let session_manager = {
+        let session_manager = self.session_manager.clone().unwrap_or_else(|| {
             let pool = self
                 .config
                 .pool()
@@ -379,7 +404,7 @@ impl Server {
                 SessionManager::with_defaults(pool.clone())
                     .with_safe_mode_guard(safe_mode_guard.clone()),
             )
-        };
+        });
 
         // Create memory manager for agent knowledge persistence
         let memory_manager = {
@@ -438,13 +463,20 @@ impl Server {
 
         // Create Skill Book for curated skill catalog
         let skill_book = {
-            let skill_book_path = std::path::PathBuf::from("skills/skill-book");
+            let skill_book_path = std::path::PathBuf::from("skills/node-registry");
             let registry_path = self.config.skills_registry_path.clone();
             Arc::new(crate::skill_book::SkillBook::new(
                 skill_book_path,
                 registry_path,
                 self.config.clone(),
             ))
+        };
+
+        // Create Elixir manager for knowledge artifact lifecycle
+        let elixir_manager = {
+            let pool = self.config.pool()
+                .expect("Database pool required for ElixirManager");
+            Arc::new(crate::elixir::ElixirManager::new(pool.clone(), xp_manager.clone()))
         };
 
         let state = AppState::new(
@@ -463,7 +495,18 @@ impl Server {
             xp_manager,
             voice_gateway,
             skill_book,
+            elixir_manager,
         );
+
+        // Wire in the adapter factory if configured
+        let state = if let Some(ref factory) = self.adapter_factory {
+            AppState {
+                channel_adapter_factory: Some(factory.clone()),
+                ..state
+            }
+        } else {
+            state
+        };
 
         // Share the metrics collector and workflow engine with the scheduler
         {
@@ -617,6 +660,12 @@ fn build_router(state: AppState) -> Router {
         .route("/v1/health", get(health_handler))
         .route("/v1/health/detailed", get(detailed_health_handler));
 
+    // Webhook routes - exempt from auth (verified via signature/HMAC)
+    let webhook_routes = Router::new()
+        .route("/v1/webhooks/whatsapp", get(whatsapp_verify_handler))
+        .route("/v1/webhooks/whatsapp", post(whatsapp_inbound_handler))
+        .route("/v1/webhooks/slack", post(slack_event_handler));
+
     // All other routes - protected by auth middleware
     let protected_routes = Router::new()
         .route("/v1/status", get(status_handler))
@@ -741,13 +790,20 @@ fn build_router(state: AppState) -> Router {
             post(post_setup_complete_handler),
         )
         // Skill Book endpoints
-        .route("/v1/skill-book", get(list_skill_book_handler))
-        .route("/v1/skill-book/:id", get(get_skill_book_entry_handler))
-        .route("/v1/skill-book/:id/activate", post(activate_skill_handler))
+        .route("/v1/node-registry", get(list_skill_book_handler))
+        .route("/v1/node-registry/:id", get(get_skill_book_entry_handler))
+        .route("/v1/node-registry/:id/activate", post(activate_skill_handler))
         .route(
-            "/v1/skill-book/:id/deactivate",
+            "/v1/node-registry/:id/deactivate",
             delete(deactivate_skill_handler),
         )
+        // Elixir endpoints
+        .route("/v1/elixirs/search", get(search_elixirs_handler))
+        .route("/v1/elixirs/drafts", get(list_elixir_drafts_handler))
+        .route("/v1/elixirs/drafts/:id/approve", post(approve_elixir_draft_handler))
+        .route("/v1/elixirs/drafts/:id/reject", post(reject_elixir_draft_handler))
+        .route("/v1/elixirs", get(list_elixirs_handler).post(create_elixir_handler))
+        .route("/v1/elixirs/:id", get(get_elixir_handler))
         // API Key endpoint (localhost-only via middleware)
         .route("/v1/config/api-key", get(get_api_key_handler))
         // Revocation sync endpoint
@@ -761,8 +817,9 @@ fn build_router(state: AppState) -> Router {
             carnelian_key_auth,
         ));
 
-    // Merge health routes (unprotected) with protected routes
+    // Merge health routes (unprotected) with webhook routes and protected routes
     health_routes
+        .merge(webhook_routes)
         .merge(protected_routes)
         // Web UI static files (served at /ui)
         .nest_service("/ui", ServeDir::new("target/dx/carnelian-ui/release/web/public"))
@@ -3890,6 +3947,118 @@ async fn handle_websocket(socket: axum::extract::ws::WebSocket, state: AppState)
     send_task.abort();
 }
 
+// =============================================================================
+// WEBHOOK HANDLERS
+// =============================================================================
+
+/// WhatsApp webhook verification handler (GET /v1/webhooks/whatsapp).
+///
+/// Handles Meta hub challenge verification for webhook subscription.
+async fn whatsapp_verify_handler(
+    State(state): State<AppState>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    // Find the WhatsApp adapter
+    let adapters = state.channel_adapters.read().await;
+    let adapter = match adapters.values().find(|a| a.name() == "whatsapp") {
+        Some(a) => a.clone(),
+        None => {
+            return (StatusCode::NOT_FOUND, "WhatsApp adapter not found").into_response();
+        }
+    };
+    drop(adapters);
+
+    // Call the adapter's webhook verification method
+    match adapter.handle_webhook_verify(params).await {
+        Ok(challenge) => {
+            // Meta requires plain-text response, not JSON
+            (
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, "text/plain")],
+                challenge,
+            )
+                .into_response()
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "WhatsApp webhook verification failed");
+            (StatusCode::FORBIDDEN, format!("Verification failed: {e}")).into_response()
+        }
+    }
+}
+
+/// WhatsApp inbound webhook handler (POST /v1/webhooks/whatsapp).
+///
+/// Processes incoming messages from WhatsApp Cloud API.
+async fn whatsapp_inbound_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: bytes::Bytes,
+) -> impl IntoResponse {
+    // Find the WhatsApp adapter
+    let adapters = state.channel_adapters.read().await;
+    let adapter = match adapters.values().find(|a| a.name() == "whatsapp") {
+        Some(a) => a.clone(),
+        None => {
+            return (StatusCode::NOT_FOUND, Json(json!({"error": "WhatsApp adapter not found"}))).into_response();
+        }
+    };
+    drop(adapters);
+
+    // Convert headers to HashMap
+    let header_map: HashMap<String, String> = headers
+        .iter()
+        .filter_map(|(k, v)| {
+            Some((k.to_string().to_lowercase(), v.to_str().ok()?.to_string()))
+        })
+        .collect();
+
+    // Process the webhook
+    match adapter.handle_webhook_post(header_map, body).await {
+        Ok(_) => (StatusCode::OK, Json(json!({}))).into_response(),
+        Err(e) => {
+            tracing::warn!(error = %e, "WhatsApp webhook processing failed");
+            // Still return 200 as Meta retries on non-200
+            (StatusCode::OK, Json(json!({}))).into_response()
+        }
+    }
+}
+
+/// Slack Events API webhook handler (POST /v1/webhooks/slack).
+///
+/// Handles both URL verification and message events from Slack.
+async fn slack_event_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: bytes::Bytes,
+) -> impl IntoResponse {
+    // Find the Slack adapter
+    let adapters = state.channel_adapters.read().await;
+    let adapter = match adapters.values().find(|a| a.name() == "slack") {
+        Some(a) => a.clone(),
+        None => {
+            return (StatusCode::NOT_FOUND, Json(json!({"error": "Slack adapter not found"}))).into_response();
+        }
+    };
+    drop(adapters);
+
+    // Convert headers to HashMap (lowercase keys for Slack headers)
+    let header_map: HashMap<String, String> = headers
+        .iter()
+        .filter_map(|(k, v)| {
+            Some((k.to_string().to_lowercase(), v.to_str().ok()?.to_string()))
+        })
+        .collect();
+
+    // Process the webhook and return the response (may contain challenge)
+    match adapter.handle_webhook_post(header_map, body).await {
+        Ok(response_body) => (StatusCode::OK, Json(response_body)).into_response(),
+        Err(e) => {
+            tracing::warn!(error = %e, "Slack webhook processing failed");
+            (StatusCode::OK, Json(json!({}))).into_response()
+        }
+    }
+}
+
 /// Create a shutdown signal that listens for SIGINT and SIGTERM.
 async fn shutdown_signal() {
     let ctrl_c = async {
@@ -5789,6 +5958,7 @@ mod tests {
             std::path::PathBuf::from("skill_registry"),
             config.clone(),
         ));
+        let elixir_manager = Arc::new(crate::elixir::ElixirManager::new(pool.clone(), xp_manager.clone()));
         AppState::new(
             config,
             event_stream,
@@ -5805,6 +5975,7 @@ mod tests {
             xp_manager,
             voice_gateway,
             skill_book,
+            elixir_manager,
         )
     }
 
@@ -6490,7 +6661,7 @@ async fn post_setup_complete_handler(State(state): State<AppState>) -> impl Into
 // SKILL BOOK HANDLERS
 // =============================================================================
 
-/// List all skills in the Skill Book catalog via `GET /v1/skill-book`.
+/// List all skills in the Skill Book catalog via `GET /v1/node-registry`.
 async fn list_skill_book_handler(State(state): State<AppState>) -> impl IntoResponse {
     match state.skill_book.load_catalog() {
         Ok(catalog) => (
@@ -6509,7 +6680,7 @@ async fn list_skill_book_handler(State(state): State<AppState>) -> impl IntoResp
     }
 }
 
-/// Get a single Skill Book entry via `GET /v1/skill-book/:id`.
+/// Get a single Skill Book entry via `GET /v1/node-registry/:id`.
 async fn get_skill_book_entry_handler(
     State(state): State<AppState>,
     Path(skill_id): Path<String>,
@@ -6528,7 +6699,7 @@ async fn get_skill_book_entry_handler(
     }
 }
 
-/// Activate a skill from the Skill Book via `POST /v1/skill-book/:id/activate`.
+/// Activate a skill from the Skill Book via `POST /v1/node-registry/:id/activate`.
 async fn activate_skill_handler(
     State(state): State<AppState>,
     Path(skill_id): Path<String>,
@@ -6548,7 +6719,7 @@ async fn activate_skill_handler(
     }
 }
 
-/// Deactivate a skill via `DELETE /v1/skill-book/:id/deactivate`.
+/// Deactivate a skill via `DELETE /v1/node-registry/:id/deactivate`.
 async fn deactivate_skill_handler(
     State(state): State<AppState>,
     Path(skill_id): Path<String>,
@@ -6662,5 +6833,236 @@ pub async fn carnelian_key_auth(
             )
                 .into_response()
         }
+    }
+}
+
+// =============================================================================
+// ELIXIR HANDLERS
+// =============================================================================
+
+/// Query parameters for elixir search
+#[derive(Debug, Deserialize)]
+struct SearchElixirsQuery {
+    q: String,
+    limit: Option<u32>,
+}
+
+/// Request body for approving a draft
+#[derive(Debug, Deserialize)]
+struct ApproveDraftBody {
+    reviewed_by: Option<Uuid>,
+}
+
+/// Request body for rejecting a draft
+#[derive(Debug, Deserialize)]
+struct RejectDraftBody {
+    reviewed_by: Option<Uuid>,
+}
+
+/// GET /v1/elixirs - List elixirs with optional filtering and pagination
+async fn list_elixirs_handler(
+    State(state): State<AppState>,
+    Query(params): Query<ListElixirsQuery>,
+) -> impl IntoResponse {
+    match state.elixir_manager.list_elixirs(params).await {
+        Ok(response) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(response).unwrap_or_default()),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+/// POST /v1/elixirs - Create a new elixir
+async fn create_elixir_handler(
+    State(state): State<AppState>,
+    Json(body): Json<CreateElixirRequest>,
+) -> impl IntoResponse {
+    let created_by = body.created_by;
+
+    match state.elixir_manager.create_elixir(body, created_by).await {
+        Ok(elixir) => {
+            (
+                StatusCode::CREATED,
+                Json(serde_json::to_value(elixir).unwrap_or_default()),
+            )
+                .into_response()
+        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+/// GET /v1/elixirs/:id - Get a single elixir by ID
+async fn get_elixir_handler(
+    State(state): State<AppState>,
+    Path(elixir_id): Path<Uuid>,
+) -> impl IntoResponse {
+    match state.elixir_manager.get_elixir(elixir_id).await {
+        Ok(Some(elixir)) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(elixir).unwrap_or_default()),
+        )
+            .into_response(),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Elixir not found"})),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+/// GET /v1/elixirs/search - Search elixirs using semantic search
+async fn search_elixirs_handler(
+    State(state): State<AppState>,
+    Query(params): Query<SearchElixirsQuery>,
+) -> impl IntoResponse {
+    let limit = params.limit.unwrap_or(10);
+
+    match state.elixir_manager.search_elixirs(params.q, limit).await {
+        Ok(response) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(response).unwrap_or_default()),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+/// GET /v1/elixirs/drafts - List all elixir drafts
+async fn list_elixir_drafts_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": e.to_string()})),
+            )
+                .into_response();
+        }
+    };
+
+    let rows = match sqlx::query(
+        r#"
+        SELECT draft_id, skill_id, proposed_name, proposed_description,
+               dataset, auto_created_reason, status, reviewed_by, reviewed_at, created_at
+        FROM elixir_drafts
+        ORDER BY created_at DESC
+        "#,
+    )
+    .fetch_all(pool)
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": e.to_string()})),
+            )
+                .into_response();
+        }
+    };
+
+    let drafts: Vec<ElixirDraft> = rows
+        .iter()
+        .map(|r| ElixirDraft {
+            draft_id: r.get("draft_id"),
+            skill_id: r.get("skill_id"),
+            proposed_name: r.get("proposed_name"),
+            proposed_description: r.get("proposed_description"),
+            dataset: r.get("dataset"),
+            auto_created_reason: r.get("auto_created_reason"),
+            status: r.get("status"),
+            reviewed_by: r.get("reviewed_by"),
+            reviewed_at: r.get("reviewed_at"),
+            created_at: r.get("created_at"),
+        })
+        .collect();
+
+    let total = drafts.len() as i64;
+
+    let response = ListElixirDraftsResponse { drafts, total };
+
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(response).unwrap_or_default()),
+    )
+        .into_response()
+}
+
+/// POST /v1/elixirs/drafts/:id/approve - Approve a draft and promote to elixir
+async fn approve_elixir_draft_handler(
+    State(state): State<AppState>,
+    Path(draft_id): Path<Uuid>,
+    Json(body): Json<ApproveDraftBody>,
+) -> impl IntoResponse {
+    match state
+        .elixir_manager
+        .approve_draft(draft_id, body.reviewed_by)
+        .await
+    {
+        Ok(response) => {
+            (
+                StatusCode::OK,
+                Json(serde_json::to_value(response).unwrap_or_default()),
+            )
+                .into_response()
+        }
+        Err(e) if e.to_string().contains("not found") || e.to_string().contains("reviewed") => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+/// POST /v1/elixirs/drafts/:id/reject - Reject a draft
+async fn reject_elixir_draft_handler(
+    State(state): State<AppState>,
+    Path(draft_id): Path<Uuid>,
+    Json(body): Json<RejectDraftBody>,
+) -> impl IntoResponse {
+    match state
+        .elixir_manager
+        .reject_draft(draft_id, body.reviewed_by)
+        .await
+    {
+        Ok(response) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(response).unwrap_or_default()),
+        )
+            .into_response(),
+        Err(e) if e.to_string().contains("not found") || e.to_string().contains("reviewed") => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
     }
 }

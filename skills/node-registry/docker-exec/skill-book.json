@@ -1,0 +1,9 @@
+{
+  "id": "docker-exec",
+  "name": "Docker Exec",
+  "description": "Execute a command inside a running Docker container (owner approval required)",
+  "category": "automation",
+  "runtime": "native",
+  "version": "1.0.0",
+  "required_config": []
+}

@@ -1,0 +1,9 @@
+{
+  "id": "git-log",
+  "name": "Git Log",
+  "description": "Show the commit history of a git repository",
+  "category": "code",
+  "runtime": "native",
+  "version": "1.0.0",
+  "required_config": []
+}

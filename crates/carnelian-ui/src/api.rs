@@ -990,7 +990,7 @@ use carnelian_common::types::{
 /// List all skills in the Skill Book catalog.
 pub async fn list_skill_book() -> Result<SkillBookCatalog, String> {
     client()
-        .get(format!("{API_BASE_URL}/v1/skill-book"))
+        .get(format!("{API_BASE_URL}/v1/node-registry"))
         .send()
         .await
         .map_err(|e| format!("Request failed: {e}"))?
@@ -1002,7 +1002,7 @@ pub async fn list_skill_book() -> Result<SkillBookCatalog, String> {
 /// Get a single Skill Book entry.
 pub async fn get_skill_book_entry(skill_id: &str) -> Result<SkillBookEntry, String> {
     client()
-        .get(format!("{API_BASE_URL}/v1/skill-book/{skill_id}"))
+        .get(format!("{API_BASE_URL}/v1/node-registry/{skill_id}"))
         .send()
         .await
         .map_err(|e| format!("Request failed: {e}"))?
@@ -1018,7 +1018,7 @@ pub async fn activate_skill(
 ) -> Result<ActivateSkillResponse, String> {
     let request = ActivateSkillRequest { config };
     client()
-        .post(format!("{API_BASE_URL}/v1/skill-book/{skill_id}/activate"))
+        .post(format!("{API_BASE_URL}/v1/node-registry/{skill_id}/activate"))
         .json(&request)
         .send()
         .await
@@ -1032,12 +1032,118 @@ pub async fn activate_skill(
 pub async fn deactivate_skill(skill_id: &str) -> Result<DeactivateSkillResponse, String> {
     client()
         .delete(format!(
-            "{API_BASE_URL}/v1/skill-book/{skill_id}/deactivate"
+            "{API_BASE_URL}/v1/node-registry/{skill_id}/deactivate"
         ))
         .send()
         .await
         .map_err(|e| format!("Request failed: {e}"))?
         .json::<DeactivateSkillResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+// ── Elixir Operations ─────────────────────────────────
+
+use carnelian_common::types::{
+    ApproveDraftResponse, CreateElixirRequest, ElixirDetail, ElixirSearchResponse,
+    ListElixirDraftsResponse, ListElixirsQuery, ListElixirsResponse, RejectDraftResponse,
+};
+
+/// List elixirs with optional filtering and pagination.
+pub async fn elixirs_list(filters: ListElixirsQuery) -> Result<ListElixirsResponse, String> {
+    let mut url = format!(
+        "{API_BASE_URL}/v1/elixirs?page={}&page_size={}",
+        filters.page, filters.page_size
+    );
+    if let Some(elixir_type) = filters.elixir_type {
+        url.push_str(&format!("&elixir_type={}", elixir_type));
+    }
+    if let Some(skill_id) = filters.skill_id {
+        url.push_str(&format!("&skill_id={}", skill_id));
+    }
+    if let Some(active) = filters.active {
+        url.push_str(&format!("&active={}", active));
+    }
+    client()
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<ListElixirsResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Create a new elixir.
+pub async fn elixirs_create(request: CreateElixirRequest) -> Result<ElixirDetail, String> {
+    client()
+        .post(format!("{API_BASE_URL}/v1/elixirs"))
+        .json(&request)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<ElixirDetail>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Search elixirs using semantic search.
+pub async fn elixirs_search(query: String, limit: u32) -> Result<ElixirSearchResponse, String> {
+    let url = reqwest::Url::parse_with_params(
+        &format!("{API_BASE_URL}/v1/elixirs/search"),
+        &[("q", query.as_str()), ("limit", &limit.to_string())],
+    )
+    .map_err(|e| format!("URL parse failed: {e}"))?;
+    client()
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<ElixirSearchResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// List all elixir drafts.
+pub async fn elixirs_drafts_list() -> Result<ListElixirDraftsResponse, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/elixirs/drafts"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<ListElixirDraftsResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Approve an elixir draft and promote it to an elixir.
+pub async fn elixirs_draft_approve(draft_id: Uuid) -> Result<ApproveDraftResponse, String> {
+    client()
+        .post(format!(
+            "{API_BASE_URL}/v1/elixirs/drafts/{}/approve",
+            draft_id
+        ))
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<ApproveDraftResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Reject an elixir draft.
+pub async fn elixirs_draft_reject(draft_id: Uuid) -> Result<RejectDraftResponse, String> {
+    client()
+        .post(format!(
+            "{API_BASE_URL}/v1/elixirs/drafts/{}/reject",
+            draft_id
+        ))
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<RejectDraftResponse>()
         .await
         .map_err(|e| format!("Parse failed: {e}"))
 }

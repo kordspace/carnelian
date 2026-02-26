@@ -1,5 +1,6 @@
 # Rust
 /target/
+skills/registry/*/target/
 **/*.rs.bk
 *.pdb
 # Cargo.lock is committed for reproducible builds

@@ -8,6 +8,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use bytes::Bytes;
 use uuid::Uuid;
 
 /// Trait implemented by all channel adapters (Telegram, Discord, etc.).
@@ -30,6 +31,30 @@ pub trait ChannelAdapter: Send + Sync {
 
     /// Returns `true` if the adapter is currently running.
     fn is_running(&self) -> bool;
+
+    /// Handle webhook verification request (GET /v1/webhooks/{channel}).
+    ///
+    /// Default implementation returns an error indicating webhook not supported.
+    /// Used for hub-verification flows like Meta's WhatsApp webhook verification.
+    async fn handle_webhook_verify(
+        &self,
+        _params: std::collections::HashMap<String, String>,
+    ) -> anyhow::Result<String> {
+        anyhow::bail!("webhook verification not supported")
+    }
+
+    /// Handle webhook POST request with inbound payload.
+    ///
+    /// Default implementation returns an error indicating webhook not supported.
+    /// Returns a JSON body to echo back (e.g., `{"challenge": "..."}` for Slack
+    /// URL verification, or `{}` for a plain 200 OK).
+    async fn handle_webhook_post(
+        &self,
+        _headers: std::collections::HashMap<String, String>,
+        _body: Bytes,
+    ) -> anyhow::Result<serde_json::Value> {
+        anyhow::bail!("webhook POST not supported")
+    }
 }
 
 /// Factory trait for building channel adapters from configuration.

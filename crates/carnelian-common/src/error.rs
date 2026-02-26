@@ -90,6 +90,9 @@ pub enum Error {
 
     #[error("Bot API error: {0}")]
     BotApiError(String),
+
+    #[error("{1}")]
+    ExitCode(i32, String),
 }
 
 impl<T> From<tokio::sync::broadcast::error::SendError<T>> for Error {

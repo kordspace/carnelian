@@ -183,3 +183,24 @@ workspace_scan_paths = ["."]
 # delete, drop, migrate, deploy, production, credential, secret, key rotation,
 # sudo, admin, root, destroy, truncate, revert, rollback, security, permission,
 # privilege
+
+# =============================================================================
+# Channel Adapter Configuration
+# =============================================================================
+
+# [adapters.whatsapp]
+# WhatsApp Cloud API credentials (Meta for Developers).
+# Can be overridden with WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID,
+# and WHATSAPP_VERIFY_TOKEN environment variables.
+#
+# access_token     = ""   # Meta Cloud API permanent access token
+# phone_number_id  = ""   # Phone Number ID from Meta Business dashboard
+# verify_token     = ""   # Arbitrary secret used for webhook verification
+
+# [adapters.slack]
+# Slack Bot credentials (api.slack.com/apps).
+# Can be overridden with SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET
+# environment variables.
+#
+# bot_token      = ""   # xoxb-... OAuth Bot Token
+# signing_secret = ""   # Used to verify Slack request signatures (HMAC-SHA256)

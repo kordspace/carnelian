@@ -1,7 +1,7 @@
 //! Skill Book Library — curated skill catalog with activation management.
 //!
 //! Provides:
-//! - Loading and parsing skill-book.json manifests
+//! - Loading and parsing node-registry.json manifests
 //! - Checking activation status against skills registry
 //! - Activating skills (copy to registry + store config)
 //! - Deactivating skills
@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
 
-/// Skill Book manifest structure (skill-book.json).
+/// Skill Book manifest structure (node-registry.json).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillBookManifest {
     pub id: String,
@@ -103,7 +103,7 @@ impl SkillBook {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_dir() {
-                    let manifest_path = path.join("skill-book.json");
+                    let manifest_path = path.join("node-registry.json");
                     if let Ok(manifest) = self.load_manifest(&manifest_path) {
                         let activated = self.check_activated(&manifest.id);
 
@@ -241,7 +241,7 @@ impl SkillBook {
             "description": manifest.description,
             "runtime": manifest.runtime,
             "version": manifest.version,
-            "capabilities": ["*"], // Full capabilities for skill-book skills
+            "capabilities": ["*"], // Full capabilities for node-registry skills
         });
 
         std::fs::write(&skill_json_path, skill_content.to_string()).map_err(|e| {

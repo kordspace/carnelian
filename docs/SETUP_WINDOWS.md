@@ -129,29 +129,45 @@ All commands below run inside WSL2.
 git clone https://github.com/kordspace/carnelian.git
 cd carnelian
 
-# 2. Start Docker services (PostgreSQL + Ollama)
-docker-compose up -d
+# 2. Build the project
+cargo build --release
 
-# 3. Verify services are healthy
-docker-compose ps
+# 3. Run the interactive setup wizard
+# This detects your hardware, sets up Docker containers, creates the database,
+# generates your owner keypair, and activates starter skills.
+carnelian init
 
-# 4. Download a model
-docker exec carnelian-ollama ollama pull deepseek-r1:7b
-
-# 5. Run database migrations
-cargo install sqlx-cli --no-default-features --features postgres
-export DATABASE_URL="postgresql://carnelian:carnelian@localhost:5432/carnelian"
-sqlx migrate run
-
-# 6. Build the workspace
-cargo build
-
-# 7. Run tests
-cargo test
-
-# 8. Start the orchestrator
-cargo run --bin carnelian -- start
+# 4. Start the system
+carnelian start
 ```
+
+> **Non-interactive (CI/scripted):** `carnelian init --non-interactive`
+> 
+> For automated deployments, use the `--non-interactive` flag to skip all prompts.
+> See [INSTALL.md](INSTALL.md) for detailed CI/CD setup options.
+
+### Post-Init Setup (WSL2 Specific)
+
+After running `carnelian init`, your system is ready. The wizard automatically:
+- Starts PostgreSQL and Ollama Docker containers
+- Runs database migrations
+- Pulls appropriate models for your GPU profile
+- Generates and secures your owner keypair
+
+Access the dashboard at: http://localhost:18789
+
+### Windows Host Access
+
+To access Carnelian from Windows (outside WSL2):
+
+```powershell
+# In PowerShell (Windows side)
+# Find WSL2 IP
+wsl hostname -I
+# Then use that IP:port in your browser
+```
+
+Or configure port forwarding in Windows Defender Firewall for port 18789.
 
 ---
 

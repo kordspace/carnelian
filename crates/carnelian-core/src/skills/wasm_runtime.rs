@@ -159,7 +159,7 @@ impl WasmSkillRuntime {
         // Step 1: Look up the skill
         let skill = {
             let skills = self.skills.lock().unwrap();
-            skills.get(skill_id).map(|s| s.clone_skill()).ok_or_else(|| {
+            skills.get(skill_id).cloned().ok_or_else(|| {
                 Error::Worker(format!("WASM skill '{}' not found", skill_id))
             })?
         };
@@ -172,7 +172,7 @@ impl WasmSkillRuntime {
 
         // Step 3: Create I/O pipes
         let stdout_pipe = MemoryOutputPipe::new(max_output_bytes);
-        let input_bytes = serde_json::to_vec(&input.data)
+        let input_bytes = serde_json::to_vec(&input.params)
             .map_err(|e| Error::Worker(format!("Failed to serialize input: {}", e)))?;
         let stdin_pipe = MemoryInputPipe::new(input_bytes);
 

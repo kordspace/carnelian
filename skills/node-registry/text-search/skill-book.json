@@ -1,0 +1,9 @@
+{
+  "id": "text-search",
+  "name": "Text Search",
+  "description": "Searches text using regular expressions inside a WASM sandbox",
+  "category": "code",
+  "runtime": "wasm",
+  "version": "0.1.0",
+  "required_config": []
+}

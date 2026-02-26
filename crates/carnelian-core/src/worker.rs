@@ -68,6 +68,7 @@ use carnelian_common::types::{
 };
 use carnelian_common::{Error, Result};
 use chrono::{DateTime, Utc};
+use ed25519_dalek::Signature;
 use serde_json::json;
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -79,6 +80,10 @@ use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout};
 use tokio::sync::{RwLock, mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
+use bollard::exec::{CreateExecOptions, StartExecResults};
+use bollard::container::{LogsOptions, StatsOptions};
+use futures_util::StreamExt;
+use sysinfo::{Disks, Networks, ProcessRefreshKind, RefreshKind, System};
 
 /// Worker runtime type
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,8 +92,8 @@ pub enum WorkerRuntime {
     Node,
     /// Python worker
     Python,
-    /// Shell worker
-    Shell,
+    /// Native ops worker
+    Native,
     /// WebAssembly worker (future)
     Wasm,
 }
@@ -98,7 +103,7 @@ impl std::fmt::Display for WorkerRuntime {
         match self {
             Self::Node => write!(f, "node"),
             Self::Python => write!(f, "python"),
-            Self::Shell => write!(f, "shell"),
+            Self::Native => write!(f, "native"),
             Self::Wasm => write!(f, "wasm"),
         }
     }
@@ -111,7 +116,7 @@ impl std::str::FromStr for WorkerRuntime {
         match s.to_lowercase().as_str() {
             "node" => Ok(Self::Node),
             "python" => Ok(Self::Python),
-            "shell" => Ok(Self::Shell),
+            "native" | "shell" => Ok(Self::Native),
             "wasm" => Ok(Self::Wasm),
             other => Err(carnelian_common::Error::Config(format!(
                 "Unknown worker runtime: {other}"
@@ -930,6 +935,846 @@ impl WorkerTransport for WasmWorkerTransport {
     }
 }
 
+/// Native worker transport for in-process native ops execution
+pub struct NativeWorkerTransport {
+    worker_id: String,
+    event_stream: Arc<EventStream>,
+    config: Arc<Config>,
+    active_runs: Arc<RwLock<HashMap<RunId, mpsc::Sender<StreamEvent>>>>,
+    created_at: std::time::Instant,
+}
+
+impl NativeWorkerTransport {
+    /// Create a new NativeWorkerTransport
+    pub fn new(
+        worker_id: String,
+        event_stream: Arc<EventStream>,
+        config: Arc<Config>,
+    ) -> Self {
+        Self {
+            worker_id,
+            event_stream,
+            config,
+            active_runs: Arc::new(RwLock::new(HashMap::new())),
+            created_at: std::time::Instant::now(),
+        }
+    }
+
+    /// Check if the required capability is present in the request
+    fn check_capability(input: &serde_json::Value, required: &str) -> bool {
+        input.get("capabilities")
+            .and_then(|c| c.as_array())
+            .map(|arr| arr.iter().any(|v| v.as_str() == Some(required)))
+            .unwrap_or(false)
+    }
+
+    /// Verify owner approval signature for privileged operations
+    fn verify_owner_approval(input: &serde_json::Value, config: &Config) -> Result<()> {
+        // Extract the signature string
+        let sig_str = input
+            .get("_approval_signature")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                Error::Security(
+                    "Missing _approval_signature: owner approval is required for this operation"
+                        .to_string(),
+                )
+            })?;
+
+        // Hex-decode the signature bytes
+        let sig_bytes = hex::decode(sig_str).map_err(|e| {
+            Error::Security(format!("Invalid _approval_signature encoding: {}", e))
+        })?;
+
+        // Parse into ed25519_dalek::Signature
+        let signature = Signature::from_slice(&sig_bytes).map_err(|e| {
+            Error::Security(format!("Malformed _approval_signature: {}", e))
+        })?;
+
+        // Build the canonical message by removing the signature field
+        let mut canonical = input.clone();
+        if let Some(obj) = canonical.as_object_mut() {
+            obj.remove("_approval_signature");
+        }
+
+        // Serialize to canonical JSON string
+        let message_str = serde_json::to_string(&canonical)
+            .map_err(|e| Error::Security(format!("Failed to serialize canonical message: {}", e)))?;
+        let message_bytes = message_str.as_bytes();
+
+        // Verify via Config::verify_signature
+        match config.verify_signature(message_bytes, &signature) {
+            Ok(true) => Ok(()),
+            Ok(false) => Err(Error::Security(
+                "Owner approval signature verification failed".to_string(),
+            )),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+#[async_trait]
+impl WorkerTransport for NativeWorkerTransport {
+    async fn invoke(&self, request: InvokeRequest) -> Result<InvokeResponse> {
+        let run_id = request.run_id.clone();
+        let skill_name = request.skill_name.clone();
+        let start_time = std::time::Instant::now();
+
+        // Emit SkillInvokeStart event
+        self.event_stream.publish(EventEnvelope::new(
+            EventLevel::Info,
+            EventType::SkillInvokeStart,
+            json!({
+                "worker_id": self.worker_id,
+                "run_id": run_id,
+                "skill_name": skill_name,
+            }),
+        ));
+
+        // Parse skill_name and execute the corresponding op with timeout
+        let timeout_secs = request.timeout_secs;
+        let timeout_duration = std::time::Duration::from_secs(timeout_secs);
+
+        let result: Result<serde_json::Value, Error> = match skill_name.as_str() {
+            "git_status" => {
+                if !Self::check_capability(&request.input, "git.read") {
+                    Err(Error::Permission(format!(
+                        "Missing required capability: git.read"
+                    )))
+                } else {
+                    let path = request.input.get("path")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(".");
+                    let output = tokio::process::Command::new("git")
+                        .args(["status", "--porcelain", path])
+                        .output()
+                        .await
+                        .map_err(|e| Error::Io(e))?;
+                    
+                    // Check if command succeeded
+                    if !output.status.success() {
+                        let exit_code = output.status.code();
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        return Ok(InvokeResponse {
+                            run_id,
+                            status: InvokeStatus::Failed,
+                            result: json!({}),
+                            error: Some(format!(
+                                "git status failed with exit code {:?}: {}",
+                                exit_code, stderr
+                            )),
+                            exit_code,
+                            duration_ms: start_time.elapsed().as_millis() as u64,
+                            truncated: false,
+                        });
+                    }
+                    
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    Ok(json!({ "output": stdout.to_string() }))
+                }
+            }
+            "file_hash" => {
+                if !Self::check_capability(&request.input, "fs.read") {
+                    Err(Error::Permission(format!(
+                        "Missing required capability: fs.read"
+                    )))
+                } else {
+                    let path = request.input.get("path")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| Error::Config("Missing path parameter".to_string()))?;
+                    let bytes = tokio::fs::read(path).await.map_err(|e| Error::Io(e))?;
+                    let hash = blake3::hash(&bytes);
+                    Ok(json!({ "hash": hash.to_hex().to_string() }))
+                }
+            }
+            "docker_ps" => {
+                if !Self::check_capability(&request.input, "docker.read") {
+                    Err(Error::Permission(format!(
+                        "Missing required capability: docker.read"
+                    )))
+                } else {
+                    let docker = bollard::Docker::connect_with_local_defaults()
+                        .map_err(|e| Error::Worker(format!("Failed to connect to Docker: {}", e)))?;
+                    let containers = docker.list_containers::<String>(None)
+                        .await
+                        .map_err(|e| Error::Worker(format!("Failed to list containers: {}", e)))?;
+                    let container_ids: Vec<String> = containers.iter()
+                        .filter_map(|c| c.id.clone())
+                        .collect();
+                    Ok(json!({ "containers": container_ids }))
+                }
+            }
+            "dir_list" => {
+                if !Self::check_capability(&request.input, "fs.read") {
+                    Err(Error::Permission(format!(
+                        "Missing required capability: fs.read"
+                    )))
+                } else {
+                    let path = request.input.get("path")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(".");
+                    let depth = request.input.get("depth")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(1) as usize;
+                    let mut entries = Vec::new();
+                    for entry in walkdir::WalkDir::new(path).max_depth(depth) {
+                        match entry {
+                            Ok(e) => entries.push(e.path().to_string_lossy().to_string()),
+                            Err(e) => tracing::warn!(error = %e, "Error reading directory entry"),
+                        }
+                    }
+                    Ok(json!({ "entries": entries }))
+                }
+            }
+            "file_read" => {
+                if !Self::check_capability(&request.input, "fs.read") {
+                    Err(Error::Permission(format!(
+                        "Missing required capability: fs.read"
+                    )))
+                } else {
+                    let path = request.input.get("path")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| Error::Worker("Missing required parameter: path".to_string()))?;
+                    let max_bytes = request.input.get("max_bytes")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(1_048_576) as usize;
+                    
+                    let bytes = tokio::fs::read(path).await.map_err(|e| Error::Io(e))?;
+                    let original_len = bytes.len();
+                    let truncated = original_len > max_bytes;
+                    let content_bytes = if truncated { &bytes[..max_bytes] } else { &bytes };
+                    let content = String::from_utf8_lossy(content_bytes).to_string();
+                    
+                    Ok(json!({
+                        "content": content,
+                        "truncated": truncated,
+                        "size": original_len
+                    }))
+                }
+            }
+            "file_write" => {
+                if !Self::check_capability(&request.input, "fs.write") {
+                    Err(Error::Permission(format!(
+                        "Missing required capability: fs.write"
+                    )))
+                } else {
+                    Self::verify_owner_approval(&request.input, &self.config)?;
+                    
+                    let path = request.input.get("path")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| Error::Worker("Missing required parameter: path".to_string()))?;
+                    let content = request.input.get("content")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| Error::Worker("Missing required parameter: content".to_string()))?;
+                    
+                    tokio::fs::write(path, content.as_bytes()).await.map_err(|e| Error::Io(e))?;
+                    
+                    Ok(json!({
+                        "written": true,
+                        "path": path
+                    }))
+                }
+            }
+            "file_search" => {
+                if !Self::check_capability(&request.input, "fs.read") {
+                    Err(Error::Permission(format!(
+                        "Missing required capability: fs.read"
+                    )))
+                } else {
+                    let pattern = request.input.get("pattern")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| Error::Worker("Missing required parameter: pattern".to_string()))?;
+                    let path = request.input.get("path")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(".");
+                    
+                    let output = tokio::process::Command::new("rg")
+                        .args(["--json", pattern, path])
+                        .output()
+                        .await
+                        .map_err(|e| Error::Io(e))?;
+                    
+                    if !output.status.success() {
+                        let exit_code = output.status.code();
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        return Ok(InvokeResponse {
+                            run_id,
+                            status: InvokeStatus::Failed,
+                            result: json!({}),
+                            error: Some(format!(
+                                "rg search failed with exit code {:?}: {}",
+                                exit_code, stderr
+                            )),
+                            exit_code,
+                            duration_ms: start_time.elapsed().as_millis() as u64,
+                            truncated: false,
+                        });
+                    }
+                    
+                    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                    Ok(json!({ "output": stdout }))
+                }
+            }
+            "file_delete" => {
+                if !Self::check_capability(&request.input, "fs.write") {
+                    Err(Error::Permission(format!(
+                        "Missing required capability: fs.write"
+                    )))
+                } else {
+                    Self::verify_owner_approval(&request.input, &self.config)?;
+                    
+                    let path = request.input.get("path")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| Error::Worker("Missing required parameter: path".to_string()))?;
+                    
+                    tokio::fs::remove_file(path).await.map_err(|e| Error::Io(e))?;
+                    
+                    Ok(json!({
+                        "deleted": true,
+                        "path": path
+                    }))
+                }
+            }
+            "file_move" => {
+                if !Self::check_capability(&request.input, "fs.write") {
+                    Err(Error::Permission(format!(
+                        "Missing required capability: fs.write"
+                    )))
+                } else {
+                    let src = request.input.get("src")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| Error::Worker("Missing required parameter: src".to_string()))?;
+                    let dst = request.input.get("dst")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| Error::Worker("Missing required parameter: dst".to_string()))?;
+                    
+                    tokio::fs::rename(src, dst).await.map_err(|e| Error::Io(e))?;
+                    
+                    Ok(json!({
+                        "moved": true,
+                        "src": src,
+                        "dst": dst
+                    }))
+                }
+            }
+            "git_diff" => {
+                if !Self::check_capability(&request.input, "git.read") {
+                    Err(Error::Permission(format!(
+                        "Missing required capability: git.read"
+                    )))
+                } else {
+                    let path = request.input.get("path")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(".");
+                    let staged = request.input.get("staged")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    
+                    let mut args = vec!["diff"];
+                    if staged {
+                        args.push("--cached");
+                    }
+                    args.push(path);
+                    
+                    let output = tokio::process::Command::new("git")
+                        .args(&args)
+                        .output()
+                        .await
+                        .map_err(|e| Error::Io(e))?;
+                    
+                    if !output.status.success() {
+                        let exit_code = output.status.code();
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        return Ok(InvokeResponse {
+                            run_id,
+                            status: InvokeStatus::Failed,
+                            result: json!({}),
+                            error: Some(format!(
+                                "git diff failed with exit code {:?}: {}",
+                                exit_code, stderr
+                            )),
+                            exit_code,
+                            duration_ms: start_time.elapsed().as_millis() as u64,
+                            truncated: false,
+                        });
+                    }
+                    
+                    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                    Ok(json!({ "output": stdout }))
+                }
+            }
+            "git_commit" => {
+                if !Self::check_capability(&request.input, "git.write") {
+                    Err(Error::Permission(format!(
+                        "Missing required capability: git.write"
+                    )))
+                } else {
+                    Self::verify_owner_approval(&request.input, &self.config)?;
+                    
+                    let message = request.input.get("message")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| Error::Worker("Missing required parameter: message".to_string()))?;
+                    let path = request.input.get("path")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(".");
+                    
+                    let output = tokio::process::Command::new("git")
+                        .args(["commit", "-m", message])
+                        .current_dir(path)
+                        .output()
+                        .await
+                        .map_err(|e| Error::Io(e))?;
+                    
+                    if !output.status.success() {
+                        let exit_code = output.status.code();
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        return Ok(InvokeResponse {
+                            run_id,
+                            status: InvokeStatus::Failed,
+                            result: json!({}),
+                            error: Some(format!(
+                                "git commit failed with exit code {:?}: {}",
+                                exit_code, stderr
+                            )),
+                            exit_code,
+                            duration_ms: start_time.elapsed().as_millis() as u64,
+                            truncated: false,
+                        });
+                    }
+                    
+                    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                    Ok(json!({ "output": stdout }))
+                }
+            }
+            "git_log" => {
+                if !Self::check_capability(&request.input, "git.read") {
+                    Err(Error::Permission(format!(
+                        "Missing required capability: git.read"
+                    )))
+                } else {
+                    let path = request.input.get("path")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(".");
+                    let max_count = request.input.get("max_count")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(20);
+                    let oneline = request.input.get("oneline")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(true);
+                    
+                    let mut args = vec!["log", &format!("--max-count={}", max_count)];
+                    if oneline {
+                        args.push("--oneline");
+                    }
+                    args.push(path);
+                    
+                    let output = tokio::process::Command::new("git")
+                        .args(&args)
+                        .output()
+                        .await
+                        .map_err(|e| Error::Io(e))?;
+                    
+                    if !output.status.success() {
+                        let exit_code = output.status.code();
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        return Ok(InvokeResponse {
+                            run_id,
+                            status: InvokeStatus::Failed,
+                            result: json!({}),
+                            error: Some(format!(
+                                "git log failed with exit code {:?}: {}",
+                                exit_code, stderr
+                            )),
+                            exit_code,
+                            duration_ms: start_time.elapsed().as_millis() as u64,
+                            truncated: false,
+                        });
+                    }
+                    
+                    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                    Ok(json!({ "output": stdout }))
+                }
+            }
+            "git_branch" => {
+                if !Self::check_capability(&request.input, "git.read") {
+                    Err(Error::Permission(format!(
+                        "Missing required capability: git.read"
+                    )))
+                } else {
+                    let path = request.input.get("path")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(".");
+                    
+                    let output = tokio::process::Command::new("git")
+                        .args(["branch", "--list"])
+                        .current_dir(path)
+                        .output()
+                        .await
+                        .map_err(|e| Error::Io(e))?;
+                    
+                    if !output.status.success() {
+                        let exit_code = output.status.code();
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        return Ok(InvokeResponse {
+                            run_id,
+                            status: InvokeStatus::Failed,
+                            result: json!({}),
+                            error: Some(format!(
+                                "git branch failed with exit code {:?}: {}",
+                                exit_code, stderr
+                            )),
+                            exit_code,
+                            duration_ms: start_time.elapsed().as_millis() as u64,
+                            truncated: false,
+                        });
+                    }
+                    
+                    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                    Ok(json!({ "output": stdout }))
+                }
+            }
+            "docker_exec" => {
+                if !Self::check_capability(&request.input, "docker.exec") {
+                    Err(Error::Permission(format!(
+                        "Missing required capability: docker.exec"
+                    )))
+                } else {
+                    Self::verify_owner_approval(&request.input, &self.config)?;
+                    
+                    let container_id = request.input.get("container_id")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| Error::Worker("Missing required parameter: container_id".to_string()))?;
+                    
+                    let cmd_array = request.input.get("cmd")
+                        .and_then(|v| v.as_array())
+                        .ok_or_else(|| Error::Worker("Missing required parameter: cmd".to_string()))?;
+                    
+                    let mut cmd = Vec::new();
+                    for (idx, item) in cmd_array.iter().enumerate() {
+                        match item.as_str() {
+                            Some(s) => cmd.push(s.to_string()),
+                            None => return Err(Error::Worker(format!(
+                                "cmd[{}] must be a string, got: {:?}", idx, item
+                            ))),
+                        }
+                    }
+                    
+                    if cmd.is_empty() {
+                        return Err(Error::Worker("cmd must be a non-empty array of strings".to_string()));
+                    }
+                    
+                    let docker = bollard::Docker::connect_with_local_defaults()
+                        .map_err(|e| Error::Worker(format!("Failed to connect to Docker: {}", e)))?;
+                    
+                    let exec = docker.create_exec(
+                        container_id,
+                        CreateExecOptions {
+                            cmd: Some(cmd),
+                            attach_stdout: Some(true),
+                            attach_stderr: Some(true),
+                            ..Default::default()
+                        }
+                    )
+                    .await
+                    .map_err(|e| Error::Worker(format!("Failed to create exec: {}", e)))?;
+                    
+                    let exec_id = exec.id;
+                    match docker.start_exec(&exec_id, None).await {
+                        Ok(StartExecResults::Attached { mut output, .. }) => {
+                            let mut collected = String::new();
+                            while let Some(chunk) = output.next().await {
+                                match chunk {
+                                    Ok(msg) => collected.push_str(&msg.to_string()),
+                                    Err(e) => return Err(Error::Worker(format!("Stream error: {}", e))),
+                                }
+                            }
+                            Ok(json!({ "output": collected }))
+                        }
+                        Ok(_) => Err(Error::Worker("Unexpected exec result".to_string())),
+                        Err(e) => Err(Error::Worker(format!("Failed to start exec: {}", e))),
+                    }
+                }
+            }
+            "docker_logs" => {
+                if !Self::check_capability(&request.input, "docker.read") {
+                    Err(Error::Permission(format!(
+                        "Missing required capability: docker.read"
+                    )))
+                } else {
+                    let container_id = request.input.get("container_id")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| Error::Worker("Missing required parameter: container_id".to_string()))?;
+                    let tail = request.input.get("tail")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("100");
+                    
+                    let docker = bollard::Docker::connect_with_local_defaults()
+                        .map_err(|e| Error::Worker(format!("Failed to connect to Docker: {}", e)))?;
+                    
+                    let mut logs_stream = docker.logs(
+                        container_id,
+                        Some(LogsOptions {
+                            stdout: true,
+                            stderr: true,
+                            tail: tail.to_string(),
+                            ..Default::default()
+                        })
+                    );
+                    
+                    let mut collected = String::new();
+                    while let Some(chunk) = logs_stream.next().await {
+                        match chunk {
+                            Ok(msg) => collected.push_str(&msg.to_string()),
+                            Err(e) => return Err(Error::Worker(format!("Stream error: {}", e))),
+                        }
+                    }
+                    
+                    Ok(json!({ "output": collected }))
+                }
+            }
+            "docker_stats" => {
+                if !Self::check_capability(&request.input, "docker.read") {
+                    Err(Error::Permission(format!(
+                        "Missing required capability: docker.read"
+                    )))
+                } else {
+                    let container_id = request.input.get("container_id")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| Error::Worker("Missing required parameter: container_id".to_string()))?;
+                    
+                    let docker = bollard::Docker::connect_with_local_defaults()
+                        .map_err(|e| Error::Worker(format!("Failed to connect to Docker: {}", e)))?;
+                    
+                    let mut stats_stream = docker.stats(
+                        container_id,
+                        Some(StatsOptions {
+                            stream: false,
+                            ..Default::default()
+                        })
+                    );
+                    
+                    match stats_stream.next().await {
+                        Some(Ok(stats)) => {
+                            let stats_value = serde_json::to_value(&stats)
+                                .map_err(|e| Error::Worker(format!("Failed to serialize stats: {}", e)))?;
+                            Ok(json!({ "stats": stats_value }))
+                        }
+                        Some(Err(e)) => Err(Error::Worker(format!("Failed to get stats: {}", e))),
+                        None => Err(Error::Worker("No stats available".to_string())),
+                    }
+                }
+            }
+            "process_list" => {
+                if !Self::check_capability(&request.input, "system.read") {
+                    Err(Error::Permission(format!(
+                        "Missing required capability: system.read"
+                    )))
+                } else {
+                    let sys = System::new_with_specifics(
+                        RefreshKind::new().with_processes(ProcessRefreshKind::everything())
+                    );
+                    
+                    let processes: Vec<serde_json::Value> = sys.processes()
+                        .iter()
+                        .map(|(pid, process)| {
+                            json!({
+                                "pid": pid.as_u32(),
+                                "name": process.name(),
+                                "cpu_usage": process.cpu_usage(),
+                                "memory": process.memory()
+                            })
+                        })
+                        .collect();
+                    
+                    Ok(json!({ "processes": processes }))
+                }
+            }
+            "disk_usage" => {
+                if !Self::check_capability(&request.input, "system.read") {
+                    Err(Error::Permission(format!(
+                        "Missing required capability: system.read"
+                    )))
+                } else {
+                    let disks = Disks::new_with_refreshed_list();
+                    
+                    let disks_vec: Vec<serde_json::Value> = disks.iter()
+                        .map(|disk| {
+                            json!({
+                                "name": disk.name().to_string_lossy(),
+                                "mount_point": disk.mount_point().to_string_lossy(),
+                                "total_space": disk.total_space(),
+                                "available_space": disk.available_space(),
+                                "file_system": String::from_utf8_lossy(disk.file_system()).to_string()
+                            })
+                        })
+                        .collect();
+                    
+                    Ok(json!({ "disks": disks_vec }))
+                }
+            }
+            "network_stats" => {
+                if !Self::check_capability(&request.input, "system.read") {
+                    Err(Error::Permission(format!(
+                        "Missing required capability: system.read"
+                    )))
+                } else {
+                    let networks = Networks::new_with_refreshed_list();
+                    
+                    let networks_vec: Vec<serde_json::Value> = networks.iter()
+                        .map(|(interface, data)| {
+                            json!({
+                                "interface": interface,
+                                "received": data.received(),
+                                "transmitted": data.transmitted()
+                            })
+                        })
+                        .collect();
+                    
+                    Ok(json!({ "networks": networks_vec }))
+                }
+            }
+            "env_get" => {
+                if !Self::check_capability(&request.input, "env.read") {
+                    Err(Error::Permission(format!(
+                        "Missing required capability: env.read"
+                    )))
+                } else {
+                    const ALLOWLIST: &[&str] = &[
+                        "PATH", "HOME", "USER", "USERNAME", "SHELL", "LANG", "LC_ALL",
+                        "PWD", "TERM", "HOSTNAME", "TMPDIR", "TEMP", "TMP"
+                    ];
+                    
+                    let key = request.input.get("key")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| Error::Worker("Missing required parameter: key".to_string()))?;
+                    
+                    if !ALLOWLIST.contains(&key) {
+                        return Err(Error::Permission(format!(
+                            "env var '{}' is not in the allowed list", key
+                        )));
+                    }
+                    
+                    let value = std::env::var(key)
+                        .map_err(|e| Error::Worker(format!("Failed to get env var: {}", e)))?;
+                    
+                    Ok(json!({
+                        "key": key,
+                        "value": value
+                    }))
+                }
+            }
+            _ => Err(Error::Worker(format!("Unknown native skill: {}", skill_name))),
+        };
+
+        // Apply timeout to the operation
+        let timeout_result = tokio::time::timeout(timeout_duration, async {
+            result
+        }).await;
+
+        let duration_ms = start_time.elapsed().as_millis() as u64;
+
+        match timeout_result {
+            Ok(Ok(data)) => {
+                // Emit SkillInvokeEnd event
+                self.event_stream.publish(EventEnvelope::new(
+                    EventLevel::Info,
+                    EventType::SkillInvokeEnd,
+                    json!({
+                        "worker_id": self.worker_id,
+                        "run_id": run_id,
+                        "skill_name": skill_name,
+                        "success": true,
+                    }),
+                ));
+
+                Ok(InvokeResponse {
+                    run_id,
+                    status: InvokeStatus::Success,
+                    result: data,
+                    error: None,
+                    exit_code: Some(0),
+                    duration_ms,
+                    truncated: false,
+                })
+            }
+            Ok(Err(e)) => {
+                // Emit SkillInvokeFailed event
+                self.event_stream.publish(EventEnvelope::new(
+                    EventLevel::Error,
+                    EventType::SkillInvokeFailed,
+                    json!({
+                        "worker_id": self.worker_id,
+                        "run_id": run_id,
+                        "skill_name": skill_name,
+                        "error": e.to_string(),
+                    }),
+                ));
+
+                Ok(InvokeResponse {
+                    run_id,
+                    status: InvokeStatus::Failed,
+                    result: json!({}),
+                    error: Some(e.to_string()),
+                    exit_code: Some(1),
+                    duration_ms,
+                    truncated: false,
+                })
+            }
+            Err(_) => {
+                // Timeout occurred
+                self.event_stream.publish(EventEnvelope::new(
+                    EventLevel::Error,
+                    EventType::SkillInvokeFailed,
+                    json!({
+                        "worker_id": self.worker_id,
+                        "run_id": run_id,
+                        "skill_name": skill_name,
+                        "error": format!("Skill execution timed out after {}s", timeout_secs),
+                    }),
+                ));
+
+                Ok(InvokeResponse {
+                    run_id,
+                    status: InvokeStatus::Timeout,
+                    result: json!({}),
+                    error: Some(format!("Skill execution timed out after {}s", timeout_secs)),
+                    exit_code: None,
+                    duration_ms,
+                    truncated: false,
+                })
+            }
+        }
+    }
+
+    async fn stream_events(&self, run_id: RunId) -> Result<mpsc::Receiver<StreamEvent>> {
+        let (tx, rx) = mpsc::channel(256);
+        let mut active_runs = self.active_runs.write().await;
+        active_runs.insert(run_id, tx);
+        Ok(rx)
+    }
+
+    async fn cancel(&self, run_id: RunId, _reason: String) -> Result<()> {
+        let mut active_runs = self.active_runs.write().await;
+        active_runs.remove(&run_id);
+        Ok(())
+    }
+
+    async fn health(&self) -> Result<HealthResponse> {
+        Ok(HealthResponse {
+            healthy: true,
+            worker_id: self.worker_id.clone(),
+            uptime_secs: self.created_at.elapsed().as_secs(),
+            attestation: None,
+        })
+    }
+
+    async fn shutdown(&self) -> Result<()> {
+        let mut active_runs = self.active_runs.write().await;
+        active_runs.clear();
+        Ok(())
+    }
+}
+
 /// Result of a single health check on a worker.
 #[allow(dead_code)]
 struct HealthCheckResult {
@@ -1200,9 +2045,9 @@ impl WorkerManager {
     /// # Errors
     ///
     /// Returns an error if:
-    /// - The max_workers limit has been reached
+    /// - The max_workers limit has been reached (unless bypass_limit is true)
     /// - The process fails to spawn
-    pub async fn spawn_worker(&mut self, runtime: WorkerRuntime) -> Result<String> {
+    pub async fn spawn_worker(&mut self, runtime: WorkerRuntime, bypass_limit: bool) -> Result<String> {
         if let Some(ref guard) = self.safe_mode_guard {
             guard.check_or_block("worker_spawn").await?;
         }
@@ -1210,7 +2055,7 @@ impl WorkerManager {
         let max_workers = self.config.machine_config().max_workers;
         let current_count = self.workers.read().await.len();
 
-        if current_count >= max_workers as usize {
+        if !bypass_limit && current_count >= max_workers as usize {
             return Err(Error::Config(format!(
                 "Max workers limit reached ({}/{})",
                 current_count, max_workers
@@ -1368,10 +2213,49 @@ impl WorkerManager {
             WorkerRuntime::Python => {
                 unreachable!("Python runtime should have been handled earlier")
             }
-            WorkerRuntime::Shell => {
-                let mut c = tokio::process::Command::new("bash");
-                c.args(["workers/shell-worker/worker.sh"]);
-                c
+            WorkerRuntime::Native => {
+                // Create native transport for in-process execution
+                let transport = NativeWorkerTransport::new(
+                    worker_id.clone(),
+                    self.event_stream.clone(),
+                    self.config.clone(),
+                );
+                let transport: Arc<dyn WorkerTransport> = Arc::new(transport);
+
+                // Register worker with transport
+                let worker = Worker {
+                    id: worker_id.clone(),
+                    runtime,
+                    process: None,
+                    status: WorkerStatus::Running,
+                    current_task: None,
+                    started_at: Utc::now(),
+                    last_health_check: None,
+                    transport: Some(transport),
+                    last_attestation: None,
+                    quarantined: false,
+                    last_attestation_verified: None,
+                };
+
+                self.workers.write().await.insert(worker_id.clone(), worker);
+
+                // Emit WorkerStarted event
+                self.event_stream.publish(EventEnvelope::new(
+                    EventLevel::Info,
+                    EventType::WorkerStarted,
+                    json!({
+                        "worker_id": worker_id,
+                        "runtime": runtime.to_string(),
+                    }),
+                ));
+
+                tracing::info!(
+                    worker_id = %worker_id,
+                    runtime = %runtime,
+                    "Worker spawned"
+                );
+
+                return Ok(worker_id);
             }
             WorkerRuntime::Wasm => {
                 // Create WASM runtime and transport
@@ -1510,26 +2394,69 @@ impl WorkerManager {
 
     /// Start workers up to the configured max_workers limit.
     ///
-    /// Spawns Node.js workers by default. Logs errors for individual
-    /// worker spawn failures but continues starting remaining workers.
+    /// Spawns Node.js workers by default, plus one each of Native, Wasm, and Python runtimes.
+    /// Logs errors for individual worker spawn failures but continues starting remaining workers.
     pub async fn start_workers(&mut self) -> Result<()> {
         let max_workers = self.config.machine_config().max_workers;
-        let mut started = 0u32;
+        let mut node_started = 0u32;
+        let mut native_started = 0u32;
+        let mut wasm_started = 0u32;
+        let mut python_started = 0u32;
 
+        // Spawn Node.js workers (primary runtime)
         for _ in 0..max_workers {
-            match self.spawn_worker(WorkerRuntime::Node).await {
+            match self.spawn_worker(WorkerRuntime::Node, false).await {
                 Ok(id) => {
-                    tracing::info!(worker_id = %id, "Worker started successfully");
-                    started += 1;
+                    tracing::info!(worker_id = %id, runtime = "node", "Worker started successfully");
+                    node_started += 1;
                 }
                 Err(e) => {
-                    tracing::warn!(error = %e, "Failed to start worker, continuing with remaining");
+                    tracing::warn!(error = %e, "Failed to start Node worker, continuing with remaining");
                 }
             }
         }
 
+        // Spawn one Native worker (in-process)
+        match self.spawn_worker(WorkerRuntime::Native, true).await {
+            Ok(id) => {
+                tracing::info!(worker_id = %id, runtime = "native", "Native worker started successfully");
+                native_started += 1;
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to start Native worker, continuing");
+            }
+        }
+
+        // Spawn one Wasm worker (in-process)
+        match self.spawn_worker(WorkerRuntime::Wasm, true).await {
+            Ok(id) => {
+                tracing::info!(worker_id = %id, runtime = "wasm", "Wasm worker started successfully");
+                wasm_started += 1;
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to start Wasm worker, continuing");
+            }
+        }
+
+        // Attempt to spawn one Python worker (external binary - may not be available)
+        match self.spawn_worker(WorkerRuntime::Python, true).await {
+            Ok(id) => {
+                tracing::info!(worker_id = %id, runtime = "python", "Python worker started successfully");
+                python_started += 1;
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to start Python worker (python may not be installed), continuing");
+            }
+        }
+
+        let total_started = node_started + native_started + wasm_started + python_started;
+
         tracing::info!(
-            total_started = started,
+            node = node_started,
+            native = native_started,
+            wasm = wasm_started,
+            python = python_started,
+            total = total_started,
             max_workers = max_workers,
             "Worker startup complete"
         );
@@ -1694,7 +2621,7 @@ impl WorkerManager {
             .runtime;
 
         self.stop_worker(worker_id).await?;
-        self.spawn_worker(runtime).await
+        self.spawn_worker(runtime, false).await
     }
 
     /// Check health of a specific worker.
@@ -1812,7 +2739,7 @@ impl WorkerManager {
                                                 let path = match runtime {
                                                     WorkerRuntime::Node => "workers/node-worker",
                                                     WorkerRuntime::Python => "workers/python-worker",
-                                                    WorkerRuntime::Shell => "workers/shell-worker",
+                                                    WorkerRuntime::Native => "workers/native-worker",
                                                     WorkerRuntime::Wasm => "workers/wasm-worker",
                                                 };
                                                 compute_expected_checksum(&config, runtime, path)
@@ -1993,7 +2920,7 @@ impl WorkerManager {
         let path = match runtime {
             WorkerRuntime::Node => "workers/node-worker",
             WorkerRuntime::Python => "workers/python-worker",
-            WorkerRuntime::Shell => "workers/shell-worker",
+            WorkerRuntime::Native => "workers/native-worker",
             WorkerRuntime::Wasm => "workers/wasm-worker",
         };
         compute_expected_checksum(&self.config, runtime, path)
@@ -2148,10 +3075,9 @@ impl WorkerManager {
                 c.args(["workers/python-worker/worker.py"]);
                 c
             }
-            WorkerRuntime::Shell => {
-                let mut c = tokio::process::Command::new("bash");
-                c.args(["workers/shell-worker/worker.sh"]);
-                c
+            WorkerRuntime::Native => {
+                // Native runtime is handled inline in spawn_worker, not via subprocess
+                unreachable!("Native runtime should have been handled earlier")
             }
             WorkerRuntime::Wasm => {
                 return Err(Error::Config("Wasm runtime not yet supported".to_string()));
@@ -2387,7 +3313,7 @@ mod tests {
     fn test_worker_runtime_display() {
         assert_eq!(WorkerRuntime::Node.to_string(), "node");
         assert_eq!(WorkerRuntime::Python.to_string(), "python");
-        assert_eq!(WorkerRuntime::Shell.to_string(), "shell");
+        assert_eq!(WorkerRuntime::Native.to_string(), "native");
         assert_eq!(WorkerRuntime::Wasm.to_string(), "wasm");
     }
 

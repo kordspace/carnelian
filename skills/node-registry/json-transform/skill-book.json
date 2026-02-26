@@ -1,0 +1,9 @@
+{
+  "id": "json-transform",
+  "name": "JSON Transform",
+  "description": "Applies jq-compatible filter expressions to JSON data",
+  "category": "data",
+  "runtime": "wasm",
+  "version": "0.1.0",
+  "required_config": []
+}

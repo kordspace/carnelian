@@ -1,0 +1,9 @@
+{
+  "id": "git-diff",
+  "name": "Git Diff",
+  "description": "Show unstaged or staged diff for a git repository",
+  "category": "code",
+  "runtime": "native",
+  "version": "1.0.0",
+  "required_config": []
+}

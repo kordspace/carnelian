@@ -101,7 +101,8 @@ graph TD
 
     NodeW[Node Worker 600+ skills]
     PythonW[Python Worker]
-    WasmW[WASM Worker planned]
+    WasmW[WASM Worker\nwasmtime · WASI P1]
+    NativeW[Native Ops Worker\ngit · blake3 · docker]
 
     DB[(PostgreSQL + pgvector)]
     OllamaS[Ollama Service :11434]
@@ -133,7 +134,8 @@ graph TD
 
     Workers -->|JSONL stdin/stdout| NodeW
     Workers -->|JSONL stdin/stdout| PythonW
-    Workers -.->|planned| WasmW
+    Workers -->|wasmtime| WasmW
+    Workers -->|in-process| NativeW
 
     OllamaP -->|HTTP| OllamaS
     Core -->|SQLx| DB
@@ -149,6 +151,8 @@ graph TD
 | **Worker Manager** | Rust (`worker.rs`) | Worker lifecycle, JSONL transport, capability grants |
 | **Node Worker** | Node.js/TypeScript | Executes 600+ existing Thummim skills |
 | **Python Worker** | Python 3.10+ | ML/data science skills, Playwright automation |
+| **WASM Worker** | wasmtime 27, WASI P1 (`wasm_runtime.rs`) | Sandboxed WASM skill execution, epoch timeout, capability-gated fs/network |
+| **Native Ops Worker** | Rust inline (`carnelian-worker-native/`) | In-process ops: git_status, file_hash (blake3), docker_ps (bollard), dir_list (walkdir) |
 | **Ledger Manager** | Rust (`ledger.rs`) | blake3 hash-chain audit trail for privileged actions |
 | **Scheduler** | Rust (`scheduler.rs`) | Priority-based task queue, retry policies, heartbeat |
 | **Agentic Loop** | Rust (`agentic.rs`) | Heartbeat agentic turn, compaction pipeline |
@@ -174,10 +178,10 @@ Carnelian uses a multi-runtime worker system for skill execution:
 
 | Worker | Runtime | Use Case | Status |
 |--------|---------|----------|--------|
-| **Node Worker** | Node.js/TypeScript | 600+ existing Thummim skills, npm ecosystem, DOM manipulation | ✅ Built |
-| **Python Worker** | Python 3.10+ | ML/data science, Playwright automation | 🔄 In Progress |
-| **WASM Worker** | WebAssembly (wasmtime) | New Rust-native sandboxed skills | 🔲 Planned |
-| **Native Ops** | Rust inline | Named ops (git_status, file_hash, docker_ps) | 🔄 Planned |
+| **Node Worker** | Node.js/TypeScript | 600+ existing Thummim skills, npm ecosystem | ✅ Built |
+| **Python Worker** | Python 3.10+ | ML/data science, Playwright automation | ✅ Built |
+| **WASM Worker** | WebAssembly (wasmtime 27 + WASI P1) | Sandboxed Rust/C/TinyGo skills | ✅ Built |
+| **Native Ops Worker** | Rust inline (no subprocess) | `git_status`, `file_hash`, `docker_ps`, `dir_list` | ✅ Built |
 
 All 600+ existing Thummim skills run unchanged through the Node worker, ensuring full backward compatibility while migrating to the Rust core. New skills should target WASM for portability and sandboxing.
 
@@ -296,34 +300,17 @@ All endpoints are prefixed with `/v1`.
 git clone https://github.com/kordspace/carnelian.git
 cd carnelian
 
-# 2. One-command setup wizard (detects GPU, pulls Docker images, configures everything)
+# 2. Build the project
+cargo build --release
+
+# 3. Run the interactive setup wizard (detects GPU, configures Docker, sets up database)
 carnelian init
 
-# 3. Verify services are healthy
-docker-compose ps
-
-# 4. Download model for your profile
-# Thummim (8GB VRAM):
-docker exec carnelian-ollama ollama pull deepseek-r1:7b
-# Urim (11GB VRAM):
-docker exec carnelian-ollama ollama pull deepseek-r1:32b
-
-# 5. Run database migrations (only needed for custom setups)
-cargo install sqlx-cli --no-default-features --features postgres
-export DATABASE_URL="postgresql://carnelian:carnelian@localhost:5432/carnelian"
-sqlx migrate run
-
-# 6. Build Rust workspace
-cargo build
-
-# 7. Run tests
-cargo test
-
-# 8. Start the orchestrator
-cargo run --bin carnelian -- start
+# 4. Start the system
+carnelian start
 ```
 
-> **Note:** `carnelian init` handles Docker image pulling, database setup, and skill registry bootstrapping automatically, so manual steps 3–8 are only needed for custom/advanced setups.
+> **CI/Headless:** For automated deployments, use `carnelian init --non-interactive`. See [docs/INSTALL.md](docs/INSTALL.md) for detailed installation options, troubleshooting, and platform-specific guides.
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for detailed setup and development workflow.
 
@@ -470,6 +457,76 @@ Rust, Python, TypeScript, JavaScript, Go, Java, C/C++, Ruby, Shell, TOML, YAML, 
 
 **Excluded Directories:**
 `target`, `node_modules`, `.git`, `__pycache__`, `dist`, `build`, `vendor`
+
+## Elixir System
+
+Carnelian includes an **Elixir System** — a RAG-based knowledge persistence layer that captures skill expertise, domain knowledge, and context for reuse across sessions and agents.
+
+### What are Elixirs?
+
+Elixirs are versioned, embeddable knowledge artifacts that preserve learned patterns, successful approaches, and domain expertise. They serve as a memory layer that transcends individual sessions, allowing agents to build on past experience.
+
+**Four Elixir Types:**
+
+| Type | Purpose | Use Case |
+|------|---------|----------|
+| **skill_backup** | Skill knowledge snapshots | Preserve successful skill execution patterns |
+| **domain_knowledge** | Domain-specific expertise | Store specialized knowledge (e.g., API docs, coding patterns) |
+| **context_cache** | Cached context for performance | Speed up repeated operations with pre-computed context |
+| **training_data** | Training datasets | Fine-tuning data for model improvement |
+
+### Elixir Features
+
+- **Versioning**: Full version history with change tracking
+- **Embeddings**: pgvector-powered similarity search (1536-dimensional)
+- **Quality Scoring**: 0-100 quality scores affect XP rewards
+- **Usage Tracking**: Effectiveness scoring per usage
+- **Sub-Agent Binding**: Auto-inject elixirs into specific sub-agents
+- **Auto-Draft Generation**: System proposes elixirs from successful task patterns
+
+### Database Schema
+
+```sql
+-- Core elixirs table
+CREATE TABLE elixirs (
+    elixir_id       UUID PRIMARY KEY,
+    name            TEXT UNIQUE NOT NULL,
+    elixir_type     TEXT CHECK (elixir_type IN ('skill_backup', 'domain_knowledge', 'context_cache', 'training_data')),
+    dataset         JSONB NOT NULL,
+    embedding       vector(1536),
+    quality_score   REAL CHECK (quality_score >= 0.0 AND quality_score <= 100.0),
+    ...
+);
+
+-- Version history
+CREATE TABLE elixir_versions (...);
+
+-- Usage tracking with effectiveness scoring
+CREATE TABLE elixir_usage (
+    effectiveness_score REAL CHECK (effectiveness_score >= 0.0 AND effectiveness_score <= 1.0),
+    ...
+);
+```
+
+### XP Integration
+
+Elixirs are integrated with the XP progression system:
+- **Creation**: Earn XP when creating high-quality elixirs
+- **Usage**: Track effectiveness and award XP for helpful elixirs
+- **Quality Bonuses**: Higher quality scores yield more XP
+
+### API Endpoints (Planned)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/elixirs` | Create a new elixir |
+| `GET` | `/v1/elixirs` | List elixirs with filtering |
+| `GET` | `/v1/elixirs/{id}` | Get elixir details |
+| `POST` | `/v1/elixirs/{id}/activate` | Activate an elixir for use |
+| `GET` | `/v1/elixirs/search` | Semantic search via embeddings |
+| `POST` | `/v1/elixirs/drafts` | Review auto-generated proposals |
+
+See [docs/SKILLS_MIGRATION_STATUS.md](docs/SKILLS_MIGRATION_STATUS.md) for implementation roadmap.
 
 ## Skill Discovery
 
@@ -665,6 +722,7 @@ See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 | [docs/SECURITY.md](docs/SECURITY.md) | Security model, capability system, threat model |
 | [docs/OPERATOR_GUIDE.md](docs/OPERATOR_GUIDE.md) | Day-to-day operations and administration |
 | [docs/API.md](docs/API.md) | Full REST API reference |
+| [docs/SKILLS_MIGRATION_STATUS.md](docs/SKILLS_MIGRATION_STATUS.md) | Skills migration tracking, Rust conversion roadmap |
 | [docs/SETUP_WINDOWS.md](docs/SETUP_WINDOWS.md) | Windows (WSL2) setup guide |
 | [docs/SETUP_MACOS.md](docs/SETUP_MACOS.md) | macOS setup guide |
 | [docs/SETUP_LINUX.md](docs/SETUP_LINUX.md) | Linux setup guide |

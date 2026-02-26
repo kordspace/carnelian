@@ -1,0 +1,9 @@
+{
+  "id": "file-write",
+  "name": "File Write",
+  "description": "Write content to a file on the local filesystem (owner approval required)",
+  "category": "code",
+  "runtime": "native",
+  "version": "1.0.0",
+  "required_config": []
+}

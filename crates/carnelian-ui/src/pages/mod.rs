@@ -4,6 +4,7 @@ pub mod approvals;
 pub mod capabilities;
 pub mod channels;
 pub mod dashboard;
+pub mod elixirs;
 pub mod events;
 pub mod heartbeat;
 pub mod identity;

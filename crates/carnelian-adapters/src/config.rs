@@ -19,6 +19,14 @@ pub struct AdapterConfig {
     #[serde(default)]
     pub discord_enabled: bool,
 
+    /// Whether the WhatsApp adapter is enabled.
+    #[serde(default)]
+    pub whatsapp_enabled: bool,
+
+    /// Whether the Slack adapter is enabled.
+    #[serde(default)]
+    pub slack_enabled: bool,
+
     /// Spam score threshold (0.0–1.0). Messages above this are dropped.
     #[serde(default = "default_spam_threshold")]
     pub spam_threshold: f32,
@@ -41,6 +49,8 @@ impl Default for AdapterConfig {
         Self {
             telegram_enabled: false,
             discord_enabled: false,
+            whatsapp_enabled: false,
+            slack_enabled: false,
             spam_threshold: default_spam_threshold(),
             spam_ttl_secs: default_spam_ttl_secs(),
         }
@@ -120,11 +130,15 @@ pub async fn delete_bot_credential(
 /// Supported variables:
 /// - `TELEGRAM_BOT_TOKEN` — Telegram bot token (enables Telegram adapter)
 /// - `DISCORD_BOT_TOKEN` — Discord bot token (enables Discord adapter)
+/// - `WHATSAPP_ACCESS_TOKEN` — WhatsApp Cloud API access token (enables WhatsApp adapter)
+/// - `SLACK_BOT_TOKEN` — Slack bot OAuth token (enables Slack adapter)
 /// - `ADAPTER_SPAM_THRESHOLD` — Spam score threshold (default: 0.8)
 #[must_use]
 pub fn load_from_env() -> AdapterConfig {
     let telegram_enabled = std::env::var("TELEGRAM_BOT_TOKEN").is_ok();
     let discord_enabled = std::env::var("DISCORD_BOT_TOKEN").is_ok();
+    let whatsapp_enabled = std::env::var("WHATSAPP_ACCESS_TOKEN").is_ok();
+    let slack_enabled = std::env::var("SLACK_BOT_TOKEN").is_ok();
 
     let spam_threshold = std::env::var("ADAPTER_SPAM_THRESHOLD")
         .ok()
@@ -139,6 +153,8 @@ pub fn load_from_env() -> AdapterConfig {
     AdapterConfig {
         telegram_enabled,
         discord_enabled,
+        whatsapp_enabled,
+        slack_enabled,
         spam_threshold,
         spam_ttl_secs,
     }

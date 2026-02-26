@@ -1,0 +1,9 @@
+{
+  "id": "network-stats",
+  "name": "Network Stats",
+  "description": "Report network interface statistics for the host",
+  "category": "automation",
+  "runtime": "native",
+  "version": "1.0.0",
+  "required_config": []
+}

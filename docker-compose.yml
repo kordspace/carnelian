@@ -113,12 +113,60 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
+  # Carnelian LLM Gateway
+  # ---------------------------------------------------------------------------
+  # HTTP API: http://localhost:18790
+  # Docker Internal: http://carnelian-gateway:18790
+  #
+  # Provides unified LLM completion API with local-first routing and remote fallback.
+  # Also serves as the message gateway for multi-channel communication skills
+  # (whatsapp-send, message-send).
+  #
+  # Service dependencies: Ollama for local LLM routing
+  # Health check: GET /health endpoint
+  # ---------------------------------------------------------------------------
+  carnelian-gateway:
+    image: carnelian/gateway:latest
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    container_name: carnelian-gateway
+    environment:
+      GATEWAY_PORT: 18790
+      CORE_API_URL: http://carnelian-core:18789
+      OLLAMA_BASE_URL: http://carnelian-ollama:11434
+      OLLAMA_ENABLED: "true"
+      LOCAL_FIRST: "true"
+      FALLBACK_ENABLED: "true"
+      MAX_TOKENS: 8192
+      REQUEST_TIMEOUT_MS: 60000
+    ports:
+      - "18790:18790"
+    depends_on:
+      carnelian-ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18790/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1G
+        reservations:
+          memory: 256M
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
   # Carnelian Core Orchestrator
   # ---------------------------------------------------------------------------
   # HTTP API: http://localhost:18789
   # Docker Internal: http://carnelian-core:18789
   #
-  # Service dependencies: PostgreSQL and Ollama must be healthy before starting
+  # Service dependencies: PostgreSQL, Ollama, and Gateway must be healthy before starting
   # Health check: GET /v1/health endpoint
   #
   # Machine profile resource limits can be overridden via compose override files:
@@ -134,6 +182,7 @@ services:
     environment:
       DATABASE_URL: postgresql://carnelian:carnelian@carnelian-postgres:5432/carnelian
       CARNELIAN_OLLAMA_URL: http://carnelian-ollama:11434
+      CARNELIAN_GATEWAY_URL: http://carnelian-gateway:18790
       CARNELIAN_ENV: production
       LOG_LEVEL: INFO
     volumes:
@@ -146,6 +195,8 @@ services:
       carnelian-postgres:
         condition: service_healthy
       carnelian-ollama:
+        condition: service_healthy
+      carnelian-gateway:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:18789/v1/health"]

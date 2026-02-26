@@ -1,0 +1,9 @@
+{
+  "id": "file-move",
+  "name": "File Move",
+  "description": "Move or rename a file on the local filesystem",
+  "category": "code",
+  "runtime": "native",
+  "version": "1.0.0",
+  "required_config": []
+}

@@ -10,6 +10,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createContext, runInContext, type Context } from "node:vm";
 import { join } from "node:path";
+import * as nodeCrypto from "node:crypto";
+import * as nodeFs from "node:fs/promises";
 import type { SkillEntry } from "./loader.js";
 import type { EventEmitter } from "./events.js";
 import type { JsonLinesWriter } from "./protocol.js";
@@ -127,7 +129,7 @@ export class SandboxExecutor {
     const scriptContent = await readFile(mainScript, "utf-8");
 
     // Create sandboxed context with abort signal
-    const sandbox = this.createNodeSandbox(request, context, emitter);
+    const sandbox = this.createNodeSandbox(request, context, emitter, skill);
     const vmContext = createContext(sandbox);
 
     // Compute VM timeout from sandbox resource limits or request timeout
@@ -196,7 +198,85 @@ export class SandboxExecutor {
     request: InvokeRequest,
     context: ExecutionContext,
     emitter: EventEmitter,
+    skill: SkillEntry,
   ): Record<string, unknown> & { __exports: Record<string, unknown>; __result: unknown } {
+    // Resolve sandbox.env overrides (replicate spawnProcess logic)
+    const resolvedSandboxEnv: Record<string, string> = {};
+    const sandboxEnv = skill.manifest.metadata.carnelian?.sandbox?.env;
+    if (sandboxEnv) {
+      for (const [key, value] of Object.entries(sandboxEnv)) {
+        const resolved = value.replace(/\$\{(\w+)\}/g, (_: string, name: string) =>
+          process.env[name] ?? "",
+        );
+        resolvedSandboxEnv[key] = resolved;
+      }
+    }
+
+    // Build read-only process.env proxy
+    const mergedEnv = { ...process.env, ...resolvedSandboxEnv };
+    const readOnlyEnvProxy = new Proxy(mergedEnv, {
+      get(target, prop) {
+        if (typeof prop === "string") {
+          return target[prop];
+        }
+        return undefined;
+      },
+      has(target, prop) {
+        return prop in target;
+      },
+      set() {
+        throw new TypeError("process.env is read-only in sandbox");
+      },
+      deleteProperty() {
+        throw new TypeError("process.env is read-only in sandbox");
+      },
+    });
+
+    // Determine network policy
+    const networkPolicy = skill.manifest.metadata.carnelian?.sandbox?.network ?? "none";
+
+    // Build fetch wrapper with abort signal propagation
+    const sandboxFetch = networkPolicy !== "none"
+      ? (input: RequestInfo | URL, init?: RequestInit) => {
+          // Merge abort signals: context signal + caller signal
+          let mergedSignal: AbortSignal;
+          
+          if (!init?.signal) {
+            // No caller signal, just use context signal
+            mergedSignal = context.abortController.signal;
+          } else if (typeof AbortSignal.any === "function") {
+            // Node 20+: Use AbortSignal.any for proper merging
+            mergedSignal = AbortSignal.any([context.abortController.signal, init.signal]);
+          } else {
+            // Node 18 fallback: Create new controller that listens to both
+            const mergedController = new AbortController();
+            const abortHandler = () => mergedController.abort();
+            
+            if (context.abortController.signal.aborted || init.signal.aborted) {
+              mergedController.abort();
+            } else {
+              context.abortController.signal.addEventListener("abort", abortHandler, { once: true });
+              init.signal.addEventListener("abort", abortHandler, { once: true });
+            }
+            
+            mergedSignal = mergedController.signal;
+          }
+
+          return globalThis.fetch(input, { ...init, signal: mergedSignal });
+        }
+      : () => {
+          throw new Error("Network access is disabled (network: none)");
+        };
+
+    // Build WebSocket wrapper with network policy enforcement
+    const sandboxWebSocket = networkPolicy !== "none"
+      ? globalThis.WebSocket
+      : class {
+          constructor() {
+            throw new Error("Network access is disabled (network: none)");
+          }
+        };
+
     // Guard: only emit events if not aborted/cancelled
     const guardedEmit = (level: string, msg: string, fields?: Record<string, unknown>) => {
       if (context.abortController.signal.aborted) return;
@@ -246,6 +326,25 @@ export class SandboxExecutor {
       decodeURIComponent,
       encodeURI,
       decodeURI,
+
+      // HTTP / network (conditional on skill.sandbox.network)
+      fetch: sandboxFetch,
+      URL: globalThis.URL,
+      URLSearchParams: globalThis.URLSearchParams,
+      Headers: globalThis.Headers,
+      Request: globalThis.Request,
+      Response: globalThis.Response,
+      WebSocket: sandboxWebSocket, // Requires Node.js >= 21, gated by network policy
+
+      // Encoding / hashing
+      Buffer: globalThis.Buffer,
+      crypto: nodeCrypto,
+
+      // File system (node:fs/promises)
+      fs: nodeFs,
+
+      // Environment (read-only proxy)
+      process: { env: readOnlyEnvProxy },
 
       // Skill API
       input: request.input,

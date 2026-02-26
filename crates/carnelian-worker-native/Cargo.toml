@@ -1,0 +1,25 @@
+[package]
+name = "carnelian-worker-native"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+carnelian-common = { path = "../carnelian-common" }
+carnelian-core = { path = "../carnelian-core" }
+blake3.workspace = true
+bollard.workspace = true
+walkdir.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+sysinfo.workspace = true
+futures-util.workspace = true
+
+[lints]
+workspace = true

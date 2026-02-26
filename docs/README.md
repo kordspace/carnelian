@@ -8,7 +8,7 @@
 
 - **Core Orchestrator**: Rust (Axum, Tokio, SQLx) — HTTP API, WebSocket events, task scheduling
 - **Desktop UI**: Dioxus desktop application
-- **Workers**: Node.js, Python, Shell execution environments (JSONL transport protocol)
+- **Workers**: Node.js, Python, WASM, Native Ops execution environments
 - **Database**: PostgreSQL 16 with pgvector for vector embeddings
 - **Models**: Local-first inference via Ollama (DeepSeek R1)
 - **Security**: blake3-based hash-chain ledger, capability grants, deny-by-default policy engine
@@ -26,6 +26,7 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for installation and configuration instruct
 | [BRAND.md](BRAND.md) | 🔥 Dual theme brand kit (Forge / Night Lab) |
 | [LOGGING.md](LOGGING.md) | 🔥 Logging philosophy and conventions |
 | [PHASE3.md](PHASE3.md) | Phase 3 agentic execution engine architecture |
+| [WASM_SKILLS.md](WASM_SKILLS.md) | How to write, compile, and deploy a Carnelian WASM skill |
 
 ## Machine Profiles
 

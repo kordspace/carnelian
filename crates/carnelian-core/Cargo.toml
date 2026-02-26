@@ -56,10 +56,6 @@ wasmtime-wasi = "27.0"
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.29", features = ["signal"] }
 
-[[bin]]
-name = "carnelian"
-path = "src/bin/carnelian.rs"
-
 [dev-dependencies]
 testcontainers.workspace = true
 tokio-test.workspace = true

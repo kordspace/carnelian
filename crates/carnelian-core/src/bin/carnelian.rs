@@ -133,7 +133,23 @@ enum Commands {
     },
 
     /// Initialize Carnelian configuration (interactive setup wizard)
-    Init,
+    Init {
+        /// Skip all prompts, accept defaults
+        #[arg(long, short = 'y')]
+        non_interactive: bool,
+
+        /// Overwrite existing machine.toml without asking
+        #[arg(long)]
+        force: bool,
+
+        /// Skip already-completed steps (used by next phase)
+        #[arg(long)]
+        resume: bool,
+
+        /// Path to an existing key file
+        #[arg(long)]
+        key_path: Option<PathBuf>,
+    },
 
     /// Launch the desktop UI (or web UI with --web flag)
     Ui {
@@ -217,7 +233,9 @@ async fn main() {
             handle_skills(command, cli.config, cli.log_level, cli.database_url).await
         }
         Commands::Task { command, url } => handle_task_command(command, &resolve_url(url)).await,
-        Commands::Init => handle_init(cli.config, cli.log_level, cli.database_url).await,
+        Commands::Init { non_interactive, force, resume, key_path } => {
+            handle_init(cli.config, cli.log_level, cli.database_url, non_interactive, force, resume, key_path).await
+        }
         Commands::Ui { web } => handle_ui(web).await,
         Commands::Keygen { output } => handle_keygen(output).await,
         Commands::Key { command } => {
@@ -230,6 +248,9 @@ async fn main() {
 
     if let Err(e) = result {
         eprintln!("Error: {}", e);
+        if let carnelian_common::Error::ExitCode(code, _) = e {
+            std::process::exit(code);
+        }
         std::process::exit(1);
     }
 }
@@ -1005,14 +1026,150 @@ fn format_event(event: &EventEnvelope) -> String {
     format!("{color_code}[{ts}] {level_str} {event_type}{meta}{payload}{reset}")
 }
 
+/// Tracks which init steps have been completed (stored in ~/.carnelian/init-state.json)
+#[derive(serde::Serialize, serde::Deserialize, Default, Debug)]
+struct InitState {
+    /// Key file written to disk
+    keypair_generated: bool,
+    /// Path to the key file (for resume with custom paths)
+    keypair_path: Option<PathBuf>,
+    /// machine.toml created/updated
+    machine_toml_written: bool,
+    /// Docker containers created & started
+    containers_started: bool,
+    /// sqlx migrations applied
+    migrations_run: bool,
+    /// Starter skills copied
+    skills_activated: bool,
+}
+
+/// Load init state from file, returning default on any error
+fn load_init_state(path: &std::path::Path) -> InitState {
+    if let Ok(contents) = std::fs::read_to_string(path) {
+        if let Ok(state) = serde_json::from_str(&contents) {
+            return state;
+        }
+    }
+    InitState::default()
+}
+
+/// Save init state to file, logging warning on failure
+fn save_init_state(path: &std::path::Path, state: &InitState) {
+    if let Ok(json) = serde_json::to_string_pretty(state) {
+        if let Err(e) = std::fs::write(path, json) {
+            println!("⚠ Warning: failed to save init state: {}", e);
+        }
+    }
+}
+
+/// Detect hardware - returns (RAM_GB, VRAM_GB)
+pub(crate) fn detect_hardware() -> (f64, f64) {
+    use sysinfo::{MemoryKind, RefreshKind, System};
+    
+    let mut sys = System::new_with_specifics(RefreshKind::new().with_memory(MemoryKind::RAM));
+    sys.refresh_all();
+    
+    let total_ram_gb = sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
+    
+    // Detect GPU VRAM
+    let mut vram_gb: f64 = 0.0;
+    
+    // Try nvidia-smi first (returns MiB)
+    if let Ok(output) = std::process::Command::new("nvidia-smi")
+        .args(["--query-gpu=memory.total", "--format=csv,noheader,nounits"])
+        .output()
+    {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Some(first_line) = stdout.lines().next() {
+                if let Ok(vram_mib) = first_line.trim().parse::<f64>() {
+                    vram_gb = vram_mib / 1024.0;
+                }
+            }
+        }
+    }
+    
+    // Fallback to rocm-smi for AMD GPUs
+    if vram_gb == 0.0 {
+        if let Ok(output) = std::process::Command::new("rocm-smi")
+            .args(["--showmeminfo", "vram"])
+            .output()
+        {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                // Parse lines like: "GPU[0] : VRAM used: 1234 MB, total: 16384 MB"
+                for line in stdout.lines() {
+                    if line.contains("total:") {
+                        let parts: Vec<&str> = line.split_whitespace().collect();
+                        for (i, part) in parts.iter().enumerate() {
+                            if *part == "total:" && i + 1 < parts.len() {
+                                if let Ok(vram_mb) = parts[i + 1].parse::<f64>() {
+                                    vram_gb = vram_mb / 1024.0;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if vram_gb > 0.0 {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    (total_ram_gb, vram_gb)
+}
+
+/// Suggest machine profile based on hardware specs
+pub(crate) fn suggest_profile(ram_gb: f64, vram_gb: f64) -> &'static str {
+    if ram_gb >= 48.0 && vram_gb >= 10.0 {
+        "urim"
+    } else if ram_gb >= 16.0 && vram_gb >= 6.0 {
+        "thummim"
+    } else {
+        "custom"
+    }
+}
+
 /// Handle the `init` command - Interactive setup wizard with Docker and hardware detection
 async fn handle_init(
     _config_path: Option<PathBuf>,
     _log_level_override: Option<String>,
     _database_url_override: Option<String>,
+    non_interactive: bool,
+    force: bool,
+    resume: bool,
+    key_path: Option<PathBuf>,
 ) -> carnelian_common::Result<()> {
     use std::io::{Write, stdin, stdout};
     use sysinfo::{MemoryKind, RefreshKind, System};
+
+    // Helper closure for interactive vs non-interactive prompts
+    let prompt_or_default = |message: &str, default: &str| -> String {
+        if non_interactive {
+            println!("{} [auto: {}]", message, default);
+            default.to_string()
+        } else {
+            print!("{}: ", message);
+            stdout().flush().unwrap();
+            let mut input = String::new();
+            stdin().read_line(&mut input).unwrap();
+            let trimmed = input.trim();
+            if trimmed.is_empty() {
+                default.to_string()
+            } else {
+                trimmed.to_string()
+            }
+        }
+    };
+
+    // Helper for yes/no prompts (returns true for yes)
+    let prompt_yes_no = |message: &str, default_yes: bool| -> bool {
+        let default_str = if default_yes { "Y/n" } else { "y/N" };
+        let response = prompt_or_default(&format!("{} [{}]", message, default_str), if default_yes { "y" } else { "n" });
+        response.to_lowercase() == "y" || (response.is_empty() && default_yes)
+    };
 
     // Welcome banner
     println!("╔═══════════════════════════════════════════════════════════════╗");
@@ -1024,30 +1181,24 @@ async fn handle_init(
     println!("╚═══════════════════════════════════════════════════════════════╝");
     println!();
 
-    // Hardware detection with sysinfo
+    // Hardware detection using extracted helper
     println!("Detecting hardware...");
-    let mut sys = System::new_with_specifics(RefreshKind::new().with_memory(MemoryKind::RAM));
-    sys.refresh_all();
-
-    let total_ram_gb = sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
+    let (total_ram_gb, vram_gb) = detect_hardware();
     println!("  RAM: {:.1} GB", total_ram_gb);
-
-    // Detect GPU presence (basic check)
-    let has_gpu = std::process::Command::new("nvidia-smi")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
-        || std::process::Command::new("rocm-smi")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
-
-    if has_gpu {
-        println!("  GPU: Detected");
+    if vram_gb > 0.0 {
+        println!("  GPU VRAM: {:.1} GB", vram_gb);
     } else {
         println!("  GPU: Not detected (CPU inference only)");
     }
     println!();
+
+    // Minimum hardware guard
+    if total_ram_gb < 8.0 {
+        return Err(carnelian_common::Error::ExitCode(
+            2,
+            "Hardware below minimum requirements (need ≥ 8 GB RAM)".to_string(),
+        ));
+    }
 
     // Prerequisite check - Docker via bollard
     print!("Checking Docker... ");
@@ -1069,52 +1220,64 @@ async fn handle_init(
         }
         Err(e) => {
             println!("⚠ Docker not available: {}", e);
-            println!("  Please install and start Docker before continuing.");
-            println!("  Visit: https://docs.docker.com/get-docker/");
-            None
+            // Platform-specific Docker install instructions
+            #[cfg(target_os = "windows")]
+            {
+                println!("  Please install Docker Desktop for Windows:");
+                println!("    winget install Docker.DockerDesktop");
+                println!("  Or visit: https://docs.docker.com/desktop/install/windows/");
+            }
+            #[cfg(target_os = "macos")]
+            {
+                println!("  Please install Docker Desktop for Mac:");
+                println!("    brew install --cask docker");
+                println!("  Or visit: https://docs.docker.com/desktop/install/mac/");
+            }
+            #[cfg(target_os = "linux")]
+            {
+                println!("  Please install Docker Engine:");
+                println!("    curl -fsSL https://get.docker.com | sh");
+                println!("  Or visit: https://docs.docker.com/engine/install/");
+            }
+            #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+            {
+                println!("  Please install Docker before continuing.");
+                println!("  Visit: https://docs.docker.com/get-docker/");
+            }
+            return Err(carnelian_common::Error::ExitCode(
+                1,
+                "Docker not found".to_string(),
+            ));
         }
     };
 
-    // Smart profile suggestion based on hardware
-    let suggested_profile = if total_ram_gb >= 32.0 && has_gpu {
-        "thummim"
-    } else if total_ram_gb >= 16.0 {
-        "urim"
-    } else {
-        "custom"
-    };
+    // Smart profile suggestion using extracted helper
+    let suggested_profile = suggest_profile(total_ram_gb, vram_gb);
 
     println!();
     println!(
-        "Suggested profile: {} (based on {:.1}GB RAM {} GPU)",
+        "Suggested profile: {} (based on {:.1}GB RAM {:.1}GB VRAM)",
         suggested_profile,
         total_ram_gb,
-        if has_gpu { "with" } else { "without" }
+        vram_gb
     );
-    print!(
-        "Select machine profile [thummim/urim/custom] (default: {}): ",
-        suggested_profile
+    let profile = prompt_or_default(
+        &format!("Select machine profile [urim/thummim/custom] (default: {})", suggested_profile),
+        suggested_profile,
     );
-    stdout().flush().unwrap();
-    let mut profile = String::new();
-    stdin().read_line(&mut profile).unwrap();
-    let profile = profile.trim();
     let machine_profile = if profile.is_empty() {
         suggested_profile
     } else {
-        profile
+        profile.as_str()
     };
 
     // Container setup if Docker is available
-    let mut auto_setup_containers = false;
-    if docker.is_some() {
+    let auto_setup_containers = if docker.is_some() {
         println!();
-        print!("Auto-setup PostgreSQL and Ollama containers? [Y/n]: ");
-        stdout().flush().unwrap();
-        let mut setup = String::new();
-        stdin().read_line(&mut setup).unwrap();
-        auto_setup_containers = setup.trim().to_lowercase() != "n";
-    }
+        prompt_yes_no("Auto-setup PostgreSQL and Ollama containers?", true)
+    } else {
+        false
+    };
 
     // Default ports and URLs
     let (postgres_port, ollama_port, http_port) = match machine_profile {
@@ -1124,53 +1287,36 @@ async fn handle_init(
     };
 
     // Database URL
-    print!(
-        "Database URL [postgresql://carnelian:carnelian@localhost:{}/carnelian]: ",
+    let default_db_url = format!(
+        "postgresql://carnelian:carnelian@localhost:{}/carnelian",
         postgres_port
     );
-    stdout().flush().unwrap();
-    let mut db_url = String::new();
-    stdin().read_line(&mut db_url).unwrap();
-    let database_url = if db_url.trim().is_empty() {
-        format!(
-            "postgresql://carnelian:carnelian@localhost:{}/carnelian",
-            postgres_port
-        )
-    } else {
-        db_url.trim().to_string()
-    };
+    let database_url = prompt_or_default(
+        &format!("Database URL [postgresql://carnelian:carnelian@localhost:{}/carnelian]", postgres_port),
+        &default_db_url,
+    );
 
     // Ollama URL
-    print!("Ollama URL [http://localhost:{}]: ", ollama_port);
-    stdout().flush().unwrap();
-    let mut ollama_url = String::new();
-    stdin().read_line(&mut ollama_url).unwrap();
-    let ollama_url = if ollama_url.trim().is_empty() {
-        format!("http://localhost:{}", ollama_port)
-    } else {
-        ollama_url.trim().to_string()
-    };
+    let default_ollama_url = format!("http://localhost:{}", ollama_port);
+    let ollama_url = prompt_or_default(
+        &format!("Ollama URL [http://localhost:{}]", ollama_port),
+        &default_ollama_url,
+    );
 
     // HTTP port
-    print!("HTTP port [{}]: ", http_port);
-    stdout().flush().unwrap();
-    let mut port_str = String::new();
-    stdin().read_line(&mut port_str).unwrap();
-    let http_port = if port_str.trim().is_empty() {
-        http_port
-    } else {
-        port_str.trim().parse::<u16>().unwrap_or(http_port)
-    };
+    let default_http_port = http_port.to_string();
+    let http_port_input = prompt_or_default(
+        &format!("HTTP port [{}]", http_port),
+        &default_http_port,
+    );
+    let http_port: u16 = http_port_input.parse().unwrap_or(http_port);
 
     // Workspace paths
-    print!("Workspace paths to scan [.] (comma-separated): ");
-    stdout().flush().unwrap();
-    let mut paths = String::new();
-    stdin().read_line(&mut paths).unwrap();
-    let workspace_paths = if paths.trim().is_empty() {
+    let paths_input = prompt_or_default("Workspace paths to scan [.] (comma-separated)", ".");
+    let workspace_paths: Vec<String> = if paths_input.trim().is_empty() || paths_input == "." {
         vec![".".to_string()]
     } else {
-        paths
+        paths_input
             .trim()
             .split(',')
             .map(|s| s.trim().to_string())
@@ -1178,85 +1324,173 @@ async fn handle_init(
     };
 
     // Owner keypair
-    println!();
-    print!("Generate new owner keypair? [Y/n]: ");
-    stdout().flush().unwrap();
-    let mut gen_key = String::new();
-    stdin().read_line(&mut gen_key).unwrap();
-    let gen_key = gen_key.trim().to_lowercase();
-
     let home_dir = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".to_string());
     let default_keypair_path = PathBuf::from(&home_dir)
         .join(".carnelian")
-        .join("owner.key");
+        .join("owner.pem");
+
+    // Init state tracking
+    let state_path = PathBuf::from(&home_dir).join(".carnelian").join("init-state.json");
+    let mut init_state = if resume {
+        load_init_state(&state_path)
+    } else {
+        InitState::default()
+    };
 
     // Track the actual key path for machine.toml
     let mut actual_keypair_path: Option<PathBuf> = None;
 
-    if gen_key.is_empty() || gen_key == "y" {
-        // Generate keypair
-        let (public_key, private_key_bytes) = carnelian_core::crypto::generate_ed25519_keypair();
+    // Retain signing key for API token encryption (Step 4)
+    let mut init_signing_key: Option<ed25519_dalek::SigningKey> = None;
 
-        // Create parent directories
-        if let Some(parent) = default_keypair_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| {
-                carnelian_common::Error::Config(format!("Failed to create key directory: {}", e))
-            })?;
+    // Handle --key-path flag: skip interactive prompt and use provided path
+    if let Some(ref provided_key_path) = key_path {
+        if !provided_key_path.exists() {
+            return Err(carnelian_common::Error::Config(format!(
+                "Key file not found: {}",
+                provided_key_path.display()
+            )));
         }
-
-        // Write private key
-        std::fs::write(&default_keypair_path, &private_key_bytes).map_err(|e| {
-            carnelian_common::Error::Config(format!("Failed to write key file: {}", e))
-        })?;
-
-        // Set permissions on Unix
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let permissions = std::fs::Permissions::from_mode(0o600);
-            std::fs::set_permissions(&default_keypair_path, permissions).map_err(|e| {
-                carnelian_common::Error::Config(format!("Failed to set key permissions: {}", e))
-            })?;
+        println!("✓ Using key from --key-path: {}", provided_key_path.display());
+        actual_keypair_path = Some(provided_key_path.clone());
+        init_state.keypair_generated = true;
+        init_state.keypair_path = Some(provided_key_path.clone());
+        // Ensure parent directory exists before saving state
+        if let Some(parent) = state_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
         }
+        save_init_state(&state_path, &init_state);
+    } else if !init_state.keypair_generated && !non_interactive {
+        // Interactive keypair selection
+        println!();
+        let gen_key = prompt_or_default("Generate new owner keypair? [Y/n]", "y");
+        let gen_key = gen_key.trim().to_lowercase();
 
-        println!("✓ Generated new owner keypair");
-        println!("  Public key (hex): {}", hex::encode(public_key.as_bytes()));
-        println!("  Private key file: {}", default_keypair_path.display());
+        if gen_key.is_empty() || gen_key == "y" {
+            // Idempotency guard: skip if already exists
+            if default_keypair_path.exists() {
+                println!("✓ Keypair already exists at {}, skipping", default_keypair_path.display());
+                actual_keypair_path = Some(default_keypair_path.clone());
+            } else {
+                // Generate keypair - returns (SigningKey, VerifyingKey)
+                let (signing_key, verifying_key) = carnelian_core::crypto::generate_ed25519_keypair();
 
-        actual_keypair_path = Some(default_keypair_path);
-    } else {
-        print!("Path to existing key file (or press Enter to skip): ");
-        stdout().flush().unwrap();
-        let mut key_path = String::new();
-        stdin().read_line(&mut key_path).unwrap();
-        let key_path = key_path.trim();
-        if !key_path.is_empty() {
-            let path = std::path::Path::new(key_path);
-            if !path.exists() {
-                return Err(carnelian_common::Error::Config(format!(
-                    "Key file not found: {}",
-                    key_path
-                )));
+                // Retain signing key for later use (Step 4)
+                init_signing_key = Some(signing_key.clone());
+
+                // Create parent directories
+                if let Some(parent) = default_keypair_path.parent() {
+                    std::fs::create_dir_all(parent).map_err(|e| {
+                        carnelian_common::Error::Config(format!("Failed to create key directory: {}", e))
+                    })?;
+                }
+
+                // Write private key using keypair_to_bytes
+                let key_bytes = carnelian_core::crypto::keypair_to_bytes(&signing_key);
+                std::fs::write(&default_keypair_path, &key_bytes).map_err(|e| {
+                    carnelian_common::Error::Config(format!("Failed to write key file: {}", e))
+                })?;
+
+                // Set permissions on Unix
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let permissions = std::fs::Permissions::from_mode(0o600);
+                    std::fs::set_permissions(&default_keypair_path, permissions).map_err(|e| {
+                        carnelian_common::Error::Config(format!("Failed to set key permissions: {}", e))
+                    })?;
+                }
+
+                println!("✓ Generated new owner keypair");
+                println!("  Public key (hex): {}", hex::encode(verifying_key.as_bytes()));
+                println!("  Private key file: {}", default_keypair_path.display());
+
+                actual_keypair_path = Some(default_keypair_path.clone());
             }
-            println!("✓ Using existing key: {}", key_path);
-            actual_keypair_path = Some(PathBuf::from(key_path));
+            init_state.keypair_generated = true;
+            init_state.keypair_path = actual_keypair_path.clone();
+            save_init_state(&state_path, &init_state);
         } else {
-            println!("  (No key configured)");
+            let key_path_input = prompt_or_default("Path to existing key file (or press Enter to skip)", "");
+            if !key_path_input.is_empty() {
+                let path = std::path::Path::new(&key_path_input);
+                if !path.exists() {
+                    return Err(carnelian_common::Error::Config(format!(
+                        "Key file not found: {}",
+                        key_path_input
+                    )));
+                }
+                println!("✓ Using existing key: {}", key_path_input);
+                let key_input_path = PathBuf::from(key_path_input);
+                actual_keypair_path = Some(key_input_path.clone());
+                init_state.keypair_generated = true;
+                init_state.keypair_path = Some(key_input_path);
+                save_init_state(&state_path, &init_state);
+            } else {
+                println!("  (No key configured)");
+            }
         }
+    } else if non_interactive && !init_state.keypair_generated && key_path.is_none() {
+        // Non-interactive mode: auto-generate key if not exists
+        if default_keypair_path.exists() {
+            println!("✓ Keypair already exists at {}, skipping", default_keypair_path.display());
+            actual_keypair_path = Some(default_keypair_path.clone());
+        } else {
+            // Generate keypair - returns (SigningKey, VerifyingKey)
+            let (signing_key, verifying_key) = carnelian_core::crypto::generate_ed25519_keypair();
+
+            // Retain signing key for later use (Step 4)
+            init_signing_key = Some(signing_key.clone());
+
+            // Create parent directories
+            if let Some(parent) = default_keypair_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+
+            // Write private key using keypair_to_bytes
+            let key_bytes = carnelian_core::crypto::keypair_to_bytes(&signing_key);
+            let _ = std::fs::write(&default_keypair_path, &key_bytes);
+
+            // Set permissions on Unix
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let permissions = std::fs::Permissions::from_mode(0o600);
+                let _ = std::fs::set_permissions(&default_keypair_path, permissions);
+            }
+
+            println!("✓ Generated new owner keypair (non-interactive)");
+            println!("  Public key (hex): {}", hex::encode(verifying_key.as_bytes()));
+            println!("  Private key file: {}", default_keypair_path.display());
+
+            actual_keypair_path = Some(default_keypair_path.clone());
+        }
+        init_state.keypair_generated = true;
+        init_state.keypair_path = actual_keypair_path.clone();
+        save_init_state(&state_path, &init_state);
+    } else {
+        // Already completed in previous run - use stored keypair_path if available
+        actual_keypair_path = init_state.keypair_path.clone().or(Some(default_keypair_path));
     }
 
     // Write machine.toml
     let machine_toml_path = PathBuf::from("machine.toml");
-    if machine_toml_path.exists() {
-        print!("\nmachine.toml already exists. Overwrite? [y/N]: ");
-        stdout().flush().unwrap();
-        let mut overwrite = String::new();
-        stdin().read_line(&mut overwrite).unwrap();
-        if overwrite.trim().to_lowercase() != "y" {
-            println!("Skipped writing machine.toml");
+    if !init_state.machine_toml_written {
+        let should_write = if machine_toml_path.exists() && !force {
+            if non_interactive {
+                // In non-interactive mode, don't overwrite unless force flag is set
+                false
+            } else {
+                let overwrite = prompt_or_default("machine.toml already exists. Overwrite? [y/N]", "n");
+                overwrite.to_lowercase() == "y"
+            }
         } else {
+            true
+        };
+        
+        if should_write {
             write_machine_toml(
                 &machine_toml_path,
                 machine_profile,
@@ -1266,21 +1500,15 @@ async fn handle_init(
                 &workspace_paths,
                 actual_keypair_path.as_ref(),
             )?;
+            init_state.machine_toml_written = true;
+            save_init_state(&state_path, &init_state);
+        } else {
+            println!("Skipped writing machine.toml");
         }
-    } else {
-        write_machine_toml(
-            &machine_toml_path,
-            machine_profile,
-            &database_url,
-            &ollama_url,
-            http_port,
-            &workspace_paths,
-            actual_keypair_path.as_ref(),
-        )?;
     }
 
     // Docker container setup
-    if auto_setup_containers {
+    if auto_setup_containers && !init_state.containers_started {
         println!();
         println!("Setting up Docker containers...");
         if let Some(ref docker) = docker {
@@ -1387,6 +1615,7 @@ async fn handle_init(
                 ..Default::default()
             };
 
+            let mut ollama_started = false;
             match docker
                 .create_container(
                     Some(CreateContainerOptions {
@@ -1403,46 +1632,118 @@ async fn handle_init(
                         .start_container("carnelian-ollama", None::<StartContainerOptions>)
                         .await
                     {
-                        Ok(_) => println!("    ✓ Ollama container started on port {}", ollama_port),
+                        Ok(_) => {
+                            println!("    ✓ Ollama container started on port {}", ollama_port);
+                            ollama_started = true;
+                        }
                         Err(e) => println!("    ⚠ Failed to start Ollama container: {}", e),
                     }
                 }
                 Err(e) => println!("    ⚠ Failed to create Ollama container: {}", e),
             }
 
-            // Wait for PostgreSQL to be ready
+            // PostgreSQL readiness retry loop
+            const MAX_PG_RETRIES: u32 = 30;
+            const PG_RETRY_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+            
             println!("  Waiting for PostgreSQL to be ready...");
-            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-            println!("    ✓ Containers should be ready");
+            let mut pg_ready = false;
+            for attempt in 1..=MAX_PG_RETRIES {
+                match sqlx::postgres::PgPoolOptions::new()
+                    .max_connections(1)
+                    .acquire_timeout(std::time::Duration::from_secs(2))
+                    .connect(&database_url)
+                    .await
+                {
+                    Ok(_) => {
+                        println!("    ✓ PostgreSQL is ready");
+                        pg_ready = true;
+                        break;
+                    }
+                    Err(_) => {
+                        println!("    … waiting for PostgreSQL ({}/{})", attempt, MAX_PG_RETRIES);
+                        tokio::time::sleep(PG_RETRY_INTERVAL).await;
+                    }
+                }
+            }
+            if !pg_ready {
+                println!("    ⚠ PostgreSQL did not become ready in time");
+            }
+
+            // Ollama readiness check
+            if ollama_started {
+                const MAX_OLLAMA_RETRIES: u32 = 30;
+                const OLLAMA_RETRY_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+                
+                println!("  Waiting for Ollama to be ready...");
+                let client = reqwest::Client::new();
+                let ollama_url = format!("http://localhost:{}/api/tags", ollama_port);
+                let mut ollama_ready = false;
+                
+                for attempt in 1..=MAX_OLLAMA_RETRIES {
+                    match client.get(&ollama_url).timeout(std::time::Duration::from_secs(2)).send().await {
+                        Ok(resp) if resp.status().is_success() => {
+                            println!("    ✓ Ollama is ready");
+                            ollama_ready = true;
+                            break;
+                        }
+                        _ => {
+                            println!("    … waiting for Ollama ({}/{})", attempt, MAX_OLLAMA_RETRIES);
+                            tokio::time::sleep(OLLAMA_RETRY_INTERVAL).await;
+                        }
+                    }
+                }
+                if !ollama_ready {
+                    println!("    ⚠ Ollama did not become ready in time");
+                }
+            }
+
+            init_state.containers_started = true;
+            save_init_state(&state_path, &init_state);
         }
     }
 
-    // Run migrations
-    println!();
-    print!("Run database migrations now? [Y/n]: ");
-    stdout().flush().unwrap();
-    let mut run_migs = String::new();
-    stdin().read_line(&mut run_migs).unwrap();
-    if run_migs.trim().to_lowercase() != "n" {
-        // Create minimal config for migrations
-        let mut config = Config::default();
-        config.database_url = database_url.clone();
-
-        println!("Connecting to database...");
-        if let Err(e) = config.connect_database().await {
-            println!("⚠ Failed to connect to database: {}", e);
-            if auto_setup_containers {
-                println!("  Make sure containers are started:");
-                println!("    docker start carnelian-postgres");
-            } else {
-                println!("  Make sure PostgreSQL is running");
-            }
+    // Run migrations (Step 5: Retain DB pool in shared_pool variable)
+    let mut shared_pool: Option<sqlx::PgPool> = None;
+    if !init_state.migrations_run {
+        println!();
+        let run_migrations = if non_interactive {
+            true
         } else {
-            println!("Running migrations...");
-            if let Ok(pool) = config.pool() {
-                match carnelian_core::db::run_migrations(pool, None).await {
-                    Ok(_) => println!("✓ Migrations completed"),
-                    Err(e) => println!("⚠ Migration error: {}", e),
+            prompt_yes_no("Run database migrations now?", true)
+        };
+        if run_migrations {
+            // Create minimal config for migrations
+            let mut config = Config::default();
+            config.database_url = database_url.clone();
+
+            println!("Connecting to database...");
+            if let Err(e) = config.connect_database().await {
+                println!("⚠ Failed to connect to database: {}", e);
+                if auto_setup_containers {
+                    println!("  Make sure containers are started:");
+                    println!("    docker start carnelian-postgres");
+                } else {
+                    println!("  Make sure PostgreSQL is running");
+                }
+            } else {
+                println!("Running migrations...");
+                if let Ok(pool) = config.pool() {
+                    // Retain pool for later use (Step 5)
+                    shared_pool = Some(pool.clone());
+                    match carnelian_core::db::run_migrations(pool, None).await {
+                        Ok(_) => {
+                            println!("✓ Migrations completed");
+                            init_state.migrations_run = true;
+                            save_init_state(&state_path, &init_state);
+                        }
+                        Err(e) => {
+                            return Err(carnelian_common::Error::ExitCode(
+                                3,
+                                format!("Migration failed: {}", e),
+                            ));
+                        }
+                    }
                 }
             }
         }
@@ -1451,11 +1752,12 @@ async fn handle_init(
     // Docker-compose up option (alternative to direct container management)
     if docker.is_some() && !auto_setup_containers {
         println!();
-        print!("Start services with docker-compose? [Y/n]: ");
-        stdout().flush().unwrap();
-        let mut compose_up = String::new();
-        stdin().read_line(&mut compose_up).unwrap();
-        if compose_up.trim().to_lowercase() != "n" {
+        let start_compose = if non_interactive {
+            false
+        } else {
+            prompt_yes_no("Start services with docker-compose?", true)
+        };
+        if start_compose {
             println!("Starting services with docker-compose...");
             match std::process::Command::new("docker-compose")
                 .args(["-f", "docker-compose.yml", "up", "-d", "carnelian-postgres", "carnelian-ollama"])
@@ -1474,60 +1776,181 @@ async fn handle_init(
         }
     }
 
-    // Starter skills activation
-    println!();
-    println!("Available starter skills:");
-    println!("  - file-analyzer: Analyze files and extract metadata");
-    println!("  - code-review: Review code for quality and issues");
-    println!("  - model-usage: Track and optimize AI model usage");
-    print!("Activate starter skills? [Y/n]: ");
-    stdout().flush().unwrap();
-    let mut activate_skills = String::new();
-    stdin().read_line(&mut activate_skills).unwrap();
-    if activate_skills.trim().to_lowercase() != "n" {
-        let starter_skills = vec!["file-analyzer", "code-review", "model-usage"];
-        let skill_book_path = PathBuf::from("skills/skill-book");
-        let registry_path = PathBuf::from("skills/registry");
-        
-        // Create registry directory if it doesn't exist
-        if let Err(e) = std::fs::create_dir_all(&registry_path) {
-            println!("⚠ Failed to create registry directory: {}", e);
+    // Starter skills activation (Step 6: Use SkillBook::activate())
+    if !init_state.skills_activated {
+        println!();
+        let activate_skills = if non_interactive {
+            true
         } else {
+            println!("Available starter skills:");
+            println!("  - file-analyzer: Analyze files and extract metadata");
+            println!("  - code-review: Review code for quality and issues");
+            println!("  - model-usage: Track and optimize AI model usage");
+            prompt_yes_no("Activate starter skills?", true)
+        };
+        
+        if activate_skills {
+            let starter_skills = vec!["file-analyzer", "code-review", "model-usage"];
+            let skill_book_path = PathBuf::from("skills/skill-book");
+            let registry_path = PathBuf::from("skills/registry");
+            
+            // Build config for SkillBook
+            let skill_config = if let Some(ref pool) = shared_pool {
+                let mut config = Config::default();
+                config.database_url = database_url.clone();
+                // Note: Config doesn't have a direct set_pool method, so we'll work without it
+                std::sync::Arc::new(config)
+            } else {
+                std::sync::Arc::new(Config::default())
+            };
+            
+            // Create SkillBook instance
+            let skill_book = carnelian_core::skill_book::SkillBook::new(
+                skill_book_path.clone(),
+                registry_path.clone(),
+                skill_config,
+            );
+            
             for skill_id in starter_skills {
-                let skill_src = skill_book_path.join(skill_id);
-                let skill_dst = registry_path.join(skill_id);
-                
-                if skill_src.exists() {
-                    match std::fs::create_dir_all(&skill_dst) {
-                        Ok(_) => {
-                            // Copy skill files
-                            if let Ok(entries) = std::fs::read_dir(&skill_src) {
-                                for entry in entries.flatten() {
-                                    let src_path = entry.path();
-                                    let dst_path = skill_dst.join(entry.file_name());
-                                    if src_path.is_file() {
-                                        let _ = std::fs::copy(&src_path, &dst_path);
-                                    }
-                                }
-                            }
-                            println!("  ✓ Activated {}", skill_id);
-                        }
-                        Err(e) => {
-                            println!("  ⚠ Failed to activate {}: {}", skill_id, e);
+                // Check if already activated using get_entry
+                match skill_book.get_entry(skill_id) {
+                    Ok(entry) if entry.activated => {
+                        println!("✓ {} already activated, skipping", skill_id);
+                    }
+                    _ => {
+                        // Activate the skill
+                        match skill_book.activate(skill_id, std::collections::HashMap::new()).await {
+                            Ok(_) => println!("✓ Activated {}", skill_id),
+                            Err(e) => println!("⚠ Failed to activate {}: {}", skill_id, e),
                         }
                     }
-                } else {
-                    println!("  ℹ Skill {} not found in skill-book (skipped)", skill_id);
                 }
             }
+            
+            init_state.skills_activated = true;
+            save_init_state(&state_path, &init_state);
         }
     }
 
-    // Success summary
+    // API token configuration (Step 7: Add optional API token prompts)
+    let mut github_configured = false;
+    let mut openai_configured = false;
+    
+    // Load signing key if not already loaded (e.g., when using existing keypair)
+    if init_signing_key.is_none() {
+        let key_path_to_load = actual_keypair_path
+            .as_ref()
+            .or(init_state.keypair_path.as_ref());
+        
+        if let Some(key_path) = key_path_to_load {
+            if key_path.exists() {
+                match std::fs::read(key_path) {
+                    Ok(key_bytes) => {
+                        match carnelian_core::crypto::bytes_to_keypair(&key_bytes) {
+                            Ok(signing_key) => {
+                                init_signing_key = Some(signing_key);
+                            }
+                            Err(e) => {
+                                println!("⚠ Warning: Could not load signing key from {}: {}", key_path.display(), e);
+                                println!("  API tokens will be stored unencrypted.");
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("⚠ Warning: Could not read key file {}: {}", key_path.display(), e);
+                        println!("  API tokens will be stored unencrypted.");
+                    }
+                }
+            } else {
+                println!("⚠ Warning: Key file not found at {}", key_path.display());
+                println!("  API tokens will be stored unencrypted.");
+            }
+        } else {
+            println!("⚠ Warning: No keypair available for token encryption.");
+            println!("  API tokens will be stored unencrypted.");
+        }
+    }
+    
+    if !non_interactive {
+        println!();
+        if let Some(ref pool) = shared_pool {
+            // GitHub token
+            let github_token = prompt_or_default("GitHub personal access token (optional, press Enter to skip)", "");
+            if !github_token.is_empty() {
+                let encryption_helper = init_signing_key.as_ref().map(|sk| {
+                    carnelian_core::encryption::EncryptionHelper::new(pool, sk)
+                });
+                
+                match Config::update_config_value_encrypted(
+                    pool,
+                    "api_token.github",
+                    None,
+                    &serde_json::json!(github_token),
+                    None,
+                    None,
+                    None,
+                    None,
+                    encryption_helper.as_ref(),
+                    1,
+                ).await {
+                    Ok(_) => {
+                        println!("✓ GitHub token stored");
+                        github_configured = true;
+                    }
+                    Err(e) => {
+                        println!("⚠ Failed to store GitHub token: {}", e);
+                    }
+                }
+            }
+            
+            // OpenAI API key
+            let openai_key = prompt_or_default("OpenAI API key (optional, press Enter to skip)", "");
+            if !openai_key.is_empty() {
+                let encryption_helper = init_signing_key.as_ref().map(|sk| {
+                    carnelian_core::encryption::EncryptionHelper::new(pool, sk)
+                });
+                
+                match Config::update_config_value_encrypted(
+                    pool,
+                    "api_token.openai",
+                    None,
+                    &serde_json::json!(openai_key),
+                    None,
+                    None,
+                    None,
+                    None,
+                    encryption_helper.as_ref(),
+                    1,
+                ).await {
+                    Ok(_) => {
+                        println!("✓ OpenAI API key stored");
+                        openai_configured = true;
+                    }
+                    Err(e) => {
+                        println!("⚠ Failed to store OpenAI API key: {}", e);
+                    }
+                }
+            }
+        } else {
+            println!("Note: API tokens can be configured later via `carnelian init` once the database is running.");
+        }
+    }
+
+    // Success summary (Step 8: Expand with richer output)
     println!();
     println!("╔═══════════════════════════════════════════════════════════════╗");
-    println!("║ ✓ Carnelian OS initialized!                             ║");
+    println!("║ ✓ Carnelian OS initialized!                                   ║");
     println!("╚═══════════════════════════════════════════════════════════════╝");
+    println!();
+    println!("Configuration summary:");
+    println!("  Profile:       {}", machine_profile);
+    println!("  Database URL:  {}", database_url);
+    println!("  Ollama URL:    {}", ollama_url);
+    println!("  HTTP port:     {}", http_port);
+    println!("  Workspaces:    {}", workspace_paths.join(", "));
+    println!("  Keypair:       {}", actual_keypair_path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "(none)".to_string()));
+    println!("  GitHub token:  {}", if github_configured { "configured" } else { "skipped" });
+    println!("  OpenAI key:    {}", if openai_configured { "configured" } else { "skipped" });
     println!();
     println!("Next steps:");
     println!("  1. Start Carnelian:   carnelian start");
@@ -1606,16 +2029,22 @@ workspace_scan_paths = [{}]
 async fn handle_keygen(output: Option<PathBuf>) -> carnelian_common::Result<()> {
     use std::io::Write;
 
-    // Generate keypair
-    let (public_key, private_key_bytes) = carnelian_core::crypto::generate_ed25519_keypair();
-
     // Determine output path
     let output_path = output.unwrap_or_else(|| {
         let home = std::env::var("HOME")
             .or_else(|_| std::env::var("USERPROFILE"))
             .unwrap_or_else(|_| ".".to_string());
-        PathBuf::from(home).join(".carnelian").join("owner.key")
+        PathBuf::from(home).join(".carnelian").join("owner.pem")
     });
+
+    // Idempotency check: skip if key file already exists
+    if output_path.exists() {
+        println!("✓ Keypair already exists at {}, skipping generation", output_path.display());
+        return Ok(());
+    }
+
+    // Generate keypair - returns (SigningKey, VerifyingKey)
+    let (signing_key, verifying_key) = carnelian_core::crypto::generate_ed25519_keypair();
 
     // Create parent directories
     if let Some(parent) = output_path.parent() {
@@ -1624,8 +2053,9 @@ async fn handle_keygen(output: Option<PathBuf>) -> carnelian_common::Result<()> 
         })?;
     }
 
-    // Write private key
-    std::fs::write(&output_path, &private_key_bytes)
+    // Write private key using keypair_to_bytes
+    let key_bytes = carnelian_core::crypto::keypair_to_bytes(&signing_key);
+    std::fs::write(&output_path, &key_bytes)
         .map_err(|e| carnelian_common::Error::Config(format!("Failed to write key file: {}", e)))?;
 
     // Set permissions on Unix
@@ -1641,7 +2071,7 @@ async fn handle_keygen(output: Option<PathBuf>) -> carnelian_common::Result<()> 
     println!("🔥 Generated Ed25519 keypair");
     println!(
         "   Public key (hex): {}",
-        hex::encode(public_key.as_bytes())
+        hex::encode(verifying_key.as_bytes())
     );
     println!(
         "   Private key file: {}",
@@ -2210,4 +2640,56 @@ async fn handle_migrate_from_thummim(
     println!("Next: carnelian skills refresh");
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sysinfo::System;
+
+    #[test]
+    fn test_detect_hardware_nonzero_ram() {
+        let (ram_gb, _) = detect_hardware();
+        assert!(
+            ram_gb > 0.0,
+            "Detected RAM should be greater than 0, got {} GB",
+            ram_gb
+        );
+    }
+
+    #[test]
+    fn test_detect_hardware_cpu_count() {
+        let sys = System::new_all();
+        let cpu_count = sys.cpus().len();
+        assert!(
+            cpu_count > 0,
+            "Detected CPU count should be greater than 0, got {}",
+            cpu_count
+        );
+    }
+
+    #[test]
+    fn test_suggest_profile_urim_threshold() {
+        // Urim: >=48GB RAM && >=10GB VRAM
+        assert_eq!(suggest_profile(48.0, 10.0), "urim");
+        assert_eq!(suggest_profile(64.0, 12.0), "urim");
+    }
+
+    #[test]
+    fn test_suggest_profile_thummim_threshold() {
+        // Thummim: >=16GB RAM && >=6GB VRAM (but less than urim thresholds)
+        assert_eq!(suggest_profile(48.0, 9.9), "thummim");
+        assert_eq!(suggest_profile(16.0, 6.0), "thummim");
+        assert_eq!(suggest_profile(32.0, 8.0), "thummim");
+    }
+
+    #[test]
+    fn test_suggest_profile_custom_threshold() {
+        // Custom: below thummim thresholds
+        assert_eq!(suggest_profile(15.9, 6.0), "custom");
+        assert_eq!(suggest_profile(32.0, 0.0), "custom");
+        assert_eq!(suggest_profile(8.0, 0.0), "custom");
+        assert_eq!(suggest_profile(16.0, 5.9), "custom");
+        assert_eq!(suggest_profile(8.0, 6.0), "custom");
+    }
 }

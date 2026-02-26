@@ -39,6 +39,10 @@ pub enum XpSource {
     SkillUsage { skill_id: Uuid },
     /// XP earned from a periodic quality bonus check.
     QualityBonus,
+    /// XP earned from creating a new elixir.
+    ElixirCreated { elixir_id: Uuid },
+    /// XP earned from approving a draft.
+    ElixirApproved { draft_id: Uuid },
 }
 
 impl XpSource {
@@ -49,6 +53,8 @@ impl XpSource {
             XpSource::LedgerSigning { .. } => "ledger_signing",
             XpSource::SkillUsage { .. } => "skill_usage",
             XpSource::QualityBonus => "quality_bonus",
+            XpSource::ElixirCreated { .. } => "elixir_creation",
+            XpSource::ElixirApproved { .. } => "elixir_usage",
         }
     }
 }
@@ -160,21 +166,30 @@ impl XpManager {
         }
 
         let source_str = source.to_source_str();
-        let (task_id, skill_id, ledger_event_id) = match &source {
+        let (task_id, skill_id, ledger_event_id, elixir_id) = match &source {
             XpSource::TaskCompletion { task_id, skill_id } => {
-                (Some(*task_id), *skill_id, None::<i64>)
+                (Some(*task_id), *skill_id, None::<i64>, None::<Uuid>)
             }
-            XpSource::LedgerSigning { ledger_event_id } => (None, None, Some(*ledger_event_id)),
-            XpSource::SkillUsage { skill_id } => (None, Some(*skill_id), None),
-            XpSource::QualityBonus => (None, None, None),
+            XpSource::LedgerSigning { ledger_event_id } => (None, None, Some(*ledger_event_id), None::<Uuid>),
+            XpSource::SkillUsage { skill_id } => (None, Some(*skill_id), None, None::<Uuid>),
+            XpSource::QualityBonus => (None, None, None, None::<Uuid>),
+            XpSource::ElixirCreated { elixir_id } => (None, None, None, Some(*elixir_id)),
+            XpSource::ElixirApproved { .. } => (None, None, None, None::<Uuid>),
         };
 
-        let metadata_value = metadata.unwrap_or_else(|| serde_json::json!({}));
+        let mut metadata_value = metadata.unwrap_or_else(|| serde_json::json!({}));
+        
+        // Merge draft_id into metadata for ElixirApproved
+        if let XpSource::ElixirApproved { draft_id } = &source {
+            if let Some(obj) = metadata_value.as_object_mut() {
+                obj.insert("draft_id".to_string(), serde_json::json!(draft_id.to_string()));
+            }
+        }
 
         // 1. Insert xp_events row
         sqlx::query(
-            "INSERT INTO xp_events (identity_id, source, xp_amount, task_id, skill_id, ledger_event_id, metadata) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            "INSERT INTO xp_events (identity_id, source, xp_amount, task_id, skill_id, ledger_event_id, elixir_id, metadata) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         )
         .bind(identity_id)
         .bind(source_str)
@@ -182,6 +197,7 @@ impl XpManager {
         .bind(task_id)
         .bind(skill_id)
         .bind(ledger_event_id)
+        .bind(elixir_id)
         .bind(&metadata_value)
         .execute(&self.pool)
         .await
@@ -351,6 +367,54 @@ impl XpManager {
                     .execute(&self.pool)
                     .await
                     .map_err(Error::Database)?;
+            }
+        }
+
+        // Check auto-draft threshold (inlined to avoid circular dependency)
+        // Rule: If skill has 100+ usages and no pending draft or active elixir, create a draft
+        let usage_count: Option<i64> = sqlx::query_scalar(
+            "SELECT usage_count FROM skill_metrics WHERE skill_id = $1",
+        )
+        .bind(skill_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Error::Database)?;
+
+        if usage_count.unwrap_or(0) >= 100 {
+            let pending_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM elixir_drafts WHERE skill_id = $1 AND status = 'pending'",
+            )
+            .bind(skill_id)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(Error::Database)?;
+
+            if pending_count == 0 {
+                let active_count: i64 = sqlx::query_scalar(
+                    "SELECT COUNT(*) FROM elixirs WHERE skill_id = $1 AND active = true",
+                )
+                .bind(skill_id)
+                .fetch_one(&self.pool)
+                .await
+                .map_err(Error::Database)?;
+
+                if active_count == 0 {
+                    sqlx::query(
+                        r#"
+                        INSERT INTO elixir_drafts (
+                            skill_id, proposed_name, dataset, auto_created_reason, status
+                        )
+                        VALUES ($1, $2, '{}'::jsonb, 'usage_count >= 100', 'pending')
+                        "#,
+                    )
+                    .bind(skill_id)
+                    .bind(format!("Auto-draft for {}", skill_id))
+                    .execute(&self.pool)
+                    .await
+                    .map_err(Error::Database)?;
+
+                    tracing::info!(skill_id = %skill_id, "Auto-draft created for skill");
+                }
             }
         }
 
