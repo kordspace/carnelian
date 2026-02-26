@@ -1,0 +1,59 @@
+{
+  "name": "slack-file",
+  "version": "1.0.0",
+  "runtime": "node",
+  "entrypoint": "index.ts",
+  "description": "Manage Slack files - upload, list, get info, delete",
+  "parameters": {
+    "type": "object",
+    "required": ["action"],
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["upload", "list", "info", "delete"],
+        "description": "File management action"
+      },
+      "accountId": {
+        "type": "string",
+        "description": "Slack account ID"
+      },
+      "channelId": {
+        "type": "string",
+        "description": "Channel ID to upload to or list from"
+      },
+      "fileId": {
+        "type": "string",
+        "description": "File ID for info/delete actions"
+      },
+      "content": {
+        "type": "string",
+        "description": "File content for upload"
+      },
+      "filename": {
+        "type": "string",
+        "description": "Filename for upload"
+      },
+      "title": {
+        "type": "string",
+        "description": "File title for upload"
+      },
+      "filetype": {
+        "type": "string",
+        "description": "File type (e.g., 'text', 'javascript', 'python')"
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "file": {
+        "type": "object",
+        "description": "Uploaded or retrieved file information"
+      },
+      "files": {
+        "type": "array",
+        "description": "List of files"
+      }
+    }
+  }
+}

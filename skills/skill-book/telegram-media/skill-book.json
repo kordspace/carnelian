@@ -1,0 +1,56 @@
+{
+  "name": "telegram-media",
+  "version": "1.0.0",
+  "runtime": "node",
+  "entrypoint": "index.ts",
+  "description": "Send media to Telegram - photos, videos, audio, documents, stickers",
+  "parameters": {
+    "type": "object",
+    "required": ["action", "chatId"],
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["photo", "video", "audio", "document", "sticker"],
+        "description": "Type of media to send"
+      },
+      "accountId": {
+        "type": "string",
+        "description": "Telegram account ID"
+      },
+      "chatId": {
+        "type": "string",
+        "description": "Chat ID to send media to"
+      },
+      "fileUrl": {
+        "type": "string",
+        "description": "URL of the file to send"
+      },
+      "fileId": {
+        "type": "string",
+        "description": "Telegram file ID to resend"
+      },
+      "caption": {
+        "type": "string",
+        "description": "Caption for the media"
+      },
+      "parseMode": {
+        "type": "string",
+        "enum": ["Markdown", "HTML"],
+        "description": "Caption parse mode"
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "messageId": {
+        "type": "number",
+        "description": "Sent message ID"
+      },
+      "chat": {
+        "type": "object",
+        "description": "Chat information"
+      }
+    }
+  }
+}

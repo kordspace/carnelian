@@ -1,0 +1,54 @@
+{
+  "name": "telegram-group",
+  "version": "1.0.0",
+  "runtime": "node",
+  "entrypoint": "index.ts",
+  "description": "Manage Telegram groups - create, get info, manage members",
+  "parameters": {
+    "type": "object",
+    "required": ["action"],
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["create", "info", "members", "invite", "kick"],
+        "description": "Group management action"
+      },
+      "accountId": {
+        "type": "string",
+        "description": "Telegram account ID"
+      },
+      "chatId": {
+        "type": "string",
+        "description": "Chat/group ID"
+      },
+      "title": {
+        "type": "string",
+        "description": "Group title for create action"
+      },
+      "userId": {
+        "type": "number",
+        "description": "User ID for invite/kick actions"
+      },
+      "userIds": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        },
+        "description": "User IDs for bulk invite"
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "chat": {
+        "type": "object",
+        "description": "Group/chat information"
+      },
+      "members": {
+        "type": "array",
+        "description": "List of group members"
+      }
+    }
+  }
+}

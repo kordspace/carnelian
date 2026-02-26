@@ -1,0 +1,47 @@
+{
+  "name": "slack-channel",
+  "version": "1.0.0",
+  "runtime": "node",
+  "entrypoint": "index.ts",
+  "description": "Manage Slack channels - list, create, archive, get info",
+  "parameters": {
+    "type": "object",
+    "required": ["action"],
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["list", "create", "archive", "info"],
+        "description": "Channel management action"
+      },
+      "accountId": {
+        "type": "string",
+        "description": "Slack account ID"
+      },
+      "channelId": {
+        "type": "string",
+        "description": "Channel ID for info/archive actions"
+      },
+      "name": {
+        "type": "string",
+        "description": "Channel name for create action"
+      },
+      "isPrivate": {
+        "type": "boolean",
+        "description": "Create as private channel"
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "channels": {
+        "type": "array",
+        "description": "List of channels"
+      },
+      "channel": {
+        "type": "object",
+        "description": "Channel information"
+      }
+    }
+  }
+}

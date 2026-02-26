@@ -1,0 +1,47 @@
+{
+  "name": "slack-react",
+  "version": "1.0.0",
+  "runtime": "node",
+  "entrypoint": "index.ts",
+  "description": "Manage Slack message reactions - add, remove, list",
+  "parameters": {
+    "type": "object",
+    "required": ["action", "channelId", "timestamp"],
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["add", "remove", "list"],
+        "description": "Reaction action"
+      },
+      "accountId": {
+        "type": "string",
+        "description": "Slack account ID"
+      },
+      "channelId": {
+        "type": "string",
+        "description": "Channel ID containing the message"
+      },
+      "timestamp": {
+        "type": "string",
+        "description": "Message timestamp"
+      },
+      "emoji": {
+        "type": "string",
+        "description": "Emoji name (without colons) for add/remove"
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "success": {
+        "type": "boolean",
+        "description": "Whether the reaction action succeeded"
+      },
+      "reactions": {
+        "type": "array",
+        "description": "List of reactions on the message"
+      }
+    }
+  }
+}
