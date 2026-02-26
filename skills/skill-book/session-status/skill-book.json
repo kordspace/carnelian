@@ -1,0 +1,54 @@
+{
+  "name": "session-status",
+  "version": "1.0.0",
+  "runtime": "node",
+  "entrypoint": "index.ts",
+  "description": "Get detailed status and metadata for a specific session",
+  "parameters": {
+    "type": "object",
+    "required": ["sessionKey"],
+    "properties": {
+      "sessionKey": {
+        "type": "string",
+        "description": "Session key to get status for"
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string",
+        "description": "Session key"
+      },
+      "kind": {
+        "type": "string",
+        "description": "Session kind (main, group, cron, hook, node, other)"
+      },
+      "channel": {
+        "type": "string",
+        "description": "Communication channel"
+      },
+      "model": {
+        "type": "string",
+        "description": "AI model being used"
+      },
+      "contextTokens": {
+        "type": "number",
+        "description": "Current context token count"
+      },
+      "totalTokens": {
+        "type": "number",
+        "description": "Total tokens used in session"
+      },
+      "updatedAt": {
+        "type": "number",
+        "description": "Last update timestamp"
+      },
+      "lastMessage": {
+        "type": "object",
+        "description": "Preview of most recent message"
+      }
+    }
+  }
+}

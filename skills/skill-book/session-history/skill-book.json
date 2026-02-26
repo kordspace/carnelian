@@ -1,0 +1,56 @@
+{
+  "name": "session-history",
+  "version": "1.0.0",
+  "runtime": "node",
+  "entrypoint": "index.ts",
+  "description": "Retrieve conversation history from a session with pagination and filtering",
+  "parameters": {
+    "type": "object",
+    "required": ["sessionKey"],
+    "properties": {
+      "sessionKey": {
+        "type": "string",
+        "description": "Session key to retrieve history from"
+      },
+      "limit": {
+        "type": "number",
+        "minimum": 1,
+        "maximum": 200,
+        "default": 50,
+        "description": "Maximum number of messages to return"
+      },
+      "offset": {
+        "type": "number",
+        "minimum": 0,
+        "default": 0,
+        "description": "Number of messages to skip (for pagination)"
+      },
+      "includeSystem": {
+        "type": "boolean",
+        "default": false,
+        "description": "Include system messages in results"
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "sessionKey": {
+        "type": "string",
+        "description": "Session key queried"
+      },
+      "count": {
+        "type": "number",
+        "description": "Number of messages returned"
+      },
+      "offset": {
+        "type": "number",
+        "description": "Offset used for pagination"
+      },
+      "messages": {
+        "type": "array",
+        "description": "Array of message objects"
+      }
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "name": "session-list",
+  "version": "1.0.0",
+  "runtime": "node",
+  "entrypoint": "index.ts",
+  "description": "List active sessions with filtering by kind, activity, and optional message history",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "kinds": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": ["main", "group", "cron", "hook", "node", "other"]
+        },
+        "description": "Filter sessions by kind"
+      },
+      "limit": {
+        "type": "number",
+        "minimum": 1,
+        "description": "Maximum number of sessions to return"
+      },
+      "activeMinutes": {
+        "type": "number",
+        "minimum": 1,
+        "description": "Only return sessions active within this many minutes"
+      },
+      "messageLimit": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 20,
+        "description": "Number of recent messages to include per session (0 for none)"
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "count": {
+        "type": "number",
+        "description": "Total number of sessions returned"
+      },
+      "sessions": {
+        "type": "array",
+        "description": "Array of session objects with metadata and optional messages"
+      }
+    }
+  }
+}
