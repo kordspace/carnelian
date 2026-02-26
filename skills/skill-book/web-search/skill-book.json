@@ -1,14 +1,24 @@
 {
   "id": "web-search",
   "name": "Web Search",
-  "description": "Search the web for information, news, and research with result summarization",
+  "description": "Search the web via Brave Search API or Perplexity Sonar; returns titles, URLs, and snippets (Brave) or an AI-synthesised answer with citations (Perplexity)",
   "category": "research",
   "runtime": "node",
   "version": "1.0.0",
   "required_config": [
     {
-      "key": "SEARCH_API_KEY",
-      "label": "Search API Key (Serper, Bing, or similar)",
+      "key": "BRAVE_API_KEY",
+      "label": "Brave Search API Key",
+      "secret": true
+    },
+    {
+      "key": "PERPLEXITY_API_KEY",
+      "label": "Perplexity API Key",
+      "secret": true
+    },
+    {
+      "key": "OPENROUTER_API_KEY",
+      "label": "OpenRouter API Key",
       "secret": true
     }
   ]

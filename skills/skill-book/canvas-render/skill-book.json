@@ -1,0 +1,20 @@
+{
+  "id": "canvas-render",
+  "name": "Canvas Render",
+  "description": "Render canvas graphics and visualizations via Carnelian gateway node.invoke API",
+  "category": "creative",
+  "runtime": "node",
+  "version": "1.0.0",
+  "required_config": [
+    {
+      "key": "CARNELIAN_GATEWAY_URL",
+      "label": "Carnelian Gateway URL",
+      "secret": false
+    },
+    {
+      "key": "CARNELIAN_GATEWAY_TOKEN",
+      "label": "Carnelian Gateway Token",
+      "secret": true
+    }
+  ]
+}

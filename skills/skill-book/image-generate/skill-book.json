@@ -1,0 +1,15 @@
+{
+  "id": "image-generate",
+  "name": "Image Generate",
+  "description": "Generate images using DALL-E via OpenAI API",
+  "category": "creative",
+  "runtime": "node",
+  "version": "1.0.0",
+  "required_config": [
+    {
+      "key": "OPENAI_API_KEY",
+      "label": "OpenAI API Key",
+      "secret": true
+    }
+  ]
+}

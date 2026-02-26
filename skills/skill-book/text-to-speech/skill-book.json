@@ -1,0 +1,15 @@
+{
+  "id": "text-to-speech",
+  "name": "Text to Speech",
+  "description": "Convert text to speech using OpenAI TTS API",
+  "category": "creative",
+  "runtime": "node",
+  "version": "1.0.0",
+  "required_config": [
+    {
+      "key": "OPENAI_API_KEY",
+      "label": "OpenAI API Key",
+      "secret": true
+    }
+  ]
+}

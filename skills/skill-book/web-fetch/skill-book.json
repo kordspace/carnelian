@@ -1,0 +1,15 @@
+{
+  "id": "web-fetch",
+  "name": "Web Fetch",
+  "description": "Fetch and extract readable content from a URL; returns markdown or plain text",
+  "category": "research",
+  "runtime": "node",
+  "version": "1.0.0",
+  "required_config": [
+    {
+      "key": "FIRECRAWL_API_KEY",
+      "label": "Firecrawl API Key",
+      "secret": true
+    }
+  ]
+}
