@@ -1,0 +1,9 @@
+{
+  "id": "memory-read",
+  "name": "Memory Read",
+  "description": "Read memories from persistent storage using the file system",
+  "category": "data",
+  "runtime": "node",
+  "version": "1.0.0",
+  "required_config": []
+}

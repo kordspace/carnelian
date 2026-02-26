@@ -1,0 +1,20 @@
+{
+  "id": "whatsapp-send",
+  "name": "WhatsApp Send",
+  "description": "Send a message or reaction via WhatsApp through the Carnelian gateway message API",
+  "category": "communication",
+  "runtime": "node",
+  "version": "1.0.0",
+  "required_config": [
+    {
+      "key": "CARNELIAN_GATEWAY_URL",
+      "label": "Carnelian Gateway URL",
+      "secret": false
+    },
+    {
+      "key": "CARNELIAN_GATEWAY_TOKEN",
+      "label": "Carnelian Gateway Token",
+      "secret": true
+    }
+  ]
+}
