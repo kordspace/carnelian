@@ -1,0 +1,19 @@
+[package]
+name = "slug-generate"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "slug-generate"
+path = "src/main.rs"
+
+[dependencies]
+slug = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
