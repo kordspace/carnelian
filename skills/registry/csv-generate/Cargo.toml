@@ -3,8 +3,9 @@ name = "csv-generate"
 version = "0.1.0"
 edition = "2021"
 
-[lib]
-crate-type = ["cdylib"]
+[[bin]]
+name = "csv-generate"
+path = "src/main.rs"
 
 [dependencies]
 csv = "1.3"
