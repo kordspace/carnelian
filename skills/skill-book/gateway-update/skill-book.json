@@ -1,0 +1,44 @@
+{
+  "name": "gateway-update",
+  "version": "1.0.0",
+  "runtime": "node",
+  "entrypoint": "index.ts",
+  "description": "Check for or run gateway updates",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["check", "run"],
+        "default": "check",
+        "description": "Action to perform: check for updates or run update"
+      },
+      "autoRestart": {
+        "type": "boolean",
+        "default": false,
+        "description": "Automatically restart gateway after update (for run action)"
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "updateAvailable": {
+        "type": "boolean",
+        "description": "Whether an update is available (for check action)"
+      },
+      "currentVersion": {
+        "type": "string",
+        "description": "Current gateway version"
+      },
+      "latestVersion": {
+        "type": "string",
+        "description": "Latest available version"
+      },
+      "updated": {
+        "type": "boolean",
+        "description": "Whether update was successful (for run action)"
+      }
+    }
+  }
+}

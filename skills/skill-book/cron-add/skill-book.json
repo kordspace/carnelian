@@ -1,0 +1,54 @@
+{
+  "name": "cron-add",
+  "version": "1.0.0",
+  "runtime": "node",
+  "entrypoint": "index.ts",
+  "description": "Create a new cron job with schedule and payload configuration",
+  "parameters": {
+    "type": "object",
+    "required": ["schedule", "payload", "sessionTarget"],
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Optional name for the job"
+      },
+      "schedule": {
+        "type": "object",
+        "description": "Schedule configuration (at/every/cron)",
+        "required": ["kind"]
+      },
+      "payload": {
+        "type": "object",
+        "description": "Payload to execute (systemEvent/agentTurn)",
+        "required": ["kind"]
+      },
+      "sessionTarget": {
+        "type": "string",
+        "enum": ["main", "isolated"],
+        "description": "Target session type"
+      },
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Whether the job is enabled"
+      },
+      "agentId": {
+        "type": "string",
+        "description": "Agent ID to associate with the job"
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "description": "Created job ID"
+      },
+      "job": {
+        "type": "object",
+        "description": "Complete job configuration"
+      }
+    }
+  }
+}

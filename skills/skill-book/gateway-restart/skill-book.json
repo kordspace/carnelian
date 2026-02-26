@@ -1,0 +1,30 @@
+{
+  "name": "gateway-restart",
+  "version": "1.0.0",
+  "runtime": "node",
+  "entrypoint": "index.ts",
+  "description": "Restart the gateway service with optional graceful shutdown",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "graceful": {
+        "type": "boolean",
+        "default": true,
+        "description": "Whether to perform a graceful restart"
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "success": {
+        "type": "boolean",
+        "description": "Whether the restart was initiated successfully"
+      },
+      "message": {
+        "type": "string",
+        "description": "Status message"
+      }
+    }
+  }
+}

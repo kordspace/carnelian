@@ -1,0 +1,35 @@
+{
+  "name": "gateway-config",
+  "version": "1.0.0",
+  "runtime": "node",
+  "entrypoint": "index.ts",
+  "description": "Get or apply gateway configuration settings",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["get", "apply"],
+        "default": "get",
+        "description": "Action to perform: get current config or apply new config"
+      },
+      "config": {
+        "type": "object",
+        "description": "Configuration object to apply (required for apply action)"
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "config": {
+        "type": "object",
+        "description": "Gateway configuration object"
+      },
+      "applied": {
+        "type": "boolean",
+        "description": "Whether config was successfully applied (for apply action)"
+      }
+    }
+  }
+}

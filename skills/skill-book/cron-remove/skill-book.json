@@ -1,0 +1,30 @@
+{
+  "name": "cron-remove",
+  "version": "1.0.0",
+  "runtime": "node",
+  "entrypoint": "index.ts",
+  "description": "Delete a cron job by its ID",
+  "parameters": {
+    "type": "object",
+    "required": ["jobId"],
+    "properties": {
+      "jobId": {
+        "type": "string",
+        "description": "ID of the job to remove"
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "success": {
+        "type": "boolean",
+        "description": "Whether the job was successfully removed"
+      },
+      "id": {
+        "type": "string",
+        "description": "ID of the removed job"
+      }
+    }
+  }
+}
