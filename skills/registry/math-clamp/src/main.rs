@@ -1,0 +1,56 @@
+use serde::{Deserialize, Serialize};
+use std::io::Read;
+
+#[derive(Deserialize)]
+struct Input {
+    value: f64,
+    min: f64,
+    max: f64,
+}
+
+#[derive(Serialize)]
+struct Output {
+    result: f64,
+    clamped: bool,
+}
+
+#[derive(Serialize)]
+struct ErrorOutput {
+    error: String,
+}
+
+fn main() {
+    let mut input_str = String::new();
+    if let Err(e) = std::io::stdin().read_to_string(&mut input_str) {
+        let error = ErrorOutput {
+            error: format!("Failed to read input: {}", e),
+        };
+        println!("{}", serde_json::to_string(&error).unwrap());
+        std::process::exit(1);
+    }
+
+    let input: Input = match serde_json::from_str(&input_str) {
+        Ok(i) => i,
+        Err(e) => {
+            let error = ErrorOutput {
+                error: format!("Invalid JSON input: {}", e),
+            };
+            println!("{}", serde_json::to_string(&error).unwrap());
+            std::process::exit(1);
+        }
+    };
+
+    if input.min > input.max {
+        let error = ErrorOutput {
+            error: "min must be less than or equal to max".to_string(),
+        };
+        println!("{}", serde_json::to_string(&error).unwrap());
+        std::process::exit(1);
+    }
+
+    let result = input.value.clamp(input.min, input.max);
+    let clamped = result != input.value;
+
+    let output = Output { result, clamped };
+    println!("{}", serde_json::to_string(&output).unwrap());
+}
