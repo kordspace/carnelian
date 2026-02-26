@@ -1,0 +1,10 @@
+{
+  "name": "browser-navigate",
+  "runtime": "node",
+  "description": "Navigate browser to URL, go back/forward, refresh page, and manage navigation history",
+  "capabilities": ["browser.control"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

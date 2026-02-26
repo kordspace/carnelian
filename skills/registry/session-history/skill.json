@@ -1,0 +1,10 @@
+{
+  "name": "session-history",
+  "runtime": "node",
+  "description": "Retrieve session conversation history with pagination and filtering",
+  "capabilities": ["gateway.read"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

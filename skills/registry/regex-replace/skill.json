@@ -1,0 +1,10 @@
+{
+  "name": "regex-replace",
+  "runtime": "wasm",
+  "description": "Replace text using regular expressions with backreferences",
+  "capabilities": [],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "none"
+  }
+}

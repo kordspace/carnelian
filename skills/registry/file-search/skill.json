@@ -1,0 +1,11 @@
+{
+  "name": "file-search",
+  "description": "Search file contents using ripgrep patterns",
+  "runtime": "native",
+  "version": "1.0.0",
+  "capabilities_required": ["fs.read"],
+  "openclaw_compat": {
+    "emoji": "🔍",
+    "tags": ["filesystem", "search", "ripgrep", "native"]
+  }
+}

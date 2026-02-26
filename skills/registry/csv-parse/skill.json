@@ -1,0 +1,10 @@
+{
+  "name": "csv-parse",
+  "runtime": "wasm",
+  "description": "Parse CSV files into structured JSON data with configurable delimiters and headers",
+  "capabilities": ["fs.read"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "read"
+  }
+}

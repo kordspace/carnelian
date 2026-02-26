@@ -1,0 +1,10 @@
+{
+  "name": "chart-generate",
+  "runtime": "python",
+  "description": "Generate charts and graphs (line, bar, pie, scatter) from data using matplotlib",
+  "capabilities": ["fs.write"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "write"
+  }
+}

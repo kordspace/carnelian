@@ -1,0 +1,16 @@
+{
+  "name": "browser-automation",
+  "description": "Control the OpenClaw browser control server (status/start/stop/tabs/snapshot/screenshot/navigate/act). Routes to the local browser control HTTP server.",
+  "runtime": "shell",
+  "version": "1.0.0",
+  "capabilities_required": ["net.http", "exec.shell"],
+  "sandbox": {
+    "network": "localhost",
+    "max_memory_mb": 128,
+    "max_cpu_percent": 25
+  },
+  "openclaw_compat": {
+    "emoji": "🌐",
+    "tags": ["automation", "browser"]
+  }
+}

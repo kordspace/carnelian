@@ -1,0 +1,10 @@
+{
+  "name": "stats-analyze",
+  "runtime": "python",
+  "description": "Calculate statistical measures: mean, median, mode, std dev, percentiles",
+  "capabilities": [],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "none"
+  }
+}

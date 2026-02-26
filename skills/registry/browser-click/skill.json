@@ -1,0 +1,10 @@
+{
+  "name": "browser-click",
+  "runtime": "node",
+  "description": "Click elements on web pages using selectors or coordinates",
+  "capabilities": ["browser.control"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

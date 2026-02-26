@@ -1,0 +1,10 @@
+{
+  "name": "image-metadata",
+  "runtime": "wasm",
+  "description": "Extract image metadata: dimensions, format, EXIF data, color profile",
+  "capabilities": ["fs.read"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "read"
+  }
+}

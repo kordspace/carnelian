@@ -1,0 +1,10 @@
+{
+  "name": "diff-text",
+  "runtime": "wasm",
+  "description": "Generate unified diff between two text files or strings",
+  "capabilities": [],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "none"
+  }
+}

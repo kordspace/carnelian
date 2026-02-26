@@ -1,0 +1,10 @@
+{
+  "name": "schema-generate",
+  "runtime": "node",
+  "description": "Generate JSON Schema from sample data with type inference",
+  "capabilities": [],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "none"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "patch-apply",
+  "runtime": "wasm",
+  "description": "Apply unified diff patches to files",
+  "capabilities": ["fs.read", "fs.write"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "readwrite"
+  }
+}

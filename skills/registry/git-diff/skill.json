@@ -1,0 +1,11 @@
+{
+  "name": "git-diff",
+  "description": "Show unstaged or staged diff for a git repository",
+  "runtime": "native",
+  "version": "1.0.0",
+  "capabilities_required": ["git.read"],
+  "openclaw_compat": {
+    "emoji": "🔀",
+    "tags": ["git", "diff", "native"]
+  }
+}

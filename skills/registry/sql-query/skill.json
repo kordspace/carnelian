@@ -1,0 +1,10 @@
+{
+  "name": "sql-query",
+  "runtime": "native",
+  "description": "Execute SQL queries against PostgreSQL database with parameterized queries",
+  "capabilities": ["db.read", "db.write"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

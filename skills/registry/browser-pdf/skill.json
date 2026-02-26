@@ -1,0 +1,10 @@
+{
+  "name": "browser-pdf",
+  "runtime": "node",
+  "description": "Generate PDF from web pages with custom formatting and options",
+  "capabilities": ["browser.control", "fs.write"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "write"
+  }
+}

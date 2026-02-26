@@ -1,0 +1,16 @@
+{
+  "name": "telegram-send",
+  "description": "Send a message to a Telegram chat via the Telegram Bot API",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["net.http"],
+  "sandbox": {
+    "network": "full",
+    "max_memory_mb": 128,
+    "max_cpu_percent": 25
+  },
+  "openclaw_compat": {
+    "emoji": "✈️",
+    "tags": ["communication", "telegram"]
+  }
+}

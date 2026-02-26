@@ -1,0 +1,10 @@
+{
+  "name": "email-send",
+  "runtime": "node",
+  "description": "Send emails via SMTP with attachments and HTML formatting",
+  "capabilities": ["network.smtp"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "read"
+  }
+}

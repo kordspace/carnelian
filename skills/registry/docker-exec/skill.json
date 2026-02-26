@@ -1,0 +1,11 @@
+{
+  "name": "docker-exec",
+  "description": "Execute a command inside a running Docker container (owner approval required)",
+  "runtime": "native",
+  "version": "1.0.0",
+  "capabilities_required": ["docker.exec"],
+  "openclaw_compat": {
+    "emoji": "🐳",
+    "tags": ["docker", "exec", "native"]
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "archive-zip",
+  "runtime": "native",
+  "description": "Create and extract ZIP archives with compression options",
+  "capabilities": ["fs.read", "fs.write"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "readwrite"
+  }
+}

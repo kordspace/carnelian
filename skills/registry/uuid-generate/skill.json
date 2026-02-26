@@ -1,0 +1,10 @@
+{
+  "name": "uuid-generate",
+  "runtime": "wasm",
+  "description": "Generate UUIDs (v4 random, v5 name-based, v7 timestamp-ordered)",
+  "capabilities": [],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "none"
+  }
+}

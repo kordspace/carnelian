@@ -1,0 +1,10 @@
+{
+  "name": "image-resize",
+  "runtime": "wasm",
+  "description": "Resize images with quality and aspect ratio control",
+  "capabilities": ["fs.read", "fs.write"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "readwrite"
+  }
+}

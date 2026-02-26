@@ -1,0 +1,11 @@
+{
+  "name": "git-log",
+  "description": "Show the commit history of a git repository",
+  "runtime": "native",
+  "version": "1.0.0",
+  "capabilities_required": ["git.read"],
+  "openclaw_compat": {
+    "emoji": "📜",
+    "tags": ["git", "log", "history", "native"]
+  }
+}

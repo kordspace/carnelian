@@ -1,0 +1,10 @@
+{
+  "name": "pdf-metadata",
+  "runtime": "node",
+  "description": "Extract PDF metadata: title, author, page count, creation date, permissions",
+  "capabilities": ["fs.read"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "read"
+  }
+}

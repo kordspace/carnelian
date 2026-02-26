@@ -1,0 +1,10 @@
+{
+  "name": "code-lint-python",
+  "runtime": "python",
+  "description": "Lint Python code using pylint/flake8 with configurable rules",
+  "capabilities": ["fs.read"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "read"
+  }
+}

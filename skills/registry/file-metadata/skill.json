@@ -1,0 +1,10 @@
+{
+  "name": "file-metadata",
+  "runtime": "native",
+  "description": "Extract file metadata: size, permissions, timestamps, MIME type, and checksums",
+  "capabilities": ["fs.read"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "read"
+  }
+}

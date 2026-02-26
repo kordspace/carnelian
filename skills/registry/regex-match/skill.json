@@ -1,0 +1,10 @@
+{
+  "name": "regex-match",
+  "runtime": "wasm",
+  "description": "Match text against regular expressions with capture groups",
+  "capabilities": [],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "none"
+  }
+}

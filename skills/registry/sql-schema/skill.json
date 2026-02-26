@@ -1,0 +1,10 @@
+{
+  "name": "sql-schema",
+  "runtime": "native",
+  "description": "Introspect database schema: list tables, columns, indexes, and constraints",
+  "capabilities": ["db.read"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "agent-step",
+  "description": "Execute a single agent step with custom system prompt and wait for completion.",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["net.ws"],
+  "sandbox": {
+    "network": "localhost",
+    "max_memory_mb": 64,
+    "max_cpu_percent": 10
+  },
+  "openclaw_compat": {
+    "emoji": "🤖",
+    "tags": ["automation", "agent"]
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "discord-channel",
+  "runtime": "node",
+  "description": "Manage Discord channels: create, delete, configure permissions, and organize channel structure",
+  "capabilities": ["network.http"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

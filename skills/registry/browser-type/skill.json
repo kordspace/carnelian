@@ -1,0 +1,10 @@
+{
+  "name": "browser-type",
+  "runtime": "node",
+  "description": "Type text into input fields and text areas on web pages",
+  "capabilities": ["browser.control"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

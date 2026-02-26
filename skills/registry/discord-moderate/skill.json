@@ -1,0 +1,10 @@
+{
+  "name": "discord-moderate",
+  "runtime": "node",
+  "description": "Discord moderation actions: ban, kick, timeout, warn members, and manage moderation logs",
+  "capabilities": ["network.http"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

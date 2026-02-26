@@ -1,0 +1,10 @@
+{
+  "name": "crypto-decrypt",
+  "runtime": "wasm",
+  "description": "Decrypt AES-256-GCM encrypted data with key derivation",
+  "capabilities": [],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "none"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "email-parse",
+  "runtime": "node",
+  "description": "Parse email messages (EML/MIME) and extract headers, body, attachments",
+  "capabilities": ["fs.read"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "read"
+  }
+}

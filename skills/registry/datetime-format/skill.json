@@ -1,0 +1,10 @@
+{
+  "name": "datetime-format",
+  "runtime": "wasm",
+  "description": "Format datetime values with custom patterns and timezone conversion",
+  "capabilities": [],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "none"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "network-stats",
+  "description": "Report network interface statistics for the host",
+  "runtime": "native",
+  "version": "1.0.0",
+  "capabilities_required": ["system.read"],
+  "openclaw_compat": {
+    "emoji": "🌐",
+    "tags": ["system", "network", "native"]
+  }
+}

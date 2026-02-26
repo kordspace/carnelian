@@ -1,0 +1,10 @@
+{
+  "name": "session-status",
+  "runtime": "node",
+  "description": "Get detailed status of a session: active agents, message count, last activity, and metadata",
+  "capabilities": ["gateway.read"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

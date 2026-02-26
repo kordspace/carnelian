@@ -1,0 +1,10 @@
+{
+  "name": "currency-convert",
+  "runtime": "node",
+  "description": "Convert between currencies using real-time exchange rates",
+  "capabilities": ["network.http"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

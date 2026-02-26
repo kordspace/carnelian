@@ -1,0 +1,10 @@
+{
+  "name": "code-deps-python",
+  "runtime": "python",
+  "description": "Analyze Python dependencies and generate dependency graph",
+  "capabilities": ["fs.read"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "read"
+  }
+}

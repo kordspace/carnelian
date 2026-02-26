@@ -1,0 +1,10 @@
+{
+  "name": "toml-parse",
+  "runtime": "wasm",
+  "description": "Parse TOML configuration files into structured JSON",
+  "capabilities": ["fs.read"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "read"
+  }
+}

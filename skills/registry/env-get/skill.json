@@ -1,0 +1,11 @@
+{
+  "name": "env-get",
+  "description": "Read an allowlisted environment variable from the host",
+  "runtime": "native",
+  "version": "1.0.0",
+  "capabilities_required": ["env.read"],
+  "openclaw_compat": {
+    "emoji": "🔑",
+    "tags": ["system", "env", "native"]
+  }
+}

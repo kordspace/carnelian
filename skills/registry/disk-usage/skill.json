@@ -1,0 +1,11 @@
+{
+  "name": "disk-usage",
+  "description": "Report disk usage statistics for host filesystems",
+  "runtime": "native",
+  "version": "1.0.0",
+  "capabilities_required": ["system.read"],
+  "openclaw_compat": {
+    "emoji": "💾",
+    "tags": ["system", "disk", "native"]
+  }
+}

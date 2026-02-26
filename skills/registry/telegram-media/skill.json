@@ -1,0 +1,10 @@
+{
+  "name": "telegram-media",
+  "runtime": "node",
+  "description": "Send media to Telegram: photos, videos, documents, audio, and stickers",
+  "capabilities": ["network.http", "fs.read"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "read"
+  }
+}

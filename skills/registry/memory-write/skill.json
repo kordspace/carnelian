@@ -1,0 +1,16 @@
+{
+  "name": "memory-write",
+  "description": "Write memories to persistent storage using the file system",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["fs.write"],
+  "sandbox": {
+    "network": "none",
+    "max_memory_mb": 64,
+    "max_cpu_percent": 10
+  },
+  "openclaw_compat": {
+    "emoji": "💾",
+    "tags": ["data", "memory"]
+  }
+}

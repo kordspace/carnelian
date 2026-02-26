@@ -1,0 +1,10 @@
+{
+  "name": "cron-run",
+  "runtime": "node",
+  "description": "Trigger a cron job immediately, bypassing its schedule",
+  "capabilities": ["gateway.admin"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

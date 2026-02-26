@@ -1,0 +1,10 @@
+{
+  "name": "gateway-config",
+  "runtime": "node",
+  "description": "Manage gateway configuration: get, apply, patch, and validate config changes",
+  "capabilities": ["gateway.admin"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

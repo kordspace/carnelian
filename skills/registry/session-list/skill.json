@@ -1,0 +1,10 @@
+{
+  "name": "session-list",
+  "runtime": "node",
+  "description": "List active sessions with filtering by agent, channel, and status",
+  "capabilities": ["gateway.read"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

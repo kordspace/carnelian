@@ -1,0 +1,11 @@
+{
+  "name": "file-delete",
+  "description": "Delete a file from the local filesystem (owner approval required)",
+  "runtime": "native",
+  "version": "1.0.0",
+  "capabilities_required": ["fs.write"],
+  "openclaw_compat": {
+    "emoji": "🗑️",
+    "tags": ["filesystem", "delete", "native"]
+  }
+}

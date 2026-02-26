@@ -1,0 +1,10 @@
+{
+  "name": "slack-react",
+  "runtime": "node",
+  "description": "Add and remove reactions (emoji) to Slack messages",
+  "capabilities": ["network.http"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

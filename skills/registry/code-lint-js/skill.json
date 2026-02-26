@@ -1,0 +1,10 @@
+{
+  "name": "code-lint-js",
+  "runtime": "node",
+  "description": "Lint JavaScript/TypeScript code using ESLint with configurable rules",
+  "capabilities": ["fs.read"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "read"
+  }
+}

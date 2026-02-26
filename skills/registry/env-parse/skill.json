@@ -1,0 +1,10 @@
+{
+  "name": "env-parse",
+  "runtime": "wasm",
+  "description": "Parse .env files and extract environment variables",
+  "capabilities": ["fs.read"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "read"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "gateway-restart",
+  "runtime": "node",
+  "description": "Restart the gateway with optional delay and reason",
+  "capabilities": ["gateway.admin"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

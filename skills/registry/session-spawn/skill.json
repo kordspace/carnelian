@@ -1,0 +1,16 @@
+{
+  "name": "session-spawn",
+  "description": "Spawn sub-agent sessions via the Gateway sessions_spawn method.",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["net.ws"],
+  "sandbox": {
+    "network": "localhost",
+    "max_memory_mb": 64,
+    "max_cpu_percent": 10
+  },
+  "openclaw_compat": {
+    "emoji": "🔀",
+    "tags": ["automation", "sessions"]
+  }
+}

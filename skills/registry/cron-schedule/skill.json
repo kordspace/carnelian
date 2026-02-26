@@ -1,0 +1,16 @@
+{
+  "name": "cron-schedule",
+  "description": "Manage Gateway cron jobs (status/list/add/update/remove/run/runs) and send wake events.",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["net.ws"],
+  "sandbox": {
+    "network": "localhost",
+    "max_memory_mb": 64,
+    "max_cpu_percent": 10
+  },
+  "openclaw_compat": {
+    "emoji": "⏰",
+    "tags": ["automation", "scheduling"]
+  }
+}

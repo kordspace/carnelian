@@ -1,0 +1,11 @@
+{
+  "name": "git-commit",
+  "description": "Stage and commit changes to a git repository (owner approval required)",
+  "runtime": "native",
+  "version": "1.0.0",
+  "capabilities_required": ["git.write"],
+  "openclaw_compat": {
+    "emoji": "✅",
+    "tags": ["git", "commit", "native"]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "docker-logs",
+  "description": "Fetch stdout/stderr logs from a Docker container",
+  "runtime": "native",
+  "version": "1.0.0",
+  "capabilities_required": ["docker.read"],
+  "openclaw_compat": {
+    "emoji": "📋",
+    "tags": ["docker", "logs", "native"]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "process-list",
+  "description": "List running processes on the host system",
+  "runtime": "native",
+  "version": "1.0.0",
+  "capabilities_required": ["system.read"],
+  "openclaw_compat": {
+    "emoji": "⚙️",
+    "tags": ["system", "processes", "native"]
+  }
+}

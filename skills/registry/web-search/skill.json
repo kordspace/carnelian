@@ -1,0 +1,16 @@
+{
+  "name": "web-search",
+  "description": "Search the web via Brave Search API or Perplexity Sonar; returns titles, URLs, and snippets (Brave) or an AI-synthesised answer with citations (Perplexity)",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["net.http"],
+  "sandbox": {
+    "network": "full",
+    "max_memory_mb": 128,
+    "max_cpu_percent": 25
+  },
+  "openclaw_compat": {
+    "emoji": "🔍",
+    "tags": ["research", "web"]
+  }
+}

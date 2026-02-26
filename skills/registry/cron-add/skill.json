@@ -1,0 +1,10 @@
+{
+  "name": "cron-add",
+  "runtime": "node",
+  "description": "Create new cron job with schedule and payload configuration",
+  "capabilities": ["gateway.admin"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

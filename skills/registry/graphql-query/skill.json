@@ -1,0 +1,10 @@
+{
+  "name": "graphql-query",
+  "runtime": "node",
+  "description": "Execute GraphQL queries against endpoints with variable substitution",
+  "capabilities": ["network.http"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

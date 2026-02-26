@@ -1,0 +1,10 @@
+{
+  "name": "browser-screenshot",
+  "runtime": "node",
+  "description": "Capture screenshots of web pages: full page, viewport, or specific elements",
+  "capabilities": ["browser.control", "fs.write"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "write"
+  }
+}

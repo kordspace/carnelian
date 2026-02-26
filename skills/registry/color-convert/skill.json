@@ -1,0 +1,10 @@
+{
+  "name": "color-convert",
+  "runtime": "wasm",
+  "description": "Convert colors between formats (HEX, RGB, HSL, HSV, CMYK)",
+  "capabilities": [],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "none"
+  }
+}

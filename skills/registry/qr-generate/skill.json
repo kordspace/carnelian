@@ -1,0 +1,10 @@
+{
+  "name": "qr-generate",
+  "runtime": "wasm",
+  "description": "Generate QR codes from text or URLs with customizable size and error correction",
+  "capabilities": ["fs.write"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "write"
+  }
+}

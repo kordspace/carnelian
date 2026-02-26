@@ -1,0 +1,10 @@
+{
+  "name": "crypto-sign",
+  "runtime": "wasm",
+  "description": "Create digital signatures using Ed25519 or RSA",
+  "capabilities": [],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "none"
+  }
+}

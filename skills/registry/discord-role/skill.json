@@ -1,0 +1,10 @@
+{
+  "name": "discord-role",
+  "runtime": "node",
+  "description": "Manage Discord roles: create, assign, remove, configure permissions and role hierarchy",
+  "capabilities": ["network.http"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

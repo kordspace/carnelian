@@ -1,0 +1,10 @@
+{
+  "name": "xml-parse",
+  "runtime": "wasm",
+  "description": "Parse XML documents into structured JSON with XPath query support",
+  "capabilities": ["fs.read"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "read"
+  }
+}

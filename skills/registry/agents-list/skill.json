@@ -1,0 +1,10 @@
+{
+  "name": "agents-list",
+  "runtime": "node",
+  "description": "List all available agents with their capabilities and status",
+  "capabilities": ["gateway.read"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

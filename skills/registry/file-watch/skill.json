@@ -1,0 +1,10 @@
+{
+  "name": "file-watch",
+  "runtime": "native",
+  "description": "Watch files and directories for changes with event notifications",
+  "capabilities": ["fs.read", "system.events"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "read"
+  }
+}

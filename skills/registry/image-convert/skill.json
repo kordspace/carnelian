@@ -1,0 +1,10 @@
+{
+  "name": "image-convert",
+  "runtime": "wasm",
+  "description": "Convert images between formats (PNG, JPEG, WebP, GIF)",
+  "capabilities": ["fs.read", "fs.write"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "readwrite"
+  }
+}

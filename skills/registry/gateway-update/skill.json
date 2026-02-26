@@ -1,0 +1,10 @@
+{
+  "name": "gateway-update",
+  "runtime": "node",
+  "description": "Update gateway to latest version and restart",
+  "capabilities": ["gateway.admin"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

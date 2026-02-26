@@ -1,0 +1,10 @@
+{
+  "name": "toml-generate",
+  "runtime": "wasm",
+  "description": "Generate TOML configuration files from JSON data",
+  "capabilities": ["fs.write"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "write"
+  }
+}

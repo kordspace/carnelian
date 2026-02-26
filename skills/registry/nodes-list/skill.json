@@ -1,0 +1,16 @@
+{
+  "name": "nodes-list",
+  "description": "Manage paired nodes (status/describe/pending/approve/reject/notify/camera/screen/location/run).",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["net.ws"],
+  "sandbox": {
+    "network": "localhost",
+    "max_memory_mb": 128,
+    "max_cpu_percent": 25
+  },
+  "openclaw_compat": {
+    "emoji": "📱",
+    "tags": ["automation", "nodes"]
+  }
+}

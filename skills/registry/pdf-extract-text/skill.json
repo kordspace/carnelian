@@ -1,0 +1,10 @@
+{
+  "name": "pdf-extract-text",
+  "runtime": "node",
+  "description": "Extract text content from PDF files with page-level granularity",
+  "capabilities": ["fs.read"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "read"
+  }
+}

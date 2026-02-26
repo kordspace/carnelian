@@ -1,0 +1,10 @@
+{
+  "name": "discord-guild",
+  "runtime": "node",
+  "description": "Manage Discord guilds (servers): create channels, manage roles, configure settings, and moderate members",
+  "capabilities": ["network.http"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

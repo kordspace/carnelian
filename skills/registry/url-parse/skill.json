@@ -1,0 +1,10 @@
+{
+  "name": "url-parse",
+  "runtime": "wasm",
+  "description": "Parse URLs into components (protocol, host, path, query, fragment)",
+  "capabilities": [],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "none"
+  }
+}

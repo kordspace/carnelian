@@ -1,0 +1,10 @@
+{
+  "name": "archive-tar",
+  "runtime": "native",
+  "description": "Create and extract TAR archives with gzip/bzip2 compression",
+  "capabilities": ["fs.read", "fs.write"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "readwrite"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "ini-parse",
+  "runtime": "wasm",
+  "description": "Parse INI configuration files into structured JSON",
+  "capabilities": ["fs.read"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "read"
+  }
+}

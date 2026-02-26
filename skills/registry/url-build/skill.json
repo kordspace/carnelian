@@ -1,0 +1,10 @@
+{
+  "name": "url-build",
+  "runtime": "wasm",
+  "description": "Build URLs from components with proper encoding",
+  "capabilities": [],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "none"
+  }
+}

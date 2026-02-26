@@ -1,0 +1,10 @@
+{
+  "name": "crypto-keygen",
+  "runtime": "wasm",
+  "description": "Generate cryptographic key pairs (RSA, Ed25519, ECDSA)",
+  "capabilities": [],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "none"
+  }
+}

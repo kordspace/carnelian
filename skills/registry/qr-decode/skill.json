@@ -1,0 +1,10 @@
+{
+  "name": "qr-decode",
+  "runtime": "wasm",
+  "description": "Decode QR codes from images and extract embedded data",
+  "capabilities": ["fs.read"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "read"
+  }
+}

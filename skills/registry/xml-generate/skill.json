@@ -1,0 +1,10 @@
+{
+  "name": "xml-generate",
+  "runtime": "wasm",
+  "description": "Generate XML documents from JSON data with schema validation",
+  "capabilities": ["fs.write"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "write"
+  }
+}

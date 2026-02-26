@@ -1,0 +1,10 @@
+{
+  "name": "crypto-verify",
+  "runtime": "wasm",
+  "description": "Verify digital signatures using Ed25519 or RSA",
+  "capabilities": [],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "none"
+  }
+}

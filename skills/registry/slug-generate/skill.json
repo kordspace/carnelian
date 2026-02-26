@@ -1,0 +1,10 @@
+{
+  "name": "slug-generate",
+  "runtime": "wasm",
+  "description": "Generate URL-safe slugs from text with transliteration and custom separators",
+  "capabilities": [],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "none"
+  }
+}

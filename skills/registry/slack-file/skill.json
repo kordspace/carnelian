@@ -1,0 +1,10 @@
+{
+  "name": "slack-file",
+  "runtime": "node",
+  "description": "Upload and manage files in Slack: upload documents, images, and share with channels or users",
+  "capabilities": ["network.http", "fs.read"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "read"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "math-calculate",
+  "runtime": "wasm",
+  "description": "Evaluate mathematical expressions with support for functions and constants",
+  "capabilities": [],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "none"
+  }
+}

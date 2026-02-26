@@ -1,0 +1,16 @@
+{
+  "name": "message-send",
+  "description": "Send a message to any configured channel (Discord, Telegram, Slack, WhatsApp, iMessage, etc.) through the Carnelian gateway unified message API",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["net.http"],
+  "sandbox": {
+    "network": "full",
+    "max_memory_mb": 128,
+    "max_cpu_percent": 25
+  },
+  "openclaw_compat": {
+    "emoji": "💬",
+    "tags": ["communication", "routing"]
+  }
+}

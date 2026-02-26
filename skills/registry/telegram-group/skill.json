@@ -1,0 +1,10 @@
+{
+  "name": "telegram-group",
+  "runtime": "node",
+  "description": "Manage Telegram groups: create, configure, add/remove members, and set permissions",
+  "capabilities": ["network.http"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

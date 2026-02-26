@@ -1,0 +1,11 @@
+{
+  "name": "docker-stats",
+  "description": "Retrieve live resource usage statistics for a Docker container",
+  "runtime": "native",
+  "version": "1.0.0",
+  "capabilities_required": ["docker.read"],
+  "openclaw_compat": {
+    "emoji": "📊",
+    "tags": ["docker", "stats", "native"]
+  }
+}

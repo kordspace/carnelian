@@ -1,0 +1,10 @@
+{
+  "name": "units-convert",
+  "runtime": "wasm",
+  "description": "Convert between units (length, weight, temperature, volume, time)",
+  "capabilities": [],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "none"
+  }
+}

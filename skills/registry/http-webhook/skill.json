@@ -1,0 +1,10 @@
+{
+  "name": "http-webhook",
+  "runtime": "node",
+  "description": "Send webhook notifications with retry logic and payload templating",
+  "capabilities": ["network.http"],
+  "sandbox": {
+    "network": "unrestricted",
+    "filesystem": "none"
+  }
+}

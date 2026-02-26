@@ -1,0 +1,16 @@
+{
+  "name": "system-healthcheck",
+  "description": "Host security hardening and risk-tolerance configuration for Carnelian deployments. Use when a user asks for security audits, firewall/SSH/update hardening, risk posture, exposure review, or version status checks on a machine running Carnelian (laptop, workstation, Pi, VPS).",
+  "runtime": "shell",
+  "version": "1.0.0",
+  "capabilities_required": ["exec.shell", "fs.read"],
+  "sandbox": {
+    "network": "localhost",
+    "max_memory_mb": 512,
+    "max_cpu_percent": 50
+  },
+  "openclaw_compat": {
+    "emoji": "💓",
+    "tags": ["system", "utility"]
+  }
+}

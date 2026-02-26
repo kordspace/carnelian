@@ -1,0 +1,10 @@
+{
+  "name": "http-request",
+  "runtime": "node",
+  "description": "Make HTTP/HTTPS requests with custom headers, body, and authentication",
+  "capabilities": ["network.http"],
+  "sandbox": {
+    "network": "unrestricted",
+    "filesystem": "none"
+  }
+}

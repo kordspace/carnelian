@@ -1,0 +1,16 @@
+{
+  "name": "gateway-query",
+  "description": "Query and manage Gateway configuration (restart/config.get/config.schema/config.apply/config.patch/update.run).",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["net.ws"],
+  "sandbox": {
+    "network": "localhost",
+    "max_memory_mb": 64,
+    "max_cpu_percent": 10
+  },
+  "openclaw_compat": {
+    "emoji": "⚙️",
+    "tags": ["automation", "gateway"]
+  }
+}

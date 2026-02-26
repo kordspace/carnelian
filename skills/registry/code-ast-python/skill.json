@@ -1,0 +1,10 @@
+{
+  "name": "code-ast-python",
+  "runtime": "python",
+  "description": "Parse Python code into Abstract Syntax Tree (AST) for analysis",
+  "capabilities": ["fs.read"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "read"
+  }
+}

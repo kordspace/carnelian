@@ -1,0 +1,16 @@
+{
+  "name": "text-to-speech",
+  "description": "Convert text to speech using OpenAI TTS API",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["net.http"],
+  "sandbox": {
+    "network": "full",
+    "max_memory_mb": 256,
+    "max_cpu_percent": 25
+  },
+  "openclaw_compat": {
+    "emoji": "🔊",
+    "tags": ["creative", "audio", "tts"]
+  }
+}

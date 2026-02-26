@@ -1,0 +1,10 @@
+{
+  "name": "template-render",
+  "runtime": "node",
+  "description": "Render templates using Handlebars/Mustache with data injection",
+  "capabilities": ["fs.read"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "read"
+  }
+}

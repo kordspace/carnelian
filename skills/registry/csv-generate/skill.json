@@ -1,0 +1,10 @@
+{
+  "name": "csv-generate",
+  "runtime": "wasm",
+  "description": "Generate CSV files from JSON data with custom formatting options",
+  "capabilities": ["fs.write"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "write"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "slack-channel",
+  "runtime": "node",
+  "description": "Manage Slack channels: create, archive, invite users, and configure channel settings",
+  "capabilities": ["network.http"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

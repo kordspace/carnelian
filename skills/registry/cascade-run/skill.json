@@ -1,0 +1,16 @@
+{
+  "name": "cascade-run",
+  "description": "Communicate with Windsurf Cascade via JSONL channel files (message/delegate/request_help/share_context/status).",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["fs.read", "fs.write"],
+  "sandbox": {
+    "network": "none",
+    "max_memory_mb": 64,
+    "max_cpu_percent": 10
+  },
+  "openclaw_compat": {
+    "emoji": "🌊",
+    "tags": ["automation", "cascade"]
+  }
+}

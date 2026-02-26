@@ -1,0 +1,10 @@
+{
+  "name": "code-ast-js",
+  "runtime": "wasm",
+  "description": "Parse JavaScript/TypeScript code into Abstract Syntax Tree (AST) for analysis",
+  "capabilities": ["fs.read"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "read"
+  }
+}

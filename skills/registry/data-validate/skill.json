@@ -1,0 +1,10 @@
+{
+  "name": "data-validate",
+  "runtime": "node",
+  "description": "Validate data against JSON Schema with detailed error reporting",
+  "capabilities": [],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "none"
+  }
+}

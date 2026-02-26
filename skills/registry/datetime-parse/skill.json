@@ -1,0 +1,10 @@
+{
+  "name": "datetime-parse",
+  "runtime": "wasm",
+  "description": "Parse datetime strings in various formats with timezone support",
+  "capabilities": [],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "none"
+  }
+}

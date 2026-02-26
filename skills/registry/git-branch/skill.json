@@ -1,0 +1,11 @@
+{
+  "name": "git-branch",
+  "description": "List or inspect branches in a git repository",
+  "runtime": "native",
+  "version": "1.0.0",
+  "capabilities_required": ["git.read"],
+  "openclaw_compat": {
+    "emoji": "🌿",
+    "tags": ["git", "branch", "native"]
+  }
+}

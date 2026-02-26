@@ -1,0 +1,16 @@
+{
+  "name": "code-format",
+  "description": "Formats source code (Rust, JSON, YAML, generic) inside a WASM sandbox",
+  "runtime": "wasm",
+  "version": "0.1.0",
+  "capabilities_required": [],
+  "sandbox": {
+    "network": "disabled",
+    "max_memory_mb": 64,
+    "max_cpu_percent": 20
+  },
+  "openclaw_compat": {
+    "emoji": "✨",
+    "tags": ["format", "rust", "json", "yaml", "wasm"]
+  }
+}

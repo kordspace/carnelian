@@ -1,0 +1,10 @@
+{
+  "name": "base64-encode",
+  "runtime": "wasm",
+  "description": "Encode data to Base64 format",
+  "capabilities": [],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "none"
+  }
+}

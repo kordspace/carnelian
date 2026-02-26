@@ -1,0 +1,10 @@
+{
+  "name": "code-deps-js",
+  "runtime": "node",
+  "description": "Analyze JavaScript/TypeScript dependencies and generate dependency graph",
+  "capabilities": ["fs.read"],
+  "sandbox": {
+    "network": "none",
+    "filesystem": "read"
+  }
+}

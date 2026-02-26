@@ -1,0 +1,10 @@
+{
+  "name": "cron-list",
+  "runtime": "node",
+  "description": "List all cron jobs with their schedules and status",
+  "capabilities": ["gateway.read"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

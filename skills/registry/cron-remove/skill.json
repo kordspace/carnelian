@@ -1,0 +1,10 @@
+{
+  "name": "cron-remove",
+  "runtime": "node",
+  "description": "Delete a cron job by ID",
+  "capabilities": ["gateway.admin"],
+  "sandbox": {
+    "network": "restricted",
+    "filesystem": "none"
+  }
+}

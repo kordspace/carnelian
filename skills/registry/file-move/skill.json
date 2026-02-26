@@ -1,0 +1,11 @@
+{
+  "name": "file-move",
+  "description": "Move or rename a file on the local filesystem",
+  "runtime": "native",
+  "version": "1.0.0",
+  "capabilities_required": ["fs.write"],
+  "openclaw_compat": {
+    "emoji": "📂",
+    "tags": ["filesystem", "move", "native"]
+  }
+}
