@@ -11,9 +11,8 @@ use dioxus::prelude::*;
 
 use crate::api;
 use crate::components::{Toast, ToastMessage, ToastType};
-use crate::store::EventStreamStore;
 use crate::theme::Theme;
-use carnelian_common::types::{DetailedHealthResponse, IdentityResponse, SetupStatusResponse};
+use carnelian_common::types::{DetailedHealthResponse, IdentityResponse};
 
 /// First-Run Wizard component props.
 #[derive(Props, Clone, PartialEq)]
@@ -76,20 +75,22 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
     let theme_class = theme.to_class();
 
     // Navigation handlers
-    let next_step = {
+    let mut next_step = {
         let mut step = step.clone();
         move || {
-            if *step.read() < 5 {
-                step.set(*step.read() + 1);
+            let current = *step.read();
+            if current < 5 {
+                step.set(current + 1);
             }
         }
     };
 
-    let prev_step = {
+    let mut prev_step = {
         let mut step = step.clone();
         move || {
-            if *step.read() > 1 {
-                step.set(*step.read() - 1);
+            let current = *step.read();
+            if current > 1 {
+                step.set(current - 1);
             }
         }
     };
@@ -452,6 +453,6 @@ fn skill_name(id: &str) -> &'static str {
         "model-usage" => "📊 Model Usage",
         "web-search" => "🌐 Web Search",
         "telegram-notify" => "💬 Telegram Notify",
-        _ => id,
+        _ => "Unknown Skill",
     }
 }

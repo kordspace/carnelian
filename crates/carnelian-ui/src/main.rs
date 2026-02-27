@@ -13,11 +13,12 @@ mod websocket;
 
 use dioxus::prelude::*;
 
-#[cfg(feature = "desktop")]
-use components::system_tray::SystemTray;
 use components::tab_nav::TabNav;
 use components::toast::ToastOverlay;
 use components::top_bar::TopBar;
+
+#[cfg(feature = "desktop")]
+use components::system_tray::SystemTray;
 
 /// Application routes.
 #[derive(Routable, Clone, Debug, PartialEq, Eq)]
@@ -82,8 +83,8 @@ fn app() -> Element {
     use_hook(move || store.start());
 
     // Check setup status
-    let mut setup_complete = use_signal(|| true); // Default to true to avoid flash
-    let mut show_wizard = use_signal(|| false);
+    let setup_complete = use_signal(|| true); // Default to true to avoid flash
+    let show_wizard = use_signal(|| false);
 
     use_hook({
         let mut setup_complete = setup_complete.clone();
@@ -115,8 +116,6 @@ fn app() -> Element {
 
     rsx! {
         style { {theme::GLOBAL_CSS} }
-        #[cfg(feature = "desktop")]
-        SystemTray {}
         if *show_wizard.read() {
             components::first_run_wizard::FirstRunWizard {
                 on_complete: complete_wizard,

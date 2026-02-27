@@ -49,7 +49,7 @@ pub fn SkillBook() -> Element {
     };
 
     use_hook({
-        let load_catalog = load_catalog.clone();
+        let mut load_catalog = load_catalog.clone();
         move || {
             load_catalog();
         }
@@ -71,12 +71,12 @@ pub fn SkillBook() -> Element {
             .unwrap_or_default()
     };
 
-    // Categories for tabs
-    let categories = catalog
+    // Categories for tabs - compute owned strings to avoid lifetime issues
+    let categories: Vec<(String, String)> = catalog
         .read()
         .as_ref()
         .map(|c| {
-            let mut cats = vec![("all", "All")];
+            let mut cats = vec![("all".to_string(), "All".to_string())];
             cats.extend(c.categories.iter().map(|id| {
                 let name = match id.as_str() {
                     "code" => "Code",
@@ -87,21 +87,19 @@ pub fn SkillBook() -> Element {
                     "automation" => "Automation",
                     _ => id.as_str(),
                 };
-                (id.as_str(), name)
+                (id.clone(), name.to_string())
             }));
             cats
         })
-        .unwrap_or_else(|| vec![("all", "All")]);
+        .unwrap_or_else(|| vec![("all".to_string(), "All".to_string())]);
 
     // Activation handler
     let activate_skill = {
-        let skill = selected_skill.read().clone();
-        let config = config_values.read().clone();
         let mut toasts = toasts.clone();
         let mut show_modal = show_activation_modal.clone();
-        let load_catalog = load_catalog.clone();
-        move || {
-            if let Some(ref s) = *skill {
+        let mut load_catalog = load_catalog.clone();
+        move |skill: Option<SkillBookEntry>, config: HashMap<String, String>| {
+            if let Some(ref s) = skill {
                 let skill_id = s.id.clone();
                 spawn(async move {
                     match api::activate_skill(&skill_id, config).await {
@@ -134,7 +132,7 @@ pub fn SkillBook() -> Element {
     // Deactivation handler
     let deactivate_skill = {
         let mut toasts = toasts.clone();
-        let load_catalog = load_catalog.clone();
+        let mut load_catalog = load_catalog.clone();
         move |skill_id: String| {
             spawn(async move {
                 match api::deactivate_skill(&skill_id).await {
@@ -234,7 +232,7 @@ pub fn SkillBook() -> Element {
                                         class: "btn-primary btn-sm",
                                         onclick: {
                                             let s = skill.clone();
-                                            let open = open_activation.clone();
+                                            let mut open = open_activation.clone();
                                             move |_| open(s.clone())
                                         },
                                         "Activate"
@@ -267,7 +265,7 @@ pub fn SkillBook() -> Element {
                                                 oninput: {
                                                     let key = field.key.clone();
                                                     let mut vals = config_values.clone();
-                                                    move |e| {
+                                                    move |e: Event<FormData>| {
                                                         let mut v = vals.read().clone();
                                                         v.insert(key.clone(), e.value().clone());
                                                         vals.set(v);
@@ -287,7 +285,11 @@ pub fn SkillBook() -> Element {
                                 }
                                 button {
                                     class: "btn-primary",
-                                    onclick: move |_| activate_skill(),
+                                    onclick: move |_| {
+                                        let skill = selected_skill.read().clone();
+                                        let config = config_values.read().clone();
+                                        activate_skill(skill, config);
+                                    },
                                     "🚀 Activate"
                                 }
                             }

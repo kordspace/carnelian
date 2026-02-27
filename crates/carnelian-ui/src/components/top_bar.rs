@@ -67,6 +67,8 @@ pub fn TopBar() -> Element {
         "urim" => "badge badge-urim",
         _ => "badge badge-custom",
     };
+    
+    let navigator = use_navigator();
 
     rsx! {
         div { class: "top-bar",
@@ -107,7 +109,6 @@ pub fn TopBar() -> Element {
                         span { class: "xp-progress-label", "{total_xp} XP" }
                     }
                 }
-                let navigator = use_navigator();
                 button {
                     class: "btn-icon",
                     title: "Settings",

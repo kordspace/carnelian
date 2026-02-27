@@ -94,7 +94,7 @@ pub fn Ledger() -> Element {
 
     // Initial load
     use_hook({
-        let load_events = load_events.clone();
+        let mut load_events = load_events.clone();
         move || {
             load_events();
         }
@@ -104,7 +104,7 @@ pub fn Ledger() -> Element {
     use_effect({
         let mut last_check = use_signal(|| 0u64);
         let event_store = event_store.clone();
-        let load_events = load_events.clone();
+        let mut load_events = load_events.clone();
 
         move || {
             let current_count = event_store.event_count.read();
@@ -156,9 +156,9 @@ pub fn Ledger() -> Element {
     };
 
     // Pagination handlers
-    let prev_page = {
+    let mut prev_page = {
         let mut offset = offset.clone();
-        let load_events = load_events.clone();
+        let mut load_events = load_events.clone();
         move || {
             let new_offset = (*offset.read() - PAGE_SIZE).max(0);
             offset.set(new_offset);
@@ -166,9 +166,9 @@ pub fn Ledger() -> Element {
         }
     };
 
-    let next_page = {
+    let mut next_page = {
         let mut offset = offset.clone();
-        let load_events = load_events.clone();
+        let mut load_events = load_events.clone();
         move || {
             let new_offset = *offset.read() + PAGE_SIZE;
             if new_offset < *total_count.read() {
@@ -179,9 +179,9 @@ pub fn Ledger() -> Element {
     };
 
     // Apply filters handler
-    let apply_filters = {
+    let mut apply_filters = {
         let mut offset = offset.clone();
-        let load_events = load_events.clone();
+        let mut load_events = load_events.clone();
         move || {
             offset.set(0);
             load_events();

@@ -920,10 +920,10 @@ fn render_node(
     let mut connecting_from = *connecting_from;
 
     // Port positions
-    let input_port_cx = x + NODE_WIDTH / 2.0;
-    let input_port_cy = y; // top center
-    let output_port_cx = x + NODE_WIDTH / 2.0;
-    let output_port_cy = y + NODE_HEIGHT; // bottom center
+    let input_port_center_x = x + NODE_WIDTH / 2.0;
+    let input_port_center_y = y; // top center
+    let output_port_center_x = x + NODE_WIDTH / 2.0;
+    let output_port_center_y = y + NODE_HEIGHT; // bottom center
 
     rsx! {
         g {
@@ -972,8 +972,8 @@ fn render_node(
             }
             // Input port (top center) — visual indicator for drop target
             circle {
-                cx: "{input_port_cx}",
-                cy: "{input_port_cy}",
+                cx: "{input_port_center_x}",
+                cy: "{input_port_center_y}",
                 r: "5",
                 fill: "rgba(74, 144, 226, 0.4)",
                 stroke: "rgba(74, 144, 226, 0.8)",
@@ -981,8 +981,8 @@ fn render_node(
             }
             // Output port (bottom center) — drag from here to create dependency
             circle {
-                cx: "{output_port_cx}",
-                cy: "{output_port_cy}",
+                cx: "{output_port_center_x}",
+                cy: "{output_port_center_y}",
                 r: "6",
                 fill: "#4A90E2",
                 stroke: "rgba(255,255,255,0.3)",

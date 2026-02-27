@@ -59,9 +59,10 @@ pub fn Elixirs() -> Element {
                 }
                 Err(e) => {
                     toasts.write().push(ToastMessage {
-                        id: Uuid::new_v4(),
+                        id: Uuid::new_v4().to_string(),
                         message: format!("Failed to load elixirs: {}", e),
                         toast_type: ToastType::Error,
+                        duration_secs: 5,
                     });
                 }
             }
@@ -78,9 +79,10 @@ pub fn Elixirs() -> Element {
                 }
                 Err(e) => {
                     toasts.write().push(ToastMessage {
-                        id: Uuid::new_v4(),
+                        id: Uuid::new_v4().to_string(),
                         message: format!("Failed to load drafts: {}", e),
                         toast_type: ToastType::Error,
+                        duration_secs: 5,
                     });
                 }
             }
@@ -98,17 +100,19 @@ pub fn Elixirs() -> Element {
             match api::elixirs_draft_approve(draft_id).await {
                 Ok(_) => {
                     toasts.write().push(ToastMessage {
-                        id: Uuid::new_v4(),
+                        id: Uuid::new_v4().to_string(),
                         message: "Draft approved successfully".to_string(),
                         toast_type: ToastType::Success,
+                        duration_secs: 5,
                     });
                     load_drafts();
                 }
                 Err(e) => {
                     toasts.write().push(ToastMessage {
-                        id: Uuid::new_v4(),
+                        id: Uuid::new_v4().to_string(),
                         message: format!("Failed to approve draft: {}", e),
                         toast_type: ToastType::Error,
+                        duration_secs: 5,
                     });
                 }
             }
@@ -120,17 +124,19 @@ pub fn Elixirs() -> Element {
             match api::elixirs_draft_reject(draft_id).await {
                 Ok(_) => {
                     toasts.write().push(ToastMessage {
-                        id: Uuid::new_v4(),
+                        id: Uuid::new_v4().to_string(),
                         message: "Draft rejected successfully".to_string(),
                         toast_type: ToastType::Success,
+                        duration_secs: 5,
                     });
                     load_drafts();
                 }
                 Err(e) => {
                     toasts.write().push(ToastMessage {
-                        id: Uuid::new_v4(),
+                        id: Uuid::new_v4().to_string(),
                         message: format!("Failed to reject draft: {}", e),
                         toast_type: ToastType::Error,
+                        duration_secs: 5,
                     });
                 }
             }
@@ -152,16 +158,18 @@ pub fn Elixirs() -> Element {
 
             if success_count > 0 {
                 toasts.write().push(ToastMessage {
-                    id: Uuid::new_v4(),
+                    id: Uuid::new_v4().to_string(),
                     message: format!("✅ {} draft(s) approved", success_count),
                     toast_type: ToastType::Success,
+                    duration_secs: 5,
                 });
             }
             if error_count > 0 {
                 toasts.write().push(ToastMessage {
-                    id: Uuid::new_v4(),
+                    id: Uuid::new_v4().to_string(),
                     message: format!("❌ {} draft(s) failed", error_count),
                     toast_type: ToastType::Error,
+                    duration_secs: 5,
                 });
             }
 
@@ -170,28 +178,30 @@ pub fn Elixirs() -> Element {
         });
     };
 
-    let open_detail = move |elixir: ElixirDetail| {
+    let mut open_detail = move |elixir: ElixirDetail| {
         selected_elixir.set(Some(elixir));
         show_detail.set(true);
     };
 
-    let close_detail = move || {
+    let mut close_detail = move || {
         show_detail.set(false);
     };
 
-    let export_json = move |elixir: ElixirDetail| match serde_json::to_string_pretty(&elixir) {
+    let mut export_json = move |elixir: ElixirDetail| match serde_json::to_string_pretty(&elixir) {
         Ok(json_str) => {
             toasts.write().push(ToastMessage {
-                id: Uuid::new_v4(),
+                id: Uuid::new_v4().to_string(),
                 message: format!("Exported JSON:\n{}", json_str),
                 toast_type: ToastType::Success,
+                duration_secs: 5,
             });
         }
         Err(e) => {
             toasts.write().push(ToastMessage {
-                id: Uuid::new_v4(),
+                id: Uuid::new_v4().to_string(),
                 message: format!("Failed to export: {}", e),
                 toast_type: ToastType::Error,
+                duration_secs: 5,
             });
         }
     };
@@ -219,10 +229,7 @@ pub fn Elixirs() -> Element {
         .cloned()
         .collect();
 
-    let theme_class = match *theme {
-        Theme::Light => "theme-light",
-        Theme::Dark => "theme-dark",
-    };
+    let theme_class = theme.to_class();
 
     let active_tab_val = active_tab.read().clone();
     let drafts_pending_count = pending_drafts.len();
@@ -284,7 +291,10 @@ pub fn Elixirs() -> Element {
                     }
 
                     button {
-                        onclick: move |_| sort_asc.set(!*sort_asc.read()),
+                        onclick: move |_| {
+                            let current = *sort_asc.read();
+                            sort_asc.set(!current);
+                        },
                         if *sort_asc.read() { "↑" } else { "↓" }
                     }
                 }

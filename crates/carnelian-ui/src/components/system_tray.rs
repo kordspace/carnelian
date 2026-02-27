@@ -36,7 +36,7 @@ const MENU_QUIT: &str = "quit";
 /// The icon is loaded at compile time and parsed into RGBA for the tray.
 fn load_carnelian_icon() -> TrayIconImage {
     // Embed the SVG file at compile time
-    let svg_bytes = include_bytes!("../../../../assets/logos/carnelian-icon.svg");
+    let _svg_bytes = include_bytes!("../../../../assets/logos/carnelian-icon.svg");
 
     // For now, create a colored icon based on the SVG palette
     // In a full implementation, you'd parse the SVG and render it to RGBA
