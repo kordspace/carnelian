@@ -1,0 +1,11 @@
+{
+  "name": "windsurf-cascade",
+  "description": "Bridge Carnelian with Windsurf IDE's Cascade AI agent. Enables bidirectional communication, task delegation, and code collaboration between agents.",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": [],
+  "openclaw_compat": {
+    "emoji": "🏄",
+    "tags": ["windsurf", "cascade", "ide", "collaboration", "mcp"]
+  }
+}

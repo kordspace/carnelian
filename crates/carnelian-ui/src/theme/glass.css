@@ -1,0 +1,223 @@
+/**
+ * Liquid Glass Theme for Carnelian UI
+ * Inspired by THUMMIM's aurora dusk aesthetic with transparent glass morphism
+ */
+
+:root {
+  /* Glass morphism core */
+  --glass: rgba(18, 22, 30, 0.55);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-blur: 12px;
+  --glass-strong: rgba(18, 22, 30, 0.75);
+  --glass-subtle: rgba(18, 22, 30, 0.35);
+
+  /* Liquid glass panels */
+  --panel-glass: rgba(12, 15, 21, 0.88);
+  --panel-glass-strong: rgba(18, 22, 30, 0.9);
+  --panel-glass-hover: rgba(28, 34, 46, 0.9);
+
+  /* Card glass */
+  --card-glass: rgba(20, 24, 34, 0.72);
+  --card-glass-highlight: rgba(255, 255, 255, 0.08);
+  --card-glass-border: rgba(255, 255, 255, 0.06);
+
+  /* Chrome glass */
+  --chrome-glass: rgba(10, 12, 18, 0.75);
+  --chrome-glass-strong: rgba(10, 12, 18, 0.88);
+
+  /* Backdrop filters */
+  --backdrop-blur-sm: blur(8px);
+  --backdrop-blur-md: blur(12px);
+  --backdrop-blur-lg: blur(16px);
+  --backdrop-blur-xl: blur(24px);
+
+  /* Glass shadows with depth */
+  --glass-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  --glass-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --glass-shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --glass-shadow-xl: 0 24px 48px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+
+  /* Aurora gradients */
+  --aurora-teal: rgba(45, 212, 191, 0.18);
+  --aurora-maroon: rgba(155, 59, 59, 0.22);
+  --aurora-cream: rgba(255, 246, 230, 0.08);
+
+  /* Glow effects */
+  --glow-teal: rgba(45, 212, 191, 0.35);
+  --glow-maroon: rgba(155, 59, 59, 0.35);
+  --glow-accent: rgba(45, 212, 191, 0.25);
+}
+
+:root[data-theme="light"] {
+  /* Light glass */
+  --glass: rgba(255, 250, 243, 0.65);
+  --glass-border: rgba(155, 59, 59, 0.15);
+  --glass-blur: 14px;
+  --glass-strong: rgba(255, 250, 243, 0.85);
+  --glass-subtle: rgba(255, 250, 243, 0.45);
+
+  --panel-glass: rgba(246, 241, 234, 0.9);
+  --panel-glass-strong: rgba(239, 231, 221, 0.95);
+  --panel-glass-hover: rgba(233, 225, 214, 0.95);
+
+  --card-glass: rgba(255, 250, 243, 0.75);
+  --card-glass-highlight: rgba(0, 0, 0, 0.04);
+  --card-glass-border: rgba(140, 116, 116, 0.2);
+
+  --chrome-glass: rgba(255, 250, 243, 0.88);
+  --chrome-glass-strong: rgba(255, 250, 243, 0.96);
+
+  --glass-shadow-sm: 0 1px 2px rgba(44, 30, 30, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  --glass-shadow-md: 0 4px 12px rgba(44, 30, 30, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --glass-shadow-lg: 0 12px 28px rgba(44, 30, 30, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --glass-shadow-xl: 0 24px 48px rgba(44, 30, 30, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+
+  --aurora-teal: rgba(45, 212, 191, 0.18);
+  --aurora-maroon: rgba(155, 59, 59, 0.16);
+  --aurora-cream: rgba(255, 246, 230, 0.35);
+
+  --glow-teal: rgba(45, 212, 191, 0.25);
+  --glow-maroon: rgba(155, 59, 59, 0.2);
+  --glow-accent: rgba(45, 212, 191, 0.2);
+}
+
+/* Glass card component */
+.glass-card {
+  background: var(--card-glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg, 12px);
+  backdrop-filter: var(--backdrop-blur-md);
+  box-shadow: var(--glass-shadow-md);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card:hover {
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow-lg);
+  transform: translateY(-1px);
+}
+
+/* Glass panel component */
+.glass-panel {
+  background: var(--panel-glass);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--backdrop-blur-lg);
+  box-shadow: var(--glass-shadow-sm);
+}
+
+.glass-panel-strong {
+  background: var(--panel-glass-strong);
+  backdrop-filter: var(--backdrop-blur-xl);
+}
+
+/* Glass chrome (top bars, nav) */
+.glass-chrome {
+  background: var(--chrome-glass);
+  border-bottom: 1px solid var(--glass-border);
+  backdrop-filter: var(--backdrop-blur-md);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+/* Aurora background effect */
+.aurora-background {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(1000px 600px at 10% 10%, var(--aurora-teal), transparent 60%),
+    radial-gradient(900px 500px at 90% 20%, var(--aurora-maroon), transparent 60%),
+    radial-gradient(800px 700px at 50% 80%, var(--aurora-cream), transparent 70%),
+    linear-gradient(180deg, #0a0d12 0%, #0c0f15 45%, #0f121a 100%);
+}
+
+:root[data-theme="light"] .aurora-background {
+  background:
+    radial-gradient(900px 600px at 15% 10%, var(--aurora-teal), transparent 60%),
+    radial-gradient(900px 500px at 85% 15%, var(--aurora-maroon), transparent 60%),
+    radial-gradient(800px 700px at 50% 85%, var(--aurora-cream), transparent 70%),
+    linear-gradient(180deg, #f6f1ea 0%, #efe7dd 45%, #f8f2ea 100%);
+}
+
+/* Floating particles effect */
+.aurora-particles {
+  position: fixed;
+  inset: -10% -10% 0 -10%;
+  z-index: -1;
+  opacity: 0.4;
+  background-image:
+    radial-gradient(2.5px 2.5px at 15% 25%, rgba(45, 212, 191, 0.6), transparent 50%),
+    radial-gradient(2px 2px at 35% 15%, rgba(45, 212, 191, 0.45), transparent 50%),
+    radial-gradient(1.5px 1.5px at 55% 35%, rgba(45, 212, 191, 0.5), transparent 50%),
+    radial-gradient(2px 2px at 75% 45%, rgba(45, 212, 191, 0.4), transparent 50%),
+    radial-gradient(2.5px 2.5px at 80% 20%, rgba(155, 59, 59, 0.55), transparent 50%),
+    radial-gradient(2px 2px at 60% 40%, rgba(155, 59, 59, 0.4), transparent 50%),
+    radial-gradient(1px 1px at 30% 30%, rgba(255, 255, 255, 0.25), transparent 60%);
+  animation: particles-float 35s ease-in-out infinite;
+}
+
+@keyframes particles-float {
+  0%, 100% {
+    transform: translateY(0) translateX(0);
+  }
+  25% {
+    transform: translateY(-4%) translateX(1%);
+  }
+  50% {
+    transform: translateY(-8%) translateX(-1%);
+  }
+  75% {
+    transform: translateY(-4%) translateX(0.5%);
+  }
+}
+
+/* Glass button */
+.glass-button {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--backdrop-blur-sm);
+  box-shadow: var(--glass-shadow-sm);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-button:hover {
+  background: var(--glass-strong);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow-md);
+  transform: translateY(-1px);
+}
+
+.glass-button:active {
+  transform: translateY(0);
+  box-shadow: var(--glass-shadow-sm);
+}
+
+/* Glow effects */
+.glow-teal {
+  box-shadow: 0 0 20px var(--glow-teal);
+}
+
+.glow-maroon {
+  box-shadow: 0 0 20px var(--glow-maroon);
+}
+
+.glow-accent {
+  box-shadow: 0 0 24px var(--glow-accent);
+}
+
+/* Frosted glass overlay */
+.frosted-overlay {
+  background: var(--glass-subtle);
+  backdrop-filter: var(--backdrop-blur-xl);
+  border: 1px solid var(--glass-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora-particles {
+    animation: none;
+  }
+  
+  .glass-card,
+  .glass-button {
+    transition: none;
+  }
+}
