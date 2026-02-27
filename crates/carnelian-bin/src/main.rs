@@ -18,7 +18,6 @@
 
 use std::path::PathBuf;
 use std::time::Duration;
-use sysinfo::System;
 
 use carnelian_common::types::{CreateTaskRequest, CreateTaskResponse, EventEnvelope, EventLevel};
 use clap::{Parser, Subcommand};
@@ -33,12 +32,13 @@ use carnelian_core::{
 
 use bollard::Docker;
 use bollard::container::{
-    Config as ContainerConfig, CreateContainerOptions, HostConfig, PortBinding,
+    Config as ContainerConfig, CreateContainerOptions,
     StartContainerOptions,
 };
 use bollard::image::CreateImageOptions;
-use bollard::models::{HostConfig as HostConfigModel, PortMap};
+use bollard::models::{HostConfig, PortBinding};
 use futures_util::stream::TryStreamExt;
+use sysinfo::{RefreshKind, System};
 
 /// 🔥 Carnelian OS - Local-first AI agent mainframe
 #[derive(Parser)]
@@ -351,7 +351,7 @@ async fn handle_start(
     // Create session manager with safe mode guard (needed for factory and server)
     let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
         config.pool()?.clone(),
-        ledger.clone(),
+        Arc::new(ledger.clone()),
     ));
     let session_manager = Arc::new(
         carnelian_core::session::SessionManager::with_defaults(config.pool()?.clone())
@@ -1079,7 +1079,7 @@ async fn handle_init(
     key_path: Option<PathBuf>,
 ) -> carnelian_common::Result<()> {
     use std::io::{Write, stdin, stdout};
-    use sysinfo::{MemoryKind, RefreshKind, System};
+    use sysinfo::{RefreshKind, System};
 
     // Welcome banner
     println!("╔═══════════════════════════════════════════════════════════════╗");
@@ -1093,7 +1093,7 @@ async fn handle_init(
 
     // Hardware detection with sysinfo
     println!("Detecting hardware...");
-    let mut sys = System::new_with_specifics(RefreshKind::new().with_memory(MemoryKind::RAM));
+    let mut sys = System::new_with_specifics(RefreshKind::new().with_memory(sysinfo::MemoryRefreshKind::everything()));
     sys.refresh_all();
 
     let total_ram_gb = sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
@@ -1508,7 +1508,7 @@ async fn handle_init(
                 Ok(_) => {
                     println!("    ✓ PostgreSQL container created");
                     match docker
-                        .start_container("carnelian-postgres", None::<StartContainerOptions>)
+                        .start_container("carnelian-postgres", None::<StartContainerOptions<String>>)
                         .await
                     {
                         Ok(_) => println!(
@@ -1555,7 +1555,7 @@ async fn handle_init(
                 Ok(_) => {
                     println!("    ✓ Ollama container created");
                     match docker
-                        .start_container("carnelian-ollama", None::<StartContainerOptions>)
+                        .start_container("carnelian-ollama", None::<StartContainerOptions<String>>)
                         .await
                     {
                         Ok(_) => println!("    ✓ Ollama container started on port {}", ollama_port),
@@ -1901,8 +1901,9 @@ async fn handle_key_rotate(
 
     // Store new keypair in config_store as base64-encoded JSON
     let pool = config.pool()?.clone();
+    use base64::Engine;
     let new_value = serde_json::json!({
-        "seed_base64": base64::encode(&new_private_key_bytes)
+        "seed_base64": base64::engine::general_purpose::STANDARD.encode(&new_private_key_bytes)
     });
 
     Config::update_config_value(

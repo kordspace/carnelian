@@ -390,7 +390,6 @@ async fn process_message_event(event: &SlackEvent, adapter: &SlackAdapter) -> an
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rate_limiter::RateLimitConfig;
     use crate::types::TrustLevel;
 
     #[test]

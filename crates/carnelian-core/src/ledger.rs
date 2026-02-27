@@ -115,6 +115,7 @@ pub struct LedgerEvent {
 ///
 /// Each appended event's hash depends on the previous event's hash, forming an
 /// immutable chain that can be verified at any time.
+#[derive(Clone)]
 pub struct Ledger {
     /// Database connection pool
     pool: PgPool,

@@ -53,6 +53,7 @@ chrono = { version = "0.4", features = ["serde"] }
 ed25519-dalek = { version = "2.1", features = ["serde", "rand_core"] }
 blake3 = "1.5"
 hex = "0.4"
+base64 = "0.22"
 # HTTP client (for remote model providers, ElevenLabs)
 reqwest = { version = "0.13", features = ["json", "stream", "rustls", "multipart"] }
 # WebSocket
@@ -94,6 +95,7 @@ tokio-util = { version = "0.7", features = ["codec"] }
 # Platform-specific
 libc = "0.2"
 walkdir = "2.5"
+which = "7.0"
 # Docker API client
 bollard = "0.17"
 # System information

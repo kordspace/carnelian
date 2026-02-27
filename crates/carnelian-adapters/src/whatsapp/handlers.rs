@@ -342,7 +342,7 @@ mod tests {
 
     #[test]
     fn test_webhook_verification_success() {
-        let event_stream = Arc::new(EventStream::new());
+        let event_stream = Arc::new(EventStream::new(100, 100));
 
         let query = WhatsAppVerifyQuery {
             hub_mode: "subscribe".to_string(),
@@ -357,7 +357,7 @@ mod tests {
 
     #[test]
     fn test_webhook_verification_wrong_token() {
-        let event_stream = Arc::new(EventStream::new());
+        let event_stream = Arc::new(EventStream::new(100, 100));
 
         let query = WhatsAppVerifyQuery {
             hub_mode: "subscribe".to_string(),
