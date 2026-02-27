@@ -5,3 +5,4 @@
 mod memory_tests;
 mod skill_execution_tests;
 mod xp_system_tests;
+mod elixir_tests;
