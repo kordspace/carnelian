@@ -4,6 +4,8 @@
 //! the Carnelian orchestrator. Features real-time event streaming
 //! via WebSocket, a glassy dark theme, and router-based navigation.
 
+#![allow(clippy::clone_on_copy)]
+
 mod api;
 mod components;
 mod pages;

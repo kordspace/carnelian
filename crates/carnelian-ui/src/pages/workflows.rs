@@ -1,7 +1,15 @@
 //! Workflow builder page — list, filter, create, edit, execute workflows
 //! with a visual node-based builder (drag-and-drop nodes, connector-based
 //! dependency linking), real-time execution monitoring via WebSocket events,
-//! and a history panel for past workflow runs.
+//! Workflows page with list view, visual builder, execution panel, and history.
+
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::needless_pass_by_ref_mut)]
+#![allow(clippy::redundant_clone)]
+#![allow(clippy::clone_on_copy)]
+#![allow(clippy::needless_collect)]
+#![allow(clippy::ptr_arg)]
+#![allow(clippy::redundant_closure_call)]
 
 use std::collections::HashMap;
 

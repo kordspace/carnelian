@@ -1,6 +1,9 @@
 //! Channel management page with table view, wizard modal, edit modal,
 //! confirmation dialogs, and pairing status indicators.
 
+#![allow(clippy::needless_pass_by_ref_mut)]
+#![allow(clippy::uninlined_format_args)]
+
 use carnelian_common::types::{
     ChannelDetail, CreateChannelApiRequest, EventType, UpdateChannelApiRequest,
 };

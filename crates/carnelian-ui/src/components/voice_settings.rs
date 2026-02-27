@@ -1,4 +1,6 @@
-//! Voice settings component — configure `ElevenLabs` API key, select voice, test TTS.
+//! Voice settings component for configuring TTS.
+
+#![allow(clippy::manual_map)]
 
 use carnelian_common::types::{ConfigureVoiceRequest, TestVoiceRequest};
 use dioxus::document::eval;

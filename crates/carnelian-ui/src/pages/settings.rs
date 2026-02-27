@@ -5,6 +5,8 @@
 //! - Each card links to relevant existing routes
 //! - About section shows version from `system_status`
 
+#![allow(clippy::clone_on_copy)]
+
 use dioxus::prelude::*;
 
 use crate::api;

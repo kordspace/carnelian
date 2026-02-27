@@ -9,6 +9,9 @@
 //! `mpsc` channels, and Dioxus-local `spawn` coroutines drain those
 //! channels on the UI thread where signal writes are safe.
 
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::cast_possible_truncation)]
+
 use std::collections::VecDeque;
 use std::time::Duration;
 

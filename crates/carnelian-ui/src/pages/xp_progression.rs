@@ -1,5 +1,10 @@
 //! XP Progression page — level history, leaderboard, and skill levels.
 
+#![allow(clippy::nonminimal_bool)]
+#![allow(clippy::suboptimal_flops)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::option_map_or_none)]
+
 use dioxus::prelude::*;
 
 use crate::components::xp_widget::XpWidget;

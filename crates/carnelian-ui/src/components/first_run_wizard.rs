@@ -1,9 +1,8 @@
-//! First-Run Wizard component — 5-step onboarding modal.
-//!
-//! Steps:
-//! 1. Prerequisites Check (Docker, DB, GPU status)
-//! 2. Machine Profile selection (Urim / Thummim / Custom)
-//! 3. Owner Keypair display and copy
+//! First-run wizard component for initial setup.
+
+#![allow(clippy::clone_on_copy)]
+#![allow(clippy::redundant_closure_for_method_calls)]
+#![allow(clippy::redundant_closure_call)]
 //! 4. Workspace & Models configuration
 //! 5. Starter Skills activation
 

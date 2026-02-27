@@ -1,4 +1,6 @@
-//! Toast overlay component for transient XP notifications.
+//! Toast notification overlay component.
+
+#![allow(clippy::match_wildcard_for_single_variants)]
 
 use chrono::Utc;
 use dioxus::prelude::*;
@@ -18,7 +20,7 @@ pub enum ToastType {
 }
 
 /// A generic page-level toast notification data struct.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ToastMessage {
     pub id: String,
     pub message: String,

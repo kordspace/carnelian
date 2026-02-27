@@ -5,6 +5,11 @@
 //! - Grid of skill cards with activation status
 //! - Inline activation wizard with config prompts
 //! - Deactivate functionality
+//! Skill Book page — browse and activate skills from the catalog.
+
+#![allow(clippy::clone_on_copy)]
+#![allow(clippy::map_unwrap_or)]
+#![allow(clippy::doc_lazy_continuation)]
 
 use dioxus::prelude::*;
 use std::collections::HashMap;

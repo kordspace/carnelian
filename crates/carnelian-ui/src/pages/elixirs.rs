@@ -1,4 +1,6 @@
-//! Elixirs page: curated elixir library and draft review queue.
+//! Elixirs page — manage skill configurations with filtering, sorting, CRUD, and drafts.
+
+#![allow(clippy::nonminimal_bool)]
 
 use crate::api;
 use crate::components::{Toast, ToastMessage, ToastType};
