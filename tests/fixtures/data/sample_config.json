@@ -1,0 +1,27 @@
+{
+  "id": "test-config-001",
+  "name": "Test Configuration",
+  "version": "1.0.0",
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "name": "carnelian_test",
+    "pool_size": 5
+  },
+  "ollama": {
+    "host": "http://localhost:11434",
+    "default_model": "llama3.2:3b",
+    "timeout_seconds": 60
+  },
+  "api": {
+    "host": "127.0.0.1",
+    "port": 8080,
+    "rate_limit_requests_per_second": 10
+  },
+  "features": {
+    "enable_voice": false,
+    "enable_telegram": false,
+    "enable_discord": false,
+    "safe_mode": true
+  }
+}

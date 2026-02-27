@@ -1,0 +1,15 @@
+{
+  "model": "llama3.2:3b",
+  "provider": "ollama",
+  "response": {
+    "content": "This is a mock LLM response for testing purposes.",
+    "role": "assistant",
+    "tool_calls": null
+  },
+  "usage": {
+    "prompt_tokens": 50,
+    "completion_tokens": 20,
+    "total_tokens": 70
+  },
+  "latency_ms": 150
+}

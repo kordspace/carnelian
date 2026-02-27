@@ -1,0 +1,47 @@
+{
+  "id": "wf_001",
+  "name": "Test Workflow",
+  "description": "A simple test workflow for unit testing",
+  "version": "1.0.0",
+  "status": "draft",
+  "steps": [
+    {
+      "id": "step_1",
+      "type": "skill",
+      "skill_name": "echo",
+      "inputs": {
+        "message": "Hello from test workflow"
+      },
+      "next": "step_2"
+    },
+    {
+      "id": "step_2",
+      "type": "condition",
+      "condition": "{{step_1.output.status}} == 'success'",
+      "true_branch": "step_3",
+      "false_branch": "step_error"
+    },
+    {
+      "id": "step_3",
+      "type": "skill",
+      "skill_name": "log",
+      "inputs": {
+        "level": "info",
+        "message": "Workflow completed successfully"
+      },
+      "next": null
+    },
+    {
+      "id": "step_error",
+      "type": "skill",
+      "skill_name": "log",
+      "inputs": {
+        "level": "error",
+        "message": "Workflow failed at step 1"
+      },
+      "next": null
+    }
+  ],
+  "created_at": "2026-02-26T00:00:00Z",
+  "updated_at": "2026-02-26T00:00:00Z"
+}

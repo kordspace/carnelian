@@ -1,0 +1,12 @@
+{
+  "id": "mem_001",
+  "content": "Test memory entry for unit testing",
+  "embedding": [0.1, 0.2, 0.3, 0.4, 0.5],
+  "metadata": {
+    "source": "test",
+    "type": "conversation",
+    "timestamp": "2026-02-26T00:00:00Z"
+  },
+  "created_at": "2026-02-26T00:00:00Z",
+  "updated_at": "2026-02-26T00:00:00Z"
+}

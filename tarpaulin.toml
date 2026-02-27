@@ -1,0 +1,41 @@
+# Tarpaulin Configuration for CARNELIAN
+# Code coverage settings
+
+[engine]
+# Use the default LLVM coverage engine
+
+[features]
+# Features to enable during coverage
+features = ["test"]
+
+[exclude]
+# Files to exclude from coverage
+exclude-files = [
+    "tests/*",
+    "benches/*",
+    "**/target/*",
+    "crates/carnelian-ui/*",
+]
+
+[include]
+# Only include source files
+include-files = [
+    "crates/carnelian-core/src/**/*.rs",
+    "crates/carnelian-common/src/**/*.rs",
+]
+
+[test]
+# Test timeout
+timeout = "120s"
+
+[output]
+# Output formats
+out = ["Html", "Xml", "Json"]
+output-dir = "coverage"
+
+[thresholds]
+# Coverage thresholds
+line-coverage = 70
+function-coverage = 70
+branch-coverage = 55
+statement-coverage = 70
