@@ -3215,7 +3215,8 @@ async fn heartbeat_status_handler(State(state): State<AppState>) -> impl IntoRes
     match row {
         Ok(Some((mantra, last_ts))) => {
             let interval_ms = state.config.heartbeat_interval_ms;
-            let next_ts = last_ts + chrono::Duration::milliseconds(i64::try_from(interval_ms).unwrap_or(i64::MAX));
+            let next_ts = last_ts
+                + chrono::Duration::milliseconds(i64::try_from(interval_ms).unwrap_or(i64::MAX));
             (
                 StatusCode::OK,
                 Json(json!(HeartbeatStatusResponse {

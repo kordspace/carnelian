@@ -48,7 +48,9 @@ impl TokenBucket {
         let now = Instant::now();
         let elapsed = now.duration_since(self.last_refill).as_secs_f64();
 
-        self.tokens = elapsed.mul_add(self.refill_rate, self.tokens).min(self.capacity);
+        self.tokens = elapsed
+            .mul_add(self.refill_rate, self.tokens)
+            .min(self.capacity);
         self.last_refill = now;
     }
 }

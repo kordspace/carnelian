@@ -1625,7 +1625,10 @@ async fn handle_init(
                 Ok(_) => {
                     println!("    ✓ PostgreSQL container created");
                     match docker
-                        .start_container("carnelian-postgres", None::<StartContainerOptions<String>>)
+                        .start_container(
+                            "carnelian-postgres",
+                            None::<StartContainerOptions<String>>,
+                        )
                         .await
                     {
                         Ok(_) => println!(
