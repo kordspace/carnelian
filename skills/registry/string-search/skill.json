@@ -1,0 +1,7 @@
+{
+  "name": "string-search",
+  "description": "Search for substring patterns in text with match positions",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

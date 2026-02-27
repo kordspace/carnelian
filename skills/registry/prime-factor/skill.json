@@ -1,0 +1,7 @@
+{
+  "name": "prime-factor",
+  "description": "Check if number is prime and return prime factorization",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

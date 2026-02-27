@@ -1,0 +1,7 @@
+{
+  "name": "jira-issue",
+  "description": "Create and manage Jira issues and tickets",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["jira_api"]
+}

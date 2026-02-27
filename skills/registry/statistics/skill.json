@@ -1,0 +1,7 @@
+{
+  "name": "statistics",
+  "description": "Calculate statistical measures: mean, median, mode, std dev, variance",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}
