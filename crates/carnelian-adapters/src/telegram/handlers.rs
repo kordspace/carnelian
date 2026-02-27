@@ -52,6 +52,7 @@ pub fn build_handler() -> UpdateHandler<anyhow::Error> {
 /// 7. Emit `ChannelMessageReceived` event
 /// 8. Update `last_seen_at`
 #[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_arguments)]
 async fn handle_message(
     bot: Bot,
     msg: Message,

@@ -138,6 +138,11 @@ impl SpamDetector {
         state.last_content_hash = content_hash;
 
         let final_score = state.score;
+        let duplicate_count = state.duplicate_count;
+        let command_count = state.command_count;
+        
+        // Drop entry early to release lock
+        drop(entry);
 
         // Emit spam detection event if above threshold
         if final_score >= self.threshold {
@@ -150,8 +155,8 @@ impl SpamDetector {
                         "channel_user_id": channel_user_id,
                         "spam_score": final_score,
                         "threshold": self.threshold,
-                        "duplicate_count": state.duplicate_count,
-                        "command_count": state.command_count,
+                        "duplicate_count": duplicate_count,
+                        "command_count": command_count,
                     }),
                 ));
             }

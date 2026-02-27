@@ -32,6 +32,7 @@ use super::SlackAdapter;
 /// # Errors
 ///
 /// Returns an error if database operations or message sending fails.
+#[allow(clippy::too_many_arguments)]
 pub async fn handle_pair(
     channel_id: &str,
     user_id: &str,
@@ -117,6 +118,7 @@ async fn initiate_pairing(
 }
 
 /// Complete pairing: verify the token and upgrade the session.
+#[allow(clippy::too_many_lines)]
 async fn complete_pairing(
     channel_id: &str,
     token_str: &str,

@@ -69,6 +69,7 @@ impl SlackAdapter {
     /// # Errors
     ///
     /// Currently infallible, but returns `Result` for future extensibility.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         config: ChannelConfig,
         signing_secret: String,

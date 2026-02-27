@@ -121,6 +121,7 @@ async fn initiate_pairing(
 }
 
 /// Complete pairing: verify the token and upgrade the session.
+#[allow(clippy::too_many_lines)]
 async fn complete_pairing(
     bot: &Bot,
     msg: &Message,
