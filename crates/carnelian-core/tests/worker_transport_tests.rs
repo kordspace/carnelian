@@ -265,7 +265,7 @@ async fn test_worker_manager_transport_integration() {
     // This test validates the integration path; it may fail if the
     // actual worker script isn't present, but the transport creation
     // path is exercised.
-    let result = manager.spawn_worker(WorkerRuntime::Node).await;
+    let result = manager.spawn_worker(WorkerRuntime::Node, false).await;
 
     // If spawn succeeded, verify transport is accessible
     if let Ok(worker_id) = result {
