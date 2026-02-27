@@ -840,8 +840,9 @@ impl WorkerTransport for WasmWorkerTransport {
         }
 
         // Read capabilities from skill.json
-        let capabilities =
-            std::fs::read_to_string(&skill_json_path).map_or_else(|_| Vec::new(), |content| {
+        let capabilities = std::fs::read_to_string(&skill_json_path).map_or_else(
+            |_| Vec::new(),
+            |content| {
                 serde_json::from_str::<serde_json::Value>(&content)
                     .ok()
                     .and_then(|v| v.get("capabilities_required").cloned())
@@ -853,7 +854,8 @@ impl WorkerTransport for WasmWorkerTransport {
                         })
                     })
                     .unwrap_or_default()
-            });
+            },
+        );
 
         // Convert input to SkillInput
         let skill_input = SkillInput {
