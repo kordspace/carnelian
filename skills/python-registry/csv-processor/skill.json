@@ -1,0 +1,7 @@
+{
+  "name": "csv-processor",
+  "description": "Advanced CSV file processing and transformation",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

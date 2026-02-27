@@ -1,0 +1,7 @@
+{
+  "name": "opencv-image",
+  "description": "Image processing using OpenCV",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

@@ -1,0 +1,7 @@
+{
+  "name": "altair-chart",
+  "description": "Create declarative visualizations using Altair",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

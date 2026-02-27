@@ -1,0 +1,7 @@
+{
+  "name": "arrow-convert",
+  "description": "Apache Arrow data format conversions",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

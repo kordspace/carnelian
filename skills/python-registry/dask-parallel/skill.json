@@ -1,0 +1,7 @@
+{
+  "name": "dask-parallel",
+  "description": "Parallel data processing using Dask",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

@@ -1,0 +1,7 @@
+{
+  "name": "tensorflow-inference",
+  "description": "Deep learning inference using TensorFlow",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

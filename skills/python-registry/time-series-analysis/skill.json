@@ -1,0 +1,7 @@
+{
+  "name": "time-series-analysis",
+  "description": "Time series analysis and forecasting",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

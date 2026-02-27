@@ -1,0 +1,7 @@
+{
+  "name": "lightgbm-train",
+  "description": "Train fast gradient boosting models using LightGBM",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

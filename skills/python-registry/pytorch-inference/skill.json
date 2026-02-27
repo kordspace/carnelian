@@ -1,0 +1,7 @@
+{
+  "name": "pytorch-inference",
+  "description": "Neural network inference using PyTorch",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

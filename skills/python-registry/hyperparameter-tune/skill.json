@@ -1,0 +1,7 @@
+{
+  "name": "hyperparameter-tune",
+  "description": "Hyperparameter optimization for ML models",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}
