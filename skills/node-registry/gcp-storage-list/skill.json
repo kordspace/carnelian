@@ -1,0 +1,7 @@
+{
+  "name": "gcp-storage-list",
+  "description": "List objects in Google Cloud Storage buckets",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["gcp_storage_api"]
+}

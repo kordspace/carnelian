@@ -1,0 +1,7 @@
+{
+  "name": "gcp-pubsub-subscribe",
+  "description": "Subscribe to Google Cloud Pub/Sub topics and pull messages",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["gcp_pubsub_api"]
+}

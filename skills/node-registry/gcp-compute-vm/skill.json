@@ -1,0 +1,7 @@
+{
+  "name": "gcp-compute-vm",
+  "description": "Manage Google Compute Engine virtual machines",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["gcp_compute_api"]
+}

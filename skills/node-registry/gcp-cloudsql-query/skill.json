@@ -1,0 +1,7 @@
+{
+  "name": "gcp-cloudsql-query",
+  "description": "Execute SQL queries on Google Cloud SQL databases",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["gcp_cloudsql_api"]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "gcp-functions-deploy",
+  "description": "Deploy serverless functions to Google Cloud Functions",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["gcp_functions_api"]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "gcp-run-deploy",
+  "description": "Deploy containerized applications to Google Cloud Run",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["gcp_run_api"]
+}

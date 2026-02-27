@@ -1,0 +1,7 @@
+{
+  "name": "gcp-bigquery-load",
+  "description": "Load data into Google BigQuery tables",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["gcp_bigquery_api"]
+}
