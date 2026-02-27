@@ -67,7 +67,7 @@ pub fn TopBar() -> Element {
         "urim" => "badge badge-urim",
         _ => "badge badge-custom",
     };
-    
+
     let navigator = use_navigator();
 
     rsx! {
