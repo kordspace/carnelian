@@ -26,8 +26,7 @@ use carnelian_common::types::{
     ProviderDetail, RunDetail, RunLogEntry, RunLogsQuery, SkillDetail, SkillMetricsDetail,
     SkillToggleResponse, StatusResponse, TaskDetail, TestVoiceRequest, TestVoiceResponse,
     TopSkillsQuery, TopSkillsResponse, TranscribeVoiceRequest, TranscribeVoiceResponse,
-    UpdateWorkflowRequest, XpEventDetail, XpHistoryQuery, XpHistoryResponse,
-    XpLeaderboardResponse,
+    UpdateWorkflowRequest, XpEventDetail, XpHistoryQuery, XpHistoryResponse, XpLeaderboardResponse,
 };
 use futures_util::{SinkExt, StreamExt};
 use http::{HeaderMap, Method, header};
