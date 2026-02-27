@@ -1566,7 +1566,7 @@ async fn handle_init(
                         .await
                     {
                         Ok(()) => {
-                            println!("    ✓ Ollama container started on port {}", ollama_port)
+                            println!("    ✓ Ollama container started on port {}", ollama_port);
                         }
                         Err(e) => println!("    ⚠ Failed to start Ollama container: {}", e),
                     };

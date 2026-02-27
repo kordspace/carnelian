@@ -1,18 +1,11 @@
 # Carnelian OS Rust formatting configuration
 # These are project-wide formatting standards that align with the workspace edition.
-#
-# Note: Some options (imports_granularity, group_imports, format_code_in_doc_comments)
-# require nightly rustfmt. On stable toolchain (1.85), these will emit warnings but
-# are included for completeness. The formatter will still work correctly.
 
 edition = "2024"
 style_edition = "2024"
 max_width = 100
 use_small_heuristics = "Default"
 
-# Import organization (nightly rustfmt feature)
-imports_granularity = "Crate"
-group_imports = "StdExternalCrate"
-
-# Documentation formatting (nightly rustfmt feature)
-format_code_in_doc_comments = true
+# Note: Advanced import organization and doc comment formatting features
+# (imports_granularity, group_imports, format_code_in_doc_comments) are only
+# available in nightly rustfmt and have been removed to avoid warnings on stable.
