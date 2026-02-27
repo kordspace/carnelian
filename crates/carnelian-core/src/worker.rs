@@ -61,6 +61,7 @@
 use crate::config::Config;
 use crate::events::EventStream;
 use crate::ledger::Ledger;
+use crate::skills::skill_trait::SkillInput;
 use crate::skills::wasm_runtime::WasmSkillRuntime;
 use async_trait::async_trait;
 use bollard::container::{LogsOptions, StatsOptions};
@@ -1051,7 +1052,7 @@ impl WorkerTransport for NativeWorkerTransport {
         let timeout_secs = request.timeout_secs;
         let timeout_duration = std::time::Duration::from_secs(timeout_secs);
 
-        let result: Result<serde_json::Value, Error> = match skill_name.as_str() {
+        let result: Result<serde_json::Value> = match skill_name.as_str() {
             "git_status" => {
                 if !Self::check_capability(&request.input, "git.read") {
                     Err(Error::Permission(format!(

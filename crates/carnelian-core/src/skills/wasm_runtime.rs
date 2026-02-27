@@ -77,10 +77,10 @@ impl WasmSkillRuntime {
                 .map_err(|e| Error::Worker(format!("Failed to create WASM engine: {}", e)))?,
         );
 
-        // Create linker with WASI P1
+        // Create linker with WASI
         let mut linker = Linker::new(&engine);
-        wasi_p1_add_to_linker(&mut linker, |s: &mut WasmState| &mut s.wasi)
-            .map_err(|e| Error::Worker(format!("Failed to add WASI P1 to linker: {}", e)))?;
+        wasmtime_wasi::add_to_linker_async(&mut linker)
+            .map_err(|e| Error::Worker(format!("Failed to add WASI to linker: {}", e)))?;
 
         Ok(Self {
             engine,
@@ -200,7 +200,7 @@ impl WasmSkillRuntime {
                 .map_err(|e| Error::Worker(format!("Failed to preopen dir: {}", e)))?;
         }
 
-        let wasi = wasi_builder.build_p1();
+        let wasi = wasi_builder.build();
 
         // Step 5: Create Store with WasmState
         let mut store = Store::new(&skill.engine, WasmState { wasi, capabilities });
@@ -266,26 +266,23 @@ impl WasmSkillRuntime {
         });
 
         // Step 12: Build result
+        let mut metadata = HashMap::new();
+        if truncated {
+            metadata.insert("truncated".to_string(), "true".to_string());
+        }
+
         match result {
             Ok(_) => Ok(SkillOutput {
                 success: true,
                 data,
                 error: None,
-                metadata: if truncated {
-                    Some(serde_json::json!({ "truncated": "true" }))
-                } else {
-                    None
-                },
+                metadata: metadata.clone(),
             }),
             Err(e) => Ok(SkillOutput {
                 success: false,
                 data: serde_json::json!({}),
                 error: Some(e.to_string()),
-                metadata: if truncated {
-                    Some(serde_json::json!({ "truncated": "true" }))
-                } else {
-                    None
-                },
+                metadata,
             }),
         }
     }
