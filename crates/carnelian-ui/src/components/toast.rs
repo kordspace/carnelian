@@ -12,8 +12,9 @@ use crate::store::{EventStreamStore, ToastKind};
 pub enum ToastType {
     Success,
     Error,
-    Warning,
+    #[allow(dead_code)]
     Info,
+    Warning,
 }
 
 /// A generic page-level toast notification data struct.

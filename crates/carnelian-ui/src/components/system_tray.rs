@@ -14,6 +14,8 @@
 //! `SystemTray` (a Dioxus component) builds the actual icon after
 //! the event loop is running.
 
+#![allow(dead_code)]
+
 use std::sync::OnceLock;
 
 use dioxus::prelude::*;
