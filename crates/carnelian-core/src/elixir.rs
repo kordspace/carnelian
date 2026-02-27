@@ -11,8 +11,7 @@
 //! or active elixir, a draft is automatically created for review.
 
 use carnelian_common::types::{
-    ApproveDraftResponse, CreateElixirRequest, ElixirDetail, ElixirDraft, ElixirSearchResponse,
-    ListElixirDraftsResponse, ListElixirsQuery, ListElixirsResponse, RejectDraftResponse,
+    CreateElixirRequest, ListElixirsQuery,
 };
 use carnelian_common::{Error, Result};
 use serde_json::Value as JsonValue;

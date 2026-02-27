@@ -58,6 +58,7 @@
 //! }).await?;
 //! ```
 
+use async_trait::async_trait;
 use crate::config::Config;
 use crate::events::EventStream;
 use crate::ledger::Ledger;
@@ -854,8 +855,11 @@ impl WorkerTransport for WasmWorkerTransport {
         };
 
         // Convert input to SkillInput
-        let skill_input = crate::skills::skill_trait::SkillInput {
-            data: request.input,
+        let skill_input = SkillInput {
+            action: "execute".to_string(),
+            params: request.input,
+            identity_id: None,
+            correlation_id: request.correlation_id.clone(),
         };
 
         // Call WASM runtime

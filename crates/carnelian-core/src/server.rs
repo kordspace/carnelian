@@ -13,18 +13,18 @@ use axum::{
 use base64::Engine as _;
 use carnelian_common::Result;
 use carnelian_common::types::{
-    AgentXpResponse, ApproveDraftResponse, AwardXpRequest, AwardXpResponse, CancelTaskRequest,
+    AgentXpResponse, AwardXpRequest, AwardXpResponse, CancelTaskRequest,
     CancelTaskResponse, ConfigureVoiceRequest, ConfigureVoiceResponse, CreateElixirRequest,
     CreateMemoryRequest, CreateMemoryResponse, CreateTaskRequest, CreateTaskResponse,
-    CreateWorkflowRequest, DetailedHealthResponse, ElixirDetail, ElixirDraft, ElixirSearchResponse,
+    CreateWorkflowRequest, DetailedHealthResponse, ElixirDraft,
     EventEnvelope, EventLevel, EventType, ExecuteWorkflowRequest, ExportMemoryRequest,
     ExportMemoryResponse, GetMemoryResponse, HeartbeatRecord, HeartbeatStatusResponse,
     IdentityResponse, ImportMemoryRequest, ImportMemoryResponse, LeaderboardEntry,
-    ListElixirDraftsResponse, ListElixirsQuery, ListElixirsResponse, ListMemoriesResponse,
+    ListElixirsQuery, ListMemoriesResponse,
     ListProvidersResponse, ListRunsResponse, ListSkillsResponse, ListTasksResponse,
     ListVoicesResponse, ListWorkflowsParams, ListWorkflowsResponse, MemoryDetail,
     MemoryImportResultApi, OllamaStatusResponse, PaginatedRunLogsResponse, ProviderDetail,
-    RejectDraftResponse, RunDetail, RunLogEntry, RunLogsQuery, SkillDetail, SkillMetricsDetail,
+    RunLogEntry, RunLogsQuery, SkillDetail, SkillMetricsDetail,
     SkillToggleResponse, StatusResponse, TaskDetail, TestVoiceRequest, TestVoiceResponse,
     TopSkillsQuery, TopSkillsResponse, TranscribeVoiceRequest, TranscribeVoiceResponse,
     UpdateWorkflowRequest, XpEventDetail, XpHistoryQuery, XpHistoryResponse, XpLeaderboardResponse,
@@ -72,10 +72,10 @@ const X_CARNELIAN_KEY: &str = "X-Carnelian-Key";
 ///
 /// Bypasses authentication for localhost requests.
 /// For remote requests, validates the X-Carnelian-Key header against the owner key.
-async fn carnelian_key_auth<B>(
+async fn carnelian_key_auth(
     State(state): State<AppState>,
-    req: axum::extract::Request<B>,
-    next: axum::middleware::Next<B>,
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
 ) -> axum::response::Response {
     // Check if request is from localhost
     let is_localhost = req
@@ -6824,50 +6824,6 @@ pub async fn localhost_only(
     next.run(req).await
 }
 
-/// Middleware layer that validates X-Carnelian-Key header for remote access.
-/// This middleware allows non-localhost requests if they provide a valid API key.
-/// Validates against config_store database for stored API keys.
-pub async fn carnelian_key_auth(
-    req: axum::http::Request<axum::body::Body>,
-    next: axum::middleware::Next,
-) -> impl IntoResponse {
-    let headers = req.headers();
-    let remote_addr = req
-        .extensions()
-        .get::<std::net::SocketAddr>()
-        .map(|addr| addr.ip().to_string())
-        .unwrap_or_default();
-
-    let is_localhost =
-        remote_addr == "127.0.0.1" || remote_addr == "::1" || remote_addr == "localhost";
-
-    // Localhost requests bypass auth
-    if is_localhost {
-        return next.run(req).await;
-    }
-
-    // Non-localhost requests require X-Carnelian-Key header
-    let api_key = headers.get("x-carnelian-key").and_then(|v| v.to_str().ok());
-
-    match api_key {
-        Some(key) if !key.is_empty() => {
-            // TODO: Integrate with config_store to validate against stored API key
-            // For now, accept any non-empty key as placeholder
-            tracing::info!("Remote access with API key from {}", remote_addr);
-            next.run(req).await
-        }
-        _ => {
-            tracing::warn!("Unauthorized remote access attempt from {}", remote_addr);
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({
-                    "error": "Remote access requires X-Carnelian-Key header"
-                })),
-            )
-                .into_response()
-        }
-    }
-}
 
 // =============================================================================
 // ELIXIR HANDLERS

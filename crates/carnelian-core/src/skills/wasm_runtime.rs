@@ -9,20 +9,15 @@ use std::sync::{Arc, Mutex};
 
 use tracing::{info, warn};
 use wasmtime::{Config, Engine, Linker, Module, Store};
-use wasmtime_wasi::p1::{WasiP1Ctx, add_to_linker_async as wasi_p1_add_to_linker};
-use wasmtime_wasi::{
-    WasiCtxBuilder,
-    p2::pipe::{MemoryInputPipe, MemoryOutputPipe},
-};
+use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, pipe::{MemoryInputPipe, MemoryOutputPipe}};
 
 use crate::skills::skill_trait::{SkillInput, SkillOutput};
 use carnelian_common::{Error, Result};
-use serde_json::Value;
 
 /// State for WASM skill execution
 pub struct WasmState {
-    /// WASI context for system access (P1 for module-based WASM)
-    wasi: WasiP1Ctx,
+    /// WASI context for system access
+    wasi: WasiCtx,
 
     /// Granted capabilities
     capabilities: Vec<String>,
