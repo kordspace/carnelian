@@ -1,4 +1,4 @@
-//! WhatsApp webhook handlers.
+//! `WhatsApp` webhook handlers.
 //!
 //! Handles incoming webhook verification (Meta hub challenge) and message
 //! payloads, applying rate limiting, spam detection, and capability checks
@@ -68,7 +68,7 @@ pub struct WhatsAppValue {
     pub metadata: WhatsAppMetadata,
 }
 
-/// Individual WhatsApp message.
+/// Individual `WhatsApp` message.
 #[derive(Debug, Deserialize)]
 pub struct WhatsAppMessage {
     pub id: String,
@@ -85,7 +85,7 @@ pub struct WhatsAppText {
     pub body: String,
 }
 
-/// Metadata about the WhatsApp business account.
+/// Metadata about the `WhatsApp` business account.
 #[derive(Debug, Deserialize)]
 pub struct WhatsAppMetadata {
     pub phone_number_id: String,
@@ -96,10 +96,14 @@ pub struct WhatsAppMetadata {
 // WEBHOOK VERIFICATION
 // =============================================================================
 
-/// Handle webhook verification request from Meta.
+/// Handle webhook verification challenge from Meta.
 ///
-/// Verifies the hub mode is "subscribe" and the verify token matches.
-/// Returns the challenge string on success for the HTTP response.
+/// Meta sends a GET request with `hub.mode`, `hub.verify_token`, and `hub.challenge`.
+/// We verify the token and echo back the challenge.
+///
+/// # Errors
+///
+/// Returns an error if verification fails.
 pub fn handle_verification(
     query: &WhatsAppVerifyQuery,
     verify_token: &str,
@@ -136,10 +140,14 @@ pub fn handle_verification(
 // INBOUND MESSAGE HANDLING
 // =============================================================================
 
-/// Handle inbound webhook payload from WhatsApp.
+/// Handle inbound webhook payload from `WhatsApp`.
 ///
-/// Processes each message in the payload, applying rate limiting,
-/// spam detection, capability checks, and session management.
+/// Deserializes the payload, extracts messages, and routes them to the
+/// message processor.
+///
+/// # Errors
+///
+/// Returns an error if payload processing fails.
 pub async fn handle_inbound(
     payload: &WhatsAppWebhookPayload,
     adapter: &WhatsAppAdapter,
@@ -164,22 +172,21 @@ pub async fn handle_inbound(
     Ok(())
 }
 
-/// Process a single WhatsApp message.
+/// Process a single `WhatsApp` message.
 async fn process_message(
     message: &WhatsAppMessage,
     adapter: &WhatsAppAdapter,
 ) -> anyhow::Result<()> {
     // Only process text messages
-    let text = match &message.text {
-        Some(t) => &t.body,
-        None => {
-            tracing::debug!(
-                message_id = %message.id,
-                message_type = %message.type_,
-                "Skipping non-text WhatsApp message"
-            );
-            return Ok(());
-        }
+    let text = if let Some(t) = &message.text {
+        &t.body
+    } else {
+        tracing::debug!(
+            message_id = %message.id,
+            message_type = %message.type_,
+            "Skipping non-text WhatsApp message"
+        );
+        return Ok(());
     };
 
     let from = &message.from;

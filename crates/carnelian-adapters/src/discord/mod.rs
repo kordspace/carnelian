@@ -62,6 +62,10 @@ impl DiscordAdapter {
     /// Create a new Discord adapter.
     ///
     /// The bot token is read from `config.bot_token`.
+    ///
+    /// # Errors
+    ///
+    /// Currently infallible, but returns `Result` for future extensibility.
     pub fn new(
         config: ChannelConfig,
         session_manager: Arc<SessionManager>,
@@ -90,14 +94,14 @@ impl DiscordAdapter {
 
     /// Returns a reference to the channel configuration.
     #[must_use]
-    pub fn config(&self) -> &ChannelConfig {
+    pub const fn config(&self) -> &ChannelConfig {
         &self.config
     }
 }
 
 #[async_trait]
 impl ChannelAdapter for DiscordAdapter {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "discord"
     }
 

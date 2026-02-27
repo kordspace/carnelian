@@ -20,6 +20,10 @@ use super::SlackAdapter;
 /// The `body` parameter is the text after `/carnelian ` (e.g., "pair", "status").
 /// Returns `Ok(true)` if a command was recognized and dispatched,
 /// `Ok(false)` if not a recognized command.
+///
+/// # Errors
+///
+/// Returns an error if command execution fails.
 pub async fn dispatch_command(
     body: &str,
     channel_id: &str,

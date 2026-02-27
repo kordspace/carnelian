@@ -59,7 +59,7 @@ pub struct DefaultAdapterFactory {
 
 impl DefaultAdapterFactory {
     /// Create a new adapter factory.
-    pub fn new(
+    pub const fn new(
         db_pool: PgPool,
         session_manager: Arc<SessionManager>,
         event_stream: Arc<EventStream>,
@@ -107,7 +107,7 @@ impl ChannelAdapterFactory for DefaultAdapterFactory {
         // 4. Build ChannelConfig
         let mut channel_config = ChannelConfig {
             channel_id: session_id,
-            channel_type: parsed_channel_type.clone(),
+            channel_type: parsed_channel_type,
             bot_token: bot_token.to_string(),
             default_trust_level: parsed_trust_level,
             enabled: true,

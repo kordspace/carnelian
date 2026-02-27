@@ -26,6 +26,10 @@ use crate::types::{PairingRequest, TrustLevel};
 /// - `/pair` — generate a new pairing token (default: conversational trust)
 /// - `/pair <trust_level>` — generate token with requested trust level
 /// - `/pair <token>` — verify and complete pairing
+///
+/// # Errors
+///
+/// Returns an error if database operations or message sending fails.
 pub async fn handle_pair(
     bot: &Bot,
     msg: &Message,
@@ -127,16 +131,13 @@ async fn complete_pairing(
     policy_engine: &Arc<PolicyEngine>,
 ) -> anyhow::Result<()> {
     // Look up the existing session
-    let session = match channel_db::get_channel_session(db_pool, "telegram", chat_id).await? {
-        Some(s) => s,
-        None => {
-            bot.send_message(
-                msg.chat.id,
-                "❌ No pending pairing found. Use /pair to start.",
-            )
-            .await?;
-            return Ok(());
-        }
+    let Some(session) = channel_db::get_channel_session(db_pool, "telegram", chat_id).await? else {
+        bot.send_message(
+            msg.chat.id,
+            "❌ No pending pairing found. Use /pair to start.",
+        )
+        .await?;
+        return Ok(());
     };
 
     // Verify the token from metadata

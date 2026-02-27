@@ -29,7 +29,7 @@ pub enum ChannelType {
 impl ChannelType {
     /// Returns the database string representation.
     #[must_use]
-    pub fn as_str(&self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Telegram => "telegram",
             Self::Discord => "discord",
@@ -84,7 +84,7 @@ pub enum TrustLevel {
 impl TrustLevel {
     /// Returns the database string representation.
     #[must_use]
-    pub fn as_str(&self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Conversational => "conversational",
             Self::Untrusted => "untrusted",
@@ -94,7 +94,7 @@ impl TrustLevel {
 
     /// Returns the rate limit (messages per minute) for this trust level.
     #[must_use]
-    pub fn rate_limit_per_minute(&self) -> u32 {
+    pub const fn rate_limit_per_minute(&self) -> u32 {
         match self {
             Self::Untrusted => 5,
             Self::Conversational => 30,
@@ -104,7 +104,7 @@ impl TrustLevel {
 
     /// Returns the context window token limit for this trust level.
     #[must_use]
-    pub fn context_window_tokens(&self) -> usize {
+    pub const fn context_window_tokens(&self) -> usize {
         match self {
             Self::Untrusted => 4_000,
             Self::Conversational => 16_000,
@@ -114,7 +114,7 @@ impl TrustLevel {
 
     /// Returns the capabilities granted at this trust level.
     #[must_use]
-    pub fn capabilities(&self) -> &'static [&'static str] {
+    pub const fn capabilities(&self) -> &'static [&'static str] {
         match self {
             Self::Untrusted => &["channel.message.receive"],
             Self::Conversational => &["channel.message.receive", "channel.message.send"],

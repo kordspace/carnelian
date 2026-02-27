@@ -26,6 +26,10 @@ use crate::types::{PairingRequest, TrustLevel};
 /// - `!pair` — generate a new pairing token (default: conversational trust)
 /// - `!pair <trust_level>` — generate token with requested trust level
 /// - `!pair <token>` — verify and complete pairing
+///
+/// # Errors
+///
+/// Returns an error if database operations or message sending fails.
 pub async fn handle_pair(
     ctx: &Context,
     msg: &Message,
@@ -121,17 +125,15 @@ async fn complete_pairing(
     event_stream: &Arc<EventStream>,
     policy_engine: &Arc<PolicyEngine>,
 ) -> anyhow::Result<()> {
-    let session = match channel_db::get_channel_session(db_pool, "discord", channel_id).await? {
-        Some(s) => s,
-        None => {
-            msg.channel_id
-                .say(
-                    &ctx.http,
-                    "❌ No pending pairing found. Use `!pair` to start.",
-                )
-                .await?;
-            return Ok(());
-        }
+    let Some(session) = channel_db::get_channel_session(db_pool, "discord", channel_id).await?
+    else {
+        msg.channel_id
+            .say(
+                &ctx.http,
+                "❌ No pending pairing found. Use `!pair` to start.",
+            )
+            .await?;
+        return Ok(());
     };
 
     // Verify token

@@ -80,6 +80,7 @@ impl SpamDetector {
     /// - **Duplicate content**: repeated identical messages increase the score
     /// - **Command spam**: excessive command usage increases the score
     /// - **Decay**: scores decay over time when the user is idle
+    #[must_use]
     pub fn update_score(
         &self,
         channel_type: &str,
@@ -91,8 +92,7 @@ impl SpamDetector {
         let is_command = message_content.starts_with('/');
         let now = Instant::now();
 
-        let mut entry = self.scores.entry(key).or_default();
-        let state = entry.value_mut();
+        let state = self.scores.entry(key).or_default().value_mut();
 
         // Decay: reduce score based on time since last message
         if let Some(last_time) = state.last_message_time {
@@ -116,7 +116,9 @@ impl SpamDetector {
         // Duplicate content penalty
         if content_hash == state.last_content_hash && state.last_content_hash != 0 {
             state.duplicate_count += 1;
-            state.score += 0.2 * (state.duplicate_count as f32).min(3.0);
+            #[allow(clippy::cast_precision_loss)]
+            let dup_penalty = (state.duplicate_count as f32).min(3.0);
+            state.score += 0.2 * dup_penalty;
         } else {
             state.duplicate_count = 0;
         }
@@ -165,7 +167,7 @@ impl SpamDetector {
 
     /// Returns the configured spam threshold.
     #[must_use]
-    pub fn threshold(&self) -> f32 {
+    pub const fn threshold(&self) -> f32 {
         self.threshold
     }
 

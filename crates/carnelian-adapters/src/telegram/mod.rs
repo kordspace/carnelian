@@ -60,6 +60,10 @@ impl TelegramAdapter {
     /// Create a new Telegram adapter.
     ///
     /// The bot token is read from `config.bot_token`.
+    ///
+    /// # Errors
+    ///
+    /// Currently infallible, but returns `Result` for future extensibility.
     pub fn new(
         config: ChannelConfig,
         session_manager: Arc<SessionManager>,
@@ -88,21 +92,20 @@ impl TelegramAdapter {
     }
 
     /// Returns a reference to the underlying `teloxide::Bot`.
-    #[must_use]
-    pub fn bot(&self) -> &Bot {
+    pub const fn bot(&self) -> &Bot {
         &self.bot
     }
 
     /// Returns a reference to the channel configuration.
     #[must_use]
-    pub fn config(&self) -> &ChannelConfig {
+    pub const fn config(&self) -> &ChannelConfig {
         &self.config
     }
 }
 
 #[async_trait]
 impl ChannelAdapter for TelegramAdapter {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "telegram"
     }
 

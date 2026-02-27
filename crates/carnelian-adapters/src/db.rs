@@ -14,6 +14,10 @@ use crate::types::ChannelSession;
 /// Create a new channel session.
 ///
 /// Returns the generated `session_id`.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
 pub async fn create_channel_session(
     pool: &PgPool,
     channel_type: &str,
@@ -43,6 +47,10 @@ pub async fn create_channel_session(
 }
 
 /// Look up a channel session by `(channel_type, channel_user_id)`.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
 pub async fn get_channel_session(
     pool: &PgPool,
     channel_type: &str,
@@ -66,6 +74,10 @@ pub async fn get_channel_session(
 }
 
 /// Look up a channel session by its `session_id`.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
 pub async fn get_channel_session_by_id(
     pool: &PgPool,
     session_id: Uuid,
@@ -87,6 +99,10 @@ pub async fn get_channel_session_by_id(
 }
 
 /// Update a channel session's trust level and metadata.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
 pub async fn update_channel_session(
     pool: &PgPool,
     session_id: Uuid,
@@ -113,6 +129,10 @@ pub async fn update_channel_session(
 /// Delete a channel session by `session_id`.
 ///
 /// Returns `true` if a row was deleted.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
 pub async fn delete_channel_session(pool: &PgPool, session_id: Uuid) -> Result<bool> {
     let result = sqlx::query(r"DELETE FROM channel_sessions WHERE session_id = $1")
         .bind(session_id)
@@ -124,6 +144,10 @@ pub async fn delete_channel_session(pool: &PgPool, session_id: Uuid) -> Result<b
 }
 
 /// List all channel sessions, optionally filtered by `channel_type`.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
 pub async fn list_channel_sessions(
     pool: &PgPool,
     channel_type: Option<&str>,
@@ -160,6 +184,10 @@ pub async fn list_channel_sessions(
 }
 
 /// Update the `last_seen_at` timestamp for a channel session.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
 pub async fn touch_channel_session(pool: &PgPool, session_id: Uuid) -> Result<()> {
     sqlx::query(r"UPDATE channel_sessions SET last_seen_at = NOW() WHERE session_id = $1")
         .bind(session_id)
@@ -172,6 +200,10 @@ pub async fn touch_channel_session(pool: &PgPool, session_id: Uuid) -> Result<()
 
 /// Upsert a channel session — create if not exists, otherwise update
 /// `last_seen_at` and return the existing session.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
 pub async fn upsert_channel_session(
     pool: &PgPool,
     channel_type: &str,

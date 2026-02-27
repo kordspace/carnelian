@@ -1,6 +1,6 @@
-//! WhatsApp Cloud API adapter for 🔥 Carnelian OS.
+//! `WhatsApp` Cloud API adapter for 🔥 Carnelian OS.
 //!
-//! Provides a webhook-based WhatsApp bot that integrates with Carnelian's
+//! Provides a webhook-based `WhatsApp` bot that integrates with Carnelian's
 //! session management, event streaming, and capability-based security systems.
 //! Unlike Telegram's polling loop, this adapter is driven by HTTP webhooks
 //! registered in `carnelian-core`.
@@ -27,7 +27,7 @@ use crate::rate_limiter::RateLimiter;
 use crate::spam_detector::SpamDetector;
 use crate::types::ChannelConfig;
 
-/// WhatsApp Cloud API adapter.
+/// `WhatsApp` Cloud API adapter.
 ///
 /// Wraps a `reqwest::Client` and integrates with Carnelian subsystems for
 /// session management, rate limiting, spam detection, and capability checks.
@@ -35,7 +35,7 @@ use crate::types::ChannelConfig;
 pub struct WhatsAppAdapter {
     /// Channel configuration (bot_token = Meta access token).
     config: ChannelConfig,
-    /// WhatsApp phone number ID for Graph API URL construction.
+    /// `WhatsApp` phone number ID for Graph API URL construction.
     phone_number_id: String,
     /// Verification token for Meta hub challenge.
     verify_token: String,
@@ -62,7 +62,7 @@ pub struct WhatsAppAdapter {
 }
 
 impl WhatsAppAdapter {
-    /// Create a new WhatsApp adapter.
+    /// Create a new `WhatsApp` adapter.
     ///
     /// The access token is read from `config.bot_token`.
     ///

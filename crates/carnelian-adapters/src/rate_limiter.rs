@@ -48,6 +48,14 @@ impl RateLimiter {
     ///
     /// Returns `Ok(())` if the request is allowed, or `Err(RateLimitError)`
     /// if the limit has been exceeded.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RateLimitError` if the rate limit is exceeded.
+    ///
+    /// # Panics
+    ///
+    /// Never panics in practice - the `unwrap()` calls have safe fallbacks.
     pub fn check_rate_limit(
         &self,
         channel_type: &str,
@@ -57,7 +65,7 @@ impl RateLimiter {
         let key = format!("{channel_type}:{channel_user_id}");
         let limiter = self
             .limiters
-            .entry(key.clone())
+            .entry(key)
             .or_insert_with(|| {
                 let per_minute = trust_level.rate_limit_per_minute();
                 let quota = Quota::per_minute(

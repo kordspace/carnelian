@@ -1,4 +1,4 @@
-//! WhatsApp pairing flow for the `/pair` command.
+//! `WhatsApp` pairing flow for the `/pair` command.
 //!
 //! Implements a token-based pairing flow:
 //! 1. User sends `/pair` → generate token, store pending session
@@ -28,6 +28,10 @@ use super::WhatsAppAdapter;
 /// - `/pair` — generate a new pairing token (default: conversational trust)
 /// - `/pair <trust_level>` — generate token with requested trust level
 /// - `/pair <token>` — verify and complete pairing
+///
+/// # Errors
+///
+/// Returns an error if database operations or message sending fails.
 pub async fn handle_pair(
     from: &str,
     args: &str,
@@ -109,14 +113,11 @@ async fn complete_pairing(
     event_stream: &Arc<EventStream>,
     policy_engine: &Arc<PolicyEngine>,
 ) -> anyhow::Result<()> {
-    let session = match channel_db::get_channel_session(db_pool, "whatsapp", from).await? {
-        Some(s) => s,
-        None => {
-            adapter
-                .send_message(from, "❌ No pending pairing found. Use `/pair` to start.")
-                .await?;
-            return Ok(());
-        }
+    let Some(session) = channel_db::get_channel_session(db_pool, "whatsapp", from).await? else {
+        adapter
+            .send_message(from, "❌ No pending pairing found. Use `/pair` to start.")
+            .await?;
+        return Ok(());
     };
 
     // Verify token

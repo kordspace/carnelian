@@ -15,6 +15,10 @@ use crate::db as channel_db;
 ///
 /// Note: Slash command registration can take up to an hour to propagate.
 /// For development, use guild-specific registration instead.
+///
+/// # Errors
+///
+/// Currently infallible, but returns `Result` for future extensibility.
 pub fn register_commands(ctx: &Context) -> anyhow::Result<()> {
     // For now, we use prefix commands (!pair, !status, etc.)
     // Slash command registration can be added later for production use.
@@ -24,6 +28,10 @@ pub fn register_commands(ctx: &Context) -> anyhow::Result<()> {
 }
 
 /// Handle prefix-based commands (e.g., `!pair`, `!status`, `!help`, `!unpair`).
+///
+/// # Errors
+///
+/// Returns an error if command execution fails.
 pub async fn handle_prefix_command(
     ctx: &Context,
     msg: &Message,

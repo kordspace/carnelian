@@ -43,7 +43,7 @@ pub struct SlackEventPayload {
     pub team_id: Option<String>,
 }
 
-/// Individual Slack event (wrapped in event_callback).
+/// Individual Slack event (wrapped in `event_callback`).
 #[derive(Debug, Deserialize)]
 pub struct SlackEvent {
     #[serde(rename = "type")]
@@ -87,6 +87,10 @@ pub enum SlackEventResponse {
 /// 2. Builds base string: `v0:{timestamp}:{body}`
 /// 3. Computes HMAC-SHA256 of base string with signing secret
 /// 4. Compares computed signature with provided signature
+///
+/// # Errors
+///
+/// Returns an error if signature verification fails or timestamp is invalid.
 pub fn verify_slack_signature(
     signing_secret: &str,
     timestamp: &str,
@@ -140,11 +144,13 @@ fn constant_time_eq(a: &str, b: &str) -> bool {
 // EVENT HANDLING
 // =============================================================================
 
-/// Handle Slack event payload.
+/// Handle inbound Slack event webhook.
 ///
-/// 1. Verifies HMAC-SHA256 signature
-/// 2. Deserializes payload
-/// 3. Routes to appropriate handler based on event type
+/// Verifies signature, deserializes payload, and routes to appropriate handler.
+///
+/// # Errors
+///
+/// Returns an error if signature verification fails or event processing fails.
 pub async fn handle_event(
     payload_bytes: &[u8],
     timestamp: &str,

@@ -32,9 +32,9 @@ use crate::types::ChannelConfig;
 /// Wraps a `reqwest::Client` and integrates with Carnelian subsystems for
 /// session management, rate limiting, spam detection, and capability checks.
 /// The adapter is webhook-driven; `start()` only manages the running flag.
-/// Request signatures are verified using HMAC-SHA256 with the signing_secret.
+/// Request signatures are verified using HMAC-SHA256 with the `signing_secret`.
 pub struct SlackAdapter {
-    /// Channel configuration (bot_token = Slack Bot OAuth token xoxb-...).
+    /// Channel configuration (`bot_token` = Slack Bot OAuth token xoxb-...).
     config: ChannelConfig,
     /// Slack signing secret for HMAC-SHA256 request verification.
     signing_secret: String,
@@ -64,7 +64,11 @@ impl SlackAdapter {
     /// Create a new Slack adapter.
     ///
     /// The bot token is read from `config.bot_token`.
-    /// The signing_secret is passed directly (not from config).
+    /// The `signing_secret` is passed directly (not from config).
+    ///
+    /// # Errors
+    ///
+    /// Currently infallible, but returns `Result` for future extensibility.
     pub fn new(
         config: ChannelConfig,
         signing_secret: String,
@@ -115,7 +119,7 @@ impl SlackAdapter {
 
 #[async_trait]
 impl ChannelAdapter for SlackAdapter {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "slack"
     }
 
@@ -197,14 +201,14 @@ impl ChannelAdapter for SlackAdapter {
 
         let ok = response_json
             .get("ok")
-            .and_then(|v| v.as_bool())
+            .and_then(serde_json::Value::as_bool)
             .unwrap_or(false);
         if !ok {
             let error = response_json
                 .get("error")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown error");
-            anyhow::bail!("Slack API returned error: {}", error);
+            anyhow::bail!("Slack API returned error: {error}");
         }
 
         // Emit message sent event

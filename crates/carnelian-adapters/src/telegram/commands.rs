@@ -30,6 +30,10 @@ pub enum Command {
 }
 
 /// Dispatch a parsed command to the appropriate handler.
+///
+/// # Errors
+///
+/// Returns an error if command execution fails.
 pub async fn handle_command(
     bot: Bot,
     msg: Message,
