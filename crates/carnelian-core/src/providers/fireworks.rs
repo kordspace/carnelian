@@ -145,16 +145,13 @@ impl Provider for FireworksProvider {
         // Try a simple API call to check connectivity
         let url = format!("{}/models", self.base_url);
 
-        match self
+        (self
             .client
             .get(&url)
             .timeout(Duration::from_secs(10))
             .send()
-            .await
-        {
-            Ok(resp) => Ok(resp.status().is_success()),
-            Err(_) => Ok(false),
-        }
+            .await)
+            .map_or_else(|_| Ok(false), |resp| Ok(resp.status().is_success()))
     }
 
     async fn list_models(&self) -> Result<Vec<String>> {
@@ -245,7 +242,7 @@ impl Provider for FireworksProvider {
         request: CompletionRequest,
     ) -> Result<BoxStream<'static, Result<CompletionChunk>>> {
         let url = format!("{}/chat/completions", self.base_url);
-        let _model = request.model.clone();
+        let model = request.model.clone();
 
         let fireworks_request = FireworksRequest {
             model: request.model,
@@ -256,7 +253,7 @@ impl Provider for FireworksProvider {
         };
 
         let client = self.client.clone();
-        let _provider_name = self.name.clone();
+        let provider_name = self.name.clone();
 
         let stream = async_stream::stream! {
             let resp = match client.post(&url).json(&fireworks_request).send().await {

@@ -177,16 +177,13 @@ impl Provider for AnthropicProvider {
         // Anthropic doesn't have a simple health endpoint, so check if we can list models
         let url = format!("{}/models", self.base_url);
 
-        match self
+        (self
             .client
             .get(&url)
             .timeout(Duration::from_secs(10))
             .send()
-            .await
-        {
-            Ok(resp) => Ok(resp.status().is_success()),
-            Err(_) => Ok(false),
-        }
+            .await)
+            .map_or_else(|_| Ok(false), |resp| Ok(resp.status().is_success()))
     }
 
     async fn list_models(&self) -> Result<Vec<String>> {
@@ -266,13 +263,12 @@ impl Provider for AnthropicProvider {
             .map_err(|e| Error::ModelRouting(format!("Failed to parse Anthropic response: {e}")))?;
 
         // Combine all content blocks into single content
-        let content = data
+        let content: String = data
             .content
             .iter()
             .filter(|c| c.content_type == "text")
             .map(|c| c.text.clone())
-            .collect::<Vec<_>>()
-            .join("");
+            .collect();
 
         Ok(CompletionResponse {
             id: data.id,

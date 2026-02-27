@@ -164,16 +164,13 @@ impl Provider for OpenAiProvider {
         // Try to list models as health check
         let url = format!("{}/models", self.base_url);
 
-        match self
+        (self
             .client
             .get(&url)
             .timeout(Duration::from_secs(10))
             .send()
-            .await
-        {
-            Ok(resp) => Ok(resp.status().is_success()),
-            Err(_) => Ok(false),
-        }
+            .await)
+            .map_or_else(|_| Ok(false), |resp| Ok(resp.status().is_success()))
     }
 
     async fn list_models(&self) -> Result<Vec<String>> {

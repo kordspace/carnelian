@@ -3854,13 +3854,8 @@ async fn resume_sub_agent_handler(
     };
 
     // Spawn a worker for the resumed sub-agent
-    match spawn_worker_for_sub_agent(&state, &sub_agent).await {
-        Ok(worker_id) => (
-            StatusCode::OK,
-            Json(json!({"status": "resumed", "worker_id": worker_id})),
-        )
-            .into_response(),
-        Err(_) => {
+    (spawn_worker_for_sub_agent(&state, &sub_agent).await).map_or_else(
+        |_| {
             // Record was resumed but worker failed to spawn
             (
                 StatusCode::OK,
@@ -3870,8 +3865,15 @@ async fn resume_sub_agent_handler(
                 })),
             )
                 .into_response()
-        }
-    }
+        },
+        |worker_id| {
+            (
+                StatusCode::OK,
+                Json(json!({"status": "resumed", "worker_id": worker_id})),
+            )
+                .into_response()
+        },
+    )
 }
 
 // =============================================================================

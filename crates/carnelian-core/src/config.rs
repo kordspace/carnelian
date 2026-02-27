@@ -225,7 +225,7 @@ pub struct Config {
     #[serde(default = "default_max_tasks_per_heartbeat")]
     pub max_tasks_per_heartbeat: usize,
 
-    /// Workspace paths to scan for TASK:/TODO: markers during heartbeat (default: ["."])
+    /// Workspace paths to scan for TASK:/TODO: markers during heartbeat (default: `["."]`)
     #[serde(default = "default_workspace_scan_paths")]
     pub workspace_scan_paths: Vec<PathBuf>,
 
@@ -1299,7 +1299,7 @@ impl Config {
     ///
     /// # Example
     ///
-    /// ```ignore
+    /// ```rust
     /// let signature = config.sign_message(b"Hello, world!")?;
     /// ```
     pub fn sign_message(&self, message: &[u8]) -> Result<Signature> {

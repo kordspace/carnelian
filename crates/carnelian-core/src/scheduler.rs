@@ -804,8 +804,8 @@ impl Scheduler {
                     &active_tasks_clone,
                     &metrics,
                     &safe_mode_guard,
-                    &workflow_engine,
-                    &xp_manager,
+                    workflow_engine.as_ref(),
+                    xp_manager.as_ref(),
                 )
                 .await
                 {
@@ -868,8 +868,8 @@ impl Scheduler {
         active_tasks: &Arc<tokio::sync::Mutex<HashMap<Uuid, tokio::task::JoinHandle<()>>>>,
         metrics: &Arc<MetricsCollector>,
         safe_mode_guard: &Arc<crate::safe_mode::SafeModeGuard>,
-        workflow_engine: &Option<Arc<WorkflowEngine>>,
-        xp_manager: &Option<Arc<crate::xp::XpManager>>,
+        workflow_engine: Option<&Arc<WorkflowEngine>>,
+        xp_manager: Option<&Arc<crate::xp::XpManager>>,
     ) -> Result<()> {
         // Safe mode is checked in poll_task_queue before dequeuing, but
         // re-check here as a defence-in-depth measure in case the flag was

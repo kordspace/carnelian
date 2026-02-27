@@ -104,16 +104,13 @@ impl Provider for OllamaProvider {
     async fn health_check(&self) -> Result<bool> {
         let url = format!("{}/api/tags", self.base_url);
 
-        match self
+        (self
             .client
             .get(&url)
             .timeout(Duration::from_secs(5))
             .send()
-            .await
-        {
-            Ok(resp) => Ok(resp.status().is_success()),
-            Err(_) => Ok(false),
-        }
+            .await)
+            .map_or_else(|_| Ok(false), |resp| Ok(resp.status().is_success()))
     }
 
     async fn list_models(&self) -> Result<Vec<String>> {
@@ -268,7 +265,6 @@ impl Provider for OllamaProvider {
             }
 
             let mut stream = resp.bytes_stream();
-            let mut accumulated = String::new();
             let chunk_id = format!("ollama-stream-{}-{}", model, uuid::Uuid::now_v7());
             let mut chunk_index = 0;
 
@@ -286,7 +282,6 @@ impl Provider for OllamaProvider {
                             match serde_json::from_str::<serde_json::Value>(line) {
                                 Ok(data) => {
                                     if let Some(response_text) = data["response"].as_str() {
-                                        accumulated.push_str(response_text);
 
                                         let chunk = CompletionChunk {
                                             id: chunk_id.clone(),
