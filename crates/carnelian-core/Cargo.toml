@@ -66,5 +66,15 @@ mockall = "0.12"
 wiremock = "0.6"
 cargo-tarpaulin = "0.28"
 
+[[bench]]
+name = "memory_benchmarks"
+path = "../../benches/memory_benchmarks.rs"
+harness = false
+
+[[bench]]
+name = "skill_benchmarks"
+path = "../../benches/skill_benchmarks.rs"
+harness = false
+
 [lints]
 workspace = true
