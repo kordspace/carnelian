@@ -1,0 +1,7 @@
+{
+  "name": "trello-card",
+  "description": "Create and manage Trello cards and boards",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["trello_api"]
+}

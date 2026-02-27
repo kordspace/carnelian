@@ -1,0 +1,7 @@
+{
+  "name": "text-stats",
+  "description": "Calculate text statistics: word count, character count, sentences, paragraphs",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

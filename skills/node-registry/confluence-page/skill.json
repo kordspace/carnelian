@@ -1,0 +1,7 @@
+{
+  "name": "confluence-page",
+  "description": "Create and manage Confluence wiki pages",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["confluence_api"]
+}
