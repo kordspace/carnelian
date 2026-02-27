@@ -61,6 +61,17 @@ testcontainers.workspace = true
 tokio-test.workspace = true
 memory-stats.workspace = true
 tempfile = "3.14"
+criterion = { version = "0.5", features = ["async_tokio"] }
+mockall = "0.12"
+wiremock = "0.6"
+
+[[bench]]
+name = "memory_benchmarks"
+harness = false
+
+[[bench]]
+name = "skill_benchmarks"
+harness = false
 
 [lints]
 workspace = true
