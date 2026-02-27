@@ -1627,7 +1627,7 @@ async fn handle_init(
     stdin().read_line(&mut activate_skills).unwrap();
     if activate_skills.trim().to_lowercase() != "n" {
         let starter_skills = vec!["file-analyzer", "code-review", "model-usage"];
-        let skill_book_path = PathBuf::from("skills/skill-book");
+        let skill_book_path = PathBuf::from("skills/node-registry");
         let registry_path = PathBuf::from("skills/registry");
         
         // Create registry directory if it doesn't exist
@@ -1658,7 +1658,7 @@ async fn handle_init(
                         }
                     }
                 } else {
-                    println!("  ℹ Skill {} not found in skill-book (skipped)", skill_id);
+                    println!("  ℹ Skill {} not found in node-registry (skipped)", skill_id);
                 }
             }
         }
