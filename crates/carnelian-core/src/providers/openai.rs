@@ -109,6 +109,7 @@ struct OpenAiChoice {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(clippy::struct_field_names)]
 struct OpenAiUsage {
     #[serde(rename = "prompt_tokens")]
     prompt_tokens: i32,

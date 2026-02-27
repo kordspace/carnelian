@@ -338,7 +338,6 @@ impl Provider for AnthropicProvider {
             let mut stream = resp.bytes_stream();
             let mut buffer = String::new();
             let stream_id = format!("anthropic-stream-{}-{}", model, uuid::Uuid::now_v7());
-            let mut accumulated_content = String::new();
 
             while let Some(chunk_result) = stream.next().await {
                 match chunk_result {
@@ -351,12 +350,11 @@ impl Provider for AnthropicProvider {
                             buffer = buffer[pos + 2..].to_string();
 
                             // Parse SSE event
-                            let mut _event_type = String::new();
                             let mut event_data = String::new();
 
                             for line in event_text.lines() {
-                                if let Some(et) = line.strip_prefix("event: ") {
-                                    _event_type.push_str(et);
+                                if line.strip_prefix("event: ").is_some() {
+                                    // Event type ignored - we process based on data content
                                 } else if let Some(data) = line.strip_prefix("data: ") {
                                     event_data = data.to_string();
                                 }
@@ -372,7 +370,6 @@ impl Provider for AnthropicProvider {
                                         "content_block_delta" => {
                                             if let Some(delta) = event.delta {
                                                 if let Some(text) = delta.text {
-                                                    accumulated_content.push_str(&text);
                                                     let chunk = CompletionChunk {
                                                         id: stream_id.clone(),
                                                         model: model.clone(),

@@ -99,6 +99,7 @@ struct FireworksChoice {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(clippy::struct_field_names)]
 struct FireworksUsage {
     #[serde(rename = "prompt_tokens")]
     prompt_tokens: i32,
