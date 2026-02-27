@@ -1,5 +1,5 @@
 use carnelian_common::types::{InvokeRequest, InvokeStatus, RunId};
-use carnelian_core::worker::NativeWorkerTransport;
+use carnelian_core::worker::{NativeWorkerTransport, WorkerTransport};
 use carnelian_core::{Config, EventStream};
 use serde_json::json;
 use std::io::Write;
