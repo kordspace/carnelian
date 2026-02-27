@@ -32,12 +32,9 @@ use carnelian_core::{
 };
 
 use bollard::Docker;
-use bollard::container::{
-    Config as ContainerConfig, CreateContainerOptions, HostConfig, PortBinding,
-    StartContainerOptions,
-};
+use bollard::container::{Config as ContainerConfig, CreateContainerOptions};
 use bollard::image::CreateImageOptions;
-use bollard::models::{HostConfig as HostConfigModel, PortMap};
+use bollard::models::{HostConfig, PortBinding, StartContainerOptions};
 use futures_util::stream::TryStreamExt;
 
 /// 🔥 Carnelian OS - Local-first AI agent mainframe
@@ -1078,9 +1075,9 @@ fn save_init_state(path: &std::path::Path, state: &InitState) {
 
 /// Detect hardware - returns (RAM_GB, VRAM_GB)
 pub(crate) fn detect_hardware() -> (f64, f64) {
-    use sysinfo::{MemoryKind, RefreshKind, System};
+    use sysinfo::{RefreshKind, System};
 
-    let mut sys = System::new_with_specifics(RefreshKind::new().with_memory(MemoryKind::RAM));
+    let mut sys = System::new_with_specifics(RefreshKind::new().with_memory());
     sys.refresh_all();
 
     let total_ram_gb = sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
@@ -1156,8 +1153,7 @@ async fn handle_init(
     resume: bool,
     key_path: Option<PathBuf>,
 ) -> carnelian_common::Result<()> {
-    use std::io::{Write, stdin, stdout};
-    use sysinfo::{MemoryKind, RefreshKind, System};
+    use sysinfo::{RefreshKind, System};
 
     // Helper closure for interactive vs non-interactive prompts
     let prompt_or_default = |message: &str, default: &str| -> String {
@@ -1629,7 +1625,7 @@ async fn handle_init(
                 Ok(_) => {
                     println!("    ✓ PostgreSQL container created");
                     match docker
-                        .start_container("carnelian-postgres", None::<StartContainerOptions>)
+                        .start_container("carnelian-postgres", None::<StartContainerOptions<String>>)
                         .await
                     {
                         Ok(_) => println!(
@@ -1677,7 +1673,7 @@ async fn handle_init(
                 Ok(_) => {
                     println!("    ✓ Ollama container created");
                     match docker
-                        .start_container("carnelian-ollama", None::<StartContainerOptions>)
+                        .start_container("carnelian-ollama", None::<StartContainerOptions<String>>)
                         .await
                     {
                         Ok(_) => {

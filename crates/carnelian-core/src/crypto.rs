@@ -48,6 +48,15 @@ pub fn keypair_to_bytes(signing_key: &SigningKey) -> [u8; 32] {
     signing_key.to_bytes()
 }
 
+/// Reconstruct a signing key from a 32-byte seed (alias for keypair_from_bytes).
+///
+/// # Errors
+///
+/// Returns an error if `bytes` is not exactly 32 bytes.
+pub fn bytes_to_keypair(bytes: &[u8]) -> Result<SigningKey> {
+    keypair_from_bytes(bytes)
+}
+
 /// Reconstruct a signing key from a 32-byte seed.
 ///
 /// # Errors
