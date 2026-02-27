@@ -1,0 +1,7 @@
+{
+  "name": "caesar-cipher",
+  "description": "Caesar cipher encoding/decoding with configurable shift",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

@@ -1,0 +1,7 @@
+{
+  "name": "rot13",
+  "description": "ROT13 cipher encoding/decoding",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

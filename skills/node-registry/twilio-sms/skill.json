@@ -1,0 +1,7 @@
+{
+  "name": "twilio-sms",
+  "description": "Send and manage SMS messages via Twilio",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["twilio_api"]
+}

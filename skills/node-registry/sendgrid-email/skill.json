@@ -1,0 +1,7 @@
+{
+  "name": "sendgrid-email",
+  "description": "Send transactional emails via SendGrid with template support",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["sendgrid_api"]
+}
