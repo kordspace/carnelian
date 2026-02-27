@@ -20,15 +20,15 @@ use carnelian_common::types::{SkillBookCatalog, SkillBookEntry};
 pub fn SkillBook() -> Element {
     let theme = use_context::<Theme>();
     let _event_store = use_context::<EventStreamStore>();
-    let mut toasts = use_signal(Vec::new);
+    let toasts = use_signal(Vec::new);
 
     // State
-    let mut catalog = use_signal(|| None::<SkillBookCatalog>);
+    let catalog = use_signal(|| None::<SkillBookCatalog>);
     let mut selected_category = use_signal(|| "all".to_string());
-    let mut loading = use_signal(|| false);
+    let loading = use_signal(|| false);
     let mut show_activation_modal = use_signal(|| false);
-    let mut selected_skill = use_signal(|| None::<SkillBookEntry>);
-    let mut config_values = use_signal(HashMap::<String, String>::new);
+    let selected_skill = use_signal(|| None::<SkillBookEntry>);
+    let config_values = use_signal(HashMap::<String, String>::new);
 
     // Load catalog on mount
     let load_catalog = {

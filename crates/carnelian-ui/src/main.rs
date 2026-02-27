@@ -17,9 +17,6 @@ use components::tab_nav::TabNav;
 use components::toast::ToastOverlay;
 use components::top_bar::TopBar;
 
-#[cfg(feature = "desktop")]
-use components::system_tray::SystemTray;
-
 /// Application routes.
 #[derive(Routable, Clone, Debug, PartialEq, Eq)]
 pub enum Route {

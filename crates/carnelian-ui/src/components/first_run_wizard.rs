@@ -25,24 +25,24 @@ pub struct FirstRunWizardProps {
 #[component]
 pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
     let theme = use_context::<Theme>();
-    let mut step = use_signal(|| 1u8);
-    let mut toasts = use_signal(Vec::new);
+    let step = use_signal(|| 1u8);
+    let toasts = use_signal(Vec::new);
 
     // Step 1: Prerequisites
-    let mut health_status = use_signal(|| None::<DetailedHealthResponse>);
+    let health_status = use_signal(|| None::<DetailedHealthResponse>);
 
     // Step 2: Machine Profile
-    let mut selected_profile = use_signal(|| "thummim".to_string());
+    let selected_profile = use_signal(|| "thummim".to_string());
 
     // Step 3: Identity
-    let mut identity = use_signal(|| None::<IdentityResponse>);
+    let identity = use_signal(|| None::<IdentityResponse>);
 
     // Step 4: Workspace
-    let mut workspace_path = use_signal(|| ".".to_string());
-    let mut model_provider = use_signal(|| "ollama".to_string());
+    let workspace_path = use_signal(|| ".".to_string());
+    let model_provider = use_signal(|| "ollama".to_string());
 
     // Step 5: Starter Skills
-    let mut selected_skills = use_signal(|| {
+    let selected_skills = use_signal(|| {
         vec![
             ("file-analyzer", true),
             ("code-review", true),

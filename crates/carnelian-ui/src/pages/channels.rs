@@ -246,9 +246,9 @@ fn format_relative_time(dt: DateTime<Utc>) -> String {
 
 fn render_channel_row(
     channel: &ChannelDetail,
-    edit_channel: &mut Signal<Option<ChannelDetail>>,
-    confirm_delete: &mut Signal<Option<ChannelDetail>>,
-    refresh: &mut Signal<u64>,
+    edit_channel: &Signal<Option<ChannelDetail>>,
+    confirm_delete: &Signal<Option<ChannelDetail>>,
+    refresh: &Signal<u64>,
 ) -> Element {
     let icon = channel_type_icon(&channel.channel_type);
     let trust_badge = trust_level_badge_class(&channel.trust_level);

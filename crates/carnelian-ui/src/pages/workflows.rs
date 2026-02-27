@@ -896,9 +896,9 @@ fn render_node(
     step: &WorkflowStepDef,
     positions: &HashMap<String, (f64, f64)>,
     is_selected: bool,
-    selected_step: &mut Signal<Option<String>>,
-    dragging_node: &mut Signal<Option<(String, f64, f64)>>,
-    connecting_from: &mut Signal<Option<String>>,
+    selected_step: &Signal<Option<String>>,
+    dragging_node: &Signal<Option<(String, f64, f64)>>,
+    connecting_from: &Signal<Option<String>>,
 ) -> Element {
     let pos = positions
         .get(&step.step_id)
@@ -1182,12 +1182,13 @@ fn StepConfigPanel(
     let mut input_mapping_err = use_signal(|| Option::<String>::None);
     let mut condition_err = use_signal(|| Option::<String>::None);
 
-    let step_id = step.step_id.clone();
-    let skill_name = step.skill_name.clone();
-    let dep_display: String = if step.depends_on.is_empty() {
+    let step_clone = step.clone();
+    let step_id = step_clone.step_id.clone();
+    let skill_name = step_clone.skill_name.clone();
+    let dep_display: String = if step_clone.depends_on.is_empty() {
         "None".to_string()
     } else {
-        step.depends_on.join(", ")
+        step_clone.depends_on.join(", ")
     };
 
     rsx! {
@@ -1208,7 +1209,7 @@ fn StepConfigPanel(
                     style: "font-family: monospace; font-size: 12px; min-height: 80px;",
                     value: "{input_mapping_str}",
                     oninput: {
-                        let step_clone = step.clone();
+                        let step_for_closure = step_clone.clone();
                         let cont = *continue_on_error.read();
                         let cond_str = condition_str.read().clone();
                         move |e: Event<FormData>| {
@@ -1227,7 +1228,7 @@ fn StepConfigPanel(
                                 }
                             };
                             let condition = if cond_str.trim().is_empty() { None } else { serde_json::from_str(&cond_str).ok() };
-                            let mut updated = step_clone.clone();
+                            let mut updated = step_for_closure.clone();
                             updated.input_mapping = mapping;
                             updated.condition = condition;
                             updated.continue_on_error = cont;
@@ -1247,7 +1248,7 @@ fn StepConfigPanel(
                     style: "font-family: monospace; font-size: 12px; min-height: 60px;",
                     value: "{condition_str}",
                     oninput: {
-                        let step_clone = step.clone();
+                        let step_for_cond = step_clone.clone();
                         let cont = *continue_on_error.read();
                         let map_str = input_mapping_str.read().clone();
                         move |e: Event<FormData>| {
@@ -1266,7 +1267,7 @@ fn StepConfigPanel(
                                 }
                             };
                             let mapping = if map_str.trim().is_empty() { None } else { serde_json::from_str(&map_str).ok() };
-                            let mut updated = step_clone.clone();
+                            let mut updated = step_for_cond.clone();
                             updated.condition = condition;
                             updated.input_mapping = mapping;
                             updated.continue_on_error = cont;
@@ -1285,13 +1286,13 @@ fn StepConfigPanel(
                         r#type: "checkbox",
                         checked: *continue_on_error.read(),
                         onchange: {
-                            let step_clone = step.clone();
+                            let step_for_checkbox = step_clone.clone();
                             let map_str = input_mapping_str.read().clone();
                             let cond_str = condition_str.read().clone();
                             move |_| {
                                 let new_val = !*continue_on_error.read();
                                 continue_on_error.set(new_val);
-                                let mut updated = step_clone.clone();
+                                let mut updated = step_for_checkbox.clone();
                                 updated.continue_on_error = new_val;
                                 updated.input_mapping = if map_str.trim().is_empty() { None } else { serde_json::from_str(&map_str).ok() };
                                 updated.condition = if cond_str.trim().is_empty() { None } else { serde_json::from_str(&cond_str).ok() };
@@ -1739,8 +1740,8 @@ fn WorkflowHistoryPanel() -> Element {
 fn render_history_row(
     task: &TaskDetail,
     expanded_id: &Option<Uuid>,
-    expanded_task: &mut Signal<Option<Uuid>>,
-    expanded_detail: &mut Signal<Option<serde_json::Value>>,
+    expanded_task: &Signal<Option<Uuid>>,
+    expanded_detail: &Signal<Option<serde_json::Value>>,
 ) -> Element {
     let wf_name = task
         .title

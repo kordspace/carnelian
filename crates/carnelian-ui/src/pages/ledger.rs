@@ -19,7 +19,7 @@ use carnelian_common::types::{LedgerEventDetail, LedgerVerifyResponse};
 pub fn Ledger() -> Element {
     let theme = use_context::<Theme>();
     let event_store = use_context::<EventStreamStore>();
-    let mut toasts = use_signal(Vec::new);
+    let toasts = use_signal(Vec::new);
 
     // Filter state
     let mut action_type_filter = use_signal(String::new);
@@ -28,12 +28,12 @@ pub fn Ledger() -> Element {
     let mut to_ts_filter = use_signal(String::new);
 
     // Data state
-    let mut events = use_signal(Vec::<LedgerEventDetail>::new);
-    let mut total_count = use_signal(|| 0i64);
-    let mut offset = use_signal(|| 0i64);
-    let mut limit = use_signal(|| 50i64);
-    let mut verify_result = use_signal(|| None::<LedgerVerifyResponse>);
-    let mut loading = use_signal(|| false);
+    let events = use_signal(Vec::<LedgerEventDetail>::new);
+    let total_count = use_signal(|| 0i64);
+    let offset = use_signal(|| 0i64);
+    let limit = use_signal(|| 50i64);
+    let verify_result = use_signal(|| None::<LedgerVerifyResponse>);
+    let loading = use_signal(|| false);
 
     const PAGE_SIZE: i64 = 50;
 
@@ -285,7 +285,7 @@ pub fn Ledger() -> Element {
                                     td { "{event.action_type}" }
                                     td { class: "mono truncate", "{event.event_hash}" }
                                     td {
-                                        if let Some(ref sig) = event.signature {
+                                        if let Some(ref _sig) = event.signature {
                                             span { class: "badge signed", "Signed" }
                                         } else {
                                             span { class: "badge unsigned", "—" }
