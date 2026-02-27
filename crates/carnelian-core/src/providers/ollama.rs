@@ -154,7 +154,7 @@ impl Provider for OllamaProvider {
         let models = self.list_models().await?;
         Ok(models
             .iter()
-            .any(|m| m == model || m.starts_with(&format!("{}", model))))
+            .any(|m| m == model || m.starts_with(&model.to_string())))
     }
 
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
@@ -200,8 +200,8 @@ impl Provider for OllamaProvider {
             .unwrap_or_default();
 
         // Estimate token counts (Ollama doesn't return them directly)
-        let prompt_tokens = (prompt.len() / 4) as i32;
-        let completion_tokens = (content.len() / 4) as i32;
+        let prompt_tokens = i32::try_from(prompt.len() / 4).unwrap_or(i32::MAX);
+        let completion_tokens = i32::try_from(content.len() / 4).unwrap_or(i32::MAX);
 
         Ok(CompletionResponse {
             id: format!("ollama-{}-{}", request.model, uuid::Uuid::now_v7()),

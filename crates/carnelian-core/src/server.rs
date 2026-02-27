@@ -3215,7 +3215,7 @@ async fn heartbeat_status_handler(State(state): State<AppState>) -> impl IntoRes
     match row {
         Ok(Some((mantra, last_ts))) => {
             let interval_ms = state.config.heartbeat_interval_ms;
-            let next_ts = last_ts + chrono::Duration::milliseconds(interval_ms as i64);
+            let next_ts = last_ts + chrono::Duration::milliseconds(i64::try_from(interval_ms).unwrap_or(i64::MAX));
             (
                 StatusCode::OK,
                 Json(json!(HeartbeatStatusResponse {
@@ -6984,7 +6984,7 @@ async fn list_elixir_drafts_handler(State(state): State<AppState>) -> impl IntoR
         })
         .collect();
 
-    let total = drafts.len() as i64;
+    let total = i64::try_from(drafts.len()).unwrap_or(i64::MAX);
 
     let response = ListElixirDraftsResponse { drafts, total };
 

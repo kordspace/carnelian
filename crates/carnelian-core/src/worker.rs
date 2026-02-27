@@ -1055,9 +1055,7 @@ impl WorkerTransport for NativeWorkerTransport {
         let result: Result<serde_json::Value> = match skill_name.as_str() {
             "git_status" => {
                 if !Self::check_capability(&request.input, "git.read") {
-                    Err(Error::Permission(format!(
-                        "Missing required capability: git.read"
-                    )))
+                    Err(Error::Permission("Missing required capability: git.read".to_string()))
                 } else {
                     let path = request
                         .input
@@ -1094,9 +1092,7 @@ impl WorkerTransport for NativeWorkerTransport {
             }
             "file_hash" => {
                 if !Self::check_capability(&request.input, "fs.read") {
-                    Err(Error::Permission(format!(
-                        "Missing required capability: fs.read"
-                    )))
+                    Err(Error::Permission("Missing required capability: fs.read".to_string()))
                 } else {
                     let path = request
                         .input
@@ -1110,9 +1106,7 @@ impl WorkerTransport for NativeWorkerTransport {
             }
             "docker_ps" => {
                 if !Self::check_capability(&request.input, "docker.read") {
-                    Err(Error::Permission(format!(
-                        "Missing required capability: docker.read"
-                    )))
+                    Err(Error::Permission("Missing required capability: docker.read".to_string()))
                 } else {
                     let docker = bollard::Docker::connect_with_local_defaults().map_err(|e| {
                         Error::Worker(format!("Failed to connect to Docker: {}", e))
@@ -1128,9 +1122,7 @@ impl WorkerTransport for NativeWorkerTransport {
             }
             "dir_list" => {
                 if !Self::check_capability(&request.input, "fs.read") {
-                    Err(Error::Permission(format!(
-                        "Missing required capability: fs.read"
-                    )))
+                    Err(Error::Permission("Missing required capability: fs.read".to_string()))
                 } else {
                     let path = request
                         .input
@@ -1154,9 +1146,7 @@ impl WorkerTransport for NativeWorkerTransport {
             }
             "file_read" => {
                 if !Self::check_capability(&request.input, "fs.read") {
-                    Err(Error::Permission(format!(
-                        "Missing required capability: fs.read"
-                    )))
+                    Err(Error::Permission("Missing required capability: fs.read".to_string()))
                 } else {
                     let path = request
                         .input
@@ -1190,9 +1180,7 @@ impl WorkerTransport for NativeWorkerTransport {
             }
             "file_write" => {
                 if !Self::check_capability(&request.input, "fs.write") {
-                    Err(Error::Permission(format!(
-                        "Missing required capability: fs.write"
-                    )))
+                    Err(Error::Permission("Missing required capability: fs.write".to_string()))
                 } else {
                     Self::verify_owner_approval(&request.input, &self.config)?;
 
@@ -1223,9 +1211,7 @@ impl WorkerTransport for NativeWorkerTransport {
             }
             "file_search" => {
                 if !Self::check_capability(&request.input, "fs.read") {
-                    Err(Error::Permission(format!(
-                        "Missing required capability: fs.read"
-                    )))
+                    Err(Error::Permission("Missing required capability: fs.read".to_string()))
                 } else {
                     let pattern = request
                         .input
@@ -1269,9 +1255,7 @@ impl WorkerTransport for NativeWorkerTransport {
             }
             "file_delete" => {
                 if !Self::check_capability(&request.input, "fs.write") {
-                    Err(Error::Permission(format!(
-                        "Missing required capability: fs.write"
-                    )))
+                    Err(Error::Permission("Missing required capability: fs.write".to_string()))
                 } else {
                     Self::verify_owner_approval(&request.input, &self.config)?;
 
@@ -1295,9 +1279,7 @@ impl WorkerTransport for NativeWorkerTransport {
             }
             "file_move" => {
                 if !Self::check_capability(&request.input, "fs.write") {
-                    Err(Error::Permission(format!(
-                        "Missing required capability: fs.write"
-                    )))
+                    Err(Error::Permission("Missing required capability: fs.write".to_string()))
                 } else {
                     let src = request
                         .input
@@ -1327,9 +1309,7 @@ impl WorkerTransport for NativeWorkerTransport {
             }
             "git_diff" => {
                 if !Self::check_capability(&request.input, "git.read") {
-                    Err(Error::Permission(format!(
-                        "Missing required capability: git.read"
-                    )))
+                    Err(Error::Permission("Missing required capability: git.read".to_string()))
                 } else {
                     let path = request
                         .input
@@ -1377,9 +1357,7 @@ impl WorkerTransport for NativeWorkerTransport {
             }
             "git_commit" => {
                 if !Self::check_capability(&request.input, "git.write") {
-                    Err(Error::Permission(format!(
-                        "Missing required capability: git.write"
-                    )))
+                    Err(Error::Permission("Missing required capability: git.write".to_string()))
                 } else {
                     Self::verify_owner_approval(&request.input, &self.config)?;
 
@@ -1426,9 +1404,7 @@ impl WorkerTransport for NativeWorkerTransport {
             }
             "git_log" => {
                 if !Self::check_capability(&request.input, "git.read") {
-                    Err(Error::Permission(format!(
-                        "Missing required capability: git.read"
-                    )))
+                    Err(Error::Permission("Missing required capability: git.read".to_string()))
                 } else {
                     let path = request
                         .input
@@ -1482,9 +1458,7 @@ impl WorkerTransport for NativeWorkerTransport {
             }
             "git_branch" => {
                 if !Self::check_capability(&request.input, "git.read") {
-                    Err(Error::Permission(format!(
-                        "Missing required capability: git.read"
-                    )))
+                    Err(Error::Permission("Missing required capability: git.read".to_string()))
                 } else {
                     let path = request
                         .input
@@ -1522,9 +1496,7 @@ impl WorkerTransport for NativeWorkerTransport {
             }
             "docker_exec" => {
                 if !Self::check_capability(&request.input, "docker.exec") {
-                    Err(Error::Permission(format!(
-                        "Missing required capability: docker.exec"
-                    )))
+                    Err(Error::Permission("Missing required capability: docker.exec".to_string()))
                 } else {
                     Self::verify_owner_approval(&request.input, &self.config)?;
 
@@ -1601,9 +1573,7 @@ impl WorkerTransport for NativeWorkerTransport {
             }
             "docker_logs" => {
                 if !Self::check_capability(&request.input, "docker.read") {
-                    Err(Error::Permission(format!(
-                        "Missing required capability: docker.read"
-                    )))
+                    Err(Error::Permission("Missing required capability: docker.read".to_string()))
                 } else {
                     let container_id = request
                         .input
@@ -1645,9 +1615,7 @@ impl WorkerTransport for NativeWorkerTransport {
             }
             "docker_stats" => {
                 if !Self::check_capability(&request.input, "docker.read") {
-                    Err(Error::Permission(format!(
-                        "Missing required capability: docker.read"
-                    )))
+                    Err(Error::Permission("Missing required capability: docker.read".to_string()))
                 } else {
                     let container_id = request
                         .input
@@ -1683,9 +1651,7 @@ impl WorkerTransport for NativeWorkerTransport {
             }
             "process_list" => {
                 if !Self::check_capability(&request.input, "system.read") {
-                    Err(Error::Permission(format!(
-                        "Missing required capability: system.read"
-                    )))
+                    Err(Error::Permission("Missing required capability: system.read".to_string()))
                 } else {
                     let sys = System::new_with_specifics(
                         RefreshKind::new().with_processes(ProcessRefreshKind::everything()),
@@ -1709,9 +1675,7 @@ impl WorkerTransport for NativeWorkerTransport {
             }
             "disk_usage" => {
                 if !Self::check_capability(&request.input, "system.read") {
-                    Err(Error::Permission(format!(
-                        "Missing required capability: system.read"
-                    )))
+                    Err(Error::Permission("Missing required capability: system.read".to_string()))
                 } else {
                     let disks = Disks::new_with_refreshed_list();
 
@@ -1733,9 +1697,7 @@ impl WorkerTransport for NativeWorkerTransport {
             }
             "network_stats" => {
                 if !Self::check_capability(&request.input, "system.read") {
-                    Err(Error::Permission(format!(
-                        "Missing required capability: system.read"
-                    )))
+                    Err(Error::Permission("Missing required capability: system.read".to_string()))
                 } else {
                     let networks = Networks::new_with_refreshed_list();
 
@@ -1755,9 +1717,7 @@ impl WorkerTransport for NativeWorkerTransport {
             }
             "env_get" => {
                 if !Self::check_capability(&request.input, "env.read") {
-                    Err(Error::Permission(format!(
-                        "Missing required capability: env.read"
-                    )))
+                    Err(Error::Permission("Missing required capability: env.read".to_string()))
                 } else {
                     const ALLOWLIST: &[&str] = &[
                         "PATH", "HOME", "USER", "USERNAME", "SHELL", "LANG", "LC_ALL", "PWD",
