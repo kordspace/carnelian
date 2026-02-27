@@ -3,7 +3,7 @@
 //! Configures Cross-Origin Resource Sharing (CORS) policies.
 //! Provides different configurations for development and production environments.
 
-use axum::http::{header, HeaderValue, Method};
+use axum::http::{HeaderValue, Method, header};
 use std::time::Duration;
 use tower_http::cors::{Any, CorsLayer};
 
@@ -115,7 +115,7 @@ mod tests {
             allowed_origins: vec!["https://example.com".to_string()],
             max_age: Duration::from_secs(7200),
         };
-        
+
         assert!(config.production);
         assert_eq!(config.max_age, Duration::from_secs(7200));
     }

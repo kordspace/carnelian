@@ -35,7 +35,7 @@ impl TokenBucket {
 
     fn try_consume(&mut self) -> bool {
         self.refill();
-        
+
         if self.tokens >= 1.0 {
             self.tokens -= 1.0;
             true
@@ -47,7 +47,7 @@ impl TokenBucket {
     fn refill(&mut self) {
         let now = Instant::now();
         let elapsed = now.duration_since(self.last_refill).as_secs_f64();
-        
+
         self.tokens = (self.tokens + elapsed * self.refill_rate).min(self.capacity);
         self.last_refill = now;
     }
@@ -78,22 +78,20 @@ impl RateLimiter {
     /// Check if request should be allowed
     pub fn check_rate_limit(&self, ip: IpAddr) -> bool {
         let mut buckets = self.buckets.lock().unwrap();
-        
+
         let bucket = buckets
             .entry(ip)
             .or_insert_with(|| TokenBucket::new(self.capacity, self.refill_rate));
-        
+
         bucket.try_consume()
     }
 
     /// Clean up old entries (call periodically)
     pub fn cleanup(&self) {
         let mut buckets = self.buckets.lock().unwrap();
-        
+
         // Remove buckets that haven't been used in 5 minutes
-        buckets.retain(|_, bucket| {
-            bucket.last_refill.elapsed() < Duration::from_secs(300)
-        });
+        buckets.retain(|_, bucket| bucket.last_refill.elapsed() < Duration::from_secs(300));
     }
 }
 
@@ -105,7 +103,7 @@ pub async fn rate_limit_middleware(
 ) -> Response {
     // Extract client IP from request
     let ip = extract_client_ip(&req).unwrap_or_else(|| "127.0.0.1".parse().unwrap());
-    
+
     if limiter.check_rate_limit(ip) {
         next.run(req).await
     } else {
@@ -129,7 +127,7 @@ fn extract_client_ip(req: &Request) -> Option<IpAddr> {
             }
         }
     }
-    
+
     // Try X-Real-IP header
     if let Some(real_ip) = req.headers().get("x-real-ip") {
         if let Ok(ip_str) = real_ip.to_str() {
@@ -138,7 +136,7 @@ fn extract_client_ip(req: &Request) -> Option<IpAddr> {
             }
         }
     }
-    
+
     // Fallback to connection info (would need to be passed in real implementation)
     None
 }
@@ -158,7 +156,7 @@ mod tests {
     #[test]
     fn test_token_bucket_consume() {
         let mut bucket = TokenBucket::new(10.0, 5.0);
-        
+
         assert!(bucket.try_consume());
         assert_eq!(bucket.tokens, 9.0);
     }
@@ -166,7 +164,7 @@ mod tests {
     #[test]
     fn test_token_bucket_exhaustion() {
         let mut bucket = TokenBucket::new(2.0, 1.0);
-        
+
         assert!(bucket.try_consume());
         assert!(bucket.try_consume());
         assert!(!bucket.try_consume()); // Should fail
@@ -175,15 +173,15 @@ mod tests {
     #[test]
     fn test_token_bucket_refill() {
         let mut bucket = TokenBucket::new(10.0, 10.0);
-        
+
         // Consume all tokens
         for _ in 0..10 {
             bucket.try_consume();
         }
-        
+
         // Wait for refill
         std::thread::sleep(Duration::from_millis(200));
-        
+
         // Should have refilled some tokens
         assert!(bucket.try_consume());
     }
@@ -199,7 +197,7 @@ mod tests {
     fn test_rate_limiter_check() {
         let limiter = RateLimiter::new(10, 2);
         let ip: IpAddr = "127.0.0.1".parse().unwrap();
-        
+
         assert!(limiter.check_rate_limit(ip));
         assert!(limiter.check_rate_limit(ip));
         assert!(!limiter.check_rate_limit(ip)); // Should be rate limited
@@ -210,11 +208,11 @@ mod tests {
         let limiter = RateLimiter::new(10, 2);
         let ip1: IpAddr = "127.0.0.1".parse().unwrap();
         let ip2: IpAddr = "127.0.0.2".parse().unwrap();
-        
+
         assert!(limiter.check_rate_limit(ip1));
         assert!(limiter.check_rate_limit(ip1));
         assert!(!limiter.check_rate_limit(ip1));
-        
+
         // Different IP should have its own bucket
         assert!(limiter.check_rate_limit(ip2));
         assert!(limiter.check_rate_limit(ip2));
@@ -224,16 +222,16 @@ mod tests {
     fn test_rate_limiter_cleanup() {
         let limiter = RateLimiter::new(10, 20);
         let ip: IpAddr = "127.0.0.1".parse().unwrap();
-        
+
         limiter.check_rate_limit(ip);
-        
+
         {
             let buckets = limiter.buckets.lock().unwrap();
             assert_eq!(buckets.len(), 1);
         }
-        
+
         limiter.cleanup();
-        
+
         {
             let buckets = limiter.buckets.lock().unwrap();
             assert_eq!(buckets.len(), 1); // Should still be there (not old enough)

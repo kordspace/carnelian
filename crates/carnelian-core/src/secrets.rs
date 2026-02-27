@@ -18,18 +18,19 @@ use std::path::Path;
 pub fn read_secret(secret_name: &str, env_var_name: &str) -> Result<String> {
     // Try Docker secret first
     let secret_path = format!("/run/secrets/{}", secret_name);
-    
+
     if Path::new(&secret_path).exists() {
         fs::read_to_string(&secret_path)
             .map(|s| s.trim().to_string())
             .map_err(|e| Error::Config(format!("Failed to read secret {}: {}", secret_name, e)))
     } else {
         // Fallback to environment variable
-        std::env::var(env_var_name)
-            .map_err(|_| Error::Config(format!(
+        std::env::var(env_var_name).map_err(|_| {
+            Error::Config(format!(
                 "Secret {} not found in /run/secrets and {} not set in environment",
                 secret_name, env_var_name
-            )))
+            ))
+        })
     }
 }
 
@@ -61,14 +62,14 @@ pub fn is_using_docker_secrets() -> bool {
 /// List available Docker secrets
 pub fn list_available_secrets() -> Result<Vec<String>> {
     let secrets_dir = Path::new("/run/secrets");
-    
+
     if !secrets_dir.exists() {
         return Ok(vec![]);
     }
-    
+
     let entries = fs::read_dir(secrets_dir)
         .map_err(|e| Error::Config(format!("Failed to read secrets directory: {}", e)))?;
-    
+
     let mut secrets = vec![];
     for entry in entries {
         if let Ok(entry) = entry {
@@ -77,7 +78,7 @@ pub fn list_available_secrets() -> Result<Vec<String>> {
             }
         }
     }
-    
+
     Ok(secrets)
 }
 
@@ -96,11 +97,11 @@ mod tests {
     #[test]
     fn test_read_secret_from_env() {
         env::set_var("TEST_SECRET", "test_value");
-        
+
         let result = read_secret("nonexistent_secret", "TEST_SECRET");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "test_value");
-        
+
         env::remove_var("TEST_SECRET");
     }
 
@@ -113,22 +114,22 @@ mod tests {
     #[test]
     fn test_get_database_password_fallback() {
         env::set_var("POSTGRES_PASSWORD", "test_db_password");
-        
+
         let result = get_database_password();
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "test_db_password");
-        
+
         env::remove_var("POSTGRES_PASSWORD");
     }
 
     #[test]
     fn test_get_carnelian_api_key_fallback() {
         env::set_var("CARNELIAN_API_KEY", "test_api_key");
-        
+
         let result = get_carnelian_api_key();
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "test_api_key");
-        
+
         env::remove_var("CARNELIAN_API_KEY");
     }
 

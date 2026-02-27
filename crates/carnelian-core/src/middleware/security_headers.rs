@@ -10,7 +10,7 @@
 
 use axum::{
     extract::Request,
-    http::{header, HeaderValue},
+    http::{HeaderValue, header},
     middleware::Next,
     response::Response,
 };
@@ -103,7 +103,8 @@ pub async fn security_headers_middleware(
             // Note: ALLOW-FROM is deprecated, use CSP frame-ancestors instead
             headers.insert(
                 HeaderValue::from_static("x-frame-options"),
-                HeaderValue::from_str(&format!("ALLOW-FROM {}", url)).unwrap_or(HeaderValue::from_static("DENY")),
+                HeaderValue::from_str(&format!("ALLOW-FROM {}", url))
+                    .unwrap_or(HeaderValue::from_static("DENY")),
             );
             return response;
         }

@@ -10,7 +10,7 @@
 use axum::{
     body::Body,
     extract::Request,
-    http::{header, StatusCode},
+    http::{StatusCode, header},
     middleware::Next,
     response::{IntoResponse, Response},
 };
@@ -109,7 +109,7 @@ pub fn sanitize_json(value: &mut Value) {
 /// Check for common SQL injection patterns
 pub fn contains_sql_injection(input: &str) -> bool {
     let input_lower = input.to_lowercase();
-    
+
     let sql_patterns = [
         "' or '1'='1",
         "' or 1=1",
@@ -122,13 +122,15 @@ pub fn contains_sql_injection(input: &str) -> bool {
         "sp_executesql",
     ];
 
-    sql_patterns.iter().any(|pattern| input_lower.contains(pattern))
+    sql_patterns
+        .iter()
+        .any(|pattern| input_lower.contains(pattern))
 }
 
 /// Check for common XSS patterns
 pub fn contains_xss(input: &str) -> bool {
     let input_lower = input.to_lowercase();
-    
+
     let xss_patterns = [
         "<script",
         "javascript:",
@@ -142,11 +144,17 @@ pub fn contains_xss(input: &str) -> bool {
         "<embed",
     ];
 
-    xss_patterns.iter().any(|pattern| input_lower.contains(pattern))
+    xss_patterns
+        .iter()
+        .any(|pattern| input_lower.contains(pattern))
 }
 
 /// Validate JSON structure
-pub fn validate_json_structure(value: &Value, max_depth: usize, current_depth: usize) -> Result<(), String> {
+pub fn validate_json_structure(
+    value: &Value,
+    max_depth: usize,
+    current_depth: usize,
+) -> Result<(), String> {
     if current_depth > max_depth {
         return Err(format!("JSON nesting too deep (max: {})", max_depth));
     }
@@ -205,7 +213,10 @@ mod tests {
     fn test_sanitize_string() {
         let input = "<script>alert('XSS')</script>";
         let sanitized = sanitize_string(input);
-        assert_eq!(sanitized, "&lt;script&gt;alert(&#x27;XSS&#x27;)&lt;&#x2F;script&gt;");
+        assert_eq!(
+            sanitized,
+            "&lt;script&gt;alert(&#x27;XSS&#x27;)&lt;&#x2F;script&gt;"
+        );
     }
 
     #[test]
@@ -216,9 +227,9 @@ mod tests {
                 "value": "normal & text"
             }
         });
-        
+
         sanitize_json(&mut value);
-        
+
         assert!(value["name"].as_str().unwrap().contains("&lt;script&gt;"));
         assert!(value["nested"]["value"].as_str().unwrap().contains("&amp;"));
     }
@@ -244,10 +255,12 @@ mod tests {
         let valid = serde_json::json!({"key": "value"});
         assert!(validate_json_structure(&valid, 10, 0).is_ok());
 
-        let too_deep = serde_json::json!({
-            "a": {"b": {"c": {"d": {"e": {"f": {"g": {"h": {"i": {"j": {"k": "value"}}}}}}}}}}}
-        });
-        assert!(validate_json_structure(&too_deep, 5, 0).is_err());
+        // Create deeply nested JSON programmatically to avoid macro issues
+        let mut deep_value = serde_json::json!("value");
+        for _ in 0..15 {
+            deep_value = serde_json::json!({"nested": deep_value});
+        }
+        assert!(validate_json_structure(&deep_value, 5, 0).is_err());
 
         let large_array = serde_json::json!(vec![1; 2000]);
         assert!(validate_json_structure(&large_array, 10, 0).is_err());
