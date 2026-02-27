@@ -4,6 +4,8 @@
 //! events, applying HMAC-SHA256 signature verification, rate limiting, spam detection,
 //! and capability checks before forwarding to the session manager.
 
+#![allow(unused_imports)]
+
 use std::sync::Arc;
 
 use hmac::{Hmac, Mac};
@@ -18,6 +20,7 @@ use carnelian_core::EventStream;
 use carnelian_core::policy::PolicyEngine;
 use carnelian_core::session::SessionManager;
 
+use crate::ChannelAdapter;
 use crate::db as channel_db;
 use crate::events;
 use crate::rate_limiter::RateLimiter;
@@ -337,12 +340,12 @@ async fn process_message_event(event: &SlackEvent, adapter: &SlackAdapter) -> an
                 conv.session_id,
                 "user",
                 text.to_string(),
+                None, // token_estimate
+                None, // tool_name
+                None, // tool_call_id
                 Some(correlation_id),
-                None,
-                None,
-                None,
-                None,
-                None,
+                None, // metadata
+                None, // tool_metadata
             )
             .await
         {

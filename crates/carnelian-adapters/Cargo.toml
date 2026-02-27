@@ -7,6 +7,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+bytes.workspace = true
 carnelian-common = { path = "../carnelian-common" }
 carnelian-core = { path = "../carnelian-core" }
 tokio.workspace = true
