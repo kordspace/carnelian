@@ -1,0 +1,7 @@
+{
+  "name": "numpy-array",
+  "description": "Array computations and linear algebra operations using NumPy",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

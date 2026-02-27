@@ -1,0 +1,7 @@
+{
+  "name": "sklearn-train",
+  "description": "Train machine learning models using scikit-learn",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

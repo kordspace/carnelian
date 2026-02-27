@@ -1,0 +1,7 @@
+{
+  "name": "pandas-dataframe",
+  "description": "DataFrame operations including filter, group, merge, and aggregate",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

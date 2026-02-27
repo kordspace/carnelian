@@ -1,0 +1,7 @@
+{
+  "name": "matplotlib-plot",
+  "description": "Create static plots using matplotlib (line, bar, scatter, histogram)",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

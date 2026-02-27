@@ -1,0 +1,7 @@
+{
+  "name": "scipy-stats",
+  "description": "Statistical tests and distributions using SciPy",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}
