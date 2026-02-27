@@ -71,11 +71,9 @@ pub fn list_available_secrets() -> Result<Vec<String>> {
         .map_err(|e| Error::Config(format!("Failed to read secrets directory: {}", e)))?;
 
     let mut secrets = vec![];
-    for entry in entries {
-        if let Ok(entry) = entry {
-            if let Some(name) = entry.file_name().to_str() {
-                secrets.push(name.to_string());
-            }
+    for entry in entries.flatten() {
+        if let Some(name) = entry.file_name().to_str() {
+            secrets.push(name.to_string());
         }
     }
 

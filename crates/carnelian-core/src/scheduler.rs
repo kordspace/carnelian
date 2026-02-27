@@ -1325,7 +1325,7 @@ impl Scheduler {
 
                                 // First skill use bonus
                                 if let Some(sid) = skill_id {
-                                    if let Ok(true) = xp_mgr.is_first_skill_use(agent_id, sid).await
+                                    if matches!(xp_mgr.is_first_skill_use(agent_id, sid).await, Ok(true))
                                     {
                                         total_xp += 10;
                                     }
