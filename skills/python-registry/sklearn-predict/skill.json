@@ -1,0 +1,7 @@
+{
+  "name": "sklearn-predict",
+  "description": "Make predictions using trained scikit-learn models",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

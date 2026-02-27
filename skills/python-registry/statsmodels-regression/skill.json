@@ -1,0 +1,7 @@
+{
+  "name": "statsmodels-regression",
+  "description": "Statistical regression modeling using statsmodels",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

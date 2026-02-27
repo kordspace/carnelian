@@ -1,0 +1,7 @@
+{
+  "name": "polars-query",
+  "description": "Fast DataFrame queries using Polars",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

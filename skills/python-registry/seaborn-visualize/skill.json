@@ -1,0 +1,7 @@
+{
+  "name": "seaborn-visualize",
+  "description": "Create statistical visualizations using Seaborn",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

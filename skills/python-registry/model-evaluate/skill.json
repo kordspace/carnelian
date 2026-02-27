@@ -1,0 +1,7 @@
+{
+  "name": "model-evaluate",
+  "description": "Evaluate ML model performance with comprehensive metrics",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

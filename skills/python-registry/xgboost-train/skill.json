@@ -1,0 +1,7 @@
+{
+  "name": "xgboost-train",
+  "description": "Train gradient boosting models using XGBoost",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

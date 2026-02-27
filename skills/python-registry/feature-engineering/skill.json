@@ -1,0 +1,7 @@
+{
+  "name": "feature-engineering",
+  "description": "Feature transformation and engineering for ML models",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

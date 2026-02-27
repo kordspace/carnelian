@@ -1,0 +1,7 @@
+{
+  "name": "networkx-graph",
+  "description": "Graph analysis and algorithms using NetworkX",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

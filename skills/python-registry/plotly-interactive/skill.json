@@ -1,0 +1,7 @@
+{
+  "name": "plotly-interactive",
+  "description": "Create interactive visualizations using Plotly",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

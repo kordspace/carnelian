@@ -1,0 +1,7 @@
+{
+  "name": "scipy-optimize",
+  "description": "Optimization algorithms using SciPy",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}
