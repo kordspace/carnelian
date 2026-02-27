@@ -711,23 +711,53 @@ See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 
 ## Documentation
 
+### User & Developer Guides
+
 | Document | Description |
 |----------|-------------|
+| [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) | Quick start guide for new users |
+| [docs/INSTALL.md](docs/INSTALL.md) | Installation instructions |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Development setup and workflow |
 | [docs/DOCKER.md](docs/DOCKER.md) | Docker environment and troubleshooting |
-| [docs/BRAND.md](docs/BRAND.md) | Dual theme brand kit (Forge / Night Lab) |
-| [docs/LOGGING.md](docs/LOGGING.md) | Structured logging philosophy and conventions |
-| [docs/CHECKPOINT1.md](docs/CHECKPOINT1.md) | Checkpoint 1 validation steps and demo |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture and component overview |
-| [docs/SECURITY.md](docs/SECURITY.md) | Security model, capability system, threat model |
-| [docs/OPERATOR_GUIDE.md](docs/OPERATOR_GUIDE.md) | Day-to-day operations and administration |
 | [docs/API.md](docs/API.md) | Full REST API reference |
-| [docs/SKILLS_MIGRATION_STATUS.md](docs/SKILLS_MIGRATION_STATUS.md) | Skills migration tracking, Rust conversion roadmap |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture and component overview |
+| [docs/OPERATOR_GUIDE.md](docs/OPERATOR_GUIDE.md) | Day-to-day operations and administration |
+| [docs/SECURITY.md](docs/SECURITY.md) | Security model, capability system, threat model |
+| [docs/LOGGING.md](docs/LOGGING.md) | Structured logging philosophy and conventions |
+| [docs/BRAND.md](docs/BRAND.md) | Dual theme brand kit (Forge / Night Lab) |
+
+### Platform Setup
+
+| Document | Description |
+|----------|-------------|
 | [docs/SETUP_WINDOWS.md](docs/SETUP_WINDOWS.md) | Windows (WSL2) setup guide |
 | [docs/SETUP_MACOS.md](docs/SETUP_MACOS.md) | macOS setup guide |
 | [docs/SETUP_LINUX.md](docs/SETUP_LINUX.md) | Linux setup guide |
-| [crates/carnelian-core/tests/README.md](crates/carnelian-core/tests/README.md) | Test suite documentation |
-| [db/migrations/README.md](db/migrations/README.md) | Database migration guide |
+
+### Project Status & Planning
+
+| Document | Description |
+|----------|-------------|
+| [documentation/COMPREHENSIVE_STATUS_AND_ANALYSIS.md](documentation/COMPREHENSIVE_STATUS_AND_ANALYSIS.md) | Complete system status and analysis |
+| [documentation/PRE_DEPLOYMENT_REVIEW.md](documentation/PRE_DEPLOYMENT_REVIEW.md) | Pre-deployment infrastructure review |
+| [documentation/IMPLEMENTATION_ROADMAP.md](documentation/IMPLEMENTATION_ROADMAP.md) | 4-phase implementation roadmap |
+| [documentation/SECURITY_CHECKLIST.md](documentation/SECURITY_CHECKLIST.md) | Security hardening checklist |
+| [documentation/TESTING_GUIDE.md](documentation/TESTING_GUIDE.md) | Comprehensive testing guide |
+| [documentation/MACHINE_PROFILES.md](documentation/MACHINE_PROFILES.md) | Deployment machine profiles |
+| [docs/ENHANCEMENT_SUMMARY.md](docs/ENHANCEMENT_SUMMARY.md) | Project enhancement summary |
+| [docs/FINAL_STATUS_REPORT.md](docs/FINAL_STATUS_REPORT.md) | Final status report |
+
+### Technical Deep Dives
+
+| Document | Description |
+|----------|-------------|
+| [docs/PHASE3.md](docs/PHASE3.md) | Phase 3 architecture deep-dive |
+| [docs/WASM_SKILLS.md](docs/WASM_SKILLS.md) | WASM skill system documentation |
+| [docs/RUST_SKILL_SYSTEM.md](docs/RUST_SKILL_SYSTEM.md) | Rust skill system design |
+| [docs/ATTESTATION.md](docs/ATTESTATION.md) | Attestation and verification system |
+| [docs/SKILL_GAP_ANALYSIS.md](docs/SKILL_GAP_ANALYSIS.md) | Skills migration tracking |
+| [docs/REMOTE_DEPLOY.md](docs/REMOTE_DEPLOY.md) | Remote deployment guide |
+| [docs/DOCKER_ECOSYSTEM.md](docs/DOCKER_ECOSYSTEM.md) | Docker ecosystem overview |
 
 ### Project Planning
 
@@ -736,11 +766,33 @@ See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 
 ## Contributing
 
-This is currently a personal project (Marco + Mim). The architecture is designed for eventual sharing as a platform.
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
+- Development setup
+- Code style guidelines
+- Testing requirements
+- Pull request process
 
-- Pre-commit hooks enforce code quality
-- CI requires passing lint, build, and integration test checks
-- See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for code style
+### Quick Start for Contributors
+
+```bash
+# Fork and clone
+git clone https://github.com/YOUR_USERNAME/carnelian.git
+cd carnelian
+
+# Install dependencies
+cargo build
+npm install --prefix tests/e2e
+
+# Run tests
+cargo test --all
+
+# Start development server
+docker-compose up -d
+```
+
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for detailed development workflow.
+
+This is currently a personal project (Marco + Mim). The architecture is designed for eventual sharing as a platform.
 
 ## License
 
