@@ -1,0 +1,7 @@
+{
+  "name": "backup-snapshot",
+  "description": "Create comprehensive system snapshots for backup and recovery",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["internal_orchestration"]
+}

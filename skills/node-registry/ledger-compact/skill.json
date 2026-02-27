@@ -1,0 +1,7 @@
+{
+  "name": "ledger-compact",
+  "description": "Compact and optimize the audit ledger database",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["internal_orchestration"]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "skill-registry-sync",
+  "description": "Synchronize skill metadata across all workers",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["internal_orchestration"]
+}

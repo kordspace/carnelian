@@ -1,0 +1,7 @@
+{
+  "name": "config-hot-reload",
+  "description": "Reload configuration without restarting the system",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["internal_orchestration"]
+}

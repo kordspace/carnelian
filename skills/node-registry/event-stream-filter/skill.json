@@ -1,0 +1,7 @@
+{
+  "name": "event-stream-filter",
+  "description": "Filter and route events by pattern in the event stream",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["internal_orchestration"]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "worker-health-monitor",
+  "description": "Monitor worker process health and performance metrics",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["internal_orchestration"]
+}

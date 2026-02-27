@@ -1,0 +1,7 @@
+{
+  "name": "worker-spawn",
+  "description": "Dynamically spawn new worker processes",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["internal_orchestration"]
+}

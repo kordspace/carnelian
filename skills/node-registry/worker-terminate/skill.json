@@ -1,0 +1,7 @@
+{
+  "name": "worker-terminate",
+  "description": "Gracefully terminate worker processes",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["internal_orchestration"]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "metrics-aggregate",
+  "description": "Aggregate system metrics across workers and time ranges",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["internal_orchestration"]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "task-queue-rebalance",
+  "description": "Intelligently rebalance task distribution across workers",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["internal_orchestration"]
+}
