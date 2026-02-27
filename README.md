@@ -8,17 +8,17 @@
   <a href="https://github.com/kordspace/carnelian"><img src="https://img.shields.io/badge/🦎-Lian-7C4DFF" alt="Lian"></a>
 </p>
 
-<p align="center">A local-first AI agent mainframe built in Rust with capability-based security and event-stream architecture.</p>
+<p align="center">An AI workspace harness built in Rust — orchestrating autonomous agents with capability-based security, event-stream architecture, and local-first execution.</p>
 
-> 💎 *Carnelian is a gemstone — warm, fiery, and grounding. The name reflects both the system's Rust foundation and its role as a precious, reliable core.*
+> 💎 *Carnelian Core provides the foundational infrastructure for AI agent orchestration, task execution, and workspace automation. Think of it as the runtime and security layer that makes autonomous AI agents safe, auditable, and productive.*
 
 ## Brand Identity
 
 | Symbol | Name | Role |
 |--------|------|------|
-| 🔥 | **Carnelian OS** | System/runtime — the forge that refines and executes |
+| 🔥 | **Carnelian Core** | AI workspace harness — the runtime that orchestrates agents |
 | 🦎 | **Lian** | Agent personality — the spirit that reasons and decides |
-| 💎 | **Core** | Architectural foundations — security, ledger, guarantees |
+| 💎 | **Foundation** | Architectural guarantees — security, ledger, auditability |
 
 ### Brand Assets
 
@@ -31,9 +31,14 @@ See [docs/BRAND.md](docs/BRAND.md) for the complete dual-theme brand kit (Forge/
 
 ## Overview
 
-🔥 Carnelian OS is a production-grade rewrite of the experimental Thummim system. It addresses critical performance bottlenecks, security gaps, and architectural debt accumulated in the original Node.js/TypeScript monolith while preserving the 600+ skills, personality features, and core workflows that make the system valuable.
+🔥 **Carnelian Core** is an AI workspace harness built in Rust that provides the foundational infrastructure for autonomous agent orchestration. It combines capability-based security, event-stream architecture, and local-first LLM execution to create a safe, auditable environment for AI-driven task automation.
 
-The core value proposition is reliable AI agent orchestration with strong containment guarantees, local-first execution via Ollama, and tamper-resistant auditability. Carnelian provides a foundation for autonomous task execution with proper resource controls, capability-based security, and event-stream architecture that prevents UI freezes under load.
+**Core Value Proposition:**
+- **Workspace Automation** — Autonomous task discovery, scheduling, and execution
+- **Security First** — Capability-based deny-by-default security with tamper-resistant audit trails
+- **Local-First AI** — Ollama integration for on-device inference with cloud fallback
+- **Production Ready** — Event-stream architecture, worker sandboxing, and resource controls
+- **Extensible** — 600+ skills via multi-runtime worker system (Node.js, Python, WASM, native Rust)
 
 ## Phase Status
 
@@ -49,23 +54,17 @@ The core value proposition is reliable AI agent orchestration with strong contai
 
 See [docs/PHASE3.md](docs/PHASE3.md) for the Phase 3 architecture deep-dive.
 
-## Why 🔥 Carnelian?
+## Why Carnelian Core?
 
-**What's Preserved from Thummim:**
-- PostgreSQL backend with pgvector for embeddings
-- Local model integration (Ollama/DeepSeek)
-- Heartbeat system (555,555ms wake routine)
-- Task queue and scheduling
-- Personality features and mantra rotation
-- 600+ existing skills via Node.js worker
-
-**What's Improved:**
-- Rust core for performance and memory safety
-- Capability-based security (deny-by-default)
-- Event-stream architecture with backpressure
-- Proper resource controls and worker sandboxing
-- Hash-chain ledger for tamper-resistant audit trail
-- Priority-based event sampling (no UI freezes)
+**Built for Production AI Workflows:**
+- **Rust Foundation** — Performance, memory safety, and reliability
+- **Capability-Based Security** — Deny-by-default with explicit grants and audit trails
+- **Event-Stream Architecture** — Backpressure handling, bounded buffers, no UI freezes
+- **Worker Sandboxing** — Isolated execution with resource controls
+- **Local-First LLMs** — Ollama integration with GPU support and cloud fallback
+- **Multi-Runtime Support** — Node.js, Python, WASM, and native Rust workers
+- **Autonomous Operation** — Heartbeat system (555,555ms), task discovery, auto-queueing
+- **Tamper-Resistant Ledger** — blake3 hash-chain for privileged action audit trail
 
 ## Architecture
 
@@ -547,7 +546,7 @@ Each skill is a subdirectory containing a `skill.json`:
     "network": "disabled",
     "max_memory_mb": 128
   },
-  "openclaw_compat": {
+  "metadata": {
     "emoji": "🔊",
     "tags": ["utility"]
   }
