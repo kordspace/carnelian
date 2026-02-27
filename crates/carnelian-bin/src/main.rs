@@ -1569,7 +1569,7 @@ async fn handle_init(
                             println!("    ✓ Ollama container started on port {}", ollama_port)
                         }
                         Err(e) => println!("    ⚠ Failed to start Ollama container: {}", e),
-                    }
+                    };
                 }
                 Err(e) => println!("    ⚠ Failed to create Ollama container: {}", e),
             }
@@ -2055,23 +2055,22 @@ async fn handle_ui(web: bool) -> carnelian_common::Result<()> {
     }
 
     // Spawn the UI (detached)
+    // On Unix, use setsid command to detach from parent process group
+    // On Windows, CREATE_NEW_PROCESS_GROUP flag is set automatically
+    #[cfg(unix)]
+    let mut cmd = {
+        // Use setsid command to create a new session and detach
+        let mut c = std::process::Command::new("setsid");
+        c.arg(&ui_binary);
+        c
+    };
+
+    #[cfg(not(unix))]
     let mut cmd = std::process::Command::new(&ui_binary);
+
     cmd.stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        #[allow(unsafe_code)]
-        unsafe {
-            cmd.pre_exec(|| {
-                // Detach from parent process group
-                libc::setsid();
-                Ok(())
-            });
-        }
-    }
 
     let child = cmd
         .spawn()
