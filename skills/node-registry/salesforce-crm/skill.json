@@ -1,0 +1,7 @@
+{
+  "name": "salesforce-crm",
+  "description": "Manage Salesforce CRM records (leads, opportunities, accounts)",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["salesforce_api"]
+}

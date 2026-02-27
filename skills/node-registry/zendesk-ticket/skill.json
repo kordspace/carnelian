@@ -1,0 +1,7 @@
+{
+  "name": "zendesk-ticket",
+  "description": "Create and manage Zendesk support tickets",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["zendesk_api"]
+}

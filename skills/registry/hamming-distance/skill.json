@@ -1,0 +1,7 @@
+{
+  "name": "hamming-distance",
+  "description": "Calculate Hamming distance between two equal-length strings",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

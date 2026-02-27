@@ -1,0 +1,7 @@
+{
+  "name": "metaphone",
+  "description": "Generate Metaphone phonetic encoding for text",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

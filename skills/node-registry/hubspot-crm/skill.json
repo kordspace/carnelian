@@ -1,0 +1,7 @@
+{
+  "name": "hubspot-crm",
+  "description": "Manage HubSpot CRM records (contacts, deals, companies)",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["hubspot_api"]
+}
