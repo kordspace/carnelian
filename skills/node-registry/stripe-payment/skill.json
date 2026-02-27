@@ -1,0 +1,7 @@
+{
+  "name": "stripe-payment",
+  "description": "Process Stripe payments, create customers, and manage refunds",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["stripe_api"]
+}

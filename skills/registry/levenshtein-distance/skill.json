@@ -1,0 +1,7 @@
+{
+  "name": "levenshtein-distance",
+  "description": "Calculate Levenshtein edit distance and similarity between two strings",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

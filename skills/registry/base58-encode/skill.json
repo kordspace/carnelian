@@ -1,0 +1,7 @@
+{
+  "name": "base58-encode",
+  "description": "Encode data to Base58 format (Bitcoin-style alphabet)",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

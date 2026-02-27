@@ -1,0 +1,7 @@
+{
+  "name": "base58-decode",
+  "description": "Decode Base58 encoded data (Bitcoin-style alphabet)",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

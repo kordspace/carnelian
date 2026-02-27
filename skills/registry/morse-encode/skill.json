@@ -1,0 +1,7 @@
+{
+  "name": "morse-encode",
+  "description": "Encode text to Morse code",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}
