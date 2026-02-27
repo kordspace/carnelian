@@ -414,8 +414,7 @@ mod tests {
         let payload_bytes = payload.to_string().into_bytes();
 
         // Compute HMAC signature
-        type HmacSha256 = Hmac<Sha256>;
-        let mut mac = HmacSha256::new_from_slice(test_secret.as_bytes()).unwrap();
+        let mut mac = Hmac::<Sha256>::new_from_slice(test_secret.as_bytes()).unwrap();
         let base_string = format!(
             "v0:{timestamp}:{}",
             std::str::from_utf8(&payload_bytes).unwrap()
@@ -426,11 +425,7 @@ mod tests {
 
         // Verify signature function works
         let result = verify_slack_signature(test_secret, &timestamp, &payload_bytes, &signature);
-        assert!(
-            result.is_ok(),
-            "Signature verification failed: {:?}",
-            result
-        );
+        assert!(result.is_ok(), "Signature verification failed: {result:?}");
 
         // The response would contain the challenge if we had a full adapter
         // Here we just verify the signature logic which is the core of handle_event

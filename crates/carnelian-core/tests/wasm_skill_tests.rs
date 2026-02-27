@@ -10,7 +10,7 @@ fn wasm_path(skill_name: &str) -> PathBuf {
     PathBuf::from(manifest_dir)
         .join("../../skills/core-registry")
         .join(skill_name)
-        .join(format!("{}.wasm", skill_name))
+        .join(format!("{skill_name}.wasm"))
 }
 
 fn make_runtime() -> WasmSkillRuntime {
@@ -45,7 +45,7 @@ async fn test_hello_wasm() {
         .await
         .unwrap();
 
-    assert_eq!(output.success, true);
+    assert!(output.success);
     assert_eq!(output.data["data"]["message"], "Hello from WASM!");
 }
 
@@ -70,7 +70,7 @@ async fn test_markdown_parse() {
         .await
         .unwrap();
 
-    assert_eq!(output.success, true);
+    assert!(output.success);
     assert!(output.data["data"]["ast"].is_array());
     assert_eq!(output.data["data"]["headings"][0]["text"], "Title");
 }
@@ -96,7 +96,7 @@ async fn test_json_transform_field() {
         .await
         .unwrap();
 
-    assert_eq!(output.success, true);
+    assert!(output.success);
     assert_eq!(output.data["data"]["result"][0], "carnelian");
 }
 
@@ -121,7 +121,7 @@ async fn test_json_transform_identity() {
         .await
         .unwrap();
 
-    assert_eq!(output.success, true);
+    assert!(output.success);
     assert!(output.data["data"]["result"][0].is_array());
     assert_eq!(
         output.data["data"]["result"][0].as_array().unwrap().len(),
@@ -150,7 +150,7 @@ async fn test_yaml_parse() {
         .await
         .unwrap();
 
-    assert_eq!(output.success, true);
+    assert!(output.success);
     assert_eq!(output.data["data"]["json"]["name"], "carnelian");
 }
 
@@ -175,7 +175,7 @@ async fn test_text_search() {
         .await
         .unwrap();
 
-    assert_eq!(output.success, true);
+    assert!(output.success);
     assert_eq!(output.data["data"]["count"].as_u64().unwrap(), 3);
 }
 
@@ -200,7 +200,7 @@ async fn test_hash_file() {
         .await
         .unwrap();
 
-    assert_eq!(output.success, true);
+    assert!(output.success);
     assert!(output.data["data"]["hash"].is_string());
     assert_eq!(output.data["data"]["algorithm"], "blake3");
 }
@@ -226,7 +226,7 @@ async fn test_code_format_json() {
         .await
         .unwrap();
 
-    assert_eq!(output.success, true);
+    assert!(output.success);
     assert!(
         output.data["data"]["formatted"]
             .as_str()
