@@ -1,8 +1,8 @@
 # =============================================================================
-# Carnelian OS - Performance Machine Profile Override
+# Carnelian OS - Performance Machine Profile
 # =============================================================================
-# Performance: High-end GPU (11GB+ VRAM), 64GB RAM
-# Recommended model: deepseek-r1:32b
+# Performance: High-end machine (32GB+ RAM, 8+ CPU cores, GPU with 11GB+ VRAM)
+# Recommended model: deepseek-r1:32b or qwen2.5:32b
 #
 # Usage:
 #   docker-compose -f docker-compose.yml -f docker-compose.performance.yml up -d
@@ -17,3 +17,33 @@ services:
           memory: 8G
         reservations:
           memory: 2G
+
+  postgres:
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 4G
+        reservations:
+          memory: 1G
+    environment:
+      - POSTGRES_MAX_CONNECTIONS=200
+      - POSTGRES_SHARED_BUFFERS=1GB
+      - POSTGRES_EFFECTIVE_CACHE_SIZE=3GB
+
+  ollama:
+    environment:
+      - OLLAMA_NUM_PARALLEL=4
+      - OLLAMA_MAX_LOADED_MODELS=2
+      - OLLAMA_KEEP_ALIVE=24h
+    deploy:
+      resources:
+        limits:
+          cpus: "8"
+          memory: 16G
+        reservations:
+          memory: 4G
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

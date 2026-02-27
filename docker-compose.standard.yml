@@ -1,0 +1,40 @@
+# =============================================================================
+# Carnelian OS - Standard Machine Profile
+# =============================================================================
+# Standard: Mid-range machine (16GB RAM, 4-8 CPU cores, optional GPU)
+# Recommended model: deepseek-r1:7b or llama3.1:8b
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.standard.yml up -d
+# =============================================================================
+
+services:
+  carnelian-core:
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 4G
+        reservations:
+          memory: 1G
+
+  postgres:
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  ollama:
+    environment:
+      - OLLAMA_NUM_PARALLEL=2
+      - OLLAMA_MAX_LOADED_MODELS=1
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 8G
+        reservations:
+          memory: 2G

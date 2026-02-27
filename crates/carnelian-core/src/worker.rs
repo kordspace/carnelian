@@ -1713,7 +1713,8 @@ impl WorkerTransport for NativeWorkerTransport {
                 } else {
                     let disks = Disks::new_with_refreshed_list();
 
-                    let disks_vec: Vec<serde_json::Value> = disks.iter()
+                    let disks_vec: Vec<serde_json::Value> = disks
+                        .iter()
                         .map(|disk| {
                             json!({
                                 "name": disk.name().to_string_lossy(),
