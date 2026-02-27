@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\html-parse\target\wasm32-wasip1\release\html-parse.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\html-parse\src\main.rs

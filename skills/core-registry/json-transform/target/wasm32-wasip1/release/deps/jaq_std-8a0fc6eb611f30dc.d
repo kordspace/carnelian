@@ -1,0 +1,11 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\json-transform\target\wasm32-wasip1\release\deps\libjaq_std-8a0fc6eb611f30dc.rmeta: C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\jaq-std-2.1.2\src\lib.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\jaq-std-2.1.2\src\math.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\jaq-std-2.1.2\src\regex.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\jaq-std-2.1.2\src\time.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\jaq-std-2.1.2\src\defs.jq
+
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\json-transform\target\wasm32-wasip1\release\deps\libjaq_std-8a0fc6eb611f30dc.rlib: C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\jaq-std-2.1.2\src\lib.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\jaq-std-2.1.2\src\math.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\jaq-std-2.1.2\src\regex.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\jaq-std-2.1.2\src\time.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\jaq-std-2.1.2\src\defs.jq
+
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\json-transform\target\wasm32-wasip1\release\deps\jaq_std-8a0fc6eb611f30dc.d: C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\jaq-std-2.1.2\src\lib.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\jaq-std-2.1.2\src\math.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\jaq-std-2.1.2\src\regex.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\jaq-std-2.1.2\src\time.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\jaq-std-2.1.2\src\defs.jq
+
+C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\jaq-std-2.1.2\src\lib.rs:
+C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\jaq-std-2.1.2\src\math.rs:
+C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\jaq-std-2.1.2\src\regex.rs:
+C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\jaq-std-2.1.2\src\time.rs:
+C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\jaq-std-2.1.2\src\defs.jq:

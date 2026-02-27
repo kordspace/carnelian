@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\html-escape\target\wasm32-wasip1\release\html-escape.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\html-escape\src\main.rs

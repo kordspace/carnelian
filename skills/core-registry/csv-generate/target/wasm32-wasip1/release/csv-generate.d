@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\csv-generate\target\wasm32-wasip1\release\csv-generate.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\csv-generate\src\main.rs

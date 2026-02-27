@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\json-merge\target\wasm32-wasip1\release\json-merge.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\json-merge\src\main.rs

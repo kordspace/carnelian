@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\url-validate\target\wasm32-wasip1\release\url-validate.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\url-validate\src\main.rs

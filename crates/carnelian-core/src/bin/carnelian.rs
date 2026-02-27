@@ -1859,7 +1859,7 @@ async fn handle_init(
         if activate_skills {
             let starter_skills = vec!["file-analyzer", "code-review", "model-usage"];
             let skill_book_path = PathBuf::from("skills/skill-book");
-            let registry_path = PathBuf::from("skills/registry");
+            let registry_path = PathBuf::from("skills/core-registry");
 
             // Build config for SkillBook
             let skill_config = if let Some(ref pool) = shared_pool {

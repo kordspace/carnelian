@@ -8,7 +8,7 @@ use std::path::PathBuf;
 fn wasm_path(skill_name: &str) -> PathBuf {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     PathBuf::from(manifest_dir)
-        .join("../../skills/registry")
+        .join("../../skills/core-registry")
         .join(skill_name)
         .join(format!("{}.wasm", skill_name))
 }

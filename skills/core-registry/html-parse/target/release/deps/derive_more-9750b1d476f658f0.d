@@ -1,0 +1,10 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\html-parse\target\release\deps\derive_more-9750b1d476f658f0.dll: C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\derive_more-0.99.20\src\lib.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\derive_more-0.99.20\src\syn_compat.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\derive_more-0.99.20\src\utils.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\derive_more-0.99.20\src\add_assign_like.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\derive_more-0.99.20\src\add_helpers.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\derive_more-0.99.20\src\add_like.rs
+
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\html-parse\target\release\deps\derive_more-9750b1d476f658f0.d: C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\derive_more-0.99.20\src\lib.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\derive_more-0.99.20\src\syn_compat.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\derive_more-0.99.20\src\utils.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\derive_more-0.99.20\src\add_assign_like.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\derive_more-0.99.20\src\add_helpers.rs C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\derive_more-0.99.20\src\add_like.rs
+
+C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\derive_more-0.99.20\src\lib.rs:
+C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\derive_more-0.99.20\src\syn_compat.rs:
+C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\derive_more-0.99.20\src\utils.rs:
+C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\derive_more-0.99.20\src\add_assign_like.rs:
+C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\derive_more-0.99.20\src\add_helpers.rs:
+C:\Users\marco\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\derive_more-0.99.20\src\add_like.rs:

@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\text-truncate\target\wasm32-wasip1\release\text-truncate.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\text-truncate\src\main.rs

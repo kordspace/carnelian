@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\json-stringify\target\wasm32-wasip1\release\json-stringify.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\json-stringify\src\main.rs

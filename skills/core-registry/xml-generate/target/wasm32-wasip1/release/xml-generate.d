@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\xml-generate\target\wasm32-wasip1\release\xml-generate.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\xml-generate\src\main.rs

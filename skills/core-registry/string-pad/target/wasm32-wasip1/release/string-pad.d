@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\string-pad\target\wasm32-wasip1\release\string-pad.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\string-pad\src\main.rs

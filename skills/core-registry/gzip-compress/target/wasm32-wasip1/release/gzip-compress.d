@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\gzip-compress\target\wasm32-wasip1\release\gzip-compress.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\gzip-compress\src\main.rs

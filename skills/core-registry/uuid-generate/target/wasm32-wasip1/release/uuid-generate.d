@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\uuid-generate\target\wasm32-wasip1\release\uuid-generate.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\uuid-generate\src\main.rs

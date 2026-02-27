@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\json-filter\target\wasm32-wasip1\release\json-filter.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\json-filter\src\main.rs

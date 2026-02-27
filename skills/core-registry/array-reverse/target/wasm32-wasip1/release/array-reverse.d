@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\array-reverse\target\wasm32-wasip1\release\array-reverse.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\array-reverse\src\main.rs

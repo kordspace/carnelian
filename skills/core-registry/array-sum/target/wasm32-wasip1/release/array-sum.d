@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\array-sum\target\wasm32-wasip1\release\array-sum.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\array-sum\src\main.rs

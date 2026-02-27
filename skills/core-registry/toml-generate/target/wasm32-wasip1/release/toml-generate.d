@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\toml-generate\target\wasm32-wasip1\release\toml-generate.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\toml-generate\src\main.rs

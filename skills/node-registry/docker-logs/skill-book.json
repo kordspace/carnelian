@@ -1,9 +1,0 @@
-{
-  "id": "docker-logs",
-  "name": "Docker Logs",
-  "description": "Fetch stdout/stderr logs from a Docker container",
-  "category": "automation",
-  "runtime": "native",
-  "version": "1.0.0",
-  "required_config": []
-}

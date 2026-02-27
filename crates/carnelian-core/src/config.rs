@@ -177,7 +177,7 @@ pub struct Config {
     #[serde(default = "default_skill_max_log_lines")]
     pub skill_max_log_lines: usize,
 
-    /// Path to skills registry directory (default: ./skills/registry)
+    /// Path to skills core-registry directory (default: ./skills/core-registry)
     #[serde(default = "default_skills_registry_path")]
     pub skills_registry_path: PathBuf,
 
@@ -388,7 +388,7 @@ fn default_cors_origins() -> Vec<String> {
 }
 
 fn default_skills_registry_path() -> PathBuf {
-    PathBuf::from("./skills/registry")
+    PathBuf::from("./skills/core-registry")
 }
 
 fn default_souls_path() -> PathBuf {

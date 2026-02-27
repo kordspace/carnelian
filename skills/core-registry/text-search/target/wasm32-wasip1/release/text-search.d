@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\text-search\target\wasm32-wasip1\release\text-search.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\text-search\src\main.rs

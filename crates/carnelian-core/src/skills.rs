@@ -13,7 +13,7 @@
 //! Each skill directory contains a `skill.json` file:
 //!
 //! ```text
-//! skills/registry/
+//! skills/core-registry/
 //! ├── healthcheck/
 //! │   └── skill.json
 //! ├── echo/

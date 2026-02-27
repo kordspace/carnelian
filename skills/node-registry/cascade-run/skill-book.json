@@ -1,9 +1,0 @@
-{
-  "id": "cascade-run",
-  "name": "Cascade Run",
-  "description": "Communicate with Windsurf Cascade via JSONL channel files (message/delegate/request_help/share_context/status).",
-  "category": "code",
-  "runtime": "node",
-  "version": "1.0.0",
-  "required_config": []
-}

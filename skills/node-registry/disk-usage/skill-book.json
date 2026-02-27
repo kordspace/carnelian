@@ -1,9 +1,0 @@
-{
-  "id": "disk-usage",
-  "name": "Disk Usage",
-  "description": "Report disk usage statistics for host filesystems",
-  "category": "automation",
-  "runtime": "native",
-  "version": "1.0.0",
-  "required_config": []
-}

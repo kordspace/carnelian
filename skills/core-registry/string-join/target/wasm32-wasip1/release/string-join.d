@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\string-join\target\wasm32-wasip1\release\string-join.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\string-join\src\main.rs

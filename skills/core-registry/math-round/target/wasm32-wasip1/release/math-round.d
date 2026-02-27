@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\math-round\target\wasm32-wasip1\release\math-round.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\math-round\src\main.rs

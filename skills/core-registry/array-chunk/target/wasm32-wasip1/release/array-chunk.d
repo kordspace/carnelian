@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\array-chunk\target\wasm32-wasip1\release\array-chunk.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\array-chunk\src\main.rs

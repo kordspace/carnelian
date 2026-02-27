@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\csv-parse\target\wasm32-wasip1\release\csv-parse.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\csv-parse\src\main.rs

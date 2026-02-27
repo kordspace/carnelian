@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\crypto-decrypt\target\wasm32-wasip1\release\crypto-decrypt.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\crypto-decrypt\src\main.rs

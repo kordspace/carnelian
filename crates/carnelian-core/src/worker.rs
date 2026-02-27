@@ -825,8 +825,8 @@ impl WorkerTransport for WasmWorkerTransport {
         ));
 
         // Derive WASM path
-        let wasm_path = format!("skills/registry/{}/{}.wasm", skill_name, skill_name);
-        let skill_json_path = format!("skills/registry/{}/skill.json", skill_name);
+        let wasm_path = format!("skills/core-registry/{}/{}.wasm", skill_name, skill_name);
+        let skill_json_path = format!("skills/core-registry/{}/skill.json", skill_name);
 
         // Load skill if not already loaded
         let skill_id = format!("{}/{}-worker", skill_name, self.worker_id);

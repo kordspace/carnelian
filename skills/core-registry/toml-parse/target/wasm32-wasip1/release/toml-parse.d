@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\toml-parse\target\wasm32-wasip1\release\toml-parse.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\toml-parse\src\main.rs

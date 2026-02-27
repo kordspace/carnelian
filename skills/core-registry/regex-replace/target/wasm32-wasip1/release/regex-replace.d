@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\regex-replace\target\wasm32-wasip1\release\regex-replace.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\regex-replace\src\main.rs

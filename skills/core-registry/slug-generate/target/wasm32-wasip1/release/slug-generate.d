@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\slug-generate\target\wasm32-wasip1\release\slug-generate.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\slug-generate\src\main.rs

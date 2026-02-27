@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\string-trim\target\wasm32-wasip1\release\string-trim.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\string-trim\src\main.rs

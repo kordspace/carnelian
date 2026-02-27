@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\text-similarity\target\wasm32-wasip1\release\text-similarity.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\text-similarity\src\main.rs

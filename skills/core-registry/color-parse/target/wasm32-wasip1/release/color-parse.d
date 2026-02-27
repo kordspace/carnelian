@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\color-parse\target\wasm32-wasip1\release\color-parse.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\color-parse\src\main.rs

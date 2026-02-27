@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\yaml-parse\target\wasm32-wasip1\release\yaml-parse.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\yaml-parse\src\main.rs

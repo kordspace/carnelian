@@ -1654,7 +1654,7 @@ async fn handle_init(
     if activate_skills.trim().to_lowercase() != "n" {
         let starter_skills = vec!["file-analyzer", "code-review", "model-usage"];
         let skill_book_path = PathBuf::from("skills/node-registry");
-        let registry_path = PathBuf::from("skills/registry");
+        let registry_path = PathBuf::from("skills/core-registry");
 
         // Create registry directory if it doesn't exist
         if let Err(e) = std::fs::create_dir_all(&registry_path) {

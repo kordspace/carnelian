@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\array-flatten\target\wasm32-wasip1\release\array-flatten.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\array-flatten\src\main.rs

@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\base32-encode\target\wasm32-wasip1\release\base32-encode.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\base32-encode\src\main.rs

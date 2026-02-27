@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\string-case\target\wasm32-wasip1\release\string-case.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\string-case\src\main.rs

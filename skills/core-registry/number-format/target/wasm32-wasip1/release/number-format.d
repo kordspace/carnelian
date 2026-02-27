@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\number-format\target\wasm32-wasip1\release\number-format.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\number-format\src\main.rs

@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\crypto-encrypt\target\wasm32-wasip1\release\crypto-encrypt.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\crypto-encrypt\src\main.rs

@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\hex-encode\target\wasm32-wasip1\release\hex-encode.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\hex-encode\src\main.rs

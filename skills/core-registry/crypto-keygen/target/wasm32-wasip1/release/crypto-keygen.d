@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\crypto-keygen\target\wasm32-wasip1\release\crypto-keygen.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\crypto-keygen\src\main.rs

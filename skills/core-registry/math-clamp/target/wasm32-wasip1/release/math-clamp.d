@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\math-clamp\target\wasm32-wasip1\release\math-clamp.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\math-clamp\src\main.rs

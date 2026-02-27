@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\string-repeat\target\wasm32-wasip1\release\string-repeat.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\string-repeat\src\main.rs

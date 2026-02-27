@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\object-pick\target\wasm32-wasip1\release\object-pick.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\object-pick\src\main.rs

@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\math-calculate\target\wasm32-wasip1\release\math-calculate.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\math-calculate\src\main.rs

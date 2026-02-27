@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\number-random\target\wasm32-wasip1\release\number-random.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\number-random\src\main.rs

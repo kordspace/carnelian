@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\hash-file\target\wasm32-wasip1\release\hash-file.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\hash-file\src\main.rs

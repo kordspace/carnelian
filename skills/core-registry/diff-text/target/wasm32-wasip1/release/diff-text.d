@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\diff-text\target\wasm32-wasip1\release\diff-text.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\diff-text\src\main.rs

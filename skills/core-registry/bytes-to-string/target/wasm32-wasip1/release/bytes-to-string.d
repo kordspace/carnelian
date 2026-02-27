@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\bytes-to-string\target\wasm32-wasip1\release\bytes-to-string.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\bytes-to-string\src\main.rs

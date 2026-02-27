@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\array-filter\target\wasm32-wasip1\release\array-filter.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\array-filter\src\main.rs

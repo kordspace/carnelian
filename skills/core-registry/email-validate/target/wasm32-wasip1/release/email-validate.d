@@ -1,0 +1,1 @@
+C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\email-validate\target\wasm32-wasip1\release\email-validate.wasm: C:\Users\marco\Documents\Code\Agents\CARNELIAN\skills\registry\email-validate\src\main.rs
