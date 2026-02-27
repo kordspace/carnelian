@@ -92,7 +92,8 @@ impl SpamDetector {
         let is_command = message_content.starts_with('/');
         let now = Instant::now();
 
-        let state = self.scores.entry(key).or_default().value_mut();
+        let mut entry = self.scores.entry(key).or_default();
+        let state = entry.value_mut();
 
         // Decay: reduce score based on time since last message
         if let Some(last_time) = state.last_message_time {
