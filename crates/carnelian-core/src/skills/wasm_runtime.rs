@@ -226,7 +226,7 @@ impl WasmSkillRuntime {
         });
 
         // Step 8: Instantiate and call the module
-        let result: Result<(), Error> = async {
+        let result: Result<()> = async {
             let instance = self
                 .linker
                 .instantiate_async(&mut store, &skill.module)
