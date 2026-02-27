@@ -75,7 +75,7 @@ pgvector = { version = "0.4", features = ["sqlx"] }
 # Process management (worker spawning)
 tokio-process = "0.2"
 # Dioxus (Desktop UI)
-dioxus = { version = "0.6", default-features = false, features = ["desktop", "router"] }
+dioxus = { version = "0.6", features = ["desktop", "router"] }
 dioxus-signals = "0.6"
 # System tray (re-exported by dioxus-desktop, pinned to compatible versions)
 tray-icon = "0.19"

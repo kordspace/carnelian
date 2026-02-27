@@ -15,7 +15,7 @@ use carnelian_common::types::StatusResponse;
 #[component]
 pub fn Settings() -> Element {
     let theme = use_context::<Theme>();
-    let mut status = use_signal(|| None::<StatusResponse>);
+    let status = use_signal(|| None::<StatusResponse>);
 
     // Load system status on mount
     use_hook({
