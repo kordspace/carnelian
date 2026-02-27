@@ -332,12 +332,14 @@ impl Server {
     }
 
     /// Set the channel adapter factory for building adapters.
+    #[must_use]
     pub fn with_adapter_factory(mut self, factory: Arc<dyn ChannelAdapterFactory>) -> Self {
         self.adapter_factory = Some(factory);
         self
     }
 
     /// Set the session manager for conversation persistence.
+    #[must_use]
     pub fn with_session_manager(mut self, session_manager: Arc<SessionManager>) -> Self {
         self.session_manager = Some(session_manager);
         self

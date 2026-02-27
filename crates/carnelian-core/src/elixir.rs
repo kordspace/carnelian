@@ -249,7 +249,7 @@ impl ElixirManager {
             .iter()
             .map(Self::row_to_elixir_detail)
             .collect::<Vec<_>>();
-        let total = results.len() as i64;
+        let total = i64::try_from(results.len()).unwrap_or(i64::MAX);
 
         Ok(ElixirSearchResponse {
             results,

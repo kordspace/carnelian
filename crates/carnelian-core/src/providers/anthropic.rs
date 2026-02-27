@@ -169,7 +169,7 @@ impl Provider for AnthropicProvider {
         &self.name
     }
 
-    fn provider_type(&self) -> &str {
+    fn provider_type(&self) -> &'static str {
         "remote"
     }
 

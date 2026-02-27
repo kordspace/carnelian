@@ -467,7 +467,7 @@ impl AgenticEngine {
                 session_id,
                 "user",
                 request.user_message.clone(),
-                Some(user_tokens as i32),
+                Some(user_tokens.try_into().unwrap_or(i32::MAX)),
                 None,
                 None,
                 Some(correlation_id),
@@ -483,7 +483,7 @@ impl AgenticEngine {
         let effective_limit =
             (self.config.context_window_tokens as f64 * (1.0 - reserve_fraction)) as i64;
 
-        if counters.total + user_tokens as i64 > effective_limit {
+        if counters.total + i64::try_from(user_tokens).unwrap_or(i64::MAX) > effective_limit {
             // Trigger memory flush before compaction
             match self
                 .trigger_memory_flush(session_id, request.identity_id, correlation_id)
@@ -609,7 +609,7 @@ impl AgenticEngine {
                 session_id,
                 "assistant",
                 assistant_content.clone(),
-                Some(assistant_tokens as i32),
+                Some(assistant_tokens.try_into().unwrap_or(i32::MAX)),
                 None,
                 None,
                 Some(correlation_id),
@@ -1261,7 +1261,7 @@ impl AgenticEngine {
                     session_id,
                     "tool",
                     persist_content,
-                    Some(persist_tokens as i32),
+                    Some(persist_tokens.try_into().unwrap_or(i32::MAX)),
                     Some(tool_call.tool_name.clone()),
                     Some(tool_call.call_id.clone()),
                     Some(correlation_id),
@@ -1384,7 +1384,7 @@ impl AgenticEngine {
                         session_id,
                         "tool",
                         skip_content,
-                        Some(skip_tokens as i32),
+                        Some(skip_tokens.try_into().unwrap_or(i32::MAX)),
                         step.skill_name.clone(),
                         Some(step.step_id.to_string()),
                         Some(correlation_id),
@@ -1531,7 +1531,7 @@ impl AgenticEngine {
                     session_id,
                     "tool",
                     step_content,
-                    Some(step_tokens as i32),
+                    Some(step_tokens.try_into().unwrap_or(i32::MAX)),
                     step.skill_name.clone(),
                     Some(step.step_id.to_string()),
                     Some(correlation_id),
@@ -1590,7 +1590,7 @@ impl AgenticEngine {
                 session_id,
                 "assistant",
                 plan_summary,
-                Some(summary_tokens as i32),
+                Some(summary_tokens.try_into().unwrap_or(i32::MAX)),
                 None,
                 None,
                 Some(correlation_id),

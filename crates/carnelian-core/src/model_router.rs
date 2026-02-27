@@ -266,12 +266,14 @@ impl ModelRouter {
     }
 
     /// Attach an optional event stream for publishing routing events.
+    #[must_use]
     pub fn with_event_stream(mut self, event_stream: Arc<EventStream>) -> Self {
         self.event_stream = Some(event_stream);
         self
     }
 
     /// Attach a safe mode guard for blocking remote model calls.
+    #[must_use]
     pub fn with_safe_mode_guard(mut self, guard: Arc<crate::safe_mode::SafeModeGuard>) -> Self {
         self.safe_mode_guard = Some(guard);
         self
@@ -281,6 +283,7 @@ impl ModelRouter {
     ///
     /// This should be called after the router is created to add remote providers
     /// (OpenAI, Anthropic, Fireworks) when API keys are available.
+    #[must_use]
     pub fn with_remote_providers(mut self, config: &crate::config::Config) -> Self {
         // Add OpenAI if API key is configured
         if let Some(api_key) = config.openai_api_key() {
@@ -310,7 +313,7 @@ impl ModelRouter {
     ///
     /// Deprecated: Native providers don't use a gateway.
     #[must_use]
-    pub fn gateway_url(&self) -> &str {
+    pub fn gateway_url(&self) -> &'static str {
         ""
     }
 
@@ -651,7 +654,7 @@ impl ModelRouter {
             .map_err(|e| Error::ModelRouting(format!("Provider request failed: {e}")))?;
 
         // Ensure provider field is set correctly
-        response.provider = provider_config.name.clone();
+        response.provider.clone_from(&provider_config.name);
 
         // Persist usage
         let estimated_cost = Self::estimate_cost(&response.provider, &response.usage);
@@ -853,7 +856,7 @@ impl ModelRouter {
             .chain(futures_util::stream::once(async move {
                 // Stream complete - persist estimated usage
                 // Estimate tokens based on characters (rough approximation)
-                let est_prompt = (prompt_chars as i32 + 3) / 4;
+                let est_prompt = i32::try_from((prompt_chars + 3) / 4).unwrap_or(i32::MAX);
                 // We don't have the actual content length here,
                 // so we skip usage persistence for streaming responses
                 // In a production system, we'd track this properly

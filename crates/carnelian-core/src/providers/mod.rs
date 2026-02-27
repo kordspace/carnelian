@@ -24,7 +24,7 @@ pub trait Provider: Send + Sync {
     fn name(&self) -> &str;
 
     /// Provider type ("local" or "remote")
-    fn provider_type(&self) -> &str;
+    fn provider_type(&self) -> &'static str;
 
     /// Check if provider is available
     async fn health_check(&self) -> Result<bool>;

@@ -97,7 +97,7 @@ impl Provider for OllamaProvider {
         &self.name
     }
 
-    fn provider_type(&self) -> &str {
+    fn provider_type(&self) -> &'static str {
         "local"
     }
 

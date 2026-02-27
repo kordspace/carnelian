@@ -1,8 +1,8 @@
 # Linguist overrides for better language detection
 # See: https://github.com/github/linguist/blob/master/docs/overrides.md
 
-# Mark Makefile as documentation (not counted in language stats)
-Makefile linguist-documentation
+# Mark Makefile as vendored (not counted in language stats)
+Makefile linguist-vendored
 
 # Mark all shell scripts as documentation
 *.sh linguist-documentation

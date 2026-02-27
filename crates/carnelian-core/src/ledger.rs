@@ -258,20 +258,14 @@ impl Ledger {
 
         // Sign privileged actions with the owner's Ed25519 key
         let core_signature: Option<String> = if is_privileged_action(action_type) {
-            if let Some(signing_key) = owner_signing_key {
+            owner_signing_key.map(|signing_key| {
                 let sig = crate::crypto::sign_bytes(signing_key, event_hash.as_bytes());
                 tracing::info!(
                     action_type = %action_type,
                     "Privileged ledger event signed with owner key"
                 );
-                Some(sig)
-            } else {
-                tracing::debug!(
-                    action_type = %action_type,
-                    "Privileged action appended without signature (no owner key)"
-                );
-                None
-            }
+                sig
+            })
         } else {
             None
         };
@@ -691,7 +685,7 @@ impl Ledger {
 
         // Compute merkle root using blake3 pairwise hashing
         let root_hash = Self::compute_merkle_root(&hashes);
-        let root_hash_hex = hex::encode(&root_hash);
+        let root_hash_hex = hex::encode(root_hash);
 
         // Prepare metadata
         let metadata = serde_json::json!({
@@ -712,7 +706,7 @@ impl Ledger {
             to_event_id,
             &anchor_id,
             &root_hash_hex,
-            rows.len() as i64,
+            i64::try_from(rows.len()).unwrap_or(i64::MAX),
             owner_signing_key,
         )
         .await?;

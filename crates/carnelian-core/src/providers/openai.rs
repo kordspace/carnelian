@@ -155,7 +155,7 @@ impl Provider for OpenAiProvider {
         &self.name
     }
 
-    fn provider_type(&self) -> &str {
+    fn provider_type(&self) -> &'static str {
         "remote"
     }
 
