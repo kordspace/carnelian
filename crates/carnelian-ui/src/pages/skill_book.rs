@@ -106,7 +106,7 @@ pub fn SkillBook() -> Element {
                         Ok(_) => {
                             let toast = ToastMessage {
                                 id: uuid::Uuid::now_v7().to_string(),
-                                message: format!("✅ {} activated successfully", skill_id),
+                                message: format!("✅ {skill_id} activated successfully"),
                                 toast_type: ToastType::Success,
                                 duration_secs: 3,
                             };
@@ -117,7 +117,7 @@ pub fn SkillBook() -> Element {
                         Err(e) => {
                             let toast = ToastMessage {
                                 id: uuid::Uuid::now_v7().to_string(),
-                                message: format!("❌ Failed to activate: {}", e),
+                                message: format!("❌ Failed to activate: {e}"),
                                 toast_type: ToastType::Error,
                                 duration_secs: 5,
                             };
@@ -139,7 +139,7 @@ pub fn SkillBook() -> Element {
                     Ok(_) => {
                         let toast = ToastMessage {
                             id: uuid::Uuid::now_v7().to_string(),
-                            message: format!("✅ {} deactivated", skill_id),
+                            message: format!("✅ {skill_id} deactivated"),
                             toast_type: ToastType::Success,
                             duration_secs: 3,
                         };
@@ -149,7 +149,7 @@ pub fn SkillBook() -> Element {
                     Err(e) => {
                         let toast = ToastMessage {
                             id: uuid::Uuid::now_v7().to_string(),
-                            message: format!("❌ Failed to deactivate: {}", e),
+                            message: format!("❌ Failed to deactivate: {e}"),
                             toast_type: ToastType::Error,
                             duration_secs: 5,
                         };
@@ -218,7 +218,7 @@ pub fn SkillBook() -> Element {
                                     button {
                                         class: "btn-secondary btn-sm",
                                         onclick: {
-                                            let id = skill.id.clone();
+                                            let id = skill.id;
                                             let deactivate = deactivate_skill.clone();
                                             move |_| deactivate(id.clone())
                                         },
@@ -231,7 +231,7 @@ pub fn SkillBook() -> Element {
                                     button {
                                         class: "btn-primary btn-sm",
                                         onclick: {
-                                            let s = skill.clone();
+                                            let s = skill;
                                             let mut open = open_activation.clone();
                                             move |_| open(s.clone())
                                         },
@@ -267,7 +267,7 @@ pub fn SkillBook() -> Element {
                                                     let mut vals = config_values.clone();
                                                     move |e: Event<FormData>| {
                                                         let mut v = vals.read().clone();
-                                                        v.insert(key.clone(), e.value().clone());
+                                                        v.insert(key.clone(), e.value());
                                                         vals.set(v);
                                                     }
                                                 },

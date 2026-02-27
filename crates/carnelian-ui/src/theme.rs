@@ -4,18 +4,18 @@
 //! for a translucent dark theme with blur effects.
 
 /// UI theme selection used as Dioxus context.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Theme {
     pub dark: bool,
 }
 
 impl Theme {
-    pub fn new_dark() -> Self {
+    pub const fn new_dark() -> Self {
         Self { dark: true }
     }
 
     /// Return the CSS class for this theme.
-    pub fn to_class(&self) -> &'static str {
+    pub const fn to_class(&self) -> &'static str {
         if self.dark {
             "theme-dark"
         } else {

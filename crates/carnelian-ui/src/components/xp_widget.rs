@@ -68,12 +68,12 @@ pub fn XpWidget() -> Element {
                             _ => {}
                         }
                     }
-                    let total = (task_count + ledger_count + skill_count + quality_count).max(1) as f64;
+                    let total = f64::from((task_count + ledger_count + skill_count + quality_count).max(1));
                     let slices: Vec<(&str, f64, &str)> = vec![
-                        ("Tasks", task_count as f64 / total, "#4A90E2"),
-                        ("Ledger", ledger_count as f64 / total, "#9B59B6"),
-                        ("Skills", skill_count as f64 / total, "#2ECC71"),
-                        ("Quality", quality_count as f64 / total, "#F39C12"),
+                        ("Tasks", f64::from(task_count) / total, "#4A90E2"),
+                        ("Ledger", f64::from(ledger_count) / total, "#9B59B6"),
+                        ("Skills", f64::from(skill_count) / total, "#2ECC71"),
+                        ("Quality", f64::from(quality_count) / total, "#F39C12"),
                     ];
 
                     // Build SVG pie chart paths
@@ -87,14 +87,14 @@ pub fn XpWidget() -> Element {
                             let r = 40.0_f64;
                             let cx = 50.0_f64;
                             let cy = 50.0_f64;
-                            let x1 = cx + r * (start_angle * std::f64::consts::PI / 180.0).cos();
-                            let y1 = cy + r * (start_angle * std::f64::consts::PI / 180.0).sin();
-                            let x2 = cx + r * (end_angle * std::f64::consts::PI / 180.0).cos();
-                            let y2 = cy + r * (end_angle * std::f64::consts::PI / 180.0).sin();
+                            let x1 = cx + r * start_angle.to_radians().cos();
+                            let y1 = cy + r * start_angle.to_radians().sin();
+                            let x2 = cx + r * end_angle.to_radians().cos();
+                            let y2 = cy + r * end_angle.to_radians().sin();
                             let d = format!(
                                 "M {cx} {cy} L {x1:.2} {y1:.2} A {r} {r} 0 {large_arc} 1 {x2:.2} {y2:.2} Z"
                             );
-                            paths.push((d, color.to_string(), label.to_string()));
+                            paths.push((d, (*color).to_string(), (*label).to_string()));
                             start_angle = end_angle;
                         }
                     }
@@ -119,7 +119,7 @@ pub fn XpWidget() -> Element {
                                 for (label, frac, color) in &slices {
                                     {
                                         let pct_str = format!("{}: {:.0}%", label, frac * 100.0);
-                                        let dot_style = format!("width: 8px; height: 8px; border-radius: 50%; background: {}; display: inline-block;", color);
+                                        let dot_style = format!("width: 8px; height: 8px; border-radius: 50%; background: {color}; display: inline-block;");
                                         rsx! {
                                             div { style: "display: flex; align-items: center; gap: 6px; font-size: 11px;",
                                                 span { style: "{dot_style}" }

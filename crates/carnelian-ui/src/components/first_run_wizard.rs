@@ -142,7 +142,7 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
                     Err(e) => {
                         let toast = ToastMessage {
                             id: uuid::Uuid::now_v7().to_string(),
-                            message: format!("Failed to complete setup: {}", e),
+                            message: format!("Failed to complete setup: {e}"),
                             toast_type: ToastType::Error,
                             duration_secs: 5,
                         };
@@ -242,12 +242,10 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
 fn Step1Prerequisites(health: Option<DetailedHealthResponse>) -> Element {
     let docker_ok = health
         .as_ref()
-        .map(|h| h.database == "connected")
-        .unwrap_or(false);
+        .is_some_and(|h| h.database == "connected");
     let db_ok = health
         .as_ref()
-        .map(|h| h.database == "connected")
-        .unwrap_or(false);
+        .is_some_and(|h| h.database == "connected");
 
     rsx! {
         div { class: "wizard-step",
@@ -376,7 +374,7 @@ fn Step4Workspace(workspace_path: Signal<String>, model_provider: Signal<String>
                 input {
                     r#type: "text",
                     value: "{workspace_path}",
-                    oninput: move |e| workspace_path.set(e.value().clone()),
+                    oninput: move |e| workspace_path.set(e.value()),
                 }
                 p { class: "help", "Directory to scan for skills and projects" }
             }
@@ -385,7 +383,7 @@ fn Step4Workspace(workspace_path: Signal<String>, model_provider: Signal<String>
                 label { "Primary Model Provider" }
                 select {
                     value: "{model_provider}",
-                    onchange: move |e| model_provider.set(e.value().clone()),
+                    onchange: move |e| model_provider.set(e.value()),
                     option { value: "ollama", "Ollama (local)" }
                     option { value: "openai", "OpenAI" }
                     option { value: "anthropic", "Anthropic" }

@@ -15,6 +15,14 @@
 //! the event loop is running.
 
 #![allow(dead_code)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_lossless)]
+#![allow(clippy::suboptimal_flops)]
+#![allow(clippy::unnecessary_min_or_max)]
+#![allow(clippy::no_effect_underscore_binding)]
 
 use std::sync::OnceLock;
 

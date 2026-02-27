@@ -639,48 +639,45 @@ fn ChannelWizardModal(on_close: EventHandler, on_created: EventHandler) -> Eleme
                             onclick: move |_| {
                                 error_msg.set(None);
                                 // Validate current step
-                                match step {
-                                    2 => {
-                                        if channel_user_id.read().trim().is_empty() {
-                                            error_msg.set(Some("Channel User ID is required.".to_string()));
-                                            return;
+                                if step == 2 {
+                                    if channel_user_id.read().trim().is_empty() {
+                                        error_msg.set(Some("Channel User ID is required.".to_string()));
+                                        return;
+                                    }
+                                    // Channel-type-specific validation
+                                    match channel_type.read().as_str() {
+                                        "whatsapp" => {
+                                            if whatsapp_phone_number_id.read().trim().is_empty() {
+                                                error_msg.set(Some("Phone Number ID is required for WhatsApp.".to_string()));
+                                                return;
+                                            }
+                                            if bot_token.read().trim().is_empty() {
+                                                error_msg.set(Some("Access Token is required for WhatsApp.".to_string()));
+                                                return;
+                                            }
+                                            if whatsapp_verify_token.read().trim().is_empty() {
+                                                error_msg.set(Some("Verify Token is required for WhatsApp.".to_string()));
+                                                return;
+                                            }
                                         }
-                                        // Channel-type-specific validation
-                                        match channel_type.read().as_str() {
-                                            "whatsapp" => {
-                                                if whatsapp_phone_number_id.read().trim().is_empty() {
-                                                    error_msg.set(Some("Phone Number ID is required for WhatsApp.".to_string()));
-                                                    return;
-                                                }
-                                                if bot_token.read().trim().is_empty() {
-                                                    error_msg.set(Some("Access Token is required for WhatsApp.".to_string()));
-                                                    return;
-                                                }
-                                                if whatsapp_verify_token.read().trim().is_empty() {
-                                                    error_msg.set(Some("Verify Token is required for WhatsApp.".to_string()));
-                                                    return;
-                                                }
+                                        "slack" => {
+                                            if bot_token.read().trim().is_empty() {
+                                                error_msg.set(Some("Bot Token is required for Slack.".to_string()));
+                                                return;
                                             }
-                                            "slack" => {
-                                                if bot_token.read().trim().is_empty() {
-                                                    error_msg.set(Some("Bot Token is required for Slack.".to_string()));
-                                                    return;
-                                                }
-                                                if slack_signing_secret.read().trim().is_empty() {
-                                                    error_msg.set(Some("Signing Secret is required for Slack.".to_string()));
-                                                    return;
-                                                }
+                                            if slack_signing_secret.read().trim().is_empty() {
+                                                error_msg.set(Some("Signing Secret is required for Slack.".to_string()));
+                                                return;
                                             }
-                                            _ => {
-                                                // telegram / discord
-                                                if bot_token.read().trim().is_empty() {
-                                                    error_msg.set(Some("Bot Token is required.".to_string()));
-                                                    return;
-                                                }
+                                        }
+                                        _ => {
+                                            // telegram / discord
+                                            if bot_token.read().trim().is_empty() {
+                                                error_msg.set(Some("Bot Token is required.".to_string()));
+                                                return;
                                             }
                                         }
                                     }
-                                    _ => {}
                                 }
                                 current_step += 1;
                             },
@@ -829,7 +826,7 @@ fn wizard_trust_option(
         "border: 1px solid rgba(255,255,255,0.1);".to_string()
     };
     let bg = if is_selected {
-        format!("background: rgba(255,255,255,0.08);")
+        "background: rgba(255,255,255,0.08);".to_string()
     } else {
         "background: rgba(255,255,255,0.03);".to_string()
     };

@@ -863,16 +863,16 @@ pub async fn list_ledger_events(
 ) -> Result<ListLedgerEventsResponse, String> {
     let mut url = format!("{API_BASE_URL}/v1/ledger/events?limit={limit}&offset={offset}");
     if let Some(at) = action_type {
-        url.push_str(&format!("&action_type={}", at));
+        url.push_str(&format!("&action_type={at}"));
     }
     if let Some(aid) = actor_id {
-        url.push_str(&format!("&actor_id={}", aid));
+        url.push_str(&format!("&actor_id={aid}"));
     }
     if let Some(from) = from_ts {
-        url.push_str(&format!("&from_ts={}", from));
+        url.push_str(&format!("&from_ts={from}"));
     }
     if let Some(to) = to_ts {
-        url.push_str(&format!("&to_ts={}", to));
+        url.push_str(&format!("&to_ts={to}"));
     }
     client()
         .get(url)
@@ -990,13 +990,13 @@ pub async fn elixirs_list(filters: ListElixirsQuery) -> Result<ListElixirsRespon
         filters.page, filters.page_size
     );
     if let Some(elixir_type) = filters.elixir_type {
-        url.push_str(&format!("&elixir_type={}", elixir_type));
+        url.push_str(&format!("&elixir_type={elixir_type}"));
     }
     if let Some(skill_id) = filters.skill_id {
-        url.push_str(&format!("&skill_id={}", skill_id));
+        url.push_str(&format!("&skill_id={skill_id}"));
     }
     if let Some(active) = filters.active {
-        url.push_str(&format!("&active={}", active));
+        url.push_str(&format!("&active={active}"));
     }
     client()
         .get(url)
@@ -1054,8 +1054,7 @@ pub async fn elixirs_drafts_list() -> Result<ListElixirDraftsResponse, String> {
 pub async fn elixirs_draft_approve(draft_id: Uuid) -> Result<ApproveDraftResponse, String> {
     client()
         .post(format!(
-            "{API_BASE_URL}/v1/elixirs/drafts/{}/approve",
-            draft_id
+            "{API_BASE_URL}/v1/elixirs/drafts/{draft_id}/approve"
         ))
         .json(&serde_json::json!({}))
         .send()
@@ -1070,8 +1069,7 @@ pub async fn elixirs_draft_approve(draft_id: Uuid) -> Result<ApproveDraftRespons
 pub async fn elixirs_draft_reject(draft_id: Uuid) -> Result<RejectDraftResponse, String> {
     client()
         .post(format!(
-            "{API_BASE_URL}/v1/elixirs/drafts/{}/reject",
-            draft_id
+            "{API_BASE_URL}/v1/elixirs/drafts/{draft_id}/reject"
         ))
         .json(&serde_json::json!({}))
         .send()

@@ -73,7 +73,7 @@ async fn main() {
 ///
 /// Initializes the `EventStreamStore` context provider, starts
 /// background WebSocket and status-polling tasks, checks setup
-/// status, and renders the router (or FirstRunWizard if setup
+/// status, and renders the router (or `FirstRunWizard` if setup
 /// is not complete).
 fn app() -> Element {
     let store = use_context_provider(store::EventStreamStore::new);

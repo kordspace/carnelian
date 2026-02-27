@@ -8,7 +8,7 @@ use crate::store::{EventStreamStore, ToastKind};
 // ── Generic toast types used by page components ──────────────────────────────
 
 /// Severity level for a generic page-level toast notification.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToastType {
     Success,
     Error,

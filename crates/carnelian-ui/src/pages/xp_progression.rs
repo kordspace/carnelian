@@ -64,7 +64,7 @@ fn LevelHistory(identity_id: Option<uuid::Uuid>, refresh: Signal<u64>) -> Elemen
                 {
                     let points = &resp.events;
                     if !points.is_empty() {
-                        let max_cumulative = points.iter().map(|e| e.xp_amount as i64).sum::<i64>().max(1);
+                        let max_cumulative = points.iter().map(|e| i64::from(e.xp_amount)).sum::<i64>().max(1);
                         let count = points.len();
                         let w = 600.0_f64;
                         let h = 120.0_f64;
@@ -73,9 +73,9 @@ fn LevelHistory(identity_id: Option<uuid::Uuid>, refresh: Signal<u64>) -> Elemen
                         let mut cumulative = 0i64;
                         let mut path_points = Vec::new();
                         for (i, evt) in points.iter().rev().enumerate() {
-                            cumulative += evt.xp_amount as i64;
-                            let x = padding + (i as f64 / (count.max(2) - 1).max(1) as f64) * (w - 2.0 * padding);
-                            let y = h - padding - (cumulative as f64 / max_cumulative as f64) * (h - 2.0 * padding);
+                            cumulative += i64::from(evt.xp_amount);
+                            let x = padding + (i as f64 / (count.max(2) - 1).max(1) as f64) * 2.0f64.mul_add(-padding, w);
+                            let y = h - padding - (cumulative as f64 / max_cumulative as f64) * 2.0f64.mul_add(-padding, h);
                             path_points.push(format!("{x:.1},{y:.1}"));
                         }
                         let polyline_points = path_points.join(" ");

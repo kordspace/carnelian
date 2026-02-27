@@ -4,7 +4,7 @@
 //! - Paginated table of ledger events
 //! - Filter by action type, actor, date range
 //! - Chain integrity verification button
-//! - Auto-refresh on LedgerEvent WebSocket events
+//! - Auto-refresh on `LedgerEvent` WebSocket events
 
 use dioxus::prelude::*;
 
@@ -103,7 +103,7 @@ pub fn Ledger() -> Element {
     // Auto-refresh on ledger events
     use_effect({
         let mut last_check = use_signal(|| 0u64);
-        let event_store = event_store.clone();
+        let event_store = event_store;
         let mut load_events = load_events.clone();
 
         move || {
@@ -144,7 +144,7 @@ pub fn Ledger() -> Element {
                     Err(e) => {
                         let toast = ToastMessage {
                             id: uuid::Uuid::now_v7().to_string(),
-                            message: format!("Failed to verify ledger: {}", e),
+                            message: format!("Failed to verify ledger: {e}"),
                             toast_type: ToastType::Error,
                             duration_secs: 5,
                         };
@@ -218,7 +218,7 @@ pub fn Ledger() -> Element {
                         r#type: "text",
                         placeholder: "e.g., TaskCreated",
                         value: "{action_type_filter}",
-                        oninput: move |e| action_type_filter.set(e.value().clone()),
+                        oninput: move |e| action_type_filter.set(e.value()),
                     }
                 }
                 div { class: "filter-group",
@@ -227,7 +227,7 @@ pub fn Ledger() -> Element {
                         r#type: "text",
                         placeholder: "Actor UUID",
                         value: "{actor_filter}",
-                        oninput: move |e| actor_filter.set(e.value().clone()),
+                        oninput: move |e| actor_filter.set(e.value()),
                     }
                 }
                 div { class: "filter-group",
@@ -235,7 +235,7 @@ pub fn Ledger() -> Element {
                     input {
                         r#type: "datetime-local",
                         value: "{from_ts_filter}",
-                        oninput: move |e| from_ts_filter.set(e.value().clone()),
+                        oninput: move |e| from_ts_filter.set(e.value()),
                     }
                 }
                 div { class: "filter-group",
@@ -243,7 +243,7 @@ pub fn Ledger() -> Element {
                     input {
                         r#type: "datetime-local",
                         value: "{to_ts_filter}",
-                        oninput: move |e| to_ts_filter.set(e.value().clone()),
+                        oninput: move |e| to_ts_filter.set(e.value()),
                     }
                 }
                 button {

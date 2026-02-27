@@ -258,7 +258,7 @@ impl EventStreamStore {
                         let amount = envelope
                             .payload
                             .get("xp_amount")
-                            .and_then(|v| v.as_i64())
+                            .and_then(serde_json::Value::as_i64)
                             .unwrap_or(0) as i32;
                         let source = envelope
                             .payload
@@ -281,7 +281,7 @@ impl EventStreamStore {
                         let new_level = envelope
                             .payload
                             .get("new_level")
-                            .and_then(|v| v.as_i64())
+                            .and_then(serde_json::Value::as_i64)
                             .unwrap_or(0) as i32;
                         let mut toasts = toast_notifications.write();
                         let next_id = toasts.len() as u64;
@@ -353,14 +353,14 @@ impl EventStreamStore {
                         if let Some(total) = envelope
                             .payload
                             .get("total_channels")
-                            .and_then(|v| v.as_u64())
+                            .and_then(serde_json::Value::as_u64)
                         {
                             cs.total_channels = total as usize;
                         }
                         if let Some(running) = envelope
                             .payload
                             .get("running_channels")
-                            .and_then(|v| v.as_u64())
+                            .and_then(serde_json::Value::as_u64)
                         {
                             cs.running_channels = running as usize;
                         }

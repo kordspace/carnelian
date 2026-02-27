@@ -1,0 +1,2509 @@
+﻿cargo :     Checking carnelian-ui v0.1.0 (C:\Users\marco\Documents\Code\Agents\CARNELIAN\crates\carnelian-ui)
+At line:1 char:1
++ cargo clippy --package carnelian-ui -- -D warnings 2>&1 | Out-File -F ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Checking ca...s\carnelian-ui):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+error: variables can be used directly in the `format!` string
+    --> crates\carnelian-ui\src\api.rs:1056:15
+     |
+1056 |           .post(format!(
+     |  _______________^
+1057 | |             "{API_BASE_URL}/v1/elixirs/drafts/{}/approve",
+1058 | |             draft_id
+1059 | |         ))
+     | |_________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+     = note: `-D clippy::uninlined-format-args` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::uninlined_format_args)]`
+
+error: variables can be used directly in the `format!` string
+    --> crates\carnelian-ui\src\api.rs:1072:15
+     |
+1072 |           .post(format!(
+     |  _______________^
+1073 | |             "{API_BASE_URL}/v1/elixirs/drafts/{}/reject",
+1074 | |             draft_id
+1075 | |         ))
+     | |_________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+
+error: using `clone` on type `Signal<Option<DetailedHealthResponse>>` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\components\first_run_wizard.rs:57:33
+   |
+57 |         let mut health_status = health_status.clone();
+   |                                 ^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `health_status`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+   = note: `-D clippy::clone-on-copy` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::clone_on_copy)]`
+
+error: using `clone` on type `Signal<Option<IdentityResponse>>` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\components\first_run_wizard.rs:58:28
+   |
+58 |         let mut identity = identity.clone();
+   |                            ^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `identity`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<u8>` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\components\first_run_wizard.rs:79:24
+   |
+79 |         let mut step = step.clone();
+   |                        ^^^^^^^^^^^^ help: try removing the `clone` call: `step`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<u8>` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\components\first_run_wizard.rs:89:24
+   |
+89 |         let mut step = step.clone();
+   |                        ^^^^^^^^^^^^ help: try removing the `clone` call: `step`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Callback` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\components\first_run_wizard.rs:99:27
+   |
+99 |         let on_complete = props.on_complete.clone();
+   |                           ^^^^^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `props.on_complete`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<Vec<ToastMessage>>` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\components\first_run_wizard.rs:100:26
+    |
+100 |         let mut toasts = toasts.clone();
+    |                          ^^^^^^^^^^^^^^ help: try removing the `clone` call: `toasts`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<Vec<(&str, bool)>>` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\components\first_run_wizard.rs:101:31
+    |
+101 |         let selected_skills = selected_skills.clone();
+    |                               ^^^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `selected_skills`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: variables can be used directly in the `format!` string
+   --> crates\carnelian-ui\src\components\first_run_wizard.rs:145:38
+    |
+145 | ...                   message: format!("Failed to complete setup: {}", e),
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+help: change this to
+    |
+145 -                             message: format!("Failed to complete setup: {}", e),
+145 +                             message: format!("Failed to complete setup: {e}"),
+    |
+
+error: using `clone` on type `Signal<String>` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\components\first_run_wizard.rs:165:27
+    |
+165 |                 selected: selected_profile.clone(),
+    |                           ^^^^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `selected_profile`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<String>` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\components\first_run_wizard.rs:175:33
+    |
+175 |                 workspace_path: workspace_path.clone(),
+    |                                 ^^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `workspace_path`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<String>` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\components\first_run_wizard.rs:176:33
+    |
+176 |                 model_provider: model_provider.clone(),
+    |                                 ^^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `model_provider`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<Vec<(&str, bool)>>` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\components\first_run_wizard.rs:181:34
+    |
+181 |                 selected_skills: selected_skills.clone(),
+    |                                  ^^^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `selected_skills`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: called `map(<f>).unwrap_or(false)` on an `Option` value
+   --> crates\carnelian-ui\src\components\first_run_wizard.rs:243:21
+    |
+243 |       let docker_ok = health
+    |  _____________________^
+244 | |         .as_ref()
+245 | |         .map(|h| h.database == "connected")
+246 | |         .unwrap_or(false);
+    | |_________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#map_unwrap_or
+    = note: `-D clippy::map-unwrap-or` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::map_unwrap_or)]`
+help: use `is_some_and(<f>)` instead
+    |
+245 -         .map(|h| h.database == "connected")
+245 +         .is_some_and(|h| h.database == "connected");
+    |
+
+error: called `map(<f>).unwrap_or(false)` on an `Option` value
+   --> crates\carnelian-ui\src\components\first_run_wizard.rs:247:17
+    |
+247 |       let db_ok = health
+    |  _________________^
+248 | |         .as_ref()
+249 | |         .map(|h| h.database == "connected")
+250 | |         .unwrap_or(false);
+    | |_________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#map_unwrap_or
+help: use `is_some_and(<f>)` instead
+    |
+249 -         .map(|h| h.database == "connected")
+249 +         .is_some_and(|h| h.database == "connected");
+    |
+
+error: redundant clone
+   --> crates\carnelian-ui\src\components\first_run_wizard.rs:379:67
+    |
+379 |                     oninput: move |e| workspace_path.set(e.value().clone()),
+    |                                                                   ^^^^^^^^ help: remove this
+    |
+note: this value is dropped without further use
+   --> crates\carnelian-ui\src\components\first_run_wizard.rs:379:58
+    |
+379 |                     oninput: move |e| workspace_path.set(e.value().clone()),
+    |                                                          ^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone
+    = note: `-D clippy::redundant-clone` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::redundant_clone)]`
+
+error: redundant clone
+   --> crates\carnelian-ui\src\components\first_run_wizard.rs:388:68
+    |
+388 |                     onchange: move |e| model_provider.set(e.value().clone()),
+    |                                                                    ^^^^^^^^ help: remove this
+    |
+note: this value is dropped without further use
+   --> crates\carnelian-ui\src\components\first_run_wizard.rs:388:59
+    |
+388 |                     onchange: move |e| model_provider.set(e.value().clone()),
+    |                                                           ^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone
+
+error: redundant redefinition of a binding `skill_id`
+   --> crates\carnelian-ui\src\components\first_run_wizard.rs:427:33
+    |
+427 | ...                   let skill_id = skill_id;
+    |                       ^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+help: `skill_id` is initially defined here
+   --> crates\carnelian-ui\src\components\first_run_wizard.rs:419:22
+    |
+419 |                 for (skill_id, checked) in skills_snapshot {
+    |                      ^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_locals
+    = note: `-D clippy::redundant-locals` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::redundant_locals)]`
+
+error: binding to `_` prefixed variable with no side-effect
+  --> crates\carnelian-ui\src\components\system_tray.rs:45:9
+   |
+45 |     let _svg_bytes = include_bytes!("../../../../assets/logos/carnelian-icon.svg");
+   |         ^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#no_effect_underscore_binding
+   = note: `-D clippy::no-effect-underscore-binding` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::no_effect_underscore_binding)]`
+
+error: casting `u32` to `i32` may wrap around the value
+  --> crates\carnelian-ui\src\components\system_tray.rs:67:22
+   |
+67 |             let dx = x as i32 - cx as i32;
+   |                      ^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_possible_wrap
+   = note: `-D clippy::cast-possible-wrap` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::cast_possible_wrap)]`
+
+error: casting `u32` to `i32` may wrap around the value
+  --> crates\carnelian-ui\src\components\system_tray.rs:67:33
+   |
+67 |             let dx = x as i32 - cx as i32;
+   |                                 ^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_possible_wrap
+
+error: casting `u32` to `i32` may wrap around the value
+  --> crates\carnelian-ui\src\components\system_tray.rs:68:22
+   |
+68 |             let dy = y as i32 - cy as i32;
+   |                      ^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_possible_wrap
+
+error: casting `u32` to `i32` may wrap around the value
+  --> crates\carnelian-ui\src\components\system_tray.rs:68:33
+   |
+68 |             let dy = y as i32 - cy as i32;
+   |                                 ^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_possible_wrap
+
+error: casting `i32` to `f32` causes a loss of precision (`i32` is 32 bits wide, but `f32`'s mantissa is only 23 bits wide)
+  --> crates\carnelian-ui\src\components\system_tray.rs:69:24
+   |
+69 |             let dist = ((dx * dx + dy * dy) as f32).sqrt();
+   |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_precision_loss
+   = note: `-D clippy::cast-precision-loss` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::cast_precision_loss)]`
+
+error: casting `i32` to `f32` causes a loss of precision (`i32` is 32 bits wide, but `f32`'s mantissa is only 23 bits wide)
+  --> crates\carnelian-ui\src\components\system_tray.rs:72:25
+   |
+72 |             let angle = (dy as f32).atan2(dx as f32);
+   |                         ^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_precision_loss
+
+error: casting `i32` to `f32` causes a loss of precision (`i32` is 32 bits wide, but `f32`'s mantissa is only 23 bits wide)
+  --> crates\carnelian-ui\src\components\system_tray.rs:72:43
+   |
+72 |             let angle = (dy as f32).atan2(dx as f32);
+   |                                           ^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_precision_loss
+
+error: casting `f32` to `i32` may truncate the value
+  --> crates\carnelian-ui\src\components\system_tray.rs:74:17
+   |
+74 |                 ((angle + std::f32::consts::PI) / (std::f32::consts::PI / 4.0)) as i32 % 8;
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: if this is intentional allow the lint with `#[allow(clippy::cast_possible_truncation)]` ...
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_possible_truncation
+   = note: `-D clippy::cast-possible-truncation` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::cast_possible_truncation)]`
+
+error: casting `i32` to `f32` causes a loss of precision (`i32` is 32 bits wide, but `f32`'s mantissa is only 23 bits wide)
+  --> crates\carnelian-ui\src\components\system_tray.rs:75:35
+   |
+75 |             let facet_variation = (segment % 2) as f32 * 0.15;
+   |                                   ^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_precision_loss
+
+error: multiply and add expressions can be calculated more efficiently and accurately
+  --> crates\carnelian-ui\src\components\system_tray.rs:82:32
+   |
+82 |                 let gradient = 1.0 - (dist / radius) * 0.4;
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `(dist / radius).mul_add(-0.4, 1.0)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#suboptimal_flops
+   = note: `-D clippy::suboptimal-flops` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::suboptimal_flops)]`
+
+error: casting `f32` to `u8` may truncate the value
+  --> crates\carnelian-ui\src\components\system_tray.rs:83:26
+   |
+83 |                 let br = (r as f32 * gradient) as u8;
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: if this is intentional allow the lint with `#[allow(clippy::cast_possible_truncation)]` ...
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_possible_truncation
+
+error: casting `f32` to `u8` may lose the sign of the value
+  --> crates\carnelian-ui\src\components\system_tray.rs:83:26
+   |
+83 |                 let br = (r as f32 * gradient) as u8;
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_sign_loss
+   = note: `-D clippy::cast-sign-loss` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::cast_sign_loss)]`
+
+error: casts from `u8` to `f32` can be expressed infallibly using `From`
+  --> crates\carnelian-ui\src\components\system_tray.rs:83:27
+   |
+83 |                 let br = (r as f32 * gradient) as u8;
+   |                           ^^^^^^^^
+   |
+   = help: an `as` cast can become silently lossy if the types change in the future
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_lossless
+   = note: `-D clippy::cast-lossless` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::cast_lossless)]`
+help: use `f32::from` instead
+   |
+83 |                 let br = (f32::from(r) * gradient) as u8;
+   |                           ~~~~~~~~~~~~
+
+error: casting `f32` to `u8` may truncate the value
+  --> crates\carnelian-ui\src\components\system_tray.rs:84:26
+   |
+84 |                 let bg = (g as f32 * gradient) as u8;
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: if this is intentional allow the lint with `#[allow(clippy::cast_possible_truncation)]` ...
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_possible_truncation
+
+error: casting `f32` to `u8` may lose the sign of the value
+  --> crates\carnelian-ui\src\components\system_tray.rs:84:26
+   |
+84 |                 let bg = (g as f32 * gradient) as u8;
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_sign_loss
+
+error: casts from `u8` to `f32` can be expressed infallibly using `From`
+  --> crates\carnelian-ui\src\components\system_tray.rs:84:27
+   |
+84 |                 let bg = (g as f32 * gradient) as u8;
+   |                           ^^^^^^^^
+   |
+   = help: an `as` cast can become silently lossy if the types change in the future
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_lossless
+help: use `f32::from` instead
+   |
+84 |                 let bg = (f32::from(g) * gradient) as u8;
+   |                           ~~~~~~~~~~~~
+
+error: casting `f32` to `u8` may truncate the value
+  --> crates\carnelian-ui\src\components\system_tray.rs:85:26
+   |
+85 |                 let bb = (b as f32 * gradient) as u8;
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: if this is intentional allow the lint with `#[allow(clippy::cast_possible_truncation)]` ...
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_possible_truncation
+
+error: casting `f32` to `u8` may lose the sign of the value
+  --> crates\carnelian-ui\src\components\system_tray.rs:85:26
+   |
+85 |                 let bb = (b as f32 * gradient) as u8;
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_sign_loss
+
+error: casts from `u8` to `f32` can be expressed infallibly using `From`
+  --> crates\carnelian-ui\src\components\system_tray.rs:85:27
+   |
+85 |                 let bb = (b as f32 * gradient) as u8;
+   |                           ^^^^^^^^
+   |
+   = help: an `as` cast can become silently lossy if the types change in the future
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_lossless
+help: use `f32::from` instead
+   |
+85 |                 let bb = (f32::from(b) * gradient) as u8;
+   |                           ~~~~~~~~~~~~
+
+error: `(br.saturating_add(highlight as u8))` is never greater than `255` and has therefore no effect
+  --> crates\carnelian-ui\src\components\system_tray.rs:91:25
+   |
+91 |                         (br.saturating_add(highlight as u8)).min(255),
+   |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try: `(br.saturating_add(highlight as u8))`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#unnecessary_min_or_max
+   = note: `-D clippy::unnecessary-min-or-max` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::unnecessary_min_or_max)]`
+
+error: casting `f32` to `u8` may truncate the value
+  --> crates\carnelian-ui\src\components\system_tray.rs:91:44
+   |
+91 |                         (br.saturating_add(highlight as u8)).min(255),
+   |                                            ^^^^^^^^^^^^^^^
+   |
+   = help: if this is intentional allow the lint with `#[allow(clippy::cast_possible_truncation)]` ...
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_possible_truncation
+
+error: casting `f32` to `u8` may lose the sign of the value
+  --> crates\carnelian-ui\src\components\system_tray.rs:91:44
+   |
+91 |                         (br.saturating_add(highlight as u8)).min(255),
+   |                                            ^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_sign_loss
+
+error: `(bg.saturating_add(highlight as u8 * 2 / 3))` is never greater than `255` and has therefore no effect
+  --> crates\carnelian-ui\src\components\system_tray.rs:92:25
+   |
+92 |                         (bg.saturating_add(highlight as u8 * 2 / 3)).min(255),
+   |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try: `(bg.saturating_add(highlight as u8 * 2 / 3))`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#unnecessary_min_or_max
+
+error: casting `f32` to `u8` may truncate the value
+  --> crates\carnelian-ui\src\components\system_tray.rs:92:44
+   |
+92 |                         (bg.saturating_add(highlight as u8 * 2 / 3)).min(255),
+   |                                            ^^^^^^^^^^^^^^^
+   |
+   = help: if this is intentional allow the lint with `#[allow(clippy::cast_possible_truncation)]` ...
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_possible_truncation
+
+error: casting `f32` to `u8` may lose the sign of the value
+  --> crates\carnelian-ui\src\components\system_tray.rs:92:44
+   |
+92 |                         (bg.saturating_add(highlight as u8 * 2 / 3)).min(255),
+   |                                            ^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_sign_loss
+
+error: `(bb.saturating_add(highlight as u8 / 3))` is never greater than `255` and has therefore no effect
+  --> crates\carnelian-ui\src\components\system_tray.rs:93:25
+   |
+93 |                         (bb.saturating_add(highlight as u8 / 3)).min(255),
+   |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try: `(bb.saturating_add(highlight as u8 / 3))`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#unnecessary_min_or_max
+
+error: casting `f32` to `u8` may truncate the value
+  --> crates\carnelian-ui\src\components\system_tray.rs:93:44
+   |
+93 |                         (bb.saturating_add(highlight as u8 / 3)).min(255),
+   |                                            ^^^^^^^^^^^^^^^
+   |
+   = help: if this is intentional allow the lint with `#[allow(clippy::cast_possible_truncation)]` ...
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_possible_truncation
+
+error: casting `f32` to `u8` may lose the sign of the value
+  --> crates\carnelian-ui\src\components\system_tray.rs:93:44
+   |
+93 |                         (bb.saturating_add(highlight as u8 / 3)).min(255),
+   |                                            ^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_sign_loss
+
+error: you are deriving `PartialEq` and can implement `Eq`
+  --> crates\carnelian-ui\src\components\toast.rs:11:24
+   |
+11 | #[derive(Debug, Clone, PartialEq)]
+   |                        ^^^^^^^^^ help: consider deriving `Eq` as well: `PartialEq, Eq`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#derive_partial_eq_without_eq
+   = note: `-D clippy::derive-partial-eq-without-eq` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::derive_partial_eq_without_eq)]`
+
+error: wildcard matches only a single variant and will also match any future added variants
+  --> crates\carnelian-ui\src\components\toast.rs:73:25
+   |
+73 |                         _ => "toast",
+   |                         ^ help: try: `ToastKind::XpGained{ .. }`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#match_wildcard_for_single_variants
+   = note: `-D clippy::match-wildcard-for-single-variants` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::match_wildcard_for_single_variants)]`
+
+error: item in documentation is missing backticks
+ --> crates\carnelian-ui\src\components\voice_settings.rs:1:42
+  |
+1 | //! Voice settings component ΓÇö configure ElevenLabs API key, select voice, test TTS.
+  |                                          ^^^^^^^^^^
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+  = note: `-D clippy::doc-markdown` implied by `-D warnings`
+  = help: to override `-D warnings` add `#[allow(clippy::doc_markdown)]`
+help: try
+  |
+1 | //! Voice settings component ΓÇö configure `ElevenLabs` API key, select voice, test TTS.
+  |                                          ~~~~~~~~~~~~
+
+error: use Option::map_or_else instead of an if let/else
+   --> crates\carnelian-ui\src\components\voice_settings.rs:95:17
+    |
+95  | /                 if let Some(ref msg) = msg_opt {
+96  | |                     let color = if msg.starts_with("Error") { "#E74C3C" } else { "#2ECC71" };
+97  | |                     let style = format!("font-size: 13px; margin-bottom: 16px; color: {color}");
+98  | |                     rsx! {
+...   |
+102 | |                     rsx! {}
+103 | |                 }
+    | |_________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#option_if_let_else
+    = note: `-D clippy::option-if-let-else` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::option_if_let_else)]`
+help: try
+    |
+95  ~                 msg_opt.as_ref().map_or_else(|| rsx! {}, |msg| {
+96  +                     let color = if msg.starts_with("Error") { "#E74C3C" } else { "#2ECC71" };
+97  +                     let style = format!("font-size: 13px; margin-bottom: 16px; color: {color}");
+98  +                     rsx! {
+99  +                         div { style: "{style}", "{msg}" }
+100 +                     }
+101 +                 })
+    |
+
+error: variables can be used directly in the `format!` string
+   --> crates\carnelian-ui\src\components\voice_settings.rs:130:42
+    |
+130 | ...                   let js = format!("(function(){{const a=new Audio('{}');a.play();}})()", data_url);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+help: change this to
+    |
+130 -                                 let js = format!("(function(){{const a=new Audio('{}');a.play();}})()", data_url);
+130 +                                 let js = format!("(function(){{const a=new Audio('{data_url}');a.play();}})()");
+    |
+
+error: use Option::map_or_else instead of an if let/else
+   --> crates\carnelian-ui\src\components\xp_widget.rs:57:17
+    |
+57  | /                 if let Some(resp) = events {
+58  | |                     let mut task_count = 0u32;
+59  | |                     let mut ledger_count = 0u32;
+60  | |                     let mut skill_count = 0u32;
+...   |
+140 | |                 }
+    | |_________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#option_if_let_else
+help: try
+    |
+57  ~                 events.map_or_else(|| rsx! {
+58  +                         div { class: "state-message", style: "padding: 12px;",
+59  +                             span { "Loading XP history..." }
+60  +                         }
+61  +                     }, |resp| {
+62  +                     let mut task_count = 0u32;
+63  +                     let mut ledger_count = 0u32;
+64  +                     let mut skill_count = 0u32;
+65  +                     let mut quality_count = 0u32;
+66  +                     for evt in &resp.events {
+67  +                         match evt.source.as_str() {
+68  +                             "task_completion" => task_count += 1,
+69  +                             "ledger_signing" => ledger_count += 1,
+70  +                             "skill_usage" => skill_count += 1,
+71  +                             "quality_bonus" => quality_count += 1,
+72  +                             _ => {}
+73  +                         }
+74  +                     }
+75  +                     let total = (task_count + ledger_count + skill_count + quality_count).max(1) as f64;
+76  +                     let slices: Vec<(&str, f64, &str)> = vec![
+77  +                         ("Tasks", task_count as f64 / total, "#4A90E2"),
+78  +                         ("Ledger", ledger_count as f64 / total, "#9B59B6"),
+79  +                         ("Skills", skill_count as f64 / total, "#2ECC71"),
+80  +                         ("Quality", quality_count as f64 / total, "#F39C12"),
+81  +                     ];
+82  + 
+83  +                     // Build SVG pie chart paths
+84  +                     let mut start_angle: f64 = 0.0;
+85  +                     let mut paths = Vec::new();
+86  +                     for (label, frac, color) in &slices {
+87  +                         if *frac > 0.0 {
+88  +                             let sweep = frac * 360.0;
+89  +                             let end_angle = start_angle + sweep;
+90  +                             let large_arc = if sweep > 180.0 { 1 } else { 0 };
+91  +                             let r = 40.0_f64;
+92  +                             let cx = 50.0_f64;
+93  +                             let cy = 50.0_f64;
+94  +                             let x1 = cx + r * (start_angle * std::f64::consts::PI / 180.0).cos();
+95  +                             let y1 = cy + r * (start_angle * std::f64::consts::PI / 180.0).sin();
+96  +                             let x2 = cx + r * (end_angle * std::f64::consts::PI / 180.0).cos();
+97  +                             let y2 = cy + r * (end_angle * std::f64::consts::PI / 180.0).sin();
+98  +                             let d = format!(
+99  +                                 "M {cx} {cy} L {x1:.2} {y1:.2} A {r} {r} 0 {large_arc} 1 {x2:.2} {y2:.2} Z"
+100 +                             );
+101 +                             paths.push((d, color.to_string(), label.to_string()));
+102 +                             start_angle = end_angle;
+103 +                         }
+104 +                     }
+105 + 
+106 +                     rsx! {
+107 +                         div { style: "display: flex; gap: 16px; align-items: center; margin-bottom: 16px;",
+108 +                             div { class: "xp-pie-chart",
+109 +                                 svg {
+110 +                                     width: "80",
+111 +                                     height: "80",
+112 +                                     view_box: "0 0 100 100",
+113 +                                     for (d, color, _label) in &paths {
+114 +                                         path {
+115 +                                             d: "{d}",
+116 +                                             fill: "{color}",
+117 +                                             opacity: "0.8",
+118 +                                         }
+119 +                                     }
+120 +                                 }
+121 +                             }
+122 +                             div { style: "display: flex; flex-direction: column; gap: 4px;",
+123 +                                 for (label, frac, color) in &slices {
+124 +                                     {
+125 +                                         let pct_str = format!("{}: {:.0}%", label, frac * 100.0);
+126 +                                         let dot_style = format!("width: 8px; height: 8px; border-radius: 50%; background: {}; display: inline-block;", color);
+127 +                                         rsx! {
+128 +                                             div { style: "display: flex; align-items: center; gap: 6px; font-size: 11px;",
+129 +                                                 span { style: "{dot_style}" }
+130 +                                                 span { style: "color: #A0A0A0;", "{pct_str}" }
+131 +                                             }
+132 +                                         }
+133 +                                     }
+134 +                                 }
+135 +                             }
+136 +                         }
+137 +                     }
+138 +                 })
+    |
+
+error: casts from `u32` to `f64` can be expressed infallibly using `From`
+  --> crates\carnelian-ui\src\components\xp_widget.rs:71:33
+   |
+71 |                     let total = (task_count + ledger_count + skill_count + quality_count).max(1) as f64;
+   |                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: an `as` cast can become silently lossy if the types change in the future
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_lossless
+help: use `f64::from` instead
+   |
+71 |                     let total = f64::from((task_count + ledger_count + skill_count + quality_count).max(1));
+   |                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+error: casts from `u32` to `f64` can be expressed infallibly using `From`
+  --> crates\carnelian-ui\src\components\xp_widget.rs:73:35
+   |
+73 |                         ("Tasks", task_count as f64 / total, "#4A90E2"),
+   |                                   ^^^^^^^^^^^^^^^^^
+   |
+   = help: an `as` cast can become silently lossy if the types change in the future
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_lossless
+help: use `f64::from` instead
+   |
+73 |                         ("Tasks", f64::from(task_count) / total, "#4A90E2"),
+   |                                   ~~~~~~~~~~~~~~~~~~~~~
+
+error: casts from `u32` to `f64` can be expressed infallibly using `From`
+  --> crates\carnelian-ui\src\components\xp_widget.rs:74:36
+   |
+74 |                         ("Ledger", ledger_count as f64 / total, "#9B59B6"),
+   |                                    ^^^^^^^^^^^^^^^^^^^
+   |
+   = help: an `as` cast can become silently lossy if the types change in the future
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_lossless
+help: use `f64::from` instead
+   |
+74 |                         ("Ledger", f64::from(ledger_count) / total, "#9B59B6"),
+   |                                    ~~~~~~~~~~~~~~~~~~~~~~~
+
+error: casts from `u32` to `f64` can be expressed infallibly using `From`
+  --> crates\carnelian-ui\src\components\xp_widget.rs:75:36
+   |
+75 |                         ("Skills", skill_count as f64 / total, "#2ECC71"),
+   |                                    ^^^^^^^^^^^^^^^^^^
+   |
+   = help: an `as` cast can become silently lossy if the types change in the future
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_lossless
+help: use `f64::from` instead
+   |
+75 |                         ("Skills", f64::from(skill_count) / total, "#2ECC71"),
+   |                                    ~~~~~~~~~~~~~~~~~~~~~~
+
+error: casts from `u32` to `f64` can be expressed infallibly using `From`
+  --> crates\carnelian-ui\src\components\xp_widget.rs:76:37
+   |
+76 |                         ("Quality", quality_count as f64 / total, "#F39C12"),
+   |                                     ^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: an `as` cast can become silently lossy if the types change in the future
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_lossless
+help: use `f64::from` instead
+   |
+76 |                         ("Quality", f64::from(quality_count) / total, "#F39C12"),
+   |                                     ~~~~~~~~~~~~~~~~~~~~~~~~
+
+error: boolean to int conversion using if
+  --> crates\carnelian-ui\src\components\xp_widget.rs:86:45
+   |
+86 | ...                   let large_arc = if sweep > 180.0 { 1 } else { 0 };
+   |                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace with from: `i32::from(sweep > 180.0)`
+   |
+   = note: `(sweep > 180.0) as i32` or `(sweep > 180.0).into()` can also be valid options
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#bool_to_int_with_if
+   = note: `-D clippy::bool-to-int-with-if` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::bool_to_int_with_if)]`
+
+error: multiply and add expressions can be calculated more efficiently and accurately
+  --> crates\carnelian-ui\src\components\xp_widget.rs:90:38
+   |
+90 | ...                   let x1 = cx + r * (start_angle * std::f64::consts::PI / 180.0).cos();
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `r.mul_add((start_angle * std::f64::consts::PI / 180.0).cos(), cx)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#suboptimal_flops
+
+error: conversion to radians can be done more accurately
+  --> crates\carnelian-ui\src\components\xp_widget.rs:90:47
+   |
+90 | ...                   let x1 = cx + r * (start_angle * std::f64::consts::PI / 180.0).cos();
+   |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `start_angle.to_radians()`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#suboptimal_flops
+
+error: multiply and add expressions can be calculated more efficiently and accurately
+  --> crates\carnelian-ui\src\components\xp_widget.rs:91:38
+   |
+91 | ...                   let y1 = cy + r * (start_angle * std::f64::consts::PI / 180.0).sin();
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `r.mul_add((start_angle * std::f64::consts::PI / 180.0).sin(), cy)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#suboptimal_flops
+
+error: conversion to radians can be done more accurately
+  --> crates\carnelian-ui\src\components\xp_widget.rs:91:47
+   |
+91 | ...                   let y1 = cy + r * (start_angle * std::f64::consts::PI / 180.0).sin();
+   |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `start_angle.to_radians()`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#suboptimal_flops
+
+error: multiply and add expressions can be calculated more efficiently and accurately
+  --> crates\carnelian-ui\src\components\xp_widget.rs:92:38
+   |
+92 | ...                   let x2 = cx + r * (end_angle * std::f64::consts::PI / 180.0).cos();
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `r.mul_add((end_angle * std::f64::consts::PI / 180.0).cos(), cx)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#suboptimal_flops
+
+error: conversion to radians can be done more accurately
+  --> crates\carnelian-ui\src\components\xp_widget.rs:92:47
+   |
+92 | ...                   let x2 = cx + r * (end_angle * std::f64::consts::PI / 180.0).cos();
+   |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `end_angle.to_radians()`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#suboptimal_flops
+
+error: multiply and add expressions can be calculated more efficiently and accurately
+  --> crates\carnelian-ui\src\components\xp_widget.rs:93:38
+   |
+93 | ...                   let y2 = cy + r * (end_angle * std::f64::consts::PI / 180.0).sin();
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `r.mul_add((end_angle * std::f64::consts::PI / 180.0).sin(), cy)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#suboptimal_flops
+
+error: conversion to radians can be done more accurately
+  --> crates\carnelian-ui\src\components\xp_widget.rs:93:47
+   |
+93 | ...                   let y2 = cy + r * (end_angle * std::f64::consts::PI / 180.0).sin();
+   |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `end_angle.to_radians()`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#suboptimal_flops
+
+error: calling `to_string` on `&&str`
+  --> crates\carnelian-ui\src\components\xp_widget.rs:97:44
+   |
+97 | ...                   paths.push((d, color.to_string(), label.to_string()));
+   |                                      ^^^^^^^^^^^^^^^^^ help: try dereferencing the receiver: `(*color).to_string()`
+   |
+   = help: `&str` implements `ToString` through a slower blanket impl, but `str` has a fast specialization of `ToString`
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#inefficient_to_string
+   = note: `-D clippy::inefficient-to-string` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::inefficient_to_string)]`
+
+error: calling `to_string` on `&&str`
+  --> crates\carnelian-ui\src\components\xp_widget.rs:97:63
+   |
+97 | ...                   paths.push((d, color.to_string(), label.to_string()));
+   |                                                         ^^^^^^^^^^^^^^^^^ help: try dereferencing the receiver: `(*label).to_string()`
+   |
+   = help: `&str` implements `ToString` through a slower blanket impl, but `str` has a fast specialization of `ToString`
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#inefficient_to_string
+
+error: variables can be used directly in the `format!` string
+   --> crates\carnelian-ui\src\components\xp_widget.rs:122:57
+    |
+122 | ...                   let dot_style = format!("width: 8px; height: 8px; border-radius: 50%; background: {}; display: inline-block;", color);
+    |                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+help: change this to
+    |
+122 -                                         let dot_style = format!("width: 8px; height: 8px; border-radius: 50%; background: {}; display: inline-block;", color);
+122 +                                         let dot_style = format!("width: 8px; height: 8px; border-radius: 50%; background: {color}; display: inline-block;");
+    |
+
+error: use Option::map_or_else instead of an if let/else
+   --> crates\carnelian-ui\src\components\xp_widget.rs:147:17
+    |
+147 | /                 if let Some(resp) = events {
+148 | |                     rsx! {
+149 | |                         div { style: "margin-top: 4px;",
+150 | |                             h3 { style: "font-size: 13px; margin-bottom: 8px;", "Recent Gains" }
+...   |
+170 | |                     rsx! {}
+171 | |                 }
+    | |_________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#option_if_let_else
+help: try
+    |
+147 ~                 events.map_or_else(|| rsx! {}, |resp| rsx! {
+148 +                         div { style: "margin-top: 4px;",
+149 +                             h3 { style: "font-size: 13px; margin-bottom: 8px;", "Recent Gains" }
+150 +                             for evt in resp.events.iter().take(10) {
+151 +                                 {
+152 +                                     let source = &evt.source;
+153 +                                     let xp_str = format!("+{} XP", evt.xp_amount);
+154 +                                     let ts_str = evt.created_at.format("%m/%d %H:%M").to_string();
+155 +                                     rsx! {
+156 +                                         div { style: "display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 12px;",
+157 +                                             div { style: "display: flex; gap: 8px; align-items: center;",
+158 +                                                 span { class: "badge-status", style: "font-size: 10px; padding: 1px 6px;", "{source}" }
+159 +                                             }
+160 +                                             span { style: "color: #2ECC71; font-weight: 600;", "{xp_str}" }
+161 +                                             span { style: "color: #7F8C8D; font-size: 11px;", "{ts_str}" }
+162 +                                         }
+163 +                                     }
+164 +                                 }
+165 +                             }
+166 +                         }
+167 +                     })
+    |
+
+error: the function `render_channel_row` doesn't need a mutable reference
+   --> crates\carnelian-ui\src\pages\channels.rs:147:63
+    |
+147 | ...                   { render_channel_row(channel, &mut edit_channel, &mut confirm_delete, &mut refresh) }
+    |                                                     ^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#unnecessary_mut_passed
+    = note: `-D clippy::unnecessary-mut-passed` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::unnecessary_mut_passed)]`
+
+error: the function `render_channel_row` doesn't need a mutable reference
+   --> crates\carnelian-ui\src\pages\channels.rs:147:82
+    |
+147 | ...                   { render_channel_row(channel, &mut edit_channel, &mut confirm_delete, &mut refresh) }
+    |                                                                        ^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#unnecessary_mut_passed
+
+error: the function `render_channel_row` doesn't need a mutable reference
+   --> crates\carnelian-ui\src\pages\channels.rs:147:103
+    |
+147 | ...                   { render_channel_row(channel, &mut edit_channel, &mut confirm_delete, &mut refresh) }
+    |                                                                                             ^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#unnecessary_mut_passed
+
+error: this looks like a formatting argument but it is not part of a formatting macro
+   --> crates\carnelian-ui\src\pages\channels.rs:606:67
+    |
+606 | ...                   "telegram" => "Send /pair {token} to your Telegram bot to complete pairing.",
+    |                                                 ^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#literal_string_with_formatting_args
+    = note: `-D clippy::literal-string-with-formatting-args` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::literal_string_with_formatting_args)]`
+
+error: this looks like a formatting argument but it is not part of a formatting macro
+   --> crates\carnelian-ui\src\pages\channels.rs:607:66
+    |
+607 | ...                   "discord" => "Send !pair {token} in your Discord channel to complete pairing.",
+    |                                                ^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#literal_string_with_formatting_args
+
+error: this looks like a formatting argument but it is not part of a formatting macro
+   --> crates\carnelian-ui\src\pages\channels.rs:608:67
+    |
+608 | ...                   "whatsapp" => "Send /pair {token} to your WhatsApp bot to complete pairing.",
+    |                                                 ^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#literal_string_with_formatting_args
+
+error: this looks like a formatting argument but it is not part of a formatting macro
+   --> crates\carnelian-ui\src\pages\channels.rs:609:73
+    |
+609 | ...                   "slack" => "Run /carnelian pair {token} in your Slack workspace to complete pairing.",
+    |                                                       ^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#literal_string_with_formatting_args
+
+error: you seem to be trying to use `match` for an equality check. Consider using `if`
+   --> crates\carnelian-ui\src\pages\channels.rs:642:33
+    |
+642 | / ...                   match step {
+643 | | ...                       2 => {
+644 | | ...                           if channel_user_id.read().trim().is_empty() {
+645 | | ...                               error_msg.set(Some("Channel User ID is required.".to_string()));
+...   |
+683 | | ...                       _ => {}
+684 | | ...                   }
+    | |_______________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#single_match
+    = note: `-D clippy::single-match` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::single_match)]`
+help: try
+    |
+642 ~                                 if step == 2 {
+643 +                                     if channel_user_id.read().trim().is_empty() {
+644 +                                         error_msg.set(Some("Channel User ID is required.".to_string()));
+645 +                                         return;
+646 +                                     }
+647 +                                     // Channel-type-specific validation
+648 +                                     match channel_type.read().as_str() {
+649 +                                         "whatsapp" => {
+650 +                                             if whatsapp_phone_number_id.read().trim().is_empty() {
+651 +                                                 error_msg.set(Some("Phone Number ID is required for WhatsApp.".to_string()));
+652 +                                                 return;
+653 +                                             }
+654 +                                             if bot_token.read().trim().is_empty() {
+655 +                                                 error_msg.set(Some("Access Token is required for WhatsApp.".to_string()));
+656 +                                                 return;
+657 +                                             }
+658 +                                             if whatsapp_verify_token.read().trim().is_empty() {
+659 +                                                 error_msg.set(Some("Verify Token is required for WhatsApp.".to_string()));
+660 +                                                 return;
+661 +                                             }
+662 +                                         }
+663 +                                         "slack" => {
+664 +                                             if bot_token.read().trim().is_empty() {
+665 +                                                 error_msg.set(Some("Bot Token is required for Slack.".to_string()));
+666 +                                                 return;
+667 +                                             }
+668 +                                             if slack_signing_secret.read().trim().is_empty() {
+669 +                                                 error_msg.set(Some("Signing Secret is required for Slack.".to_string()));
+670 +                                                 return;
+671 +                                             }
+672 +                                         }
+673 +                                         _ => {
+674 +                                             // telegram / discord
+675 +                                             if bot_token.read().trim().is_empty() {
+676 +                                                 error_msg.set(Some("Bot Token is required.".to_string()));
+677 +                                                 return;
+678 +                                             }
+679 +                                         }
+680 +                                     }
+681 +                                 }
+    |
+
+error: useless use of `format!`
+   --> crates\carnelian-ui\src\pages\channels.rs:832:9
+    |
+832 |         format!("background: rgba(255,255,255,0.08);")
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using `.to_string()`: `"background: rgba(255,255,255,0.08);".to_string()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#useless_format
+    = note: `-D clippy::useless-format` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::useless_format)]`
+
+error: redundant closure
+  --> crates\carnelian-ui\src\pages\elixirs.rs:13:33
+   |
+13 |     let mut toasts = use_signal(|| Vec::<ToastMessage>::new());
+   |                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the function itself: `Vec::<ToastMessage>::new`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_closure
+   = note: `-D clippy::redundant-closure` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::redundant_closure)]`
+
+error: redundant closure
+  --> crates\carnelian-ui\src\pages\elixirs.rs:15:34
+   |
+15 |     let mut elixirs = use_signal(|| Vec::<ElixirDetail>::new());
+   |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the function itself: `Vec::<ElixirDetail>::new`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_closure
+
+error: redundant closure
+  --> crates\carnelian-ui\src\pages\elixirs.rs:18:33
+   |
+18 |     let mut drafts = use_signal(|| Vec::<ElixirDraft>::new());
+   |                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the function itself: `Vec::<ElixirDraft>::new`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_closure
+
+error: redundant closure
+  --> crates\carnelian-ui\src\pages\elixirs.rs:20:38
+   |
+20 |     let mut filter_type = use_signal(|| String::new());
+   |                                      ^^^^^^^^^^^^^^^^ help: replace the closure with the function itself: `String::new`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_closure
+
+error: redundant closure
+  --> crates\carnelian-ui\src\pages\elixirs.rs:21:39
+   |
+21 |     let mut search_query = use_signal(|| String::new());
+   |                                       ^^^^^^^^^^^^^^^^ help: replace the closure with the function itself: `String::new`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_closure
+
+error: redundant closure
+  --> crates\carnelian-ui\src\pages\elixirs.rs:26:45
+   |
+26 |     let mut selected_draft_ids = use_signal(|| Vec::<Uuid>::new());
+   |                                             ^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the function itself: `Vec::<Uuid>::new`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_closure
+
+error: unnecessary boolean `not` operation
+  --> crates\carnelian-ui\src\pages\elixirs.rs:33:26
+   |
+33 |               let result = if !query_str.is_empty() {
+   |  __________________________^
+34 | |                 api::elixirs_search(query_str, 50)
+35 | |                     .await
+36 | |                     .map(|resp| (resp.results, resp.total as i64))
+...  |
+52 | |                     .map(|resp| (resp.elixirs, resp.total))
+53 | |             };
+   | |_____________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#if_not_else
+   = note: `-D clippy::if-not-else` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::if_not_else)]`
+help: try
+   |
+33 ~             let result = if query_str.is_empty() {
+34 +                 let filter_type_val = filter_type.read().clone();
+35 +                 let query = ListElixirsQuery {
+36 +                     elixir_type: if filter_type_val.is_empty() {
+37 +                         None
+38 +                     } else {
+39 +                         Some(filter_type_val)
+40 +                     },
+41 +                     skill_id: None,
+42 +                     active: None,
+43 +                     page: 1,
+44 +                     page_size: 50,
+45 +                 };
+46 +                 api::elixirs_list(query)
+47 +                     .await
+48 +                     .map(|resp| (resp.elixirs, resp.total))
+49 +             } else {
+50 +                 api::elixirs_search(query_str, 50)
+51 +                     .await
+52 +                     .map(|resp| (resp.results, resp.total as i64))
+53 ~             };
+   |
+
+error: casting to the same type is unnecessary (`i64` -> `i64`)
+  --> crates\carnelian-ui\src\pages\elixirs.rs:36:48
+   |
+36 |                     .map(|resp| (resp.results, resp.total as i64))
+   |                                                ^^^^^^^^^^^^^^^^^ help: try: `resp.total`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#unnecessary_cast
+   = note: `-D clippy::unnecessary-cast` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::unnecessary_cast)]`
+
+error: variables can be used directly in the `format!` string
+  --> crates\carnelian-ui\src\pages\elixirs.rs:63:34
+   |
+63 |                         message: format!("Failed to load elixirs: {}", e),
+   |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+help: change this to
+   |
+63 -                         message: format!("Failed to load elixirs: {}", e),
+63 +                         message: format!("Failed to load elixirs: {e}"),
+   |
+
+error: variables can be used directly in the `format!` string
+  --> crates\carnelian-ui\src\pages\elixirs.rs:83:34
+   |
+83 |                         message: format!("Failed to load drafts: {}", e),
+   |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+help: change this to
+   |
+83 -                         message: format!("Failed to load drafts: {}", e),
+83 +                         message: format!("Failed to load drafts: {e}"),
+   |
+
+error: variables can be used directly in the `format!` string
+   --> crates\carnelian-ui\src\pages\elixirs.rs:113:34
+    |
+113 |                         message: format!("Failed to approve draft: {}", e),
+    |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+help: change this to
+    |
+113 -                         message: format!("Failed to approve draft: {}", e),
+113 +                         message: format!("Failed to approve draft: {e}"),
+    |
+
+error: variables can be used directly in the `format!` string
+   --> crates\carnelian-ui\src\pages\elixirs.rs:137:34
+    |
+137 |                         message: format!("Failed to reject draft: {}", e),
+    |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+help: change this to
+    |
+137 -                         message: format!("Failed to reject draft: {}", e),
+137 +                         message: format!("Failed to reject draft: {e}"),
+    |
+
+error: it is more concise to loop over references to containers instead of using explicit iteration methods
+   --> crates\carnelian-ui\src\pages\elixirs.rs:152:29
+    |
+152 |             for draft_id in ids.iter() {
+    |                             ^^^^^^^^^^ help: to write this more concisely, try: `&ids`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#explicit_iter_loop
+    = note: `-D clippy::explicit-iter-loop` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::explicit_iter_loop)]`
+
+error: variables can be used directly in the `format!` string
+   --> crates\carnelian-ui\src\pages\elixirs.rs:162:30
+    |
+162 |                     message: format!("Γ£à {} draft(s) approved", success_count),
+    |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+help: change this to
+    |
+162 -                     message: format!("Γ£à {} draft(s) approved", success_count),
+162 +                     message: format!("Γ£à {success_count} draft(s) approved"),
+    |
+
+error: variables can be used directly in the `format!` string
+   --> crates\carnelian-ui\src\pages\elixirs.rs:170:30
+    |
+170 |                     message: format!("Γ¥î {} draft(s) failed", error_count),
+    |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+help: change this to
+    |
+170 -                     message: format!("Γ¥î {} draft(s) failed", error_count),
+170 +                     message: format!("Γ¥î {error_count} draft(s) failed"),
+    |
+
+error: variables can be used directly in the `format!` string
+   --> crates\carnelian-ui\src\pages\elixirs.rs:194:26
+    |
+194 |                 message: format!("Exported JSON:\n{}", json_str),
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+help: change this to
+    |
+194 -                 message: format!("Exported JSON:\n{}", json_str),
+194 +                 message: format!("Exported JSON:\n{json_str}"),
+    |
+
+error: variables can be used directly in the `format!` string
+   --> crates\carnelian-ui\src\pages\elixirs.rs:202:26
+    |
+202 |                 message: format!("Failed to export: {}", e),
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+help: change this to
+    |
+202 -                 message: format!("Failed to export: {}", e),
+202 +                 message: format!("Failed to export: {e}"),
+    |
+
+error: redundant clone
+   --> crates\carnelian-ui\src\pages\elixirs.rs:265:56
+    |
+265 | ...                   filter_type.set(evt.value().clone());
+    |                                                  ^^^^^^^^ help: remove this
+    |
+note: this value is dropped without further use
+   --> crates\carnelian-ui\src\pages\elixirs.rs:265:45
+    |
+265 | ...                   filter_type.set(evt.value().clone());
+    |                                       ^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone
+
+error: redundant clone
+   --> crates\carnelian-ui\src\pages\elixirs.rs:280:57
+    |
+280 | ...                   search_query.set(evt.value().clone());
+    |                                                   ^^^^^^^^ help: remove this
+    |
+note: this value is dropped without further use
+   --> crates\carnelian-ui\src\pages\elixirs.rs:280:46
+    |
+280 | ...                   search_query.set(evt.value().clone());
+    |                                        ^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone
+
+error: redundant clone
+   --> crates\carnelian-ui\src\pages\elixirs.rs:287:71
+    |
+287 |                         oninput: move |evt| sort_field.set(evt.value().clone()),
+    |                                                                       ^^^^^^^^ help: remove this
+    |
+note: this value is dropped without further use
+   --> crates\carnelian-ui\src\pages\elixirs.rs:287:60
+    |
+287 |                         oninput: move |evt| sort_field.set(evt.value().clone()),
+    |                                                            ^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone
+
+error: item in documentation is missing backticks
+ --> crates\carnelian-ui\src\pages\ledger.rs:7:23
+  |
+7 | //! - Auto-refresh on LedgerEvent WebSocket events
+  |                       ^^^^^^^^^^^
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+  |
+7 | //! - Auto-refresh on `LedgerEvent` WebSocket events
+  |                       ~~~~~~~~~~~~~
+
+error: redundant clone
+   --> crates\carnelian-ui\src\pages\ledger.rs:106:38
+    |
+106 |         let event_store = event_store.clone();
+    |                                      ^^^^^^^^ help: remove this
+    |
+note: this value is dropped without further use
+   --> crates\carnelian-ui\src\pages\ledger.rs:106:27
+    |
+106 |         let event_store = event_store.clone();
+    |                           ^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone
+
+error: adding items after statements is confusing, since items exist from the start of the scope
+  --> crates\carnelian-ui\src\pages\ledger.rs:38:5
+   |
+38 |     const PAGE_SIZE: i64 = 50;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+   = note: `-D clippy::items-after-statements` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::items_after_statements)]`
+
+error: using `clone` on type `Signal<Vec<LedgerEventDetail>>` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\pages\ledger.rs:42:26
+   |
+42 |         let mut events = events.clone();
+   |                          ^^^^^^^^^^^^^^ help: try removing the `clone` call: `events`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<i64>` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\pages\ledger.rs:43:31
+   |
+43 |         let mut total_count = total_count.clone();
+   |                               ^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `total_count`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<bool>` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\pages\ledger.rs:44:27
+   |
+44 |         let mut loading = loading.clone();
+   |                           ^^^^^^^^^^^^^^^ help: try removing the `clone` call: `loading`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<String>` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\pages\ledger.rs:45:34
+   |
+45 |         let action_type_filter = action_type_filter.clone();
+   |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `action_type_filter`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<String>` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\pages\ledger.rs:46:28
+   |
+46 |         let actor_filter = actor_filter.clone();
+   |                            ^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `actor_filter`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<String>` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\pages\ledger.rs:47:30
+   |
+47 |         let from_ts_filter = from_ts_filter.clone();
+   |                              ^^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `from_ts_filter`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<String>` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\pages\ledger.rs:48:28
+   |
+48 |         let to_ts_filter = to_ts_filter.clone();
+   |                            ^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `to_ts_filter`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `{closure@ledger.rs:52:9}` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\pages\ledger.rs:97:31
+   |
+97 |         let mut load_events = load_events.clone();
+   |                               ^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `load_events`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `{closure@ledger.rs:52:9}` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\pages\ledger.rs:107:31
+    |
+107 |         let mut load_events = load_events.clone();
+    |                               ^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `load_events`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<Option<LedgerVerifyResponse>>` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\pages\ledger.rs:120:33
+    |
+120 |         let mut verify_result = verify_result.clone();
+    |                                 ^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `verify_result`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<Vec<ToastMessage>>` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\pages\ledger.rs:121:26
+    |
+121 |         let mut toasts = toasts.clone();
+    |                          ^^^^^^^^^^^^^^ help: try removing the `clone` call: `toasts`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: variables can be used directly in the `format!` string
+   --> crates\carnelian-ui\src\pages\ledger.rs:147:38
+    |
+147 | ...                   message: format!("Failed to verify ledger: {}", e),
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+help: change this to
+    |
+147 -                             message: format!("Failed to verify ledger: {}", e),
+147 +                             message: format!("Failed to verify ledger: {e}"),
+    |
+
+error: using `clone` on type `Signal<i64>` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\pages\ledger.rs:160:26
+    |
+160 |         let mut offset = offset.clone();
+    |                          ^^^^^^^^^^^^^^ help: try removing the `clone` call: `offset`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `{closure@ledger.rs:52:9}` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\pages\ledger.rs:161:31
+    |
+161 |         let mut load_events = load_events.clone();
+    |                               ^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `load_events`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<i64>` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\pages\ledger.rs:170:26
+    |
+170 |         let mut offset = offset.clone();
+    |                          ^^^^^^^^^^^^^^ help: try removing the `clone` call: `offset`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `{closure@ledger.rs:52:9}` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\pages\ledger.rs:171:31
+    |
+171 |         let mut load_events = load_events.clone();
+    |                               ^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `load_events`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<i64>` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\pages\ledger.rs:183:26
+    |
+183 |         let mut offset = offset.clone();
+    |                          ^^^^^^^^^^^^^^ help: try removing the `clone` call: `offset`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `{closure@ledger.rs:52:9}` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\pages\ledger.rs:184:31
+    |
+184 |         let mut load_events = load_events.clone();
+    |                               ^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `load_events`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: redundant clone
+   --> crates\carnelian-ui\src\pages\ledger.rs:221:75
+    |
+221 |                         oninput: move |e| action_type_filter.set(e.value().clone()),
+    |                                                                           ^^^^^^^^ help: remove this
+    |
+note: this value is dropped without further use
+   --> crates\carnelian-ui\src\pages\ledger.rs:221:66
+    |
+221 |                         oninput: move |e| action_type_filter.set(e.value().clone()),
+    |                                                                  ^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone
+
+error: redundant clone
+   --> crates\carnelian-ui\src\pages\ledger.rs:230:69
+    |
+230 |                         oninput: move |e| actor_filter.set(e.value().clone()),
+    |                                                                     ^^^^^^^^ help: remove this
+    |
+note: this value is dropped without further use
+   --> crates\carnelian-ui\src\pages\ledger.rs:230:60
+    |
+230 |                         oninput: move |e| actor_filter.set(e.value().clone()),
+    |                                                            ^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone
+
+error: redundant clone
+   --> crates\carnelian-ui\src\pages\ledger.rs:238:71
+    |
+238 |                         oninput: move |e| from_ts_filter.set(e.value().clone()),
+    |                                                                       ^^^^^^^^ help: remove this
+    |
+note: this value is dropped without further use
+   --> crates\carnelian-ui\src\pages\ledger.rs:238:62
+    |
+238 |                         oninput: move |e| from_ts_filter.set(e.value().clone()),
+    |                                                              ^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone
+
+error: redundant clone
+   --> crates\carnelian-ui\src\pages\ledger.rs:246:69
+    |
+246 |                         oninput: move |e| to_ts_filter.set(e.value().clone()),
+    |                                                                     ^^^^^^^^ help: remove this
+    |
+note: this value is dropped without further use
+   --> crates\carnelian-ui\src\pages\ledger.rs:246:60
+    |
+246 |                         oninput: move |e| to_ts_filter.set(e.value().clone()),
+    |                                                            ^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone
+
+error: item in documentation is missing backticks
+ --> crates\carnelian-ui\src\pages\settings.rs:6:40
+  |
+6 | //! - About section shows version from system_status
+  |                                        ^^^^^^^^^^^^^
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+  |
+6 | //! - About section shows version from `system_status`
+  |                                        ~~~~~~~~~~~~~~~
+
+error: using `clone` on type `Signal<Option<StatusResponse>>` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\pages\settings.rs:22:26
+   |
+22 |         let mut status = status.clone();
+   |                          ^^^^^^^^^^^^^^ help: try removing the `clone` call: `status`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: called `map(<f>).unwrap_or_else(<g>)` on an `Option` value
+  --> crates\carnelian-ui\src\pages\settings.rs:34:19
+   |
+34 |       let version = status
+   |  ___________________^
+35 | |         .read()
+36 | |         .as_ref()
+37 | |         .map(|s| s.version.clone())
+38 | |         .unwrap_or_else(|| "Unknown".to_string());
+   | |_________________________________________________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#map_unwrap_or
+help: try
+   |
+34 ~     let version = status
+35 +         .read()
+36 ~         .as_ref().map_or_else(|| "Unknown".to_string(), |s| s.version.clone());
+   |
+
+error: using `clone` on type `Signal<Option<SkillBookCatalog>>` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\pages\skill_book.rs:35:27
+   |
+35 |         let mut catalog = catalog.clone();
+   |                           ^^^^^^^^^^^^^^^ help: try removing the `clone` call: `catalog`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<bool>` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\pages\skill_book.rs:36:27
+   |
+36 |         let mut loading = loading.clone();
+   |                           ^^^^^^^^^^^^^^^ help: try removing the `clone` call: `loading`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `{closure@skill_book.rs:37:9}` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\pages\skill_book.rs:52:32
+   |
+52 |         let mut load_catalog = load_catalog.clone();
+   |                                ^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `load_catalog`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: called `map(<f>).unwrap_or_else(<g>)` on an `Option` value
+  --> crates\carnelian-ui\src\pages\skill_book.rs:75:45
+   |
+75 |       let categories: Vec<(String, String)> = catalog
+   |  _____________________________________________^
+76 | |         .read()
+77 | |         .as_ref()
+78 | |         .map(|c| {
+...  |
+93 | |         })
+94 | |         .unwrap_or_else(|| vec![("all".to_string(), "All".to_string())]);
+   | |________________________________________________________________________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#map_unwrap_or
+
+error: using `clone` on type `Signal<Vec<ToastMessage>>` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\pages\skill_book.rs:98:26
+   |
+98 |         let mut toasts = toasts.clone();
+   |                          ^^^^^^^^^^^^^^ help: try removing the `clone` call: `toasts`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<bool>` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\pages\skill_book.rs:99:30
+   |
+99 |         let mut show_modal = show_activation_modal.clone();
+   |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `show_activation_modal`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `{closure@skill_book.rs:37:9}` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\pages\skill_book.rs:100:32
+    |
+100 |         let mut load_catalog = load_catalog.clone();
+    |                                ^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `load_catalog`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: variables can be used directly in the `format!` string
+   --> crates\carnelian-ui\src\pages\skill_book.rs:109:42
+    |
+109 | ...                   message: format!("Γ£à {} activated successfully", skill_id),
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+help: change this to
+    |
+109 -                                 message: format!("Γ£à {} activated successfully", skill_id),
+109 +                                 message: format!("Γ£à {skill_id} activated successfully"),
+    |
+
+error: variables can be used directly in the `format!` string
+   --> crates\carnelian-ui\src\pages\skill_book.rs:120:42
+    |
+120 | ...                   message: format!("Γ¥î Failed to activate: {}", e),
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+help: change this to
+    |
+120 -                                 message: format!("Γ¥î Failed to activate: {}", e),
+120 +                                 message: format!("Γ¥î Failed to activate: {e}"),
+    |
+
+error: using `clone` on type `Signal<Vec<ToastMessage>>` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\pages\skill_book.rs:134:26
+    |
+134 |         let mut toasts = toasts.clone();
+    |                          ^^^^^^^^^^^^^^ help: try removing the `clone` call: `toasts`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `{closure@skill_book.rs:37:9}` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\pages\skill_book.rs:135:32
+    |
+135 |         let mut load_catalog = load_catalog.clone();
+    |                                ^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `load_catalog`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: variables can be used directly in the `format!` string
+   --> crates\carnelian-ui\src\pages\skill_book.rs:142:38
+    |
+142 | ...                   message: format!("Γ£à {} deactivated", skill_id),
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+help: change this to
+    |
+142 -                             message: format!("Γ£à {} deactivated", skill_id),
+142 +                             message: format!("Γ£à {skill_id} deactivated"),
+    |
+
+error: variables can be used directly in the `format!` string
+   --> crates\carnelian-ui\src\pages\skill_book.rs:152:38
+    |
+152 | ...                   message: format!("Γ¥î Failed to deactivate: {}", e),
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+help: change this to
+    |
+152 -                             message: format!("Γ¥î Failed to deactivate: {}", e),
+152 +                             message: format!("Γ¥î Failed to deactivate: {e}"),
+    |
+
+error: using `clone` on type `Signal<bool>` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\pages\skill_book.rs:165:30
+    |
+165 |         let mut show_modal = show_activation_modal.clone();
+    |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `show_activation_modal`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<Option<SkillBookEntry>>` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\pages\skill_book.rs:166:28
+    |
+166 |         let mut selected = selected_skill.clone();
+    |                            ^^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `selected_skill`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<HashMap<String, String>>` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\pages\skill_book.rs:167:31
+    |
+167 |         let mut config_vals = config_values.clone();
+    |                               ^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `config_values`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: redundant clone
+   --> crates\carnelian-ui\src\pages\skill_book.rs:221:62
+    |
+221 | ...                   let id = skill.id.clone();
+    |                                        ^^^^^^^^ help: remove this
+    |
+note: this value is dropped without further use
+   --> crates\carnelian-ui\src\pages\skill_book.rs:221:54
+    |
+221 | ...                   let id = skill.id.clone();
+    |                                ^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone
+
+error: redundant clone
+   --> crates\carnelian-ui\src\pages\skill_book.rs:234:58
+    |
+234 | ...                   let s = skill.clone();
+    |                                    ^^^^^^^^ help: remove this
+    |
+note: this value is dropped without further use
+   --> crates\carnelian-ui\src\pages\skill_book.rs:234:53
+    |
+234 | ...                   let s = skill.clone();
+    |                               ^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone
+
+error: using `clone` on type `{closure@skill_book.rs:136:9}` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\pages\skill_book.rs:222:62
+    |
+222 | ...                   let deactivate = deactivate_skill.clone();
+    |                                        ^^^^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `deactivate_skill`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `{closure@skill_book.rs:168:9}` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\pages\skill_book.rs:235:60
+    |
+235 | ...                   let mut open = open_activation.clone();
+    |                                      ^^^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `open_activation`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<HashMap<String, String>>` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\pages\skill_book.rs:267:68
+    |
+267 | ...                   let mut vals = config_values.clone();
+    |                                      ^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `config_values`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: redundant clone
+   --> crates\carnelian-ui\src\pages\skill_book.rs:270:88
+    |
+270 | ...                   v.insert(key.clone(), e.value().clone());
+    |                                                      ^^^^^^^^ help: remove this
+    |
+note: this value is dropped without further use
+   --> crates\carnelian-ui\src\pages\skill_book.rs:270:79
+    |
+270 | ...                   v.insert(key.clone(), e.value().clone());
+    |                                             ^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone
+
+error: casts from `i32` to `i64` can be expressed infallibly using `From`
+  --> crates\carnelian-ui\src\pages\skills.rs:56:43
+   |
+56 |                     .map(|m| (m.skill_id, m.usage_count as i64))
+   |                                           ^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: an `as` cast can become silently lossy if the types change in the future
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_lossless
+help: use `i64::from` instead
+   |
+56 |                     .map(|m| (m.skill_id, i64::from(m.usage_count)))
+   |                                           ~~~~~~~~~~~~~~~~~~~~~~~~
+
+error: variables can be used directly in the `format!` string
+   --> crates\carnelian-ui\src\pages\skills.rs:457:32
+    |
+457 |                 error.set(Some(format!("Invalid JSON dataset: {}", e)));
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+help: change this to
+    |
+457 -                 error.set(Some(format!("Invalid JSON dataset: {}", e)));
+457 +                 error.set(Some(format!("Invalid JSON dataset: {e}")));
+    |
+
+error: variables can be used directly in the `format!` string
+   --> crates\carnelian-ui\src\pages\skills.rs:485:36
+    |
+485 |                     error.set(Some(format!("Failed to create elixir: {}", e)));
+    |                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+help: change this to
+    |
+485 -                     error.set(Some(format!("Failed to create elixir: {}", e)));
+485 +                     error.set(Some(format!("Failed to create elixir: {e}")));
+    |
+
+error: matching over `()` is more explicit
+   --> crates\carnelian-ui\src\pages\workflows.rs:182:36
+    |
+182 |                     on_save: move |_| {
+    |                                    ^ help: use `()` instead of `_`: `()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#ignored_unit_patterns
+    = note: `-D clippy::ignored-unit-patterns` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::ignored_unit_patterns)]`
+
+error: matching over `()` is more explicit
+   --> crates\carnelian-ui\src\pages\workflows.rs:187:38
+    |
+187 |                     on_cancel: move |_| {
+    |                                      ^ help: use `()` instead of `_`: `()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#ignored_unit_patterns
+
+error: multiply and add expressions can be calculated more efficiently and accurately
+   --> crates\carnelian-ui\src\pages\workflows.rs:419:25
+    |
+419 |                         120.0 + (i as f64 % 3.0) * 220.0,
+    |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `(i as f64 % 3.0).mul_add(220.0, 120.0)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#suboptimal_flops
+
+error: casting `usize` to `f64` causes a loss of precision on targets with 64-bit wide pointers (`usize` is 64 bits wide, but `f64`'s mantissa is only 52 bits wide)
+   --> crates\carnelian-ui\src\pages\workflows.rs:419:34
+    |
+419 |                         120.0 + (i as f64 % 3.0) * 220.0,
+    |                                  ^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_precision_loss
+
+error: multiply and add expressions can be calculated more efficiently and accurately
+   --> crates\carnelian-ui\src\pages\workflows.rs:420:25
+    |
+420 |                         80.0 + (i as f64 / 3.0).floor() * 160.0,
+    |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `(i as f64 / 3.0).floor().mul_add(160.0, 80.0)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#suboptimal_flops
+
+error: casting `usize` to `f64` causes a loss of precision on targets with 64-bit wide pointers (`usize` is 64 bits wide, but `f64`'s mantissa is only 52 bits wide)
+   --> crates\carnelian-ui\src\pages\workflows.rs:420:33
+    |
+420 |                         80.0 + (i as f64 / 3.0).floor() * 160.0,
+    |                                 ^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_precision_loss
+
+error: avoid using `collect()` when not needed
+   --> crates\carnelian-ui\src\pages\workflows.rs:456:10
+    |
+456 |           .collect();
+    |            ^^^^^^^
+...
+471 | /     rsx! {
+472 | |         div { class: "wf-builder-container",
+473 | |             // ΓöÇΓöÇ Left sidebar: Skills catalog ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+474 | |             div { class: "wf-sidebar",
+...   |
+746 | |     }
+    | |_____- the iterator could be used here instead
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_collect
+    = note: `-D clippy::needless-collect` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::needless_collect)]`
+help: use the original Iterator instead of collecting it and then producing a new one
+    |
+450 ~     
+451 |
+...
+464 |
+465 ~     all_skills
+466 +         .iter()
+467 +         .filter(|s| s.enabled)
+468 +         .filter(|s| {
+469 +             skill_search_lower.is_empty() || s.name.to_lowercase().contains(&skill_search_lower)
+470 +         })
+    |
+
+error: the function `render_node` doesn't need a mutable reference
+   --> crates\carnelian-ui\src\pages\workflows.rs:696:33
+    |
+696 | ...                   &mut selected_step,
+    |                       ^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#unnecessary_mut_passed
+
+error: the function `render_node` doesn't need a mutable reference
+   --> crates\carnelian-ui\src\pages\workflows.rs:697:33
+    |
+697 | ...                   &mut dragging_node,
+    |                       ^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#unnecessary_mut_passed
+
+error: the function `render_node` doesn't need a mutable reference
+   --> crates\carnelian-ui\src\pages\workflows.rs:698:33
+    |
+698 | ...                   &mut connecting_from,
+    |                       ^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#unnecessary_mut_passed
+
+error: redundant clone
+   --> crates\carnelian-ui\src\pages\workflows.rs:778:44
+    |
+778 |                 let skill_name = skill_name.clone();
+    |                                            ^^^^^^^^ help: remove this
+    |
+note: this value is dropped without further use
+   --> crates\carnelian-ui\src\pages\workflows.rs:778:34
+    |
+778 |                 let skill_name = skill_name.clone();
+    |                                  ^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone
+
+error: multiply and add expressions can be calculated more efficiently and accurately
+   --> crates\carnelian-ui\src\pages\workflows.rs:797:26
+    |
+797 |                         (120.0 + (count as f64 % 3.0) * 220.0, 80.0 + (count as f64 / 3.0).floor() * 160.0),
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `(count as f64 % 3.0).mul_add(220.0, 120.0)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#suboptimal_flops
+
+error: casting `usize` to `f64` causes a loss of precision on targets with 64-bit wide pointers (`usize` is 64 bits wide, but `f64`'s mantissa is only 52 bits wide)
+   --> crates\carnelian-ui\src\pages\workflows.rs:797:35
+    |
+797 |                         (120.0 + (count as f64 % 3.0) * 220.0, 80.0 + (count as f64 / 3.0).floor() * 160.0),
+    |                                   ^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_precision_loss
+
+error: multiply and add expressions can be calculated more efficiently and accurately
+   --> crates\carnelian-ui\src\pages\workflows.rs:797:64
+    |
+797 |                         (120.0 + (count as f64 % 3.0) * 220.0, 80.0 + (count as f64 / 3.0).floor() * 160.0),
+    |                                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `(count as f64 / 3.0).floor().mul_add(160.0, 80.0)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#suboptimal_flops
+
+error: casting `usize` to `f64` causes a loss of precision on targets with 64-bit wide pointers (`usize` is 64 bits wide, but `f64`'s mantissa is only 52 bits wide)
+   --> crates\carnelian-ui\src\pages\workflows.rs:797:72
+    |
+797 |                         (120.0 + (count as f64 % 3.0) * 220.0, 80.0 + (count as f64 / 3.0).floor() * 160.0),
+    |                                                                        ^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_precision_loss
+
+error: this could be a `const fn`
+    --> crates\carnelian-ui\src\pages\workflows.rs:1101:1
+     |
+1101 | / fn json_type_name(v: &serde_json::Value) -> &'static str {
+1102 | |     match v {
+1103 | |         serde_json::Value::Null => "null",
+1104 | |         serde_json::Value::Bool(_) => "boolean",
+...    |
+1110 | | }
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_const_for_fn
+     = note: `-D clippy::missing-const-for-fn` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::missing_const_for_fn)]`
+help: make the function `const`
+     |
+1101 | const fn json_type_name(v: &serde_json::Value) -> &'static str {
+     | +++++
+
+error: multiply and add expressions can be calculated more efficiently and accurately
+    --> crates\carnelian-ui\src\pages\workflows.rs:1153:18
+     |
+1153 |                 (80.0 + col as f64 * 220.0, 60.0 + row as f64 * 120.0),
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `(col as f64).mul_add(220.0, 80.0)`
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#suboptimal_flops
+
+error: casting `usize` to `f64` causes a loss of precision on targets with 64-bit wide pointers (`usize` is 64 bits wide, but `f64`'s mantissa is only 52 bits wide)
+    --> crates\carnelian-ui\src\pages\workflows.rs:1153:25
+     |
+1153 |                 (80.0 + col as f64 * 220.0, 60.0 + row as f64 * 120.0),
+     |                         ^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_precision_loss
+
+error: multiply and add expressions can be calculated more efficiently and accurately
+    --> crates\carnelian-ui\src\pages\workflows.rs:1153:45
+     |
+1153 |                 (80.0 + col as f64 * 220.0, 60.0 + row as f64 * 120.0),
+     |                                             ^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `(row as f64).mul_add(120.0, 60.0)`
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#suboptimal_flops
+
+error: casting `usize` to `f64` causes a loss of precision on targets with 64-bit wide pointers (`usize` is 64 bits wide, but `f64`'s mantissa is only 52 bits wide)
+    --> crates\carnelian-ui\src\pages\workflows.rs:1153:52
+     |
+1153 |                 (80.0 + col as f64 * 220.0, 60.0 + row as f64 * 120.0),
+     |                                                    ^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_precision_loss
+
+error: redundant clone
+    --> crates\carnelian-ui\src\pages\workflows.rs:1185:26
+     |
+1185 |     let step_clone = step.clone();
+     |                          ^^^^^^^^ help: remove this
+     |
+note: this value is dropped without further use
+    --> crates\carnelian-ui\src\pages\workflows.rs:1185:22
+     |
+1185 |     let step_clone = step.clone();
+     |                      ^^^^
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone
+
+error: redundant clone
+    --> crates\carnelian-ui\src\pages\workflows.rs:1186:37
+     |
+1186 |     let step_id = step_clone.step_id.clone();
+     |                                     ^^^^^^^^ help: remove this
+     |
+note: cloned value is neither consumed nor mutated
+    --> crates\carnelian-ui\src\pages\workflows.rs:1186:19
+     |
+1186 |     let step_id = step_clone.step_id.clone();
+     |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone
+
+error: redundant clone
+    --> crates\carnelian-ui\src\pages\workflows.rs:1187:43
+     |
+1187 |     let skill_name = step_clone.skill_name.clone();
+     |                                           ^^^^^^^^ help: remove this
+     |
+note: cloned value is neither consumed nor mutated
+    --> crates\carnelian-ui\src\pages\workflows.rs:1187:22
+     |
+1187 |     let skill_name = step_clone.skill_name.clone();
+     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone
+
+error: redundant clone
+    --> crates\carnelian-ui\src\pages\workflows.rs:1289:63
+     |
+1289 | ...                   let step_for_checkbox = step_clone.clone();
+     |                                                         ^^^^^^^^ help: remove this
+     |
+note: this value is dropped without further use
+    --> crates\carnelian-ui\src\pages\workflows.rs:1289:53
+     |
+1289 | ...                   let step_for_checkbox = step_clone.clone();
+     |                                               ^^^^^^^^^^
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone
+
+error: redundant clone
+    --> crates\carnelian-ui\src\pages\workflows.rs:1311:38
+     |
+1311 |                     let sid = step_id.clone();
+     |                                      ^^^^^^^^ help: remove this
+     |
+note: this value is dropped without further use
+    --> crates\carnelian-ui\src\pages\workflows.rs:1311:31
+     |
+1311 |                     let sid = step_id.clone();
+     |                               ^^^^^^^
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone
+
+error: redundant closure
+    --> crates\carnelian-ui\src\pages\workflows.rs:1410:35
+     |
+1410 |                         .and_then(|v| v.as_u64())
+     |                                   ^^^^^^^^^^^^^^ help: replace the closure with the method itself: `serde_json::Value::as_u64`
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_closure_for_method_calls
+     = note: `-D clippy::redundant-closure-for-method-calls` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::redundant_closure_for_method_calls)]`
+
+error: using `clone` on type `Option<Uuid>` which implements the `Copy` trait
+    --> crates\carnelian-ui\src\pages\workflows.rs:1687:23
+     |
+1687 |     let expanded_id = expanded_task.read().clone();
+     |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try dereferencing it: `*expanded_task.read()`
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: the function `render_history_row` doesn't need a mutable reference
+    --> crates\carnelian-ui\src\pages\workflows.rs:1716:70
+     |
+1716 | ...                   { render_history_row(task, &expanded_id, &mut expanded_task, &mut expanded_detail) }
+     |                                                                ^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#unnecessary_mut_passed
+
+error: the function `render_history_row` doesn't need a mutable reference
+    --> crates\carnelian-ui\src\pages\workflows.rs:1716:90
+     |
+1716 | ...                   { render_history_row(task, &expanded_id, &mut expanded_task, &mut expanded_detail) }
+     |                                                                                    ^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#unnecessary_mut_passed
+
+error: it is more idiomatic to use `Option<&T>` instead of `&Option<T>`
+    --> crates\carnelian-ui\src\pages\workflows.rs:1740:1
+     |
+1740 | / fn render_history_row(
+1741 | |     task: &TaskDetail,
+1742 | |     expanded_id: &Option<Uuid>,
+     | |                  ------------- help: change this to: `Option<&Uuid>`
+1743 | |     expanded_task: &Signal<Option<Uuid>>,
+...    |
+1795 | | }
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#ref_option
+     = note: `-D clippy::ref-option` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::ref_option)]`
+
+error: redundant closure
+    --> crates\carnelian-ui\src\pages\workflows.rs:1812:19
+     |
+1812 |         .and_then(|v| v.as_u64())
+     |                   ^^^^^^^^^^^^^^ help: replace the closure with the method itself: `serde_json::Value::as_u64`
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_closure_for_method_calls
+
+error: unnecessary boolean `not` operation
+  --> crates\carnelian-ui\src\pages\xp_progression.rs:66:21
+   |
+66 | /                     if !points.is_empty() {
+67 | |                         let max_cumulative = points.iter().map(|e| e.xp_amount as i64).sum::<i64>().max(1);
+68 | |                         let count = points.len();
+69 | |                         let w = 600.0_f64;
+...  |
+98 | |                         rsx! {}
+99 | |                     }
+   | |_____________________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#if_not_else
+help: try
+   |
+66 ~                     if points.is_empty() {
+67 +                         rsx! {}
+68 +                     } else {
+69 +                         let max_cumulative = points.iter().map(|e| e.xp_amount as i64).sum::<i64>().max(1);
+70 +                         let count = points.len();
+71 +                         let w = 600.0_f64;
+72 +                         let h = 120.0_f64;
+73 +                         let padding = 10.0_f64;
+74 + 
+75 +                         let mut cumulative = 0i64;
+76 +                         let mut path_points = Vec::new();
+77 +                         for (i, evt) in points.iter().rev().enumerate() {
+78 +                             cumulative += evt.xp_amount as i64;
+79 +                             let x = padding + (i as f64 / (count.max(2) - 1).max(1) as f64) * (w - 2.0 * padding);
+80 +                             let y = h - padding - (cumulative as f64 / max_cumulative as f64) * (h - 2.0 * padding);
+81 +                             path_points.push(format!("{x:.1},{y:.1}"));
+82 +                         }
+83 +                         let polyline_points = path_points.join(" ");
+84 + 
+85 +                         rsx! {
+86 +                             svg {
+87 +                                 width: "100%",
+88 +                                 height: "140",
+89 +                                 view_box: "0 0 {w} {h}",
+90 +                                 style: "background: rgba(20,20,35,0.5); border-radius: 8px; margin-bottom: 16px;",
+91 +                                 polyline {
+92 +                                     points: "{polyline_points}",
+93 +                                     fill: "none",
+94 +                                     stroke: "#4A90E2",
+95 +                                     stroke_width: "2",
+96 +                                 }
+97 +                             }
+98 +                         }
+99 +                     }
+   |
+
+error: casts from `i32` to `i64` can be expressed infallibly using `From`
+  --> crates\carnelian-ui\src\pages\xp_progression.rs:67:68
+   |
+67 |                         let max_cumulative = points.iter().map(|e| e.xp_amount as i64).sum::<i64>().max(1);
+   |                                                                    ^^^^^^^^^^^^^^^^^^
+   |
+   = help: an `as` cast can become silently lossy if the types change in the future
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_lossless
+help: use `i64::from` instead
+   |
+67 |                         let max_cumulative = points.iter().map(|e| i64::from(e.xp_amount)).sum::<i64>().max(1);
+   |                                                                    ~~~~~~~~~~~~~~~~~~~~~~
+
+error: casts from `i32` to `i64` can be expressed infallibly using `From`
+  --> crates\carnelian-ui\src\pages\xp_progression.rs:76:43
+   |
+76 | ...                   cumulative += evt.xp_amount as i64;
+   |                                     ^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: an `as` cast can become silently lossy if the types change in the future
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_lossless
+help: use `i64::from` instead
+   |
+76 |                             cumulative += i64::from(evt.xp_amount);
+   |                                           ~~~~~~~~~~~~~~~~~~~~~~~~
+
+error: multiply and add expressions can be calculated more efficiently and accurately
+  --> crates\carnelian-ui\src\pages\xp_progression.rs:77:37
+   |
+77 | ...                   let x = padding + (i as f64 / (count.max(2) - 1).max(1) as f64) * (w - 2.0 * padding);
+   |                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `(i as f64 / (count.max(2) - 1).max(1) as f64).mul_add(w - 2.0 * padding, padding)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#suboptimal_flops
+
+error: casting `usize` to `f64` causes a loss of precision on targets with 64-bit wide pointers (`usize` is 64 bits wide, but `f64`'s mantissa is only 52 bits wide)
+  --> crates\carnelian-ui\src\pages\xp_progression.rs:77:48
+   |
+77 | ...                   let x = padding + (i as f64 / (count.max(2) - 1).max(1) as f64) * (w - 2.0 * padding);
+   |                                          ^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_precision_loss
+
+error: casting `usize` to `f64` causes a loss of precision on targets with 64-bit wide pointers (`usize` is 64 bits wide, but `f64`'s mantissa is only 52 bits wide)
+  --> crates\carnelian-ui\src\pages\xp_progression.rs:77:59
+   |
+77 | ...                   let x = padding + (i as f64 / (count.max(2) - 1).max(1) as f64) * (w - 2.0 * padding);
+   |                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_precision_loss
+
+error: multiply and add expressions can be calculated more efficiently and accurately
+  --> crates\carnelian-ui\src\pages\xp_progression.rs:77:95
+   |
+77 | ...                   let x = padding + (i as f64 / (count.max(2) - 1).max(1) as f64) * (w - 2.0 * padding);
+   |                                                                                         ^^^^^^^^^^^^^^^^^^^ help: consider using: `2.0f64.mul_add(-padding, w)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#suboptimal_flops
+
+error: multiply and add expressions can be calculated more efficiently and accurately
+  --> crates\carnelian-ui\src\pages\xp_progression.rs:78:37
+   |
+78 | ...                   let y = h - padding - (cumulative as f64 / max_cumulative as f64) * (h - 2.0 * padding);
+   |                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `(cumulative as f64 / max_cumulative as f64).mul_add(-(h - 2.0 * padding), h - padding)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#suboptimal_flops
+
+error: casting `i64` to `f64` causes a loss of precision (`i64` is 64 bits wide, but `f64`'s mantissa is only 52 bits wide)
+  --> crates\carnelian-ui\src\pages\xp_progression.rs:78:52
+   |
+78 | ...                   let y = h - padding - (cumulative as f64 / max_cumulative as f64) * (h - 2.0 * padding);
+   |                                              ^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_precision_loss
+
+error: casting `i64` to `f64` causes a loss of precision (`i64` is 64 bits wide, but `f64`'s mantissa is only 52 bits wide)
+  --> crates\carnelian-ui\src\pages\xp_progression.rs:78:72
+   |
+78 | ...                   let y = h - padding - (cumulative as f64 / max_cumulative as f64) * (h - 2.0 * padding);
+   |                                                                  ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_precision_loss
+
+error: multiply and add expressions can be calculated more efficiently and accurately
+  --> crates\carnelian-ui\src\pages\xp_progression.rs:78:97
+   |
+78 | ...                   let y = h - padding - (cumulative as f64 / max_cumulative as f64) * (h - 2.0 * padding);
+   |                                                                                           ^^^^^^^^^^^^^^^^^^^ help: consider using: `2.0f64.mul_add(-padding, h)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#suboptimal_flops
+
+error: this `map_or` can be simplified
+   --> crates\carnelian-ui\src\pages\xp_progression.rs:172:47
+    |
+172 | ...                   let is_self = identity_id.map_or(false, |id| id == entry.identity_id);
+    |                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: use a standard comparison instead: `(identity_id == Some(entry.identity_id))`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#unnecessary_map_or
+    = note: `-D clippy::unnecessary-map-or` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::unnecessary_map_or)]`
+
+error: this function has too many lines (154/100)
+   --> crates\carnelian-ui\src\store.rs:217:5
+    |
+217 | /     fn bridge_events(&self, mut rx: mpsc::UnboundedReceiver<EventEnvelope>) {
+218 | |         let mut events = self.events;
+219 | |         let mut event_count = self.event_count;
+220 | |         let mut approval_notifications = self.approval_notifications;
+...   |
+389 | |         });
+390 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+    = note: `-D clippy::too-many-lines` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::too_many_lines)]`
+
+error: casting `i64` to `i32` may truncate the value
+   --> crates\carnelian-ui\src\store.rs:258:38
+    |
+258 |                           let amount = envelope
+    |  ______________________________________^
+259 | |                             .payload
+260 | |                             .get("xp_amount")
+261 | |                             .and_then(|v| v.as_i64())
+262 | |                             .unwrap_or(0) as i32;
+    | |________________________________________________^
+    |
+    = help: if this is intentional allow the lint with `#[allow(clippy::cast_possible_truncation)]` ...
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_possible_truncation
+help: ... or use `try_from` and handle the error accordingly
+    |
+258 ~                         let amount = i32::try_from(envelope
+259 +                             .payload
+260 +                             .get("xp_amount")
+261 +                             .and_then(|v| v.as_i64())
+262 ~                             .unwrap_or(0));
+    |
+
+error: redundant closure
+   --> crates\carnelian-ui\src\store.rs:261:39
+    |
+261 | ...                   .and_then(|v| v.as_i64())
+    |                                 ^^^^^^^^^^^^^^ help: replace the closure with the method itself: `serde_json::Value::as_i64`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_closure_for_method_calls
+
+error: casting `i64` to `i32` may truncate the value
+   --> crates\carnelian-ui\src\store.rs:281:41
+    |
+281 |                           let new_level = envelope
+    |  _________________________________________^
+282 | |                             .payload
+283 | |                             .get("new_level")
+284 | |                             .and_then(|v| v.as_i64())
+285 | |                             .unwrap_or(0) as i32;
+    | |________________________________________________^
+    |
+    = help: if this is intentional allow the lint with `#[allow(clippy::cast_possible_truncation)]` ...
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_possible_truncation
+help: ... or use `try_from` and handle the error accordingly
+    |
+281 ~                         let new_level = i32::try_from(envelope
+282 +                             .payload
+283 +                             .get("new_level")
+284 +                             .and_then(|v| v.as_i64())
+285 ~                             .unwrap_or(0));
+    |
+
+error: redundant closure
+   --> crates\carnelian-ui\src\store.rs:284:39
+    |
+284 | ...                   .and_then(|v| v.as_i64())
+    |                                 ^^^^^^^^^^^^^^ help: replace the closure with the method itself: `serde_json::Value::as_i64`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_closure_for_method_calls
+
+error: redundant closure
+   --> crates\carnelian-ui\src\store.rs:356:39
+    |
+356 | ...                   .and_then(|v| v.as_u64())
+    |                                 ^^^^^^^^^^^^^^ help: replace the closure with the method itself: `serde_json::Value::as_u64`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_closure_for_method_calls
+
+error: casting `u64` to `usize` may truncate the value on targets with 32-bit wide pointers
+   --> crates\carnelian-ui\src\store.rs:358:49
+    |
+358 | ...                   cs.total_channels = total as usize;
+    |                                           ^^^^^^^^^^^^^^
+    |
+    = help: if this is intentional allow the lint with `#[allow(clippy::cast_possible_truncation)]` ...
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_possible_truncation
+help: ... or use `try_from` and handle the error accordingly
+    |
+358 |                             cs.total_channels = usize::try_from(total);
+    |                                                 ~~~~~~~~~~~~~~~~~~~~~~
+
+error: redundant closure
+   --> crates\carnelian-ui\src\store.rs:363:39
+    |
+363 | ...                   .and_then(|v| v.as_u64())
+    |                                 ^^^^^^^^^^^^^^ help: replace the closure with the method itself: `serde_json::Value::as_u64`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_closure_for_method_calls
+
+error: casting `u64` to `usize` may truncate the value on targets with 32-bit wide pointers
+   --> crates\carnelian-ui\src\store.rs:365:51
+    |
+365 | ...                   cs.running_channels = running as usize;
+    |                                             ^^^^^^^^^^^^^^^^
+    |
+    = help: if this is intentional allow the lint with `#[allow(clippy::cast_possible_truncation)]` ...
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_possible_truncation
+help: ... or use `try_from` and handle the error accordingly
+    |
+365 |                             cs.running_channels = usize::try_from(running);
+    |                                                   ~~~~~~~~~~~~~~~~~~~~~~~~
+
+error: you are deriving `PartialEq` and can implement `Eq`
+ --> crates\carnelian-ui\src\theme.rs:7:24
+  |
+7 | #[derive(Debug, Clone, PartialEq)]
+  |                        ^^^^^^^^^ help: consider deriving `Eq` as well: `PartialEq, Eq`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#derive_partial_eq_without_eq
+
+error: this could be a `const fn`
+  --> crates\carnelian-ui\src\theme.rs:13:5
+   |
+13 | /     pub fn new_dark() -> Self {
+14 | |         Self { dark: true }
+15 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_const_for_fn
+help: make the function `const`
+   |
+13 |     pub const fn new_dark() -> Self {
+   |         +++++
+
+error: this could be a `const fn`
+  --> crates\carnelian-ui\src\theme.rs:18:5
+   |
+18 | /     pub fn to_class(&self) -> &'static str {
+19 | |         if self.dark {
+20 | |             "theme-dark"
+21 | |         } else {
+...  |
+24 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_const_for_fn
+help: make the function `const`
+   |
+18 |     pub const fn to_class(&self) -> &'static str {
+   |         +++++
+
+error: item in documentation is missing backticks
+  --> crates\carnelian-ui\src\main.rs:76:40
+   |
+76 | /// status, and renders the router (or FirstRunWizard if setup
+   |                                        ^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+   |
+76 | /// status, and renders the router (or `FirstRunWizard` if setup
+   |                                        ~~~~~~~~~~~~~~~~
+
+error: using `clone` on type `Signal<bool>` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\main.rs:87:34
+   |
+87 |         let mut setup_complete = setup_complete.clone();
+   |                                  ^^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `setup_complete`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<bool>` which implements the `Copy` trait
+  --> crates\carnelian-ui\src\main.rs:88:31
+   |
+88 |         let mut show_wizard = show_wizard.clone();
+   |                               ^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `show_wizard`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: using `clone` on type `Signal<bool>` which implements the `Copy` trait
+   --> crates\carnelian-ui\src\main.rs:108:31
+    |
+108 |         let mut show_wizard = show_wizard.clone();
+    |                               ^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `show_wizard`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_copy
+
+error: this argument is a mutable reference, but not used mutably
+   --> crates\carnelian-ui\src\pages\workflows.rs:317:23
+    |
+317 |     builder_workflow: &mut Signal<Option<WorkflowDetail>>,
+    |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider changing to: `&Signal<Option<WorkflowDetail>>`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_pass_by_ref_mut
+    = note: `-D clippy::needless-pass-by-ref-mut` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::needless_pass_by_ref_mut)]`
+
+error: this argument is a mutable reference, but not used mutably
+   --> crates\carnelian-ui\src\pages\workflows.rs:318:16
+    |
+318 |     view_mode: &mut Signal<String>,
+    |                ^^^^^^^^^^^^^^^^^^^ help: consider changing to: `&Signal<String>`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_pass_by_ref_mut
+
+error: this argument is a mutable reference, but not used mutably
+   --> crates\carnelian-ui\src\pages\workflows.rs:319:21
+    |
+319 |     execution_view: &mut Signal<Option<WorkflowDetail>>,
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider changing to: `&Signal<Option<WorkflowDetail>>`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_pass_by_ref_mut
+
+error: this argument is a mutable reference, but not used mutably
+   --> crates\carnelian-ui\src\pages\workflows.rs:320:26
+    |
+320 |     show_delete_confirm: &mut Signal<Option<Uuid>>,
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider changing to: `&Signal<Option<Uuid>>`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_pass_by_ref_mut
+
+error: this argument is a mutable reference, but not used mutably
+   --> crates\carnelian-ui\src\pages\workflows.rs:759:20
+    |
+759 |     builder_steps: &mut Signal<Vec<WorkflowStepDef>>,
+    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider changing to: `&Signal<Vec<WorkflowStepDef>>`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_pass_by_ref_mut
+
+error: this argument is a mutable reference, but not used mutably
+   --> crates\carnelian-ui\src\pages\workflows.rs:760:21
+    |
+760 |     node_positions: &mut Signal<HashMap<String, (f64, f64)>>,
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider changing to: `&Signal<HashMap<String, (f64, f64)>>`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_pass_by_ref_mut
+
+error: this argument is a mutable reference, but not used mutably
+   --> crates\carnelian-ui\src\pages\workflows.rs:815:20
+    |
+815 |     builder_steps: &mut Signal<Vec<WorkflowStepDef>>,
+    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider changing to: `&Signal<Vec<WorkflowStepDef>>`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_pass_by_ref_mut
+
+error: could not compile `carnelian-ui` (bin "carnelian-ui") due to 220 previous errors

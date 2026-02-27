@@ -10,20 +10,20 @@ use uuid::Uuid;
 #[component]
 pub fn Elixirs() -> Element {
     let theme = use_context::<Theme>();
-    let mut toasts = use_signal(|| Vec::<ToastMessage>::new());
+    let mut toasts = use_signal(Vec::<ToastMessage>::new);
     let mut active_tab = use_signal(|| "library".to_string());
-    let mut elixirs = use_signal(|| Vec::<ElixirDetail>::new());
+    let mut elixirs = use_signal(Vec::<ElixirDetail>::new);
     let mut elixirs_total = use_signal(|| 0i64);
     let mut loading_elixirs = use_signal(|| false);
-    let mut drafts = use_signal(|| Vec::<ElixirDraft>::new());
+    let mut drafts = use_signal(Vec::<ElixirDraft>::new);
     let mut loading_drafts = use_signal(|| false);
-    let mut filter_type = use_signal(|| String::new());
-    let mut search_query = use_signal(|| String::new());
+    let mut filter_type = use_signal(String::new);
+    let mut search_query = use_signal(String::new);
     let mut sort_field = use_signal(|| "name".to_string());
     let mut sort_asc = use_signal(|| true);
     let mut selected_elixir = use_signal(|| None::<ElixirDetail>);
     let mut show_detail = use_signal(|| false);
-    let mut selected_draft_ids = use_signal(|| Vec::<Uuid>::new());
+    let mut selected_draft_ids = use_signal(Vec::<Uuid>::new);
 
     let load_elixirs = move || {
         spawn(async move {
@@ -33,7 +33,7 @@ pub fn Elixirs() -> Element {
             let result = if !query_str.is_empty() {
                 api::elixirs_search(query_str, 50)
                     .await
-                    .map(|resp| (resp.results, resp.total as i64))
+                    .map(|resp| (resp.results, resp.total))
             } else {
                 let filter_type_val = filter_type.read().clone();
                 let query = ListElixirsQuery {
@@ -60,7 +60,7 @@ pub fn Elixirs() -> Element {
                 Err(e) => {
                     toasts.write().push(ToastMessage {
                         id: Uuid::new_v4().to_string(),
-                        message: format!("Failed to load elixirs: {}", e),
+                        message: format!("Failed to load elixirs: {e}"),
                         toast_type: ToastType::Error,
                         duration_secs: 5,
                     });
@@ -80,7 +80,7 @@ pub fn Elixirs() -> Element {
                 Err(e) => {
                     toasts.write().push(ToastMessage {
                         id: Uuid::new_v4().to_string(),
-                        message: format!("Failed to load drafts: {}", e),
+                        message: format!("Failed to load drafts: {e}"),
                         toast_type: ToastType::Error,
                         duration_secs: 5,
                     });
@@ -110,7 +110,7 @@ pub fn Elixirs() -> Element {
                 Err(e) => {
                     toasts.write().push(ToastMessage {
                         id: Uuid::new_v4().to_string(),
-                        message: format!("Failed to approve draft: {}", e),
+                        message: format!("Failed to approve draft: {e}"),
                         toast_type: ToastType::Error,
                         duration_secs: 5,
                     });
@@ -134,7 +134,7 @@ pub fn Elixirs() -> Element {
                 Err(e) => {
                     toasts.write().push(ToastMessage {
                         id: Uuid::new_v4().to_string(),
-                        message: format!("Failed to reject draft: {}", e),
+                        message: format!("Failed to reject draft: {e}"),
                         toast_type: ToastType::Error,
                         duration_secs: 5,
                     });
@@ -149,7 +149,7 @@ pub fn Elixirs() -> Element {
             let mut success_count = 0;
             let mut error_count = 0;
 
-            for draft_id in ids.iter() {
+            for draft_id in &ids {
                 match api::elixirs_draft_approve(*draft_id).await {
                     Ok(_) => success_count += 1,
                     Err(_) => error_count += 1,
@@ -159,7 +159,7 @@ pub fn Elixirs() -> Element {
             if success_count > 0 {
                 toasts.write().push(ToastMessage {
                     id: Uuid::new_v4().to_string(),
-                    message: format!("✅ {} draft(s) approved", success_count),
+                    message: format!("✅ {success_count} draft(s) approved"),
                     toast_type: ToastType::Success,
                     duration_secs: 5,
                 });
@@ -167,7 +167,7 @@ pub fn Elixirs() -> Element {
             if error_count > 0 {
                 toasts.write().push(ToastMessage {
                     id: Uuid::new_v4().to_string(),
-                    message: format!("❌ {} draft(s) failed", error_count),
+                    message: format!("❌ {error_count} draft(s) failed"),
                     toast_type: ToastType::Error,
                     duration_secs: 5,
                 });
@@ -191,7 +191,7 @@ pub fn Elixirs() -> Element {
         Ok(json_str) => {
             toasts.write().push(ToastMessage {
                 id: Uuid::new_v4().to_string(),
-                message: format!("Exported JSON:\n{}", json_str),
+                message: format!("Exported JSON:\n{json_str}"),
                 toast_type: ToastType::Success,
                 duration_secs: 5,
             });
@@ -199,7 +199,7 @@ pub fn Elixirs() -> Element {
         Err(e) => {
             toasts.write().push(ToastMessage {
                 id: Uuid::new_v4().to_string(),
-                message: format!("Failed to export: {}", e),
+                message: format!("Failed to export: {e}"),
                 toast_type: ToastType::Error,
                 duration_secs: 5,
             });
@@ -262,7 +262,7 @@ pub fn Elixirs() -> Element {
                     select {
                         value: "{filter_type.read()}",
                         oninput: move |evt| {
-                            filter_type.set(evt.value().clone());
+                            filter_type.set(evt.value());
                             load_elixirs();
                         },
                         option { value: "", "All Types" }
@@ -277,14 +277,14 @@ pub fn Elixirs() -> Element {
                         placeholder: "Search elixirs...",
                         value: "{search_query.read()}",
                         oninput: move |evt| {
-                            search_query.set(evt.value().clone());
+                            search_query.set(evt.value());
                             load_elixirs();
                         }
                     }
 
                     select {
                         value: "{sort_field.read()}",
-                        oninput: move |evt| sort_field.set(evt.value().clone()),
+                        oninput: move |evt| sort_field.set(evt.value()),
                         option { value: "name", "Name" }
                         option { value: "quality_score", "Quality Score" }
                         option { value: "created_at", "Created At" }

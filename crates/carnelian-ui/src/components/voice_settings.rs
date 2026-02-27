@@ -1,4 +1,4 @@
-//! Voice settings component — configure ElevenLabs API key, select voice, test TTS.
+//! Voice settings component — configure `ElevenLabs` API key, select voice, test TTS.
 
 use carnelian_common::types::{ConfigureVoiceRequest, TestVoiceRequest};
 use dioxus::document::eval;
@@ -127,7 +127,7 @@ pub fn VoiceSettings() -> Element {
                         match crate::api::test_voice(req).await {
                             Ok(resp) => {
                                 let data_url = format!("data:{};base64,{}", resp.content_type, resp.audio_base64);
-                                let js = format!("(function(){{const a=new Audio('{}');a.play();}})()", data_url);
+                                let js = format!("(function(){{const a=new Audio('{data_url}');a.play();}})()");
                                 eval(&js);
                                 status_message.set(Some("Playing audio...".to_string()));
                             }

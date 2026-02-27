@@ -3,7 +3,7 @@
 //! Features:
 //! - Sections as cards: Identity, Voice, Models, Workspace, Machine Profile, Security, About
 //! - Each card links to relevant existing routes
-//! - About section shows version from system_status
+//! - About section shows version from `system_status`
 
 use dioxus::prelude::*;
 
@@ -33,9 +33,7 @@ pub fn Settings() -> Element {
     let theme_class = theme.to_class();
     let version = status
         .read()
-        .as_ref()
-        .map(|s| s.version.clone())
-        .unwrap_or_else(|| "Unknown".to_string());
+        .as_ref().map_or_else(|| "Unknown".to_string(), |s| s.version.clone());
 
     rsx! {
         div { class: "page settings-page {theme_class}",

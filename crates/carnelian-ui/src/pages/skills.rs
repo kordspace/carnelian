@@ -53,7 +53,7 @@ pub fn Skills() -> Element {
             .map(|r| {
                 r.skills
                     .into_iter()
-                    .map(|m| (m.skill_id, m.usage_count as i64))
+                    .map(|m| (m.skill_id, i64::from(m.usage_count)))
                     .collect::<HashMap<Uuid, i64>>()
             })
             .unwrap_or_default()
@@ -454,7 +454,7 @@ fn CreateElixirModal(
         let dataset_json = match serde_json::from_str(&dataset_val) {
             Ok(json) => json,
             Err(e) => {
-                error.set(Some(format!("Invalid JSON dataset: {}", e)));
+                error.set(Some(format!("Invalid JSON dataset: {e}")));
                 return;
             }
         };
@@ -482,7 +482,7 @@ fn CreateElixirModal(
                     on_created.call(());
                 }
                 Err(e) => {
-                    error.set(Some(format!("Failed to create elixir: {}", e)));
+                    error.set(Some(format!("Failed to create elixir: {e}")));
                     creating.set(false);
                 }
             }

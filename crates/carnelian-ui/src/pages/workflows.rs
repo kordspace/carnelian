@@ -179,12 +179,12 @@ pub fn Workflows() -> Element {
                 // ── Builder View ─────────────────────────────
                 WorkflowBuilderView {
                     workflow: builder_workflow.read().clone(),
-                    on_save: move |_| {
+                    on_save: move |()| {
                         refresh += 1;
                         view_mode.set("list".into());
                         builder_workflow.set(None);
                     },
-                    on_cancel: move |_| {
+                    on_cancel: move |()| {
                         view_mode.set("list".into());
                         builder_workflow.set(None);
                     },
@@ -416,8 +416,8 @@ fn WorkflowBuilderView(
                 map.insert(
                     step.step_id.clone(),
                     (
-                        120.0 + (i as f64 % 3.0) * 220.0,
-                        80.0 + (i as f64 / 3.0).floor() * 160.0,
+                        (i as f64 % 3.0).mul_add(220.0, 120.0),
+                        (i as f64 / 3.0).floor().mul_add(160.0, 80.0),
                     ),
                 );
             }
@@ -775,7 +775,7 @@ fn render_skill_card(
         div {
             class: "wf-skill-card",
             onclick: {
-                let skill_name = skill_name.clone();
+                let skill_name = skill_name;
                 move |_| {
                     let step_id = format!("step_{}", Uuid::new_v4().to_string().split('-').next().unwrap_or("x"));
                     let count = builder_steps_copy.read().len();
@@ -794,7 +794,7 @@ fn render_skill_card(
                     let mut pos = node_positions_copy.read().clone();
                     pos.insert(
                         step_id,
-                        (120.0 + (count as f64 % 3.0) * 220.0, 80.0 + (count as f64 / 3.0).floor() * 160.0),
+                        ((count as f64 % 3.0).mul_add(220.0, 120.0), (count as f64 / 3.0).floor().mul_add(160.0, 80.0)),
                     );
                     node_positions_copy.set(pos);
                 }
@@ -1098,7 +1098,7 @@ fn validate_steps(steps: &[WorkflowStepDef]) -> Vec<String> {
 }
 
 /// Return a human-readable name for a JSON value type.
-fn json_type_name(v: &serde_json::Value) -> &'static str {
+const fn json_type_name(v: &serde_json::Value) -> &'static str {
     match v {
         serde_json::Value::Null => "null",
         serde_json::Value::Bool(_) => "boolean",
@@ -1150,7 +1150,7 @@ fn auto_layout(steps: &[WorkflowStepDef], positions: &mut Signal<HashMap<String,
         for (col, &step_id) in layer.iter().enumerate() {
             new_pos.insert(
                 step_id.to_string(),
-                (80.0 + col as f64 * 220.0, 60.0 + row as f64 * 120.0),
+                ((col as f64).mul_add(220.0, 80.0), (row as f64).mul_add(120.0, 60.0)),
             );
         }
     }
@@ -1286,7 +1286,7 @@ fn StepConfigPanel(
                         r#type: "checkbox",
                         checked: *continue_on_error.read(),
                         onchange: {
-                            let step_for_checkbox = step_clone.clone();
+                            let step_for_checkbox = step_clone;
                             let map_str = input_mapping_str.read().clone();
                             let cond_str = condition_str.read().clone();
                             move |_| {
@@ -1308,7 +1308,7 @@ fn StepConfigPanel(
                 class: "btn-danger btn-sm",
                 style: "margin-top:12px;",
                 onclick: {
-                    let sid = step_id.clone();
+                    let sid = step_id;
                     move |_| on_delete.call(sid.clone())
                 },
                 "Remove Step"
@@ -1407,7 +1407,7 @@ fn WorkflowExecutionModal(workflow: WorkflowDetail, on_close: EventHandler) -> E
                         .to_string();
                     let duration_ms = payload
                         .get("duration_ms")
-                        .and_then(|v| v.as_u64())
+                        .and_then(serde_json::Value::as_u64)
                         .unwrap_or(0);
                     let skill_name = payload
                         .get("skill_name")
@@ -1809,7 +1809,7 @@ fn render_history_step(step_json: &serde_json::Value) -> Element {
         .unwrap_or("unknown");
     let duration_ms = step_json
         .get("duration_ms")
-        .and_then(|v| v.as_u64())
+        .and_then(serde_json::Value::as_u64)
         .unwrap_or(0);
     let error = step_json
         .get("error")
