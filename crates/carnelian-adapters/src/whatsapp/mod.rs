@@ -58,7 +58,6 @@ pub struct WhatsAppAdapter {
     /// Shutdown signal sender.
     shutdown_tx: tokio::sync::watch::Sender<bool>,
     /// Shutdown signal receiver (cloneable).
-    #[allow(dead_code)]
     shutdown_rx: tokio::sync::watch::Receiver<bool>,
 }
 
@@ -66,6 +65,10 @@ impl WhatsAppAdapter {
     /// Create a new WhatsApp adapter.
     ///
     /// The access token is read from `config.bot_token`.
+    ///
+    /// # Errors
+    ///
+    /// Currently infallible, but returns `Result` for future extensibility.
     pub fn new(
         config: ChannelConfig,
         phone_number_id: String,
@@ -99,7 +102,7 @@ impl WhatsAppAdapter {
 
     /// Returns a reference to the channel configuration.
     #[must_use]
-    pub fn config(&self) -> &ChannelConfig {
+    pub const fn config(&self) -> &ChannelConfig {
         &self.config
     }
 
@@ -114,11 +117,17 @@ impl WhatsAppAdapter {
     pub fn verify_token(&self) -> &str {
         &self.verify_token
     }
+
+    /// Returns a clone of the shutdown receiver for monitoring shutdown signals.
+    #[must_use]
+    pub fn shutdown_receiver(&self) -> tokio::sync::watch::Receiver<bool> {
+        self.shutdown_rx.clone()
+    }
 }
 
 #[async_trait]
 impl ChannelAdapter for WhatsAppAdapter {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "whatsapp"
     }
 

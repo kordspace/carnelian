@@ -41,7 +41,7 @@ const fn default_spam_threshold() -> f32 {
     0.8
 }
 
-fn default_spam_ttl_secs() -> u64 {
+const fn default_spam_ttl_secs() -> u64 {
     3600
 }
 
@@ -64,6 +64,10 @@ impl Default for AdapterConfig {
 /// Values are stored as plaintext in the JSONB `value` column.
 /// Future enhancement: integrate with `carnelian-core/src/encryption.rs`
 /// for encrypted storage.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
 pub async fn load_bot_credential(
     pool: &PgPool,
     channel_type: &str,
@@ -84,6 +88,10 @@ pub async fn load_bot_credential(
 /// Store a bot credential in the `config_store` table.
 ///
 /// Upserts the value so repeated calls are safe.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
 pub async fn store_bot_credential(
     pool: &PgPool,
     channel_type: &str,
@@ -110,6 +118,10 @@ pub async fn store_bot_credential(
 }
 
 /// Delete a bot credential from the `config_store` table.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
 pub async fn delete_bot_credential(
     pool: &PgPool,
     channel_type: &str,
@@ -131,7 +143,7 @@ pub async fn delete_bot_credential(
 /// Supported variables:
 /// - `TELEGRAM_BOT_TOKEN` — Telegram bot token (enables Telegram adapter)
 /// - `DISCORD_BOT_TOKEN` — Discord bot token (enables Discord adapter)
-/// - `WHATSAPP_ACCESS_TOKEN` — WhatsApp Cloud API access token (enables WhatsApp adapter)
+/// - `WHATSAPP_ACCESS_TOKEN` — `WhatsApp` Cloud API access token (enables `WhatsApp` adapter)
 /// - `SLACK_BOT_TOKEN` — Slack bot OAuth token (enables Slack adapter)
 /// - `ADAPTER_SPAM_THRESHOLD` — Spam score threshold (default: 0.8)
 #[must_use]

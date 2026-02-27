@@ -57,7 +57,6 @@ pub struct SlackAdapter {
     /// Shutdown signal sender.
     shutdown_tx: tokio::sync::watch::Sender<bool>,
     /// Shutdown signal receiver (cloneable).
-    #[allow(dead_code)]
     shutdown_rx: tokio::sync::watch::Receiver<bool>,
 }
 
@@ -97,7 +96,7 @@ impl SlackAdapter {
 
     /// Returns a reference to the channel configuration.
     #[must_use]
-    pub fn config(&self) -> &ChannelConfig {
+    pub const fn config(&self) -> &ChannelConfig {
         &self.config
     }
 
@@ -105,6 +104,12 @@ impl SlackAdapter {
     #[must_use]
     pub fn signing_secret(&self) -> &str {
         &self.signing_secret
+    }
+
+    /// Returns a clone of the shutdown receiver for monitoring shutdown signals.
+    #[must_use]
+    pub fn shutdown_receiver(&self) -> tokio::sync::watch::Receiver<bool> {
+        self.shutdown_rx.clone()
     }
 }
 
