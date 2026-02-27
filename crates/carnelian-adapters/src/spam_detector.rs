@@ -140,7 +140,7 @@ impl SpamDetector {
         let final_score = state.score;
         let duplicate_count = state.duplicate_count;
         let command_count = state.command_count;
-        
+
         // Drop entry early to release lock
         drop(entry);
 
