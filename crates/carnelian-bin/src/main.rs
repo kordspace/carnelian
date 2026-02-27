@@ -32,8 +32,7 @@ use carnelian_core::{
 
 use bollard::Docker;
 use bollard::container::{
-    Config as ContainerConfig, CreateContainerOptions,
-    StartContainerOptions,
+    Config as ContainerConfig, CreateContainerOptions, StartContainerOptions,
 };
 use bollard::image::CreateImageOptions;
 use bollard::models::{HostConfig, PortBinding};
@@ -1093,7 +1092,9 @@ async fn handle_init(
 
     // Hardware detection with sysinfo
     println!("Detecting hardware...");
-    let mut sys = System::new_with_specifics(RefreshKind::new().with_memory(sysinfo::MemoryRefreshKind::everything()));
+    let mut sys = System::new_with_specifics(
+        RefreshKind::new().with_memory(sysinfo::MemoryRefreshKind::everything()),
+    );
     sys.refresh_all();
 
     let total_ram_gb = sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
@@ -1508,7 +1509,10 @@ async fn handle_init(
                 Ok(_) => {
                     println!("    ✓ PostgreSQL container created");
                     match docker
-                        .start_container("carnelian-postgres", None::<StartContainerOptions<String>>)
+                        .start_container(
+                            "carnelian-postgres",
+                            None::<StartContainerOptions<String>>,
+                        )
                         .await
                     {
                         Ok(_) => println!(
