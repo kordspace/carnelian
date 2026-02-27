@@ -10,6 +10,7 @@ use axum::{
     response::IntoResponse,
     routing::{delete, get, post},
 };
+use sqlx::Row;
 use base64::Engine as _;
 use carnelian_common::Result;
 use carnelian_common::types::{

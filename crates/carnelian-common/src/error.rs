@@ -91,6 +91,9 @@ pub enum Error {
     #[error("Bot API error: {0}")]
     BotApiError(String),
 
+    #[error("Permission denied: {0}")]
+    Permission(String),
+
     #[error("{1}")]
     ExitCode(i32, String),
 }
