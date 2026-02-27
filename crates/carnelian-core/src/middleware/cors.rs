@@ -3,7 +3,7 @@
 //! Configures Cross-Origin Resource Sharing (CORS) policies.
 //! Provides different configurations for development and production environments.
 
-use axum::http::{HeaderValue, Method, header};
+use axum::http::{HeaderName, HeaderValue, Method, header};
 use std::time::Duration;
 use tower_http::cors::{Any, CorsLayer};
 
@@ -42,7 +42,7 @@ pub fn create_cors_layer(config: CorsConfig) -> CorsLayer {
                 header::CONTENT_TYPE,
                 header::AUTHORIZATION,
                 header::ACCEPT,
-                HeaderValue::from_static("x-carnelian-key"),
+                HeaderName::from_static("x-carnelian-key"),
             ])
             .max_age(config.max_age);
 

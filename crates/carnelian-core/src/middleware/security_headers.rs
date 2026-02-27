@@ -10,7 +10,7 @@
 
 use axum::{
     extract::Request,
-    http::{HeaderValue, header},
+    http::{HeaderName, HeaderValue, header},
     middleware::Next,
     response::Response,
 };
@@ -102,27 +102,27 @@ pub async fn security_headers_middleware(
         FrameOptions::AllowFrom(ref url) => {
             // Note: ALLOW-FROM is deprecated, use CSP frame-ancestors instead
             headers.insert(
-                HeaderValue::from_static("x-frame-options"),
+                header::X_FRAME_OPTIONS,
                 HeaderValue::from_str(&format!("ALLOW-FROM {}", url))
-                    .unwrap_or(HeaderValue::from_static("DENY")),
+                    .unwrap_or_else(|_| HeaderValue::from_static("DENY")),
             );
             return response;
         }
     };
     headers.insert(
-        HeaderValue::from_static("x-frame-options"),
+        header::X_FRAME_OPTIONS,
         HeaderValue::from_static(frame_value),
     );
 
     // X-Content-Type-Options - Prevent MIME sniffing
     headers.insert(
-        HeaderValue::from_static("x-content-type-options"),
+        header::X_CONTENT_TYPE_OPTIONS,
         HeaderValue::from_static("nosniff"),
     );
 
     // X-XSS-Protection - Enable browser XSS protection
     headers.insert(
-        HeaderValue::from_static("x-xss-protection"),
+        header::X_XSS_PROTECTION,
         HeaderValue::from_static("1; mode=block"),
     );
 
@@ -134,7 +134,7 @@ pub async fn security_headers_middleware(
 
     // Permissions-Policy - Control browser features
     headers.insert(
-        HeaderValue::from_static("permissions-policy"),
+        HeaderName::from_static("permissions-policy"),
         HeaderValue::from_static("geolocation=(), microphone=(), camera=()"),
     );
 
