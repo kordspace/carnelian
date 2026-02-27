@@ -55,6 +55,7 @@ pub struct ApprovalNotification {
 
 /// State for the Heartbeat panel.
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 pub struct HeartbeatState {
     pub current_mantra: Option<String>,
     pub last_heartbeat_time: Option<DateTime<Utc>>,
@@ -64,6 +65,7 @@ pub struct HeartbeatState {
 
 /// A single heartbeat record from the history table.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct HeartbeatRecord {
     pub heartbeat_id: Uuid,
     pub ts: DateTime<Utc>,
@@ -73,6 +75,7 @@ pub struct HeartbeatRecord {
 
 /// State for the Identity panel.
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 pub struct IdentityState {
     pub identity_id: Option<Uuid>,
     pub name: String,
@@ -117,6 +120,7 @@ pub struct ChannelState {
 
 /// State for the Providers panel.
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 pub struct ProviderState {
     pub ollama_connected: bool,
     pub ollama_url: String,
@@ -126,6 +130,7 @@ pub struct ProviderState {
 
 /// Information about a single model provider.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ProviderInfo {
     pub provider_id: Uuid,
     pub name: String,

@@ -762,8 +762,8 @@ fn render_skill_card(
     let skill_name = skill.name.clone();
     let runtime = skill.runtime.clone();
     let desc = skill.description.clone().unwrap_or_default();
-    let mut builder_steps = *builder_steps;
-    let mut node_positions = *node_positions;
+    let mut builder_steps_copy = *builder_steps;
+    let mut node_positions_copy = *node_positions;
 
     let runtime_class = match runtime.as_str() {
         "node" => "wf-runtime-node",
@@ -778,7 +778,7 @@ fn render_skill_card(
                 let skill_name = skill_name.clone();
                 move |_| {
                     let step_id = format!("step_{}", Uuid::new_v4().to_string().split('-').next().unwrap_or("x"));
-                    let count = builder_steps.read().len();
+                    let count = builder_steps_copy.read().len();
                     let new_step = WorkflowStepDef {
                         step_id: step_id.clone(),
                         skill_name: skill_name.clone(),
@@ -788,15 +788,15 @@ fn render_skill_card(
                         retry_policy: None,
                         continue_on_error: false,
                     };
-                    let mut steps = builder_steps.read().clone();
+                    let mut steps = builder_steps_copy.read().clone();
                     steps.push(new_step);
-                    builder_steps.set(steps);
-                    let mut pos = node_positions.read().clone();
+                    builder_steps_copy.set(steps);
+                    let mut pos = node_positions_copy.read().clone();
                     pos.insert(
                         step_id,
                         (120.0 + (count as f64 % 3.0) * 220.0, 80.0 + (count as f64 / 3.0).floor() * 160.0),
                     );
-                    node_positions.set(pos);
+                    node_positions_copy.set(pos);
                 }
             },
             div { class: "wf-skill-card-name", "{skill_name}" }

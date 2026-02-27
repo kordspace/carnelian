@@ -4,8 +4,8 @@
 //! where `T` is the deserialized response type from `carnelian_common::types`.
 
 use carnelian_common::types::{
-    AgentXpResponse, ApprovalActionRequest, ApprovalActionResponse, AwardXpRequest,
-    AwardXpResponse, BatchApprovalRequest, BatchApprovalResponse, CancelTaskRequest,
+    ApprovalActionRequest, ApprovalActionResponse,
+    BatchApprovalRequest, BatchApprovalResponse, CancelTaskRequest,
     CancelTaskResponse, ChannelDetail, ConfigureVoiceRequest, ConfigureVoiceResponse,
     CreateChannelApiRequest, CreateChannelResponse, CreateSubAgentApiRequest,
     CreateSubAgentResponse, CreateTaskRequest, CreateTaskResponse, CreateWorkflowRequest,
@@ -15,7 +15,7 @@ use carnelian_common::types::{
     ListRunsResponse, ListSkillsResponse, ListSubAgentsResponse, ListTasksResponse,
     ListVoicesResponse, ListWorkflowsResponse, MetricsSnapshot, OllamaStatusResponse,
     PaginatedRunLogsResponse, PairChannelApiRequest, PairChannelResponse, RevokeCapabilityResponse,
-    RunDetail, SkillMetricsDetail, SkillRefreshResponse, SkillToggleResponse, StatusResponse,
+    RunDetail, SkillRefreshResponse, SkillToggleResponse, StatusResponse,
     SubAgentActionResponse, SubAgentDetail, TaskDetail, TestVoiceRequest, TestVoiceResponse,
     TopSkillsResponse, UpdateChannelApiRequest, UpdateSubAgentApiRequest, UpdateWorkflowRequest,
     WorkflowDetail, WorkflowExecutionResponse, XpHistoryResponse, XpLeaderboardResponse,
@@ -471,18 +471,6 @@ pub async fn list_sub_agents(
         .map_err(|e| format!("Parse failed: {e}"))
 }
 
-/// Get a single sub-agent by ID.
-pub async fn get_sub_agent(sub_agent_id: Uuid) -> Result<SubAgentDetail, String> {
-    client()
-        .get(format!("{API_BASE_URL}/v1/sub-agents/{sub_agent_id}"))
-        .send()
-        .await
-        .map_err(|e| format!("Request failed: {e}"))?
-        .json::<SubAgentDetail>()
-        .await
-        .map_err(|e| format!("Parse failed: {e}"))
-}
-
 /// Create a new sub-agent.
 pub async fn create_sub_agent(
     request: CreateSubAgentApiRequest,
@@ -767,18 +755,6 @@ pub async fn pair_channel(
 
 // ── XP Operations ──────────────────────────────────────────
 
-/// Get XP summary for an agent.
-pub async fn get_agent_xp(identity_id: Uuid) -> Result<AgentXpResponse, String> {
-    client()
-        .get(format!("{API_BASE_URL}/v1/xp/agents/{identity_id}"))
-        .send()
-        .await
-        .map_err(|e| format!("Request failed: {e}"))?
-        .json::<AgentXpResponse>()
-        .await
-        .map_err(|e| format!("Parse failed: {e}"))
-}
-
 /// Get paginated XP history for an agent.
 pub async fn get_xp_history(
     identity_id: Uuid,
@@ -809,18 +785,6 @@ pub async fn get_xp_leaderboard() -> Result<XpLeaderboardResponse, String> {
         .map_err(|e| format!("Parse failed: {e}"))
 }
 
-/// Get metrics for a specific skill.
-pub async fn get_skill_metrics(skill_id: Uuid) -> Result<SkillMetricsDetail, String> {
-    client()
-        .get(format!("{API_BASE_URL}/v1/xp/skills/{skill_id}"))
-        .send()
-        .await
-        .map_err(|e| format!("Request failed: {e}"))?
-        .json::<SkillMetricsDetail>()
-        .await
-        .map_err(|e| format!("Parse failed: {e}"))
-}
-
 /// Get top skills by XP.
 pub async fn get_top_skills(limit: i64) -> Result<TopSkillsResponse, String> {
     client()
@@ -829,24 +793,6 @@ pub async fn get_top_skills(limit: i64) -> Result<TopSkillsResponse, String> {
         .await
         .map_err(|e| format!("Request failed: {e}"))?
         .json::<TopSkillsResponse>()
-        .await
-        .map_err(|e| format!("Parse failed: {e}"))
-}
-
-/// Award XP to an agent.
-pub async fn award_xp(request: AwardXpRequest) -> Result<AwardXpResponse, String> {
-    let resp = client()
-        .post(format!("{API_BASE_URL}/v1/xp/award"))
-        .json(&request)
-        .send()
-        .await
-        .map_err(|e| format!("Request failed: {e}"))?;
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let text = resp.text().await.unwrap_or_default();
-        return Err(format!("Server error {status}: {text}"));
-    }
-    resp.json::<AwardXpResponse>()
         .await
         .map_err(|e| format!("Parse failed: {e}"))
 }
@@ -983,8 +929,8 @@ pub async fn mark_setup_complete() -> Result<SetupCompleteResponse, String> {
 // ── Skill Book Operations ─────────────────────────────────
 
 use carnelian_common::types::{
-    ActivateSkillRequest, ActivateSkillResponse, DeactivateSkillResponse, SkillBookCatalog,
-    SkillBookEntry,
+    ActivateSkillRequest, ActivateSkillResponse,
+    DeactivateSkillResponse, SkillBookCatalog,
 };
 
 /// List all skills in the Skill Book catalog.
@@ -995,18 +941,6 @@ pub async fn list_skill_book() -> Result<SkillBookCatalog, String> {
         .await
         .map_err(|e| format!("Request failed: {e}"))?
         .json::<SkillBookCatalog>()
-        .await
-        .map_err(|e| format!("Parse failed: {e}"))
-}
-
-/// Get a single Skill Book entry.
-pub async fn get_skill_book_entry(skill_id: &str) -> Result<SkillBookEntry, String> {
-    client()
-        .get(format!("{API_BASE_URL}/v1/node-registry/{skill_id}"))
-        .send()
-        .await
-        .map_err(|e| format!("Request failed: {e}"))?
-        .json::<SkillBookEntry>()
         .await
         .map_err(|e| format!("Parse failed: {e}"))
 }

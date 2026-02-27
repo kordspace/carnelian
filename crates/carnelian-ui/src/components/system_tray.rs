@@ -26,14 +26,18 @@ use crate::websocket::ConnectionState;
 // ── Menu item IDs (used to match events) ────────────────────
 
 /// Stable string IDs for context-menu items.
+#[cfg(feature = "desktop")]
 const MENU_SHOW: &str = "show_window";
+#[cfg(feature = "desktop")]
 const MENU_HIDE: &str = "hide_window";
+#[cfg(feature = "desktop")]
 const MENU_QUIT: &str = "quit";
 
 // ── Tray icon ───────────────────────────────────────────────
 
 /// Load the Carnelian icon from embedded SVG bytes.
 /// The icon is loaded at compile time and parsed into RGBA for the tray.
+#[cfg(feature = "desktop")]
 fn load_carnelian_icon() -> TrayIconImage {
     // Embed the SVG file at compile time
     let _svg_bytes = include_bytes!("../../../../assets/logos/carnelian-icon.svg");
@@ -45,6 +49,7 @@ fn load_carnelian_icon() -> TrayIconImage {
 }
 
 /// Generate a 32×32 RGBA icon with Carnelian gemstone colors.
+#[cfg(feature = "desktop")]
 fn carnelian_icon_rgba(r: u8, g: u8, b: u8) -> TrayIconImage {
     let size = 32_u32;
     let mut rgba = Vec::with_capacity((size * size * 4) as usize);
@@ -100,6 +105,7 @@ fn carnelian_icon_rgba(r: u8, g: u8, b: u8) -> TrayIconImage {
 }
 
 /// Generate a 16×16 RGBA icon filled with a single colour.
+#[cfg(feature = "desktop")]
 fn solid_icon(r: u8, g: u8, b: u8) -> TrayIconImage {
     let size = 16_u32;
     let mut rgba = Vec::with_capacity((size * size * 4) as usize);
@@ -109,15 +115,19 @@ fn solid_icon(r: u8, g: u8, b: u8) -> TrayIconImage {
     TrayIconImage::from_rgba(rgba, size, size).expect("valid 16×16 icon")
 }
 
+#[cfg(feature = "desktop")]
 fn icon_connected() -> TrayIconImage {
     solid_icon(46, 204, 113)
 }
+#[cfg(feature = "desktop")]
 fn icon_connecting() -> TrayIconImage {
     solid_icon(243, 156, 18)
 }
+#[cfg(feature = "desktop")]
 fn icon_disconnected() -> TrayIconImage {
     load_carnelian_icon()
 }
+#[cfg(feature = "desktop")]
 fn icon_error() -> TrayIconImage {
     solid_icon(231, 76, 60)
 }
@@ -164,6 +174,7 @@ fn handle_menu_event(event: MenuEvent) {
 // ── Dioxus component: creates & updates the native tray ─────
 
 /// Return the tray icon image for a given connection state.
+#[cfg(feature = "desktop")]
 fn icon_for_state(state: &ConnectionState) -> TrayIconImage {
     match state {
         ConnectionState::Connected => icon_connected(),
@@ -174,6 +185,7 @@ fn icon_for_state(state: &ConnectionState) -> TrayIconImage {
 }
 
 /// Return the tooltip string for a given connection state.
+#[cfg(feature = "desktop")]
 const fn tooltip_for_state(state: &ConnectionState) -> &'static str {
     match state {
         ConnectionState::Connected => "Carnelian OS \u{2014} Connected",
@@ -221,7 +233,8 @@ pub fn SystemTray() -> Element {
     rsx! {}
 }
 
-/// Build the native tray icon with a context menu.
+/// Build the tray icon and menu. Called once per app launch.
+#[cfg(feature = "desktop")]
 fn build_tray() -> Result<TrayIcon, Box<dyn std::error::Error>> {
     let menu = Menu::new();
 
