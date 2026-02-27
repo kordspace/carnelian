@@ -53,7 +53,7 @@ pub fn Skills() -> Element {
             .map(|r| {
                 r.skills
                     .into_iter()
-                    .map(|m| (m.skill_id, m.usage_count))
+                    .map(|m| (m.skill_id, m.usage_count as i64))
                     .collect::<HashMap<Uuid, i64>>()
             })
             .unwrap_or_default()
@@ -120,7 +120,7 @@ pub fn Skills() -> Element {
             div { class: "filter-bar",
                 select {
                     class: "filter-select",
-                    aria_label: "Filter by runtime",
+                    "aria-label": "Filter by runtime",
                     value: "{filter_runtime}",
                     onchange: move |e| filter_runtime.set(e.value()),
                     option { value: "All", "All Runtimes" }
@@ -130,7 +130,7 @@ pub fn Skills() -> Element {
                 }
                 select {
                     class: "filter-select",
-                    aria_label: "Filter by status",
+                    "aria-label": "Filter by status",
                     value: "{filter_status}",
                     onchange: move |e| filter_status.set(e.value()),
                     option { value: "All", "All Statuses" }
@@ -139,9 +139,9 @@ pub fn Skills() -> Element {
                 }
                 input {
                     class: "filter-input",
-                    r#type: "text",
+                    "type": "text",
                     placeholder: "Search skills\u{2026}",
-                    aria_label: "Search skills",
+                    "aria-label": "Search skills",
                     value: "{filter_search}",
                     oninput: move |e| filter_search.set(e.value()),
                 }
@@ -396,7 +396,7 @@ fn SkillManifestModal(skill: SkillDetail, on_close: EventHandler) -> Element {
         div {
             class: "modal-overlay",
             role: "dialog",
-            aria_label: "Skill Manifest",
+            "aria-label": "Skill Manifest",
             onclick: move |_| on_close.call(()),
             div {
                 class: "modal-content",
@@ -493,7 +493,7 @@ fn CreateElixirModal(
         div {
             class: "modal-overlay",
             role: "dialog",
-            aria_label: "Create Elixir",
+            "aria-label": "Create Elixir",
             onclick: move |_| on_close.call(()),
             div {
                 class: "modal-content",
@@ -514,7 +514,7 @@ fn CreateElixirModal(
                     div { class: "form-group",
                         label { "Name" }
                         input {
-                            r#type: "text",
+                            "type": "text",
                             value: "{name}",
                             oninput: move |e| name.set(e.value()),
                             disabled: *creating.read(),
@@ -551,7 +551,6 @@ fn CreateElixirModal(
                             oninput: move |e| dataset.set(e.value()),
                             disabled: *creating.read(),
                             rows: 6,
-                            placeholder: r#"{{"examples": [], "metadata": {}}"#,
                         }
                     }
                 }
