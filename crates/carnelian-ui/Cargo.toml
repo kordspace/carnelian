@@ -14,7 +14,7 @@ web = ["dioxus/web"]
 [dependencies]
 carnelian-core = { path = "../carnelian-core" }
 carnelian-common = { path = "../carnelian-common" }
-dioxus = { workspace = true, default-features = false, features = ["desktop", "router", "html", "signals", "hooks", "document"] }
+dioxus = { version = "0.6", default-features = true, features = ["desktop", "router", "launch", "macro"] }
 dioxus-signals.workspace = true
 tokio.workspace = true
 serde.workspace = true
