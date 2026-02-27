@@ -173,6 +173,7 @@ pub async fn handle_inbound(
 }
 
 /// Process a single `WhatsApp` message.
+#[allow(clippy::too_many_lines)]
 async fn process_message(
     message: &WhatsAppMessage,
     adapter: &WhatsAppAdapter,

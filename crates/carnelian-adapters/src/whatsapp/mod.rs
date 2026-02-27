@@ -33,7 +33,7 @@ use crate::types::ChannelConfig;
 /// session management, rate limiting, spam detection, and capability checks.
 /// The adapter is webhook-driven; `start()` only manages the running flag.
 pub struct WhatsAppAdapter {
-    /// Channel configuration (bot_token = Meta access token).
+    /// Channel configuration (`bot_token` = Meta access token).
     config: ChannelConfig,
     /// `WhatsApp` phone number ID for Graph API URL construction.
     phone_number_id: String,
@@ -69,6 +69,7 @@ impl WhatsAppAdapter {
     /// # Errors
     ///
     /// Currently infallible, but returns `Result` for future extensibility.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         config: ChannelConfig,
         phone_number_id: String,

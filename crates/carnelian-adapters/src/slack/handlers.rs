@@ -97,6 +97,8 @@ pub fn verify_slack_signature(
     body: &[u8],
     signature: &str,
 ) -> anyhow::Result<()> {
+    type HmacSha256 = Hmac<Sha256>;
+
     // 1. Replay protection: check timestamp is within 5 minutes
     let now = chrono::Utc::now().timestamp();
     let ts = timestamp
@@ -113,7 +115,6 @@ pub fn verify_slack_signature(
     let base_string = format!("v0:{timestamp}:{body_str}");
 
     // 3. Compute HMAC-SHA256
-    type HmacSha256 = Hmac<Sha256>;
     let mut mac = HmacSha256::new_from_slice(signing_secret.as_bytes())
         .map_err(|_| anyhow::anyhow!("Invalid signing secret length"))?;
     mac.update(base_string.as_bytes());
@@ -205,6 +206,7 @@ pub async fn handle_event(
 }
 
 /// Process a single Slack message event.
+#[allow(clippy::too_many_lines)]
 async fn process_message_event(event: &SlackEvent, adapter: &SlackAdapter) -> anyhow::Result<()> {
     // 1. Skip bot messages
     if event.bot_id.is_some() {

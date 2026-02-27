@@ -46,6 +46,7 @@ impl EventHandler for DiscordHandler {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn message(&self, ctx: Context, msg: Message) {
         // Ignore bot messages
         if msg.author.bot {

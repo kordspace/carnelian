@@ -80,6 +80,7 @@ impl DefaultAdapterFactory {
 
 #[async_trait]
 impl ChannelAdapterFactory for DefaultAdapterFactory {
+    #[allow(clippy::too_many_lines)]
     async fn build(
         &self,
         session_id: Uuid,

@@ -41,17 +41,17 @@ pub fn build_handler() -> UpdateHandler<anyhow::Error> {
         .branch(message_handler)
 }
 
-/// Handle an incoming text message from Telegram.
+/// Process a single message from Telegram.
 ///
-/// Pipeline:
-/// 1. Extract chat ID and user ID
-/// 2. Check rate limit
-/// 3. Update spam score
-/// 4. Load or create channel session
-/// 5. Check capability (`channel.message.receive`)
-/// 6. Forward to `SessionManager`
+/// 1. Extract text content
+/// 2. Look up or create channel session
+/// 3. Check rate limits
+/// 4. Check spam score
+/// 5. Verify capabilities
+/// 6. Forward to session manager
 /// 7. Emit `ChannelMessageReceived` event
 /// 8. Update `last_seen_at`
+#[allow(clippy::too_many_lines)]
 async fn handle_message(
     bot: Bot,
     msg: Message,
