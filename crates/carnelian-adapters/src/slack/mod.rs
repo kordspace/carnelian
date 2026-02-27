@@ -189,9 +189,15 @@ impl ChannelAdapter for SlackAdapter {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to parse Slack API response: {e}"))?;
 
-        let ok = response_json.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+        let ok = response_json
+            .get("ok")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         if !ok {
-            let error = response_json.get("error").and_then(|v| v.as_str()).unwrap_or("unknown error");
+            let error = response_json
+                .get("error")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown error");
             anyhow::bail!("Slack API returned error: {}", error);
         }
 

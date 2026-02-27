@@ -826,14 +826,41 @@ dependencies = [
  "chrono",
  "dashmap 6.1.0",
  "governor",
+ "hex",
+ "hmac",
+ "reqwest 0.13.1",
  "serde",
  "serde_json",
  "serenity",
+ "sha2",
  "sqlx",
  "teloxide",
  "thiserror 2.0.18",
  "tokio",
  "tokio-test",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "carnelian-bin"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bollard",
+ "carnelian-adapters",
+ "carnelian-common",
+ "carnelian-core",
+ "clap",
+ "dotenvy",
+ "futures-util",
+ "reqwest 0.13.1",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "sysinfo",
+ "tokio",
+ "tokio-tungstenite 0.28.0",
  "tracing",
  "uuid",
 ]
@@ -845,6 +872,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "blake3",
+ "bytes",
  "chrono",
  "config",
  "ed25519-dalek",
@@ -936,6 +964,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "carnelian-worker-native"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "blake3",
+ "bollard",
+ "carnelian-common",
+ "carnelian-core",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "tokio",
+ "tracing",
+ "walkdir",
+]
+
+[[package]]
 name = "carnelian-worker-node"
 version = "0.1.0"
 dependencies = [
@@ -952,23 +999,14 @@ name = "carnelian-worker-python"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "carnelian-common",
+ "carnelian-core",
  "serde",
  "serde_json",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "carnelian-worker-shell"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "carnelian-common",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
+ "which",
 ]
 
 [[package]]
@@ -1254,16 +1292,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "console_error_panic_hook"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
-dependencies = [
- "cfg-if",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1287,27 +1315,6 @@ dependencies = [
  "getrandom 0.2.17",
  "once_cell",
  "tiny-keccak",
-]
-
-[[package]]
-name = "const-serialize"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08259976d62c715c4826cb4a3d64a3a9e5c5f68f964ff6087319857f569f93a6"
-dependencies = [
- "const-serialize-macro",
- "serde",
-]
-
-[[package]]
-name = "const-serialize-macro"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04382d0d9df7434af6b1b49ea1a026ef39df1b0738b1cc373368cf175354f6eb"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.114",
 ]
 
 [[package]]
@@ -1855,20 +1862,10 @@ dependencies = [
  "dioxus-cli-config",
  "dioxus-config-macro",
  "dioxus-core",
- "dioxus-core-macro",
  "dioxus-desktop",
- "dioxus-devtools",
- "dioxus-document",
  "dioxus-fullstack",
- "dioxus-history",
- "dioxus-hooks",
- "dioxus-html",
- "dioxus-logger",
  "dioxus-router",
- "dioxus-signals",
  "dioxus-web",
- "manganis",
- "warnings",
 ]
 
 [[package]]
@@ -2050,6 +2047,7 @@ dependencies = [
  "serde",
  "server_fn",
  "tracing",
+ "web-sys",
 ]
 
 [[package]]
@@ -2152,19 +2150,6 @@ dependencies = [
  "dioxus-rsx",
  "dioxus-signals",
  "warnings",
-]
-
-[[package]]
-name = "dioxus-logger"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "545961e752f6c8bf59c274951b3c8b18a106db6ad2f9e2035b29e1f2a3e899b1"
-dependencies = [
- "console_error_panic_hook",
- "dioxus-cli-config",
- "tracing",
- "tracing-subscriber",
- "tracing-wasm",
 ]
 
 [[package]]
@@ -4395,42 +4380,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62bb907fe88d54d8d9ce32a3cceab4218ed2f6b7d35617cafe9adf84e43919cb"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "manganis"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "317af44b15e7605b85f04525449a3bb631753040156c9b318e6cba8a3ea4ef73"
-dependencies = [
- "const-serialize",
- "manganis-core",
- "manganis-macro",
-]
-
-[[package]]
-name = "manganis-core"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c38bee65cc725b2bba23b5dbb290f57c8be8fadbe2043fb7e2ce73022ea06519"
-dependencies = [
- "const-serialize",
- "dioxus-cli-config",
- "dioxus-core-types",
- "serde",
-]
-
-[[package]]
-name = "manganis-macro"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9f4f71310913c40174d9f0cfcbcb127dad0329ecdb3945678a120db22d3d065"
-dependencies = [
- "dunce",
- "manganis-core",
- "proc-macro2",
- "quote",
- "syn 2.0.114",
 ]
 
 [[package]]
@@ -8252,17 +8201,6 @@ dependencies = [
  "tracing-core",
  "tracing-log",
  "tracing-serde",
-]
-
-[[package]]
-name = "tracing-wasm"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4575c663a174420fa2d78f4108ff68f65bf2fbb7dd89f33749b6e826b3626e07"
-dependencies = [
- "tracing",
- "tracing-subscriber",
- "wasm-bindgen",
 ]
 
 [[package]]

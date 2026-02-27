@@ -8,8 +8,8 @@ rust-version.workspace = true
 
 [features]
 default = ["desktop"]
-desktop = ["tray-icon", "dioxus?/desktop"]
-web = ["dioxus?/web"]
+desktop = ["tray-icon", "dioxus/desktop"]
+web = ["dioxus/web"]
 
 [dependencies]
 carnelian-core = { path = "../carnelian-core" }

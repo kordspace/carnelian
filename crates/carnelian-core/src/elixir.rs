@@ -10,12 +10,11 @@
 //! Auto-draft threshold rule: When a skill reaches 100+ usages and has no pending draft
 //! or active elixir, a draft is automatically created for review.
 
-use carnelian_common::{Error, Result};
 use carnelian_common::types::{
-    ApproveDraftResponse, CreateElixirRequest, ElixirDetail, ElixirDraft,
-    ElixirSearchResponse, ListElixirDraftsResponse, ListElixirsQuery, ListElixirsResponse,
-    RejectDraftResponse,
+    ApproveDraftResponse, CreateElixirRequest, ElixirDetail, ElixirDraft, ElixirSearchResponse,
+    ListElixirDraftsResponse, ListElixirsQuery, ListElixirsResponse, RejectDraftResponse,
 };
+use carnelian_common::{Error, Result};
 use serde_json::Value as JsonValue;
 use sqlx::{PgPool, Row};
 use std::sync::Arc;
@@ -111,12 +110,11 @@ impl ElixirManager {
                     "Failed to ensure agent XP record"
                 );
             }
-            if let Err(e) = self.xp_manager.award_xp(
-                identity_id,
-                XpSource::ElixirCreated { elixir_id },
-                50,
-                None,
-            ).await {
+            if let Err(e) = self
+                .xp_manager
+                .award_xp(identity_id, XpSource::ElixirCreated { elixir_id }, 50, None)
+                .await
+            {
                 tracing::warn!(
                     identity_id = %identity_id,
                     elixir_id = %elixir_id,
@@ -190,7 +188,8 @@ impl ElixirManager {
         let offset = (query.page.saturating_sub(1)) * query.page_size;
         sql.push_str(&format!(
             " ORDER BY created_at DESC LIMIT ${} OFFSET ${}",
-            param_index, param_index + 1
+            param_index,
+            param_index + 1
         ));
 
         let mut main_query = sqlx::query(&sql);
@@ -246,7 +245,10 @@ impl ElixirManager {
             .await
             .map_err(Error::Database)?;
 
-        let results = rows.iter().map(Self::row_to_elixir_detail).collect::<Vec<_>>();
+        let results = rows
+            .iter()
+            .map(Self::row_to_elixir_detail)
+            .collect::<Vec<_>>();
         let total = results.len() as i64;
 
         Ok(ElixirSearchResponse {
@@ -262,14 +264,15 @@ impl ElixirManager {
         draft_id: Uuid,
         reviewed_by: Option<Uuid>,
     ) -> Result<ApproveDraftResponse> {
-        let draft_row = sqlx::query(
-            "SELECT * FROM elixir_drafts WHERE draft_id = $1 AND status = 'pending'",
-        )
-        .bind(draft_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(Error::Database)?
-        .ok_or_else(|| Error::Validation("Draft not found or already reviewed".to_string()))?;
+        let draft_row =
+            sqlx::query("SELECT * FROM elixir_drafts WHERE draft_id = $1 AND status = 'pending'")
+                .bind(draft_id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(Error::Database)?
+                .ok_or_else(|| {
+                    Error::Validation("Draft not found or already reviewed".to_string())
+                })?;
 
         let skill_id: Uuid = draft_row.get("skill_id");
         let proposed_name: String = draft_row.get("proposed_name");
@@ -336,12 +339,11 @@ impl ElixirManager {
                     "Failed to ensure agent XP record"
                 );
             }
-            if let Err(e) = self.xp_manager.award_xp(
-                identity_id,
-                XpSource::ElixirApproved { draft_id },
-                25,
-                None,
-            ).await {
+            if let Err(e) = self
+                .xp_manager
+                .award_xp(identity_id, XpSource::ElixirApproved { draft_id }, 25, None)
+                .await
+            {
                 tracing::warn!(
                     identity_id = %identity_id,
                     draft_id = %draft_id,
@@ -395,13 +397,12 @@ impl ElixirManager {
 
     /// Checks if a skill meets the auto-draft threshold and creates a draft if eligible.
     pub async fn check_auto_draft_threshold(&self, skill_id: Uuid) -> Result<()> {
-        let usage_count: Option<i64> = sqlx::query_scalar(
-            "SELECT usage_count FROM skill_metrics WHERE skill_id = $1",
-        )
-        .bind(skill_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(Error::Database)?;
+        let usage_count: Option<i64> =
+            sqlx::query_scalar("SELECT usage_count FROM skill_metrics WHERE skill_id = $1")
+                .bind(skill_id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(Error::Database)?;
 
         if usage_count.unwrap_or(0) < 100 {
             return Ok(());

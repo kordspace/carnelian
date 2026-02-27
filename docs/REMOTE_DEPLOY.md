@@ -22,7 +22,7 @@ cp machine.toml.example machine.toml
 Edit `machine.toml` with your settings:
 
 ```toml
-machine_profile = "thummim"
+machine_profile = "standard"
 database_url = "postgres://carnelian:your_password@localhost:5432/carnelian"
 gateway_url = "http://localhost:18790"
 http_port = 18789

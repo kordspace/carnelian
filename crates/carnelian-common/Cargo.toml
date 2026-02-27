@@ -7,14 +7,15 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-serde.workspace = true
-serde_json.workspace = true
-uuid.workspace = true
-chrono.workspace = true
-thiserror.workspace = true
-anyhow.workspace = true
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
 ed25519-dalek.workspace = true
 blake3.workspace = true
+bytes.workspace = true
 sqlx.workspace = true
 config.workspace = true
 tokio.workspace = true

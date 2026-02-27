@@ -43,10 +43,10 @@ pub mod types;
 pub mod whatsapp;
 
 pub use config::AdapterConfig;
+pub use factory::DefaultAdapterFactory;
+pub use slack::SlackAdapter;
 pub use types::{ChannelConfig, ChannelSession, ChannelType, TrustLevel};
 pub use whatsapp::WhatsAppAdapter;
-pub use slack::SlackAdapter;
-pub use factory::DefaultAdapterFactory;
 
 // Re-export the ChannelAdapter trait from carnelian-common so both
 // carnelian-core and carnelian-adapters share the same trait definition

@@ -170,7 +170,9 @@ impl XpManager {
             XpSource::TaskCompletion { task_id, skill_id } => {
                 (Some(*task_id), *skill_id, None::<i64>, None::<Uuid>)
             }
-            XpSource::LedgerSigning { ledger_event_id } => (None, None, Some(*ledger_event_id), None::<Uuid>),
+            XpSource::LedgerSigning { ledger_event_id } => {
+                (None, None, Some(*ledger_event_id), None::<Uuid>)
+            }
             XpSource::SkillUsage { skill_id } => (None, Some(*skill_id), None, None::<Uuid>),
             XpSource::QualityBonus => (None, None, None, None::<Uuid>),
             XpSource::ElixirCreated { elixir_id } => (None, None, None, Some(*elixir_id)),
@@ -178,11 +180,14 @@ impl XpManager {
         };
 
         let mut metadata_value = metadata.unwrap_or_else(|| serde_json::json!({}));
-        
+
         // Merge draft_id into metadata for ElixirApproved
         if let XpSource::ElixirApproved { draft_id } = &source {
             if let Some(obj) = metadata_value.as_object_mut() {
-                obj.insert("draft_id".to_string(), serde_json::json!(draft_id.to_string()));
+                obj.insert(
+                    "draft_id".to_string(),
+                    serde_json::json!(draft_id.to_string()),
+                );
             }
         }
 
@@ -372,13 +377,12 @@ impl XpManager {
 
         // Check auto-draft threshold (inlined to avoid circular dependency)
         // Rule: If skill has 100+ usages and no pending draft or active elixir, create a draft
-        let usage_count: Option<i64> = sqlx::query_scalar(
-            "SELECT usage_count FROM skill_metrics WHERE skill_id = $1",
-        )
-        .bind(skill_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(Error::Database)?;
+        let usage_count: Option<i64> =
+            sqlx::query_scalar("SELECT usage_count FROM skill_metrics WHERE skill_id = $1")
+                .bind(skill_id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(Error::Database)?;
 
         if usage_count.unwrap_or(0) >= 100 {
             let pending_count: i64 = sqlx::query_scalar(

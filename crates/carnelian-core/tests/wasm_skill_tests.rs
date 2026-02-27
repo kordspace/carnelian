@@ -1,5 +1,5 @@
-use carnelian_core::skills::wasm_runtime::WasmSkillRuntime;
 use carnelian_core::skills::SkillInput;
+use carnelian_core::skills::wasm_runtime::WasmSkillRuntime;
 use serde_json::json;
 use std::path::PathBuf;
 
@@ -33,15 +33,18 @@ fn skill_input(params: serde_json::Value) -> SkillInput {
 async fn test_hello_wasm() {
     let runtime = make_runtime();
     let path = wasm_path("hello-wasm");
-    
+
     if !path.exists() {
         println!("Skipping test: {} does not exist", path.display());
         return;
     }
-    
+
     runtime.load(&path, "hello-wasm").unwrap();
-    let output = runtime.invoke("hello-wasm", skill_input(json!({})), vec![]).await.unwrap();
-    
+    let output = runtime
+        .invoke("hello-wasm", skill_input(json!({})), vec![])
+        .await
+        .unwrap();
+
     assert_eq!(output.success, true);
     assert_eq!(output.data["data"]["message"], "Hello from WASM!");
 }
@@ -51,19 +54,22 @@ async fn test_hello_wasm() {
 async fn test_markdown_parse() {
     let runtime = make_runtime();
     let path = wasm_path("markdown-parse");
-    
+
     if !path.exists() {
         println!("Skipping test: {} does not exist", path.display());
         return;
     }
-    
+
     runtime.load(&path, "markdown-parse").unwrap();
-    let output = runtime.invoke(
-        "markdown-parse",
-        skill_input(json!({"content": "# Title\n\nParagraph text."})),
-        vec![]
-    ).await.unwrap();
-    
+    let output = runtime
+        .invoke(
+            "markdown-parse",
+            skill_input(json!({"content": "# Title\n\nParagraph text."})),
+            vec![],
+        )
+        .await
+        .unwrap();
+
     assert_eq!(output.success, true);
     assert!(output.data["data"]["ast"].is_array());
     assert_eq!(output.data["data"]["headings"][0]["text"], "Title");
@@ -74,19 +80,22 @@ async fn test_markdown_parse() {
 async fn test_json_transform_field() {
     let runtime = make_runtime();
     let path = wasm_path("json-transform");
-    
+
     if !path.exists() {
         println!("Skipping test: {} does not exist", path.display());
         return;
     }
-    
+
     runtime.load(&path, "json-transform").unwrap();
-    let output = runtime.invoke(
-        "json-transform",
-        skill_input(json!({"data": {"name": "carnelian"}, "query": ".name"})),
-        vec![]
-    ).await.unwrap();
-    
+    let output = runtime
+        .invoke(
+            "json-transform",
+            skill_input(json!({"data": {"name": "carnelian"}, "query": ".name"})),
+            vec![],
+        )
+        .await
+        .unwrap();
+
     assert_eq!(output.success, true);
     assert_eq!(output.data["data"]["result"][0], "carnelian");
 }
@@ -96,22 +105,28 @@ async fn test_json_transform_field() {
 async fn test_json_transform_identity() {
     let runtime = make_runtime();
     let path = wasm_path("json-transform");
-    
+
     if !path.exists() {
         println!("Skipping test: {} does not exist", path.display());
         return;
     }
-    
+
     runtime.load(&path, "json-transform").unwrap();
-    let output = runtime.invoke(
-        "json-transform",
-        skill_input(json!({"data": [1,2,3], "query": "."})),
-        vec![]
-    ).await.unwrap();
-    
+    let output = runtime
+        .invoke(
+            "json-transform",
+            skill_input(json!({"data": [1,2,3], "query": "."})),
+            vec![],
+        )
+        .await
+        .unwrap();
+
     assert_eq!(output.success, true);
     assert!(output.data["data"]["result"][0].is_array());
-    assert_eq!(output.data["data"]["result"][0].as_array().unwrap().len(), 3);
+    assert_eq!(
+        output.data["data"]["result"][0].as_array().unwrap().len(),
+        3
+    );
 }
 
 #[tokio::test]
@@ -119,19 +134,22 @@ async fn test_json_transform_identity() {
 async fn test_yaml_parse() {
     let runtime = make_runtime();
     let path = wasm_path("yaml-parse");
-    
+
     if !path.exists() {
         println!("Skipping test: {} does not exist", path.display());
         return;
     }
-    
+
     runtime.load(&path, "yaml-parse").unwrap();
-    let output = runtime.invoke(
-        "yaml-parse",
-        skill_input(json!({"content": "name: carnelian\nversion: 1"})),
-        vec![]
-    ).await.unwrap();
-    
+    let output = runtime
+        .invoke(
+            "yaml-parse",
+            skill_input(json!({"content": "name: carnelian\nversion: 1"})),
+            vec![],
+        )
+        .await
+        .unwrap();
+
     assert_eq!(output.success, true);
     assert_eq!(output.data["data"]["json"]["name"], "carnelian");
 }
@@ -141,19 +159,22 @@ async fn test_yaml_parse() {
 async fn test_text_search() {
     let runtime = make_runtime();
     let path = wasm_path("text-search");
-    
+
     if !path.exists() {
         println!("Skipping test: {} does not exist", path.display());
         return;
     }
-    
+
     runtime.load(&path, "text-search").unwrap();
-    let output = runtime.invoke(
-        "text-search",
-        skill_input(json!({"text": "foo bar baz", "pattern": "\\b\\w{3}\\b"})),
-        vec![]
-    ).await.unwrap();
-    
+    let output = runtime
+        .invoke(
+            "text-search",
+            skill_input(json!({"text": "foo bar baz", "pattern": "\\b\\w{3}\\b"})),
+            vec![],
+        )
+        .await
+        .unwrap();
+
     assert_eq!(output.success, true);
     assert_eq!(output.data["data"]["count"].as_u64().unwrap(), 3);
 }
@@ -163,19 +184,22 @@ async fn test_text_search() {
 async fn test_hash_file() {
     let runtime = make_runtime();
     let path = wasm_path("hash-file");
-    
+
     if !path.exists() {
         println!("Skipping test: {} does not exist", path.display());
         return;
     }
-    
+
     runtime.load(&path, "hash-file").unwrap();
-    let output = runtime.invoke(
-        "hash-file",
-        skill_input(json!({"content": "hello world"})),
-        vec![]
-    ).await.unwrap();
-    
+    let output = runtime
+        .invoke(
+            "hash-file",
+            skill_input(json!({"content": "hello world"})),
+            vec![],
+        )
+        .await
+        .unwrap();
+
     assert_eq!(output.success, true);
     assert!(output.data["data"]["hash"].is_string());
     assert_eq!(output.data["data"]["algorithm"], "blake3");
@@ -186,20 +210,28 @@ async fn test_hash_file() {
 async fn test_code_format_json() {
     let runtime = make_runtime();
     let path = wasm_path("code-format");
-    
+
     if !path.exists() {
         println!("Skipping test: {} does not exist", path.display());
         return;
     }
-    
+
     runtime.load(&path, "code-format").unwrap();
-    let output = runtime.invoke(
-        "code-format",
-        skill_input(json!({"code": "{\"a\":1,\"b\":2}", "lang": "json"})),
-        vec![]
-    ).await.unwrap();
-    
+    let output = runtime
+        .invoke(
+            "code-format",
+            skill_input(json!({"code": "{\"a\":1,\"b\":2}", "lang": "json"})),
+            vec![],
+        )
+        .await
+        .unwrap();
+
     assert_eq!(output.success, true);
-    assert!(output.data["data"]["formatted"].as_str().unwrap().contains("\"a\":"));
+    assert!(
+        output.data["data"]["formatted"]
+            .as_str()
+            .unwrap()
+            .contains("\"a\":")
+    );
     assert_eq!(output.data["data"]["lang"], "json");
 }

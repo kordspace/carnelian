@@ -11,8 +11,8 @@ This guide covers installing and setting up Carnelian OS, an AI agent runtime wi
 | **Node.js** | 18.x | 20.x+ | For building UI components |
 | **Python** | 3.10+ | 3.12 | For skill dependencies |
 | **NVIDIA Drivers** | 525+ | 550+ | For GPU inference (optional) |
-| **RAM** | 8 GB | 16+ GB | ≥16 GB recommended for `thummim` profile |
-| **GPU VRAM** | N/A | 6+ GB | ≥10 GB for `urim` profile |
+| **RAM** | 8 GB | 16+ GB | ≥32 GB recommended for `standard` profile |
+| **GPU VRAM** | N/A | 6+ GB | ≥10 GB for `performance` profile |
 | **Disk** | 10 GB free | 50+ GB | For models and data |
 
 ### Platform-Specific Notes
@@ -42,7 +42,7 @@ carnelian start
 
 The `carnelian init` command will:
 - Detect your hardware (RAM, GPU VRAM)
-- Suggest an appropriate machine profile (`urim`, `thummim`, or `custom`)
+- Suggest an appropriate machine profile (`standard`, `performance`, or `custom`)
 - Set up Docker containers for PostgreSQL and Ollama
 - Generate an owner keypair for secure API access
 - Configure `machine.toml` with your settings
@@ -88,7 +88,7 @@ services:
   carnelian:
     build: .
     environment:
-      - CARNELIAN_PROFILE=thummim
+      - CARNELIAN_PROFILE=standard
     volumes:
       - carnelian-data:/root/.carnelian
     command: >
@@ -162,7 +162,7 @@ After successful initialization:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `CARNELIAN_PROFILE` | Default machine profile | `thummim`, `urim`, `custom` |
+| `CARNELIAN_PROFILE` | Default machine profile | `standard`, `performance`, `custom` |
 | `CARNELIAN_DATABASE_URL` | PostgreSQL connection string | `postgresql://...` |
 | `CARNELIAN_OLLAMA_URL` | Ollama API endpoint | `http://localhost:11434` |
 | `CARNELIAN_HTTP_PORT` | HTTP server port | `18789` |

@@ -17,7 +17,7 @@ use carnelian_core::policy::PolicyEngine;
 
 use crate::db as channel_db;
 use crate::events;
-use crate::types::{PairingRequest, TrustLevel, ChannelType};
+use crate::types::{ChannelType, PairingRequest, TrustLevel};
 
 use super::SlackAdapter;
 
@@ -43,7 +43,15 @@ pub async fn handle_pair(
         initiate_pairing(channel_id, user_id, adapter, db_pool, identity_id, None).await
     } else if let Ok(requested_trust) = trimmed.parse::<TrustLevel>() {
         // Argument is a trust level name — initiate with that level
-        initiate_pairing(channel_id, user_id, adapter, db_pool, identity_id, Some(requested_trust)).await
+        initiate_pairing(
+            channel_id,
+            user_id,
+            adapter,
+            db_pool,
+            identity_id,
+            Some(requested_trust),
+        )
+        .await
     } else {
         // Argument is a pairing token — verify and complete
         complete_pairing(
@@ -116,7 +124,10 @@ async fn complete_pairing(
         Some(s) => s,
         None => {
             adapter
-                .send_message(channel_id, "❌ No pending pairing found. Use `/carnelian pair` to start.")
+                .send_message(
+                    channel_id,
+                    "❌ No pending pairing found. Use `/carnelian pair` to start.",
+                )
                 .await?;
             return Ok(());
         }
@@ -146,7 +157,10 @@ async fn complete_pairing(
     if let Ok(expires_at) = chrono::DateTime::parse_from_rfc3339(expires_str) {
         if chrono::Utc::now() > expires_at {
             adapter
-                .send_message(channel_id, "❌ Pairing token has expired. Use `/carnelian pair` to generate a new one.")
+                .send_message(
+                    channel_id,
+                    "❌ Pairing token has expired. Use `/carnelian pair` to generate a new one.",
+                )
                 .await?;
             return Ok(());
         }
@@ -254,11 +268,7 @@ mod tests {
 
     #[test]
     fn test_pairing_request_defaults_to_conversational() {
-        let req = PairingRequest::new(
-            ChannelType::Slack,
-            "C12345678".to_string(),
-            None,
-        );
+        let req = PairingRequest::new(ChannelType::Slack, "C12345678".to_string(), None);
 
         assert_eq!(req.requested_trust_level, TrustLevel::Conversational);
         assert!(!req.is_expired());

@@ -139,9 +139,9 @@ curl -f http://localhost:18789/v1/health
 docker-compose up -d
 
 # With machine profile override (recommended)
-docker-compose -f docker-compose.yml -f docker-compose.thummim.yml up -d
+docker-compose -f docker-compose.yml -f docker-compose.standard.yml up -d
 # OR
-docker-compose -f docker-compose.yml -f docker-compose.urim.yml up -d
+docker-compose -f docker-compose.yml -f docker-compose.performance.yml up -d
 ```
 
 ### Verify Services
@@ -160,18 +160,18 @@ docker-compose logs -f carnelian-core
 ### Download Models
 
 ```bash
-# For Thummim (8GB VRAM)
+# For Standard profile (8GB VRAM)
 docker exec carnelian-ollama ollama pull deepseek-r1:7b
 
-# For Urim (11GB VRAM)
+# For Performance profile (24GB VRAM)
 docker exec carnelian-ollama ollama pull deepseek-r1:32b
 ```
 
 ## Machine Profiles
 
-### Thummim (RTX 2080 Super, 8GB VRAM, 32GB RAM)
+### Standard (RTX 2080 Super, 8GB VRAM, 32GB RAM)
 ```bash
-docker-compose -f docker-compose.yml -f docker-compose.thummim.yml up -d
+docker-compose -f docker-compose.yml -f docker-compose.standard.yml up -d
 ```
 
 **Resource Limits:**
@@ -179,9 +179,9 @@ docker-compose -f docker-compose.yml -f docker-compose.thummim.yml up -d
 
 **Recommended Model:** `deepseek-r1:7b`
 
-### Urim (RTX 2080 Ti, 11GB VRAM, 64GB RAM)
+### Performance (RTX 3090, 24GB VRAM, 64GB+ RAM)
 ```bash
-docker-compose -f docker-compose.yml -f docker-compose.urim.yml up -d
+docker-compose -f docker-compose.yml -f docker-compose.performance.yml up -d
 ```
 
 **Resource Limits:**

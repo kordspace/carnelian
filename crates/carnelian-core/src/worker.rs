@@ -62,6 +62,8 @@ use crate::config::Config;
 use crate::events::EventStream;
 use crate::ledger::Ledger;
 use crate::skills::wasm_runtime::WasmSkillRuntime;
+use bollard::container::{LogsOptions, StatsOptions};
+use bollard::exec::{CreateExecOptions, StartExecResults};
 use carnelian_common::types::{
     CancelRequest, EventEnvelope, EventLevel, EventType, HealthResponse, InvokeRequest,
     InvokeResponse, InvokeStatus, RunId, StreamEvent, TransportMessage, WorkerInfo,
@@ -69,21 +71,19 @@ use carnelian_common::types::{
 use carnelian_common::{Error, Result};
 use chrono::{DateTime, Utc};
 use ed25519_dalek::Signature;
+use futures_util::StreamExt;
 use serde_json::json;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Instant;
+use sysinfo::{Disks, Networks, ProcessRefreshKind, RefreshKind, System};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout};
 use tokio::sync::{RwLock, mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
-use bollard::exec::{CreateExecOptions, StartExecResults};
-use bollard::container::{LogsOptions, StatsOptions};
-use futures_util::StreamExt;
-use sysinfo::{Disks, Networks, ProcessRefreshKind, RefreshKind, System};
 
 /// Worker runtime type
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -810,7 +810,7 @@ impl WorkerTransport for WasmWorkerTransport {
     async fn invoke(&self, request: InvokeRequest) -> Result<InvokeResponse> {
         let run_id = request.run_id.clone();
         let skill_name = request.skill_name.clone();
-        
+
         // Emit SkillInvokeStart event
         self.event_stream.publish(EventEnvelope::new(
             EventLevel::Info,
@@ -829,24 +829,27 @@ impl WorkerTransport for WasmWorkerTransport {
         // Load skill if not already loaded
         let skill_id = format!("{}/{}-worker", skill_name, self.worker_id);
         if !self.runtime.is_loaded(&skill_id) {
-            if let Err(e) = self.runtime.load(std::path::Path::new(&wasm_path), &skill_id) {
+            if let Err(e) = self
+                .runtime
+                .load(std::path::Path::new(&wasm_path), &skill_id)
+            {
                 tracing::warn!(error = %e, "Failed to preload WASM skill, will attempt on invoke");
             }
         }
 
         // Read capabilities from skill.json
         let capabilities = match std::fs::read_to_string(&skill_json_path) {
-            Ok(content) => {
-                serde_json::from_str::<serde_json::Value>(&content)
-                    .ok()
-                    .and_then(|v| v.get("capabilities_required").cloned())
-                    .and_then(|v| v.as_array().map(|arr| {
+            Ok(content) => serde_json::from_str::<serde_json::Value>(&content)
+                .ok()
+                .and_then(|v| v.get("capabilities_required").cloned())
+                .and_then(|v| {
+                    v.as_array().map(|arr| {
                         arr.iter()
                             .filter_map(|s| s.as_str().map(String::from))
                             .collect::<Vec<_>>()
-                    }))
-                    .unwrap_or_default()
-            }
+                    })
+                })
+                .unwrap_or_default(),
             Err(_) => Vec::new(),
         };
 
@@ -857,7 +860,11 @@ impl WorkerTransport for WasmWorkerTransport {
 
         // Call WASM runtime
         let start_time = std::time::Instant::now();
-        let output = match self.runtime.invoke(&skill_id, skill_input, capabilities).await {
+        let output = match self
+            .runtime
+            .invoke(&skill_id, skill_input, capabilities)
+            .await
+        {
             Ok(out) => out,
             Err(e) => {
                 // Emit SkillInvokeFailed event
@@ -890,16 +897,25 @@ impl WorkerTransport for WasmWorkerTransport {
         ));
 
         // Check if output was truncated from metadata
-        let truncated = output.metadata.get("truncated")
+        let truncated = output
+            .metadata
+            .get("truncated")
             .and_then(|v| v.parse::<bool>().ok())
             .unwrap_or(false);
 
         Ok(InvokeResponse {
             run_id,
-            status: if output.success { InvokeStatus::Success } else { InvokeStatus::Failed },
+            status: if output.success {
+                InvokeStatus::Success
+            } else {
+                InvokeStatus::Failed
+            },
             result: output.data,
             error: output.error,
-            exit_code: output.metadata.get("exit_code").and_then(|v| v.parse::<i32>().ok()),
+            exit_code: output
+                .metadata
+                .get("exit_code")
+                .and_then(|v| v.parse::<i32>().ok()),
             duration_ms,
             truncated,
         })
@@ -946,11 +962,7 @@ pub struct NativeWorkerTransport {
 
 impl NativeWorkerTransport {
     /// Create a new NativeWorkerTransport
-    pub fn new(
-        worker_id: String,
-        event_stream: Arc<EventStream>,
-        config: Arc<Config>,
-    ) -> Self {
+    pub fn new(worker_id: String, event_stream: Arc<EventStream>, config: Arc<Config>) -> Self {
         Self {
             worker_id,
             event_stream,
@@ -962,7 +974,8 @@ impl NativeWorkerTransport {
 
     /// Check if the required capability is present in the request
     fn check_capability(input: &serde_json::Value, required: &str) -> bool {
-        input.get("capabilities")
+        input
+            .get("capabilities")
             .and_then(|c| c.as_array())
             .map(|arr| arr.iter().any(|v| v.as_str() == Some(required)))
             .unwrap_or(false)
@@ -982,14 +995,12 @@ impl NativeWorkerTransport {
             })?;
 
         // Hex-decode the signature bytes
-        let sig_bytes = hex::decode(sig_str).map_err(|e| {
-            Error::Security(format!("Invalid _approval_signature encoding: {}", e))
-        })?;
+        let sig_bytes = hex::decode(sig_str)
+            .map_err(|e| Error::Security(format!("Invalid _approval_signature encoding: {}", e)))?;
 
         // Parse into ed25519_dalek::Signature
-        let signature = Signature::from_slice(&sig_bytes).map_err(|e| {
-            Error::Security(format!("Malformed _approval_signature: {}", e))
-        })?;
+        let signature = Signature::from_slice(&sig_bytes)
+            .map_err(|e| Error::Security(format!("Malformed _approval_signature: {}", e)))?;
 
         // Build the canonical message by removing the signature field
         let mut canonical = input.clone();
@@ -998,8 +1009,9 @@ impl NativeWorkerTransport {
         }
 
         // Serialize to canonical JSON string
-        let message_str = serde_json::to_string(&canonical)
-            .map_err(|e| Error::Security(format!("Failed to serialize canonical message: {}", e)))?;
+        let message_str = serde_json::to_string(&canonical).map_err(|e| {
+            Error::Security(format!("Failed to serialize canonical message: {}", e))
+        })?;
         let message_bytes = message_str.as_bytes();
 
         // Verify via Config::verify_signature
@@ -1042,7 +1054,9 @@ impl WorkerTransport for NativeWorkerTransport {
                         "Missing required capability: git.read"
                     )))
                 } else {
-                    let path = request.input.get("path")
+                    let path = request
+                        .input
+                        .get("path")
                         .and_then(|v| v.as_str())
                         .unwrap_or(".");
                     let output = tokio::process::Command::new("git")
@@ -1050,7 +1064,7 @@ impl WorkerTransport for NativeWorkerTransport {
                         .output()
                         .await
                         .map_err(|e| Error::Io(e))?;
-                    
+
                     // Check if command succeeded
                     if !output.status.success() {
                         let exit_code = output.status.code();
@@ -1068,7 +1082,7 @@ impl WorkerTransport for NativeWorkerTransport {
                             truncated: false,
                         });
                     }
-                    
+
                     let stdout = String::from_utf8_lossy(&output.stdout);
                     Ok(json!({ "output": stdout.to_string() }))
                 }
@@ -1079,7 +1093,9 @@ impl WorkerTransport for NativeWorkerTransport {
                         "Missing required capability: fs.read"
                     )))
                 } else {
-                    let path = request.input.get("path")
+                    let path = request
+                        .input
+                        .get("path")
                         .and_then(|v| v.as_str())
                         .ok_or_else(|| Error::Config("Missing path parameter".to_string()))?;
                     let bytes = tokio::fs::read(path).await.map_err(|e| Error::Io(e))?;
@@ -1093,14 +1109,15 @@ impl WorkerTransport for NativeWorkerTransport {
                         "Missing required capability: docker.read"
                     )))
                 } else {
-                    let docker = bollard::Docker::connect_with_local_defaults()
-                        .map_err(|e| Error::Worker(format!("Failed to connect to Docker: {}", e)))?;
-                    let containers = docker.list_containers::<String>(None)
+                    let docker = bollard::Docker::connect_with_local_defaults().map_err(|e| {
+                        Error::Worker(format!("Failed to connect to Docker: {}", e))
+                    })?;
+                    let containers = docker
+                        .list_containers::<String>(None)
                         .await
                         .map_err(|e| Error::Worker(format!("Failed to list containers: {}", e)))?;
-                    let container_ids: Vec<String> = containers.iter()
-                        .filter_map(|c| c.id.clone())
-                        .collect();
+                    let container_ids: Vec<String> =
+                        containers.iter().filter_map(|c| c.id.clone()).collect();
                     Ok(json!({ "containers": container_ids }))
                 }
             }
@@ -1110,10 +1127,14 @@ impl WorkerTransport for NativeWorkerTransport {
                         "Missing required capability: fs.read"
                     )))
                 } else {
-                    let path = request.input.get("path")
+                    let path = request
+                        .input
+                        .get("path")
                         .and_then(|v| v.as_str())
                         .unwrap_or(".");
-                    let depth = request.input.get("depth")
+                    let depth = request
+                        .input
+                        .get("depth")
                         .and_then(|v| v.as_u64())
                         .unwrap_or(1) as usize;
                     let mut entries = Vec::new();
@@ -1132,19 +1153,29 @@ impl WorkerTransport for NativeWorkerTransport {
                         "Missing required capability: fs.read"
                     )))
                 } else {
-                    let path = request.input.get("path")
+                    let path = request
+                        .input
+                        .get("path")
                         .and_then(|v| v.as_str())
-                        .ok_or_else(|| Error::Worker("Missing required parameter: path".to_string()))?;
-                    let max_bytes = request.input.get("max_bytes")
+                        .ok_or_else(|| {
+                            Error::Worker("Missing required parameter: path".to_string())
+                        })?;
+                    let max_bytes = request
+                        .input
+                        .get("max_bytes")
                         .and_then(|v| v.as_u64())
                         .unwrap_or(1_048_576) as usize;
-                    
+
                     let bytes = tokio::fs::read(path).await.map_err(|e| Error::Io(e))?;
                     let original_len = bytes.len();
                     let truncated = original_len > max_bytes;
-                    let content_bytes = if truncated { &bytes[..max_bytes] } else { &bytes };
+                    let content_bytes = if truncated {
+                        &bytes[..max_bytes]
+                    } else {
+                        &bytes
+                    };
                     let content = String::from_utf8_lossy(content_bytes).to_string();
-                    
+
                     Ok(json!({
                         "content": content,
                         "truncated": truncated,
@@ -1159,16 +1190,26 @@ impl WorkerTransport for NativeWorkerTransport {
                     )))
                 } else {
                     Self::verify_owner_approval(&request.input, &self.config)?;
-                    
-                    let path = request.input.get("path")
+
+                    let path = request
+                        .input
+                        .get("path")
                         .and_then(|v| v.as_str())
-                        .ok_or_else(|| Error::Worker("Missing required parameter: path".to_string()))?;
-                    let content = request.input.get("content")
+                        .ok_or_else(|| {
+                            Error::Worker("Missing required parameter: path".to_string())
+                        })?;
+                    let content = request
+                        .input
+                        .get("content")
                         .and_then(|v| v.as_str())
-                        .ok_or_else(|| Error::Worker("Missing required parameter: content".to_string()))?;
-                    
-                    tokio::fs::write(path, content.as_bytes()).await.map_err(|e| Error::Io(e))?;
-                    
+                        .ok_or_else(|| {
+                            Error::Worker("Missing required parameter: content".to_string())
+                        })?;
+
+                    tokio::fs::write(path, content.as_bytes())
+                        .await
+                        .map_err(|e| Error::Io(e))?;
+
                     Ok(json!({
                         "written": true,
                         "path": path
@@ -1181,19 +1222,25 @@ impl WorkerTransport for NativeWorkerTransport {
                         "Missing required capability: fs.read"
                     )))
                 } else {
-                    let pattern = request.input.get("pattern")
+                    let pattern = request
+                        .input
+                        .get("pattern")
                         .and_then(|v| v.as_str())
-                        .ok_or_else(|| Error::Worker("Missing required parameter: pattern".to_string()))?;
-                    let path = request.input.get("path")
+                        .ok_or_else(|| {
+                            Error::Worker("Missing required parameter: pattern".to_string())
+                        })?;
+                    let path = request
+                        .input
+                        .get("path")
                         .and_then(|v| v.as_str())
                         .unwrap_or(".");
-                    
+
                     let output = tokio::process::Command::new("rg")
                         .args(["--json", pattern, path])
                         .output()
                         .await
                         .map_err(|e| Error::Io(e))?;
-                    
+
                     if !output.status.success() {
                         let exit_code = output.status.code();
                         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1210,7 +1257,7 @@ impl WorkerTransport for NativeWorkerTransport {
                             truncated: false,
                         });
                     }
-                    
+
                     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
                     Ok(json!({ "output": stdout }))
                 }
@@ -1222,13 +1269,19 @@ impl WorkerTransport for NativeWorkerTransport {
                     )))
                 } else {
                     Self::verify_owner_approval(&request.input, &self.config)?;
-                    
-                    let path = request.input.get("path")
+
+                    let path = request
+                        .input
+                        .get("path")
                         .and_then(|v| v.as_str())
-                        .ok_or_else(|| Error::Worker("Missing required parameter: path".to_string()))?;
-                    
-                    tokio::fs::remove_file(path).await.map_err(|e| Error::Io(e))?;
-                    
+                        .ok_or_else(|| {
+                            Error::Worker("Missing required parameter: path".to_string())
+                        })?;
+
+                    tokio::fs::remove_file(path)
+                        .await
+                        .map_err(|e| Error::Io(e))?;
+
                     Ok(json!({
                         "deleted": true,
                         "path": path
@@ -1241,15 +1294,25 @@ impl WorkerTransport for NativeWorkerTransport {
                         "Missing required capability: fs.write"
                     )))
                 } else {
-                    let src = request.input.get("src")
+                    let src = request
+                        .input
+                        .get("src")
                         .and_then(|v| v.as_str())
-                        .ok_or_else(|| Error::Worker("Missing required parameter: src".to_string()))?;
-                    let dst = request.input.get("dst")
+                        .ok_or_else(|| {
+                            Error::Worker("Missing required parameter: src".to_string())
+                        })?;
+                    let dst = request
+                        .input
+                        .get("dst")
                         .and_then(|v| v.as_str())
-                        .ok_or_else(|| Error::Worker("Missing required parameter: dst".to_string()))?;
-                    
-                    tokio::fs::rename(src, dst).await.map_err(|e| Error::Io(e))?;
-                    
+                        .ok_or_else(|| {
+                            Error::Worker("Missing required parameter: dst".to_string())
+                        })?;
+
+                    tokio::fs::rename(src, dst)
+                        .await
+                        .map_err(|e| Error::Io(e))?;
+
                     Ok(json!({
                         "moved": true,
                         "src": src,
@@ -1263,25 +1326,29 @@ impl WorkerTransport for NativeWorkerTransport {
                         "Missing required capability: git.read"
                     )))
                 } else {
-                    let path = request.input.get("path")
+                    let path = request
+                        .input
+                        .get("path")
                         .and_then(|v| v.as_str())
                         .unwrap_or(".");
-                    let staged = request.input.get("staged")
+                    let staged = request
+                        .input
+                        .get("staged")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
-                    
+
                     let mut args = vec!["diff"];
                     if staged {
                         args.push("--cached");
                     }
                     args.push(path);
-                    
+
                     let output = tokio::process::Command::new("git")
                         .args(&args)
                         .output()
                         .await
                         .map_err(|e| Error::Io(e))?;
-                    
+
                     if !output.status.success() {
                         let exit_code = output.status.code();
                         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1298,7 +1365,7 @@ impl WorkerTransport for NativeWorkerTransport {
                             truncated: false,
                         });
                     }
-                    
+
                     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
                     Ok(json!({ "output": stdout }))
                 }
@@ -1310,21 +1377,27 @@ impl WorkerTransport for NativeWorkerTransport {
                     )))
                 } else {
                     Self::verify_owner_approval(&request.input, &self.config)?;
-                    
-                    let message = request.input.get("message")
+
+                    let message = request
+                        .input
+                        .get("message")
                         .and_then(|v| v.as_str())
-                        .ok_or_else(|| Error::Worker("Missing required parameter: message".to_string()))?;
-                    let path = request.input.get("path")
+                        .ok_or_else(|| {
+                            Error::Worker("Missing required parameter: message".to_string())
+                        })?;
+                    let path = request
+                        .input
+                        .get("path")
                         .and_then(|v| v.as_str())
                         .unwrap_or(".");
-                    
+
                     let output = tokio::process::Command::new("git")
                         .args(["commit", "-m", message])
                         .current_dir(path)
                         .output()
                         .await
                         .map_err(|e| Error::Io(e))?;
-                    
+
                     if !output.status.success() {
                         let exit_code = output.status.code();
                         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1341,7 +1414,7 @@ impl WorkerTransport for NativeWorkerTransport {
                             truncated: false,
                         });
                     }
-                    
+
                     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
                     Ok(json!({ "output": stdout }))
                 }
@@ -1352,28 +1425,34 @@ impl WorkerTransport for NativeWorkerTransport {
                         "Missing required capability: git.read"
                     )))
                 } else {
-                    let path = request.input.get("path")
+                    let path = request
+                        .input
+                        .get("path")
                         .and_then(|v| v.as_str())
                         .unwrap_or(".");
-                    let max_count = request.input.get("max_count")
+                    let max_count = request
+                        .input
+                        .get("max_count")
                         .and_then(|v| v.as_u64())
                         .unwrap_or(20);
-                    let oneline = request.input.get("oneline")
+                    let oneline = request
+                        .input
+                        .get("oneline")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(true);
-                    
+
                     let mut args = vec!["log", &format!("--max-count={}", max_count)];
                     if oneline {
                         args.push("--oneline");
                     }
                     args.push(path);
-                    
+
                     let output = tokio::process::Command::new("git")
                         .args(&args)
                         .output()
                         .await
                         .map_err(|e| Error::Io(e))?;
-                    
+
                     if !output.status.success() {
                         let exit_code = output.status.code();
                         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1390,7 +1469,7 @@ impl WorkerTransport for NativeWorkerTransport {
                             truncated: false,
                         });
                     }
-                    
+
                     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
                     Ok(json!({ "output": stdout }))
                 }
@@ -1401,17 +1480,19 @@ impl WorkerTransport for NativeWorkerTransport {
                         "Missing required capability: git.read"
                     )))
                 } else {
-                    let path = request.input.get("path")
+                    let path = request
+                        .input
+                        .get("path")
                         .and_then(|v| v.as_str())
                         .unwrap_or(".");
-                    
+
                     let output = tokio::process::Command::new("git")
                         .args(["branch", "--list"])
                         .current_dir(path)
                         .output()
                         .await
                         .map_err(|e| Error::Io(e))?;
-                    
+
                     if !output.status.success() {
                         let exit_code = output.status.code();
                         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1428,7 +1509,7 @@ impl WorkerTransport for NativeWorkerTransport {
                             truncated: false,
                         });
                     }
-                    
+
                     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
                     Ok(json!({ "output": stdout }))
                 }
@@ -1440,44 +1521,59 @@ impl WorkerTransport for NativeWorkerTransport {
                     )))
                 } else {
                     Self::verify_owner_approval(&request.input, &self.config)?;
-                    
-                    let container_id = request.input.get("container_id")
+
+                    let container_id = request
+                        .input
+                        .get("container_id")
                         .and_then(|v| v.as_str())
-                        .ok_or_else(|| Error::Worker("Missing required parameter: container_id".to_string()))?;
-                    
-                    let cmd_array = request.input.get("cmd")
+                        .ok_or_else(|| {
+                        Error::Worker("Missing required parameter: container_id".to_string())
+                    })?;
+
+                    let cmd_array = request
+                        .input
+                        .get("cmd")
                         .and_then(|v| v.as_array())
-                        .ok_or_else(|| Error::Worker("Missing required parameter: cmd".to_string()))?;
-                    
+                        .ok_or_else(|| {
+                            Error::Worker("Missing required parameter: cmd".to_string())
+                        })?;
+
                     let mut cmd = Vec::new();
                     for (idx, item) in cmd_array.iter().enumerate() {
                         match item.as_str() {
                             Some(s) => cmd.push(s.to_string()),
-                            None => return Err(Error::Worker(format!(
-                                "cmd[{}] must be a string, got: {:?}", idx, item
-                            ))),
+                            None => {
+                                return Err(Error::Worker(format!(
+                                    "cmd[{}] must be a string, got: {:?}",
+                                    idx, item
+                                )));
+                            }
                         }
                     }
-                    
+
                     if cmd.is_empty() {
-                        return Err(Error::Worker("cmd must be a non-empty array of strings".to_string()));
+                        return Err(Error::Worker(
+                            "cmd must be a non-empty array of strings".to_string(),
+                        ));
                     }
-                    
-                    let docker = bollard::Docker::connect_with_local_defaults()
-                        .map_err(|e| Error::Worker(format!("Failed to connect to Docker: {}", e)))?;
-                    
-                    let exec = docker.create_exec(
-                        container_id,
-                        CreateExecOptions {
-                            cmd: Some(cmd),
-                            attach_stdout: Some(true),
-                            attach_stderr: Some(true),
-                            ..Default::default()
-                        }
-                    )
-                    .await
-                    .map_err(|e| Error::Worker(format!("Failed to create exec: {}", e)))?;
-                    
+
+                    let docker = bollard::Docker::connect_with_local_defaults().map_err(|e| {
+                        Error::Worker(format!("Failed to connect to Docker: {}", e))
+                    })?;
+
+                    let exec = docker
+                        .create_exec(
+                            container_id,
+                            CreateExecOptions {
+                                cmd: Some(cmd),
+                                attach_stdout: Some(true),
+                                attach_stderr: Some(true),
+                                ..Default::default()
+                            },
+                        )
+                        .await
+                        .map_err(|e| Error::Worker(format!("Failed to create exec: {}", e)))?;
+
                     let exec_id = exec.id;
                     match docker.start_exec(&exec_id, None).await {
                         Ok(StartExecResults::Attached { mut output, .. }) => {
@@ -1485,7 +1581,9 @@ impl WorkerTransport for NativeWorkerTransport {
                             while let Some(chunk) = output.next().await {
                                 match chunk {
                                     Ok(msg) => collected.push_str(&msg.to_string()),
-                                    Err(e) => return Err(Error::Worker(format!("Stream error: {}", e))),
+                                    Err(e) => {
+                                        return Err(Error::Worker(format!("Stream error: {}", e)));
+                                    }
                                 }
                             }
                             Ok(json!({ "output": collected }))
@@ -1501,16 +1599,23 @@ impl WorkerTransport for NativeWorkerTransport {
                         "Missing required capability: docker.read"
                     )))
                 } else {
-                    let container_id = request.input.get("container_id")
+                    let container_id = request
+                        .input
+                        .get("container_id")
                         .and_then(|v| v.as_str())
-                        .ok_or_else(|| Error::Worker("Missing required parameter: container_id".to_string()))?;
-                    let tail = request.input.get("tail")
+                        .ok_or_else(|| {
+                        Error::Worker("Missing required parameter: container_id".to_string())
+                    })?;
+                    let tail = request
+                        .input
+                        .get("tail")
                         .and_then(|v| v.as_str())
                         .unwrap_or("100");
-                    
-                    let docker = bollard::Docker::connect_with_local_defaults()
-                        .map_err(|e| Error::Worker(format!("Failed to connect to Docker: {}", e)))?;
-                    
+
+                    let docker = bollard::Docker::connect_with_local_defaults().map_err(|e| {
+                        Error::Worker(format!("Failed to connect to Docker: {}", e))
+                    })?;
+
                     let mut logs_stream = docker.logs(
                         container_id,
                         Some(LogsOptions {
@@ -1518,9 +1623,9 @@ impl WorkerTransport for NativeWorkerTransport {
                             stderr: true,
                             tail: tail.to_string(),
                             ..Default::default()
-                        })
+                        }),
                     );
-                    
+
                     let mut collected = String::new();
                     while let Some(chunk) = logs_stream.next().await {
                         match chunk {
@@ -1528,7 +1633,7 @@ impl WorkerTransport for NativeWorkerTransport {
                             Err(e) => return Err(Error::Worker(format!("Stream error: {}", e))),
                         }
                     }
-                    
+
                     Ok(json!({ "output": collected }))
                 }
             }
@@ -1538,25 +1643,31 @@ impl WorkerTransport for NativeWorkerTransport {
                         "Missing required capability: docker.read"
                     )))
                 } else {
-                    let container_id = request.input.get("container_id")
+                    let container_id = request
+                        .input
+                        .get("container_id")
                         .and_then(|v| v.as_str())
-                        .ok_or_else(|| Error::Worker("Missing required parameter: container_id".to_string()))?;
-                    
-                    let docker = bollard::Docker::connect_with_local_defaults()
-                        .map_err(|e| Error::Worker(format!("Failed to connect to Docker: {}", e)))?;
-                    
+                        .ok_or_else(|| {
+                        Error::Worker("Missing required parameter: container_id".to_string())
+                    })?;
+
+                    let docker = bollard::Docker::connect_with_local_defaults().map_err(|e| {
+                        Error::Worker(format!("Failed to connect to Docker: {}", e))
+                    })?;
+
                     let mut stats_stream = docker.stats(
                         container_id,
                         Some(StatsOptions {
                             stream: false,
                             ..Default::default()
-                        })
+                        }),
                     );
-                    
+
                     match stats_stream.next().await {
                         Some(Ok(stats)) => {
-                            let stats_value = serde_json::to_value(&stats)
-                                .map_err(|e| Error::Worker(format!("Failed to serialize stats: {}", e)))?;
+                            let stats_value = serde_json::to_value(&stats).map_err(|e| {
+                                Error::Worker(format!("Failed to serialize stats: {}", e))
+                            })?;
                             Ok(json!({ "stats": stats_value }))
                         }
                         Some(Err(e)) => Err(Error::Worker(format!("Failed to get stats: {}", e))),
@@ -1571,10 +1682,11 @@ impl WorkerTransport for NativeWorkerTransport {
                     )))
                 } else {
                     let sys = System::new_with_specifics(
-                        RefreshKind::new().with_processes(ProcessRefreshKind::everything())
+                        RefreshKind::new().with_processes(ProcessRefreshKind::everything()),
                     );
-                    
-                    let processes: Vec<serde_json::Value> = sys.processes()
+
+                    let processes: Vec<serde_json::Value> = sys
+                        .processes()
                         .iter()
                         .map(|(pid, process)| {
                             json!({
@@ -1585,7 +1697,7 @@ impl WorkerTransport for NativeWorkerTransport {
                             })
                         })
                         .collect();
-                    
+
                     Ok(json!({ "processes": processes }))
                 }
             }
@@ -1596,7 +1708,7 @@ impl WorkerTransport for NativeWorkerTransport {
                     )))
                 } else {
                     let disks = Disks::new_with_refreshed_list();
-                    
+
                     let disks_vec: Vec<serde_json::Value> = disks.iter()
                         .map(|disk| {
                             json!({
@@ -1608,7 +1720,7 @@ impl WorkerTransport for NativeWorkerTransport {
                             })
                         })
                         .collect();
-                    
+
                     Ok(json!({ "disks": disks_vec }))
                 }
             }
@@ -1619,8 +1731,9 @@ impl WorkerTransport for NativeWorkerTransport {
                     )))
                 } else {
                     let networks = Networks::new_with_refreshed_list();
-                    
-                    let networks_vec: Vec<serde_json::Value> = networks.iter()
+
+                    let networks_vec: Vec<serde_json::Value> = networks
+                        .iter()
                         .map(|(interface, data)| {
                             json!({
                                 "interface": interface,
@@ -1629,7 +1742,7 @@ impl WorkerTransport for NativeWorkerTransport {
                             })
                         })
                         .collect();
-                    
+
                     Ok(json!({ "networks": networks_vec }))
                 }
             }
@@ -1640,36 +1753,42 @@ impl WorkerTransport for NativeWorkerTransport {
                     )))
                 } else {
                     const ALLOWLIST: &[&str] = &[
-                        "PATH", "HOME", "USER", "USERNAME", "SHELL", "LANG", "LC_ALL",
-                        "PWD", "TERM", "HOSTNAME", "TMPDIR", "TEMP", "TMP"
+                        "PATH", "HOME", "USER", "USERNAME", "SHELL", "LANG", "LC_ALL", "PWD",
+                        "TERM", "HOSTNAME", "TMPDIR", "TEMP", "TMP",
                     ];
-                    
-                    let key = request.input.get("key")
+
+                    let key = request
+                        .input
+                        .get("key")
                         .and_then(|v| v.as_str())
-                        .ok_or_else(|| Error::Worker("Missing required parameter: key".to_string()))?;
-                    
+                        .ok_or_else(|| {
+                            Error::Worker("Missing required parameter: key".to_string())
+                        })?;
+
                     if !ALLOWLIST.contains(&key) {
                         return Err(Error::Permission(format!(
-                            "env var '{}' is not in the allowed list", key
+                            "env var '{}' is not in the allowed list",
+                            key
                         )));
                     }
-                    
+
                     let value = std::env::var(key)
                         .map_err(|e| Error::Worker(format!("Failed to get env var: {}", e)))?;
-                    
+
                     Ok(json!({
                         "key": key,
                         "value": value
                     }))
                 }
             }
-            _ => Err(Error::Worker(format!("Unknown native skill: {}", skill_name))),
+            _ => Err(Error::Worker(format!(
+                "Unknown native skill: {}",
+                skill_name
+            ))),
         };
 
         // Apply timeout to the operation
-        let timeout_result = tokio::time::timeout(timeout_duration, async {
-            result
-        }).await;
+        let timeout_result = tokio::time::timeout(timeout_duration, async { result }).await;
 
         let duration_ms = start_time.elapsed().as_millis() as u64;
 
@@ -2047,7 +2166,11 @@ impl WorkerManager {
     /// Returns an error if:
     /// - The max_workers limit has been reached (unless bypass_limit is true)
     /// - The process fails to spawn
-    pub async fn spawn_worker(&mut self, runtime: WorkerRuntime, bypass_limit: bool) -> Result<String> {
+    pub async fn spawn_worker(
+        &mut self,
+        runtime: WorkerRuntime,
+        bypass_limit: bool,
+    ) -> Result<String> {
         if let Some(ref guard) = self.safe_mode_guard {
             guard.check_or_block("worker_spawn").await?;
         }
@@ -2086,7 +2209,10 @@ impl WorkerManager {
                 );
                 let status = tokio::process::Command::new(&python_bin)
                     .args([
-                        "-m", "pip", "install", "-r",
+                        "-m",
+                        "pip",
+                        "install",
+                        "-r",
                         req_path.to_str().unwrap(),
                         "--quiet",
                         "--disable-pip-version-check",

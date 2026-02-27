@@ -111,13 +111,13 @@ docker-compose exec carnelian-ollama nvidia-smi
 
 Download the recommended model for your machine profile:
 
-### Thummim Profile (RTX 2080 Super, 8GB VRAM)
+### Standard Profile (RTX 2080 Super, 8GB VRAM)
 
 ```bash
 docker exec carnelian-ollama ollama pull deepseek-r1:7b
 ```
 
-### Urim Profile (RTX 2080 Ti, 11GB VRAM)
+### Performance Profile (RTX 3090, 24GB VRAM)
 
 ```bash
 # 7B model (faster, less VRAM)
@@ -260,13 +260,13 @@ docker-compose down -v
 
 | Profile | GPU | VRAM | RAM | Recommended Model | Ollama Memory Limit |
 |---------|-----|------|-----|-------------------|---------------------|
-| Thummim | RTX 2080 Super | 8GB | 32GB | `deepseek-r1:7b` | 10GB |
-| Urim | RTX 2080 Ti | 11GB | 64GB | `deepseek-r1:32b` | 16GB |
+| Standard | RTX 2080 Super | 8GB | 32GB | `deepseek-r1:7b` (default) | 10GB |
+| Performance | RTX 3090 | 24GB | 64GB+ | `deepseek-r1:32b` or `deepseek-r1:70b` | 16GB |
 
 To adjust resource limits for your profile, edit `docker-compose.yml` or create a `docker-compose.override.yml`:
 
 ```yaml
-# docker-compose.override.yml (Urim profile)
+# docker-compose.override.yml (Performance profile)
 services:
   carnelian-ollama:
     deploy:

@@ -9,7 +9,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use carnelian_core::worker::{ProcessJsonlTransport, WorkerTransport};
 use carnelian_core::{Config, EventStream};
-use tokio::process::{Command, ChildStderr};
+use tokio::process::{ChildStderr, Command};
 
 /// Detect the Python binary path.
 ///
@@ -27,32 +27,41 @@ pub fn detect_python_binary() -> Result<PathBuf> {
 /// Logs success or failure via tracing.
 pub async fn install_worker_requirements(python_binary: &PathBuf) -> Result<()> {
     let req_path = PathBuf::from("workers/python-worker/requirements.txt");
-    
+
     if !req_path.exists() {
         tracing::info!("No requirements.txt found at {}", req_path.display());
         return Ok(());
     }
-    
-    tracing::info!("Installing Python worker requirements from {}", req_path.display());
-    
+
+    tracing::info!(
+        "Installing Python worker requirements from {}",
+        req_path.display()
+    );
+
     let status = Command::new(python_binary)
         .args([
-            "-m", "pip", "install", "-r",
+            "-m",
+            "pip",
+            "install",
+            "-r",
             req_path.to_str().unwrap(),
             "--quiet",
-            "--disable-pip-version-check"
+            "--disable-pip-version-check",
         ])
         .status()
         .await
         .context("Failed to spawn pip install command")?;
-    
+
     if status.success() {
         tracing::info!("Python worker requirements installed successfully");
         Ok(())
     } else {
         let code = status.code().unwrap_or(-1);
         tracing::warn!("pip install failed with exit code: {}", code);
-        Err(anyhow::anyhow!("pip install failed with exit code: {}", code))
+        Err(anyhow::anyhow!(
+            "pip install failed with exit code: {}",
+            code
+        ))
     }
 }
 
@@ -76,10 +85,10 @@ impl PythonWorkerTransport {
         // Step 1: Detect Python binary
         let python_bin = detect_python_binary()?;
         tracing::info!("Using Python binary: {}", python_bin.display());
-        
+
         // Step 2: Pre-install requirements
         install_worker_requirements(&python_bin).await?;
-        
+
         // Step 3: Build spawn command
         let worker_script = "workers/python-worker/worker.py";
         let mut cmd = Command::new(&python_bin);
@@ -88,19 +97,27 @@ impl PythonWorkerTransport {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .env("WORKER_ID", &worker_id)
-            .env("CARNELIAN_API_URL", format!("http://localhost:{}", config.http_port))
-            .env("RUST_LOG", std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()));
-        
+            .env(
+                "CARNELIAN_API_URL",
+                format!("http://localhost:{}", config.http_port),
+            )
+            .env(
+                "RUST_LOG",
+                std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
+            );
+
         // Step 4: Spawn the child process
-        let child = cmd.spawn()
+        let child = cmd
+            .spawn()
             .context("Failed to spawn Python worker process")?;
-        
+
         // Step 5: Create ProcessJsonlTransport and wrap it
-        let (transport, stderr) = ProcessJsonlTransport::new(worker_id, child, config, event_stream)?;
+        let (transport, stderr) =
+            ProcessJsonlTransport::new(worker_id, child, config, event_stream)?;
         let wrapper = Self {
             inner: Arc::new(transport),
         };
-        
+
         Ok((wrapper, stderr))
     }
 }
@@ -114,10 +131,7 @@ impl WorkerTransport for PythonWorkerTransport {
         self.inner.invoke(request).await
     }
 
-    async fn stream_events(
-        &self,
-        run_id: String,
-    ) -> anyhow::Result<carnelian_core::EventStream> {
+    async fn stream_events(&self, run_id: String) -> anyhow::Result<carnelian_core::EventStream> {
         self.inner.stream_events(run_id).await
     }
 

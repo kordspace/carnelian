@@ -318,8 +318,8 @@ See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for detailed setup and developmen
 
 | Profile | GPU | VRAM | RAM | Recommended Model | Notes |
 |---------|-----|------|-----|-------------------|-------|
-| **Thummim** | RTX 2080 Super | 8GB | 32GB | `deepseek-r1:7b` | Constrained profile for development |
-| **Urim** | RTX 2080 Ti | 11GB | 64GB | `deepseek-r1:32b` | High-end profile for production workloads |
+| **Standard** | RTX 2080 Super (8GB VRAM) | 32GB | `deepseek-r1:7b` |
+| **Performance** | RTX 3090 (24GB VRAM) | 64GB+ | `deepseek-r1:32b` or `deepseek-r1:70b` | High-end profile for production workloads |
 
 Profiles affect Docker resource limits and worker concurrency settings. See [docker-compose.yml](docker-compose.yml) and [machine.toml.example](machine.toml.example) for configuration.
 

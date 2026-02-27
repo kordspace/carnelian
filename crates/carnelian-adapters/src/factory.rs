@@ -30,13 +30,13 @@ use carnelian_core::session::SessionManager;
 use sqlx::PgPool;
 
 use crate::config;
+use crate::discord::DiscordAdapter;
 use crate::rate_limiter::RateLimiter;
+use crate::slack::SlackAdapter;
 use crate::spam_detector::SpamDetector;
 use crate::telegram::TelegramAdapter;
-use crate::discord::DiscordAdapter;
-use crate::whatsapp::WhatsAppAdapter;
-use crate::slack::SlackAdapter;
 use crate::types::{ChannelConfig, ChannelType, TrustLevel};
+use crate::whatsapp::WhatsAppAdapter;
 
 /// Default factory for building channel adapters.
 ///
@@ -95,10 +95,13 @@ impl ChannelAdapterFactory for DefaultAdapterFactory {
             .map_err(|e| anyhow::anyhow!("Failed to store bot credential: {e}"))?;
 
         // 2. Parse trust level (default to Conversational on failure)
-        let parsed_trust_level = trust_level.parse::<TrustLevel>().unwrap_or(TrustLevel::Conversational);
+        let parsed_trust_level = trust_level
+            .parse::<TrustLevel>()
+            .unwrap_or(TrustLevel::Conversational);
 
         // 3. Parse channel type
-        let parsed_channel_type = channel_type.parse::<ChannelType>()
+        let parsed_channel_type = channel_type
+            .parse::<ChannelType>()
             .map_err(|_| anyhow::anyhow!("Unsupported channel type: {channel_type}"))?;
 
         // 4. Build ChannelConfig
@@ -151,18 +154,28 @@ impl ChannelAdapterFactory for DefaultAdapterFactory {
             }
             "whatsapp" => {
                 // JSON-encoded: {"access_token":"...","phone_number_id":"...","verify_token":"..."}
-                let parsed: serde_json::Value = serde_json::from_str(bot_token)
-                    .map_err(|e| anyhow::anyhow!("Failed to parse WhatsApp credentials as JSON: {e}"))?;
+                let parsed: serde_json::Value = serde_json::from_str(bot_token).map_err(|e| {
+                    anyhow::anyhow!("Failed to parse WhatsApp credentials as JSON: {e}")
+                })?;
 
-                let access_token = parsed.get("access_token")
+                let access_token = parsed
+                    .get("access_token")
                     .and_then(|v| v.as_str())
-                    .ok_or_else(|| anyhow::anyhow!("Missing access_token in WhatsApp credentials"))?;
-                let phone_number_id = parsed.get("phone_number_id")
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("Missing access_token in WhatsApp credentials")
+                    })?;
+                let phone_number_id = parsed
+                    .get("phone_number_id")
                     .and_then(|v| v.as_str())
-                    .ok_or_else(|| anyhow::anyhow!("Missing phone_number_id in WhatsApp credentials"))?;
-                let verify_token = parsed.get("verify_token")
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("Missing phone_number_id in WhatsApp credentials")
+                    })?;
+                let verify_token = parsed
+                    .get("verify_token")
                     .and_then(|v| v.as_str())
-                    .ok_or_else(|| anyhow::anyhow!("Missing verify_token in WhatsApp credentials"))?;
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("Missing verify_token in WhatsApp credentials")
+                    })?;
 
                 // Set the bot_token to the actual access token
                 channel_config.bot_token = access_token.to_string();
@@ -182,15 +195,20 @@ impl ChannelAdapterFactory for DefaultAdapterFactory {
             }
             "slack" => {
                 // JSON-encoded: {"bot_token":"...","signing_secret":"..."}
-                let parsed: serde_json::Value = serde_json::from_str(bot_token)
-                    .map_err(|e| anyhow::anyhow!("Failed to parse Slack credentials as JSON: {e}"))?;
+                let parsed: serde_json::Value = serde_json::from_str(bot_token).map_err(|e| {
+                    anyhow::anyhow!("Failed to parse Slack credentials as JSON: {e}")
+                })?;
 
-                let bot_token_field = parsed.get("bot_token")
+                let bot_token_field = parsed
+                    .get("bot_token")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| anyhow::anyhow!("Missing bot_token in Slack credentials"))?;
-                let signing_secret = parsed.get("signing_secret")
+                let signing_secret = parsed
+                    .get("signing_secret")
                     .and_then(|v| v.as_str())
-                    .ok_or_else(|| anyhow::anyhow!("Missing signing_secret in Slack credentials"))?;
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("Missing signing_secret in Slack credentials")
+                    })?;
 
                 // Set the bot_token to the actual bot token
                 channel_config.bot_token = bot_token_field.to_string();

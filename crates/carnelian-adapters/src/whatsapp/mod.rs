@@ -201,10 +201,7 @@ impl ChannelAdapter for WhatsAppAdapter {
 
         let status = response.status();
         if !status.is_success() {
-            let body_text = response
-                .text()
-                .await
-                .unwrap_or_default();
+            let body_text = response.text().await.unwrap_or_default();
             anyhow::bail!("WhatsApp API returned {}: {}", status, body_text);
         }
 

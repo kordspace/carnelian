@@ -16,19 +16,18 @@ use carnelian_common::types::{
     AgentXpResponse, ApproveDraftResponse, AwardXpRequest, AwardXpResponse, CancelTaskRequest,
     CancelTaskResponse, ConfigureVoiceRequest, ConfigureVoiceResponse, CreateElixirRequest,
     CreateMemoryRequest, CreateMemoryResponse, CreateTaskRequest, CreateTaskResponse,
-    CreateWorkflowRequest, DetailedHealthResponse, ElixirDetail, ElixirDraft,
-    ElixirSearchResponse, EventEnvelope, EventLevel, EventType, ExecuteWorkflowRequest,
-    ExportMemoryRequest, ExportMemoryResponse, GetMemoryResponse, HeartbeatRecord,
-    HeartbeatStatusResponse, IdentityResponse, ImportMemoryRequest, ImportMemoryResponse,
-    LeaderboardEntry, ListElixirDraftsResponse, ListElixirsQuery, ListElixirsResponse,
-    ListMemoriesResponse, ListProvidersResponse, ListRunsResponse, ListSkillsResponse,
-    ListTasksResponse, ListVoicesResponse, ListWorkflowsParams, ListWorkflowsResponse,
-    MemoryDetail, MemoryImportResultApi, OllamaStatusResponse, PaginatedRunLogsResponse,
-    ProviderDetail, RejectDraftResponse, RunDetail, RunLogEntry, RunLogsQuery, SkillDetail,
-    SkillMetricsDetail, SkillToggleResponse, StatusResponse, TaskDetail, TestVoiceRequest,
-    TestVoiceResponse, TopSkillsQuery, TopSkillsResponse, TranscribeVoiceRequest,
-    TranscribeVoiceResponse, UpdateWorkflowRequest, XpEventDetail, XpHistoryQuery,
-    XpHistoryResponse, XpLeaderboardResponse,
+    CreateWorkflowRequest, DetailedHealthResponse, ElixirDetail, ElixirDraft, ElixirSearchResponse,
+    EventEnvelope, EventLevel, EventType, ExecuteWorkflowRequest, ExportMemoryRequest,
+    ExportMemoryResponse, GetMemoryResponse, HeartbeatRecord, HeartbeatStatusResponse,
+    IdentityResponse, ImportMemoryRequest, ImportMemoryResponse, LeaderboardEntry,
+    ListElixirDraftsResponse, ListElixirsQuery, ListElixirsResponse, ListMemoriesResponse,
+    ListProvidersResponse, ListRunsResponse, ListSkillsResponse, ListTasksResponse,
+    ListVoicesResponse, ListWorkflowsParams, ListWorkflowsResponse, MemoryDetail,
+    MemoryImportResultApi, OllamaStatusResponse, PaginatedRunLogsResponse, ProviderDetail,
+    RejectDraftResponse, RunDetail, RunLogEntry, RunLogsQuery, SkillDetail, SkillMetricsDetail,
+    SkillToggleResponse, StatusResponse, TaskDetail, TestVoiceRequest, TestVoiceResponse,
+    TopSkillsQuery, TopSkillsResponse, TranscribeVoiceRequest, TranscribeVoiceResponse,
+    UpdateWorkflowRequest, XpEventDetail, XpHistoryQuery, XpHistoryResponse, XpLeaderboardResponse,
 };
 use futures_util::{SinkExt, StreamExt};
 use http::{HeaderMap, Method, header};
@@ -87,7 +86,8 @@ async fn carnelian_key_auth<B>(
         .unwrap_or(false);
 
     // Also check the connection info for direct IP
-    let is_local_ip = req.extensions()
+    let is_local_ip = req
+        .extensions()
         .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
         .map(|addr| {
             let ip = addr.ip();
@@ -111,7 +111,11 @@ async fn carnelian_key_auth<B>(
     if key_valid {
         next.run(req).await
     } else {
-        (StatusCode::UNAUTHORIZED, "Invalid or missing X-Carnelian-Key header").into_response()
+        (
+            StatusCode::UNAUTHORIZED,
+            "Invalid or missing X-Carnelian-Key header",
+        )
+            .into_response()
     }
 }
 
@@ -474,9 +478,14 @@ impl Server {
 
         // Create Elixir manager for knowledge artifact lifecycle
         let elixir_manager = {
-            let pool = self.config.pool()
+            let pool = self
+                .config
+                .pool()
                 .expect("Database pool required for ElixirManager");
-            Arc::new(crate::elixir::ElixirManager::new(pool.clone(), xp_manager.clone()))
+            Arc::new(crate::elixir::ElixirManager::new(
+                pool.clone(),
+                xp_manager.clone(),
+            ))
         };
 
         let state = AppState::new(
@@ -792,7 +801,10 @@ fn build_router(state: AppState) -> Router {
         // Skill Book endpoints
         .route("/v1/node-registry", get(list_skill_book_handler))
         .route("/v1/node-registry/:id", get(get_skill_book_entry_handler))
-        .route("/v1/node-registry/:id/activate", post(activate_skill_handler))
+        .route(
+            "/v1/node-registry/:id/activate",
+            post(activate_skill_handler),
+        )
         .route(
             "/v1/node-registry/:id/deactivate",
             delete(deactivate_skill_handler),
@@ -800,9 +812,18 @@ fn build_router(state: AppState) -> Router {
         // Elixir endpoints
         .route("/v1/elixirs/search", get(search_elixirs_handler))
         .route("/v1/elixirs/drafts", get(list_elixir_drafts_handler))
-        .route("/v1/elixirs/drafts/:id/approve", post(approve_elixir_draft_handler))
-        .route("/v1/elixirs/drafts/:id/reject", post(reject_elixir_draft_handler))
-        .route("/v1/elixirs", get(list_elixirs_handler).post(create_elixir_handler))
+        .route(
+            "/v1/elixirs/drafts/:id/approve",
+            post(approve_elixir_draft_handler),
+        )
+        .route(
+            "/v1/elixirs/drafts/:id/reject",
+            post(reject_elixir_draft_handler),
+        )
+        .route(
+            "/v1/elixirs",
+            get(list_elixirs_handler).post(create_elixir_handler),
+        )
         .route("/v1/elixirs/:id", get(get_elixir_handler))
         // API Key endpoint (localhost-only via middleware)
         .route("/v1/config/api-key", get(get_api_key_handler))
@@ -822,7 +843,10 @@ fn build_router(state: AppState) -> Router {
         .merge(webhook_routes)
         .merge(protected_routes)
         // Web UI static files (served at /ui)
-        .nest_service("/ui", ServeDir::new("target/dx/carnelian-ui/release/web/public"))
+        .nest_service(
+            "/ui",
+            ServeDir::new("target/dx/carnelian-ui/release/web/public"),
+        )
         // 10MB request body limit
         .layer(RequestBodyLimitLayer::new(10 * 1024 * 1024))
         // 30-second timeout
@@ -833,7 +857,9 @@ fn build_router(state: AppState) -> Router {
         .layer(
             CorsLayer::new()
                 .allow_origin(
-                    state.config.cors_origins
+                    state
+                        .config
+                        .cors_origins
                         .iter()
                         .filter_map(|s| s.parse().ok())
                         .collect::<Vec<_>>(),
@@ -3999,7 +4025,11 @@ async fn whatsapp_inbound_handler(
     let adapter = match adapters.values().find(|a| a.name() == "whatsapp") {
         Some(a) => a.clone(),
         None => {
-            return (StatusCode::NOT_FOUND, Json(json!({"error": "WhatsApp adapter not found"}))).into_response();
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "WhatsApp adapter not found"})),
+            )
+                .into_response();
         }
     };
     drop(adapters);
@@ -4007,9 +4037,7 @@ async fn whatsapp_inbound_handler(
     // Convert headers to HashMap
     let header_map: HashMap<String, String> = headers
         .iter()
-        .filter_map(|(k, v)| {
-            Some((k.to_string().to_lowercase(), v.to_str().ok()?.to_string()))
-        })
+        .filter_map(|(k, v)| Some((k.to_string().to_lowercase(), v.to_str().ok()?.to_string())))
         .collect();
 
     // Process the webhook
@@ -4036,7 +4064,11 @@ async fn slack_event_handler(
     let adapter = match adapters.values().find(|a| a.name() == "slack") {
         Some(a) => a.clone(),
         None => {
-            return (StatusCode::NOT_FOUND, Json(json!({"error": "Slack adapter not found"}))).into_response();
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "Slack adapter not found"})),
+            )
+                .into_response();
         }
     };
     drop(adapters);
@@ -4044,9 +4076,7 @@ async fn slack_event_handler(
     // Convert headers to HashMap (lowercase keys for Slack headers)
     let header_map: HashMap<String, String> = headers
         .iter()
-        .filter_map(|(k, v)| {
-            Some((k.to_string().to_lowercase(), v.to_str().ok()?.to_string()))
-        })
+        .filter_map(|(k, v)| Some((k.to_string().to_lowercase(), v.to_str().ok()?.to_string())))
         .collect();
 
     // Process the webhook and return the response (may contain challenge)
@@ -5958,7 +5988,10 @@ mod tests {
             std::path::PathBuf::from("skill_registry"),
             config.clone(),
         ));
-        let elixir_manager = Arc::new(crate::elixir::ElixirManager::new(pool.clone(), xp_manager.clone()));
+        let elixir_manager = Arc::new(crate::elixir::ElixirManager::new(
+            pool.clone(),
+            xp_manager.clone(),
+        ));
         AppState::new(
             config,
             event_stream,
@@ -6886,13 +6919,11 @@ async fn create_elixir_handler(
     let created_by = body.created_by;
 
     match state.elixir_manager.create_elixir(body, created_by).await {
-        Ok(elixir) => {
-            (
-                StatusCode::CREATED,
-                Json(serde_json::to_value(elixir).unwrap_or_default()),
-            )
-                .into_response()
-        }
+        Ok(elixir) => (
+            StatusCode::CREATED,
+            Json(serde_json::to_value(elixir).unwrap_or_default()),
+        )
+            .into_response(),
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(json!({"error": e.to_string()})),
@@ -7018,18 +7049,14 @@ async fn approve_elixir_draft_handler(
         .approve_draft(draft_id, body.reviewed_by)
         .await
     {
-        Ok(response) => {
-            (
-                StatusCode::OK,
-                Json(serde_json::to_value(response).unwrap_or_default()),
-            )
-                .into_response()
-        }
-        Err(e) if e.to_string().contains("not found") || e.to_string().contains("reviewed") => (
-            StatusCode::NOT_FOUND,
-            Json(json!({"error": e.to_string()})),
+        Ok(response) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(response).unwrap_or_default()),
         )
             .into_response(),
+        Err(e) if e.to_string().contains("not found") || e.to_string().contains("reviewed") => {
+            (StatusCode::NOT_FOUND, Json(json!({"error": e.to_string()}))).into_response()
+        }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": e.to_string()})),
@@ -7054,11 +7081,9 @@ async fn reject_elixir_draft_handler(
             Json(serde_json::to_value(response).unwrap_or_default()),
         )
             .into_response(),
-        Err(e) if e.to_string().contains("not found") || e.to_string().contains("reviewed") => (
-            StatusCode::NOT_FOUND,
-            Json(json!({"error": e.to_string()})),
-        )
-            .into_response(),
+        Err(e) if e.to_string().contains("not found") || e.to_string().contains("reviewed") => {
+            (StatusCode::NOT_FOUND, Json(json!({"error": e.to_string()}))).into_response()
+        }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": e.to_string()})),

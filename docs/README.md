@@ -69,9 +69,8 @@
 
 | Profile | GPU | RAM | Recommended Model |
 |---------|-----|-----|-------------------|
-| **Thummim** | RTX 2080 Super (8GB VRAM) | 32GB | `deepseek-r1:7b` |
-| **Urim** | RTX 2080 Ti (11GB VRAM) | 64GB | `deepseek-r1:32b` |
-| **Performance** | RTX 3090 (24GB VRAM) | 128GB | `deepseek-r1:70b` |
+| **Standard** | RTX 2080 Super (8GB VRAM) | 32GB | `deepseek-r1:7b` (default) |
+| **Performance** | RTX 3090 (24GB VRAM) | 64GB+ | `deepseek-r1:32b` or `deepseek-r1:70b` |
 
 ## Brand Identity
 

@@ -10,7 +10,10 @@ use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
 use wasmtime::{Config, Engine, Linker, Module, Store};
 use wasmtime_wasi::p1::{WasiP1Ctx, add_to_linker_async as wasi_p1_add_to_linker};
-use wasmtime_wasi::{WasiCtxBuilder, p2::pipe::{MemoryInputPipe, MemoryOutputPipe}};
+use wasmtime_wasi::{
+    WasiCtxBuilder,
+    p2::pipe::{MemoryInputPipe, MemoryOutputPipe},
+};
 
 use crate::skills::skill_trait::{SkillInput, SkillOutput};
 use carnelian_common::{Error, Result};
@@ -159,9 +162,10 @@ impl WasmSkillRuntime {
         // Step 1: Look up the skill
         let skill = {
             let skills = self.skills.lock().unwrap();
-            skills.get(skill_id).cloned().ok_or_else(|| {
-                Error::Worker(format!("WASM skill '{}' not found", skill_id))
-            })?
+            skills
+                .get(skill_id)
+                .cloned()
+                .ok_or_else(|| Error::Worker(format!("WASM skill '{}' not found", skill_id)))?
         };
 
         // Step 2: Read output limit
@@ -235,11 +239,13 @@ impl WasmSkillRuntime {
             let func = instance
                 .get_typed_func::<(), ()>(&mut store, "invoke")
                 .or_else(|_| instance.get_typed_func::<(), ()>(&mut store, "_start"))
-                .map_err(|e| Error::Worker(format!("No 'invoke' or '_start' function found: {}", e)))?;
+                .map_err(|e| {
+                    Error::Worker(format!("No 'invoke' or '_start' function found: {}", e))
+                })?;
 
-            func.call_async(&mut store, ()).await.map_err(|e| {
-                Error::Worker(format!("WASM execution failed: {}", e))
-            })?;
+            func.call_async(&mut store, ())
+                .await
+                .map_err(|e| Error::Worker(format!("WASM execution failed: {}", e)))?;
 
             Ok(())
         }

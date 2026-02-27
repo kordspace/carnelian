@@ -233,8 +233,22 @@ async fn main() {
             handle_skills(command, cli.config, cli.log_level, cli.database_url).await
         }
         Commands::Task { command, url } => handle_task_command(command, &resolve_url(url)).await,
-        Commands::Init { non_interactive, force, resume, key_path } => {
-            handle_init(cli.config, cli.log_level, cli.database_url, non_interactive, force, resume, key_path).await
+        Commands::Init {
+            non_interactive,
+            force,
+            resume,
+            key_path,
+        } => {
+            handle_init(
+                cli.config,
+                cli.log_level,
+                cli.database_url,
+                non_interactive,
+                force,
+                resume,
+                key_path,
+            )
+            .await
         }
         Commands::Ui { web } => handle_ui(web).await,
         Commands::Keygen { output } => handle_keygen(output).await,
@@ -399,8 +413,8 @@ async fn handle_start(
         session_manager.clone(),
         event_stream.clone(),
         policy_engine.clone(),
-        0.8,   // spam_threshold - read from config or use sensible default
-        3600,  // spam_ttl_secs
+        0.8,  // spam_threshold - read from config or use sensible default
+        3600, // spam_ttl_secs
     ));
 
     // Create server with session manager and adapter factory wired in
@@ -1210,9 +1224,7 @@ async fn handle_init(
     println!();
     println!(
         "Suggested profile: {} (based on {:.1}GB RAM {:.1}GB VRAM)",
-        suggested_profile,
-        total_ram_gb,
-        vram_gb
+        suggested_profile, total_ram_gb, vram_gb
     );
     print!(
         "Select machine profile [urim/thummim/custom] (default: {}): ",
@@ -1319,7 +1331,10 @@ async fn handle_init(
                 provided_key_path.display()
             )));
         }
-        println!("✓ Using key from --key-path: {}", provided_key_path.display());
+        println!(
+            "✓ Using key from --key-path: {}",
+            provided_key_path.display()
+        );
         actual_keypair_path = Some(provided_key_path.clone());
     } else {
         // Interactive keypair selection
@@ -1332,12 +1347,16 @@ async fn handle_init(
 
         if gen_key.is_empty() || gen_key == "y" {
             // Generate keypair
-            let (public_key, private_key_bytes) = carnelian_core::crypto::generate_ed25519_keypair();
+            let (public_key, private_key_bytes) =
+                carnelian_core::crypto::generate_ed25519_keypair();
 
             // Create parent directories
             if let Some(parent) = default_keypair_path.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| {
-                    carnelian_common::Error::Config(format!("Failed to create key directory: {}", e))
+                    carnelian_common::Error::Config(format!(
+                        "Failed to create key directory: {}",
+                        e
+                    ))
                 })?;
             }
 
@@ -1599,7 +1618,14 @@ async fn handle_init(
         if compose_up.trim().to_lowercase() != "n" {
             println!("Starting services with docker-compose...");
             match std::process::Command::new("docker-compose")
-                .args(["-f", "docker-compose.yml", "up", "-d", "carnelian-postgres", "carnelian-ollama"])
+                .args([
+                    "-f",
+                    "docker-compose.yml",
+                    "up",
+                    "-d",
+                    "carnelian-postgres",
+                    "carnelian-ollama",
+                ])
                 .status()
             {
                 Ok(status) if status.success() => {
@@ -1629,7 +1655,7 @@ async fn handle_init(
         let starter_skills = vec!["file-analyzer", "code-review", "model-usage"];
         let skill_book_path = PathBuf::from("skills/node-registry");
         let registry_path = PathBuf::from("skills/registry");
-        
+
         // Create registry directory if it doesn't exist
         if let Err(e) = std::fs::create_dir_all(&registry_path) {
             println!("⚠ Failed to create registry directory: {}", e);
@@ -1637,7 +1663,7 @@ async fn handle_init(
             for skill_id in starter_skills {
                 let skill_src = skill_book_path.join(skill_id);
                 let skill_dst = registry_path.join(skill_id);
-                
+
                 if skill_src.exists() {
                     match std::fs::create_dir_all(&skill_dst) {
                         Ok(_) => {
@@ -1658,7 +1684,10 @@ async fn handle_init(
                         }
                     }
                 } else {
-                    println!("  ℹ Skill {} not found in node-registry (skipped)", skill_id);
+                    println!(
+                        "  ℹ Skill {} not found in node-registry (skipped)",
+                        skill_id
+                    );
                 }
             }
         }

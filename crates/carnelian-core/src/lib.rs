@@ -107,6 +107,7 @@ pub mod config;
 pub mod context;
 pub mod crypto;
 pub mod db;
+pub mod elixir;
 pub mod encryption;
 pub mod events;
 pub mod ledger;
@@ -127,7 +128,6 @@ pub mod voice;
 pub mod worker;
 pub mod workflow;
 pub mod xp;
-pub mod elixir;
 
 use std::env;
 use tracing_subscriber::{
@@ -148,6 +148,7 @@ pub use context::{
     ContextProvenance, ContextSegment, ContextWindow, SegmentPriority, SegmentSourceType,
 };
 pub use crypto::{generate_ed25519_keypair, sign_bytes, verify_signature};
+pub use elixir::ElixirManager;
 pub use encryption::EncryptionHelper;
 pub use events::{EventStream, EventStreamStats, PriorityRingBuffer};
 pub use ledger::{Ledger, LedgerEvent};
@@ -168,7 +169,6 @@ pub use voice::VoiceGateway;
 pub use worker::WorkerManager;
 pub use workflow::WorkflowEngine;
 pub use xp::XpManager;
-pub use elixir::ElixirManager;
 
 /// Core orchestrator version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

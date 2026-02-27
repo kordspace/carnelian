@@ -330,7 +330,7 @@ fn render_skill_row(
     let mut selected = *selected;
     let mut refresh = *refresh;
     let mut create_modal = *create_elixir_for;
-    
+
     let has_elixir = skills_with_elixirs.contains(&skill_id);
     let usage_count = skill_metrics.get(&skill_id).copied().unwrap_or(0);
     let can_create_elixir = usage_count >= 100 && !has_elixir;
@@ -427,7 +427,11 @@ fn SkillManifestModal(skill: SkillDetail, on_close: EventHandler) -> Element {
 // ── Create Elixir Modal ─────────────────────────────────────
 
 #[component]
-fn CreateElixirModal(skill: SkillDetail, on_close: EventHandler, on_created: EventHandler) -> Element {
+fn CreateElixirModal(
+    skill: SkillDetail,
+    on_close: EventHandler,
+    on_created: EventHandler,
+) -> Element {
     let mut name = use_signal(|| format!("{} Elixir", skill.name));
     let mut description = use_signal(|| skill.description.clone().unwrap_or_default());
     let mut elixir_type = use_signal(|| "prompt".to_string());
@@ -461,7 +465,11 @@ fn CreateElixirModal(skill: SkillDetail, on_close: EventHandler, on_created: Eve
         spawn(async move {
             let request = CreateElixirRequest {
                 name: name_val,
-                description: if desc_val.is_empty() { None } else { Some(desc_val) },
+                description: if desc_val.is_empty() {
+                    None
+                } else {
+                    Some(desc_val)
+                },
                 elixir_type: type_val,
                 skill_id: Some(skill_id),
                 dataset: dataset_json,

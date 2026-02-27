@@ -1,11 +1,11 @@
 //! Elixirs page: curated elixir library and draft review queue.
 
-use dioxus::prelude::*;
-use uuid::Uuid;
 use crate::api;
 use crate::components::{Toast, ToastMessage, ToastType};
 use crate::theme::Theme;
 use carnelian_common::types::{ElixirDetail, ElixirDraft, ListElixirsQuery};
+use dioxus::prelude::*;
+use uuid::Uuid;
 
 #[component]
 pub fn Elixirs() -> Element {
@@ -29,19 +29,27 @@ pub fn Elixirs() -> Element {
         spawn(async move {
             loading_elixirs.set(true);
             let query_str = search_query.read().clone();
-            
+
             let result = if !query_str.is_empty() {
-                api::elixirs_search(query_str, 50).await.map(|resp| (resp.results, resp.total as i64))
+                api::elixirs_search(query_str, 50)
+                    .await
+                    .map(|resp| (resp.results, resp.total as i64))
             } else {
                 let filter_type_val = filter_type.read().clone();
                 let query = ListElixirsQuery {
-                    elixir_type: if filter_type_val.is_empty() { None } else { Some(filter_type_val) },
+                    elixir_type: if filter_type_val.is_empty() {
+                        None
+                    } else {
+                        Some(filter_type_val)
+                    },
                     skill_id: None,
                     active: None,
                     page: 1,
                     page_size: 50,
                 };
-                api::elixirs_list(query).await.map(|resp| (resp.elixirs, resp.total))
+                api::elixirs_list(query)
+                    .await
+                    .map(|resp| (resp.elixirs, resp.total))
             };
 
             match result {
@@ -134,7 +142,7 @@ pub fn Elixirs() -> Element {
         spawn(async move {
             let mut success_count = 0;
             let mut error_count = 0;
-            
+
             for draft_id in ids.iter() {
                 match api::elixirs_draft_approve(*draft_id).await {
                     Ok(_) => success_count += 1,
@@ -171,22 +179,20 @@ pub fn Elixirs() -> Element {
         show_detail.set(false);
     };
 
-    let export_json = move |elixir: ElixirDetail| {
-        match serde_json::to_string_pretty(&elixir) {
-            Ok(json_str) => {
-                toasts.write().push(ToastMessage {
-                    id: Uuid::new_v4(),
-                    message: format!("Exported JSON:\n{}", json_str),
-                    toast_type: ToastType::Success,
-                });
-            }
-            Err(e) => {
-                toasts.write().push(ToastMessage {
-                    id: Uuid::new_v4(),
-                    message: format!("Failed to export: {}", e),
-                    toast_type: ToastType::Error,
-                });
-            }
+    let export_json = move |elixir: ElixirDetail| match serde_json::to_string_pretty(&elixir) {
+        Ok(json_str) => {
+            toasts.write().push(ToastMessage {
+                id: Uuid::new_v4(),
+                message: format!("Exported JSON:\n{}", json_str),
+                toast_type: ToastType::Success,
+            });
+        }
+        Err(e) => {
+            toasts.write().push(ToastMessage {
+                id: Uuid::new_v4(),
+                message: format!("Failed to export: {}", e),
+                toast_type: ToastType::Error,
+            });
         }
     };
 
@@ -196,14 +202,19 @@ pub fn Elixirs() -> Element {
 
     display_elixirs.sort_by(|a, b| {
         let cmp = match sort_field_val.as_str() {
-            "quality_score" => a.quality_score.partial_cmp(&b.quality_score).unwrap_or(std::cmp::Ordering::Equal),
+            "quality_score" => a
+                .quality_score
+                .partial_cmp(&b.quality_score)
+                .unwrap_or(std::cmp::Ordering::Equal),
             "created_at" => a.created_at.cmp(&b.created_at),
             _ => a.name.cmp(&b.name),
         };
         if sort_asc_val { cmp } else { cmp.reverse() }
     });
 
-    let pending_drafts: Vec<ElixirDraft> = drafts.read().iter()
+    let pending_drafts: Vec<ElixirDraft> = drafts
+        .read()
+        .iter()
         .filter(|d| d.status == "pending")
         .cloned()
         .collect();

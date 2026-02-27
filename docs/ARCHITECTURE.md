@@ -59,7 +59,7 @@ graph TD
 | **Voice Gateway** | `carnelian-core/src/voice.rs` | Rust, reqwest | ElevenLabs STT/TTS, encrypted API key storage |
 | **Event Stream** | `carnelian-core/src/events.rs` | Rust | Bounded-buffer pub/sub, priority sampling, backpressure |
 | **Desktop UI** | `carnelian-ui/` | Dioxus | Native desktop interface with real-time event streaming |
-| **Node Worker** | `workers/node-worker/` | Node.js/TypeScript | Executes 600+ existing Thummim skills |
+| **Node Worker** | `workers/node-worker/` | Node.js/TypeScript | Executes 530+ Node.js skills with gateway integration |
 | **Python Worker** | `carnelian-worker-python/` + `workers/python-worker/` | Python 3.10+, JSONL | ML/data science skills, Playwright automation |
 | **WASM Worker** | `carnelian-core/src/skills/wasm_runtime.rs` | wasmtime 27, WASI P1 | Sandboxed WASM skill execution with epoch timeout |
 | **Native Ops Worker** | `carnelian-worker-native/src/lib.rs` | Rust inline (no subprocess) | `git_status`, `file_hash`, `docker_ps`, `dir_list` — capability-gated |

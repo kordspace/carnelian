@@ -214,7 +214,7 @@ Development is optimized for two machine profiles:
 
 | Profile | GPU | RAM | Notes |
 |---------|-----|-----|-------|
-| Thummim | RTX 2080 Super (8GB) | 32GB | Constrained, use smaller models |
-| Urim | RTX 2080 Ti (11GB) | 64GB | High-end, can run larger models |
+| Standard | RTX 2080 Super (8GB) | 32GB | Default profile, use `deepseek-r1:7b` |
+| Performance | RTX 3090 (24GB) | 64GB+ | High-end, can run larger models like `deepseek-r1:32b` or `deepseek-r1:70b` |
 
 See [DOCKER.md](DOCKER.md) for profile-specific configuration.

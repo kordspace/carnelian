@@ -17,7 +17,7 @@ use carnelian_core::policy::PolicyEngine;
 
 use crate::db as channel_db;
 use crate::events;
-use crate::types::{PairingRequest, TrustLevel, ChannelType};
+use crate::types::{ChannelType, PairingRequest, TrustLevel};
 
 use super::WhatsAppAdapter;
 
@@ -45,15 +45,7 @@ pub async fn handle_pair(
         initiate_pairing(from, adapter, db_pool, identity_id, Some(requested_trust)).await
     } else {
         // Argument is a pairing token — verify and complete
-        complete_pairing(
-            from,
-            trimmed,
-            adapter,
-            db_pool,
-            event_stream,
-            policy_engine,
-        )
-        .await
+        complete_pairing(from, trimmed, adapter, db_pool, event_stream, policy_engine).await
     }
 }
 
@@ -150,7 +142,10 @@ async fn complete_pairing(
     if let Ok(expires_at) = chrono::DateTime::parse_from_rfc3339(expires_str) {
         if chrono::Utc::now() > expires_at {
             adapter
-                .send_message(from, "❌ Pairing token has expired. Use `/pair` to generate a new one.")
+                .send_message(
+                    from,
+                    "❌ Pairing token has expired. Use `/pair` to generate a new one.",
+                )
                 .await?;
             return Ok(());
         }
@@ -263,11 +258,7 @@ mod tests {
 
     #[test]
     fn test_pairing_request_defaults_to_conversational() {
-        let req = PairingRequest::new(
-            ChannelType::Whatsapp,
-            "15551234567".to_string(),
-            None,
-        );
+        let req = PairingRequest::new(ChannelType::Whatsapp, "15551234567".to_string(), None);
 
         assert_eq!(req.requested_trust_level, TrustLevel::Conversational);
         assert!(!req.is_expired());

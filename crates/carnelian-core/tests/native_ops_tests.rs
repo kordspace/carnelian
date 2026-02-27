@@ -2,9 +2,9 @@ use carnelian_common::types::{InvokeRequest, InvokeStatus, RunId};
 use carnelian_core::worker::NativeWorkerTransport;
 use carnelian_core::{Config, EventStream};
 use serde_json::json;
+use std::io::Write;
 use std::sync::Arc;
 use tempfile::NamedTempFile;
-use std::io::Write;
 
 // Shared helpers
 
@@ -36,7 +36,7 @@ async fn test_git_status() {
         json!({"path": ".", "capabilities": ["git.read"]}),
     );
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Success);
     assert!(response.result["output"].is_string());
 }
@@ -49,7 +49,7 @@ async fn test_git_diff() {
         json!({"path": ".", "staged": false, "capabilities": ["git.read"]}),
     );
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Success);
     assert!(response.result["output"].is_string());
 }
@@ -62,7 +62,7 @@ async fn test_git_log() {
         json!({"path": ".", "max_count": 5, "oneline": true, "capabilities": ["git.read"]}),
     );
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Success);
     assert!(response.result["output"].is_string());
 }
@@ -75,7 +75,7 @@ async fn test_git_branch() {
         json!({"path": ".", "capabilities": ["git.read"]}),
     );
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Success);
     assert!(response.result["output"].is_string());
 }
@@ -90,7 +90,7 @@ async fn test_dir_list() {
         json!({"path": ".", "depth": 1, "capabilities": ["fs.read"]}),
     );
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Success);
     assert!(response.result["entries"].is_array());
 }
@@ -103,7 +103,7 @@ async fn test_file_read() {
         json!({"path": "Cargo.toml", "capabilities": ["fs.read"]}),
     );
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Success);
     assert!(response.result["content"].is_string());
     assert_eq!(response.result["truncated"], false);
@@ -117,7 +117,7 @@ async fn test_file_hash() {
         json!({"path": "Cargo.toml", "capabilities": ["fs.read"]}),
     );
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Success);
     assert!(response.result["hash"].is_string());
 }
@@ -130,7 +130,7 @@ async fn test_file_search() {
         json!({"pattern": "carnelian", "path": "Cargo.toml", "capabilities": ["fs.read"]}),
     );
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Success);
     assert!(response.result["output"].is_string());
 }
@@ -140,20 +140,20 @@ async fn test_file_search() {
 #[tokio::test]
 async fn test_file_move() {
     let transport = make_transport();
-    
+
     let mut tmp_src = NamedTempFile::new().unwrap();
     writeln!(tmp_src, "test content").unwrap();
     let src_path = tmp_src.path().to_str().unwrap().to_string();
-    
+
     let tmp_dst = NamedTempFile::new().unwrap();
     let dst_path = tmp_dst.path().to_str().unwrap().to_string();
-    
+
     let request = make_request(
         "file_move",
         json!({"src": src_path, "dst": dst_path, "capabilities": ["fs.write"]}),
     );
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Success);
     assert_eq!(response.result["moved"], true);
 }
@@ -162,10 +162,10 @@ async fn test_file_move() {
 #[ignore = "requires owner approval"]
 async fn test_file_write() {
     let transport = make_transport();
-    
+
     let tmp = NamedTempFile::new().unwrap();
     let tmp_path = tmp.path().to_str().unwrap().to_string();
-    
+
     let request = make_request(
         "file_write",
         json!({
@@ -176,7 +176,7 @@ async fn test_file_write() {
         }),
     );
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Success);
     assert_eq!(response.result["written"], true);
 }
@@ -185,11 +185,11 @@ async fn test_file_write() {
 #[ignore = "requires owner approval"]
 async fn test_file_delete() {
     let transport = make_transport();
-    
+
     let mut tmp = NamedTempFile::new().unwrap();
     writeln!(tmp, "test content").unwrap();
     let tmp_path = tmp.path().to_str().unwrap().to_string();
-    
+
     let request = make_request(
         "file_delete",
         json!({
@@ -199,7 +199,7 @@ async fn test_file_delete() {
         }),
     );
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Success);
     assert_eq!(response.result["deleted"], true);
 }
@@ -218,7 +218,7 @@ async fn test_git_commit() {
         }),
     );
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Success);
     assert!(response.result["output"].is_string());
 }
@@ -228,12 +228,9 @@ async fn test_git_commit() {
 #[tokio::test]
 async fn test_docker_ps() {
     let transport = make_transport();
-    let request = make_request(
-        "docker_ps",
-        json!({"capabilities": ["docker.read"]}),
-    );
+    let request = make_request("docker_ps", json!({"capabilities": ["docker.read"]}));
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Success);
     assert!(response.result["containers"].is_array());
 }
@@ -246,11 +243,9 @@ async fn test_docker_logs() {
         json!({"container_id": "test", "tail": "10", "capabilities": ["docker.read"]}),
     );
     let response = transport.invoke(request).await.unwrap();
-    
+
     // Success or Failed (no live container) are both acceptable
-    assert!(
-        response.status == InvokeStatus::Success || response.status == InvokeStatus::Failed
-    );
+    assert!(response.status == InvokeStatus::Success || response.status == InvokeStatus::Failed);
 }
 
 #[tokio::test]
@@ -261,11 +256,9 @@ async fn test_docker_stats() {
         json!({"container_id": "test", "capabilities": ["docker.read"]}),
     );
     let response = transport.invoke(request).await.unwrap();
-    
+
     // Success or Failed (no live container) are both acceptable
-    assert!(
-        response.status == InvokeStatus::Success || response.status == InvokeStatus::Failed
-    );
+    assert!(response.status == InvokeStatus::Success || response.status == InvokeStatus::Failed);
 }
 
 #[tokio::test]
@@ -282,7 +275,7 @@ async fn test_docker_exec() {
         }),
     );
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Success);
     assert!(response.result["output"].is_string());
 }
@@ -292,12 +285,9 @@ async fn test_docker_exec() {
 #[tokio::test]
 async fn test_process_list() {
     let transport = make_transport();
-    let request = make_request(
-        "process_list",
-        json!({"capabilities": ["system.read"]}),
-    );
+    let request = make_request("process_list", json!({"capabilities": ["system.read"]}));
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Success);
     assert!(response.result["processes"].is_array());
 }
@@ -305,12 +295,9 @@ async fn test_process_list() {
 #[tokio::test]
 async fn test_disk_usage() {
     let transport = make_transport();
-    let request = make_request(
-        "disk_usage",
-        json!({"capabilities": ["system.read"]}),
-    );
+    let request = make_request("disk_usage", json!({"capabilities": ["system.read"]}));
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Success);
     assert!(response.result["disks"].is_array());
 }
@@ -318,12 +305,9 @@ async fn test_disk_usage() {
 #[tokio::test]
 async fn test_network_stats() {
     let transport = make_transport();
-    let request = make_request(
-        "network_stats",
-        json!({"capabilities": ["system.read"]}),
-    );
+    let request = make_request("network_stats", json!({"capabilities": ["system.read"]}));
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Success);
     assert!(response.result["networks"].is_array());
 }
@@ -338,7 +322,7 @@ async fn test_env_get() {
         json!({"key": "PATH", "capabilities": ["env.read"]}),
     );
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Success);
     assert_eq!(response.result["key"], "PATH");
     assert!(response.result["value"].is_string());
@@ -349,27 +333,31 @@ async fn test_env_get() {
 #[tokio::test]
 async fn test_git_status_missing_capability() {
     let transport = make_transport();
-    let request = make_request(
-        "git_status",
-        json!({"path": "."}),
-    );
+    let request = make_request("git_status", json!({"path": "."}));
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Failed);
-    assert!(response.result["error"].as_str().unwrap().contains("git.read"));
+    assert!(
+        response.result["error"]
+            .as_str()
+            .unwrap()
+            .contains("git.read")
+    );
 }
 
 #[tokio::test]
 async fn test_file_read_missing_capability() {
     let transport = make_transport();
-    let request = make_request(
-        "file_read",
-        json!({"path": "Cargo.toml"}),
-    );
+    let request = make_request("file_read", json!({"path": "Cargo.toml"}));
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Failed);
-    assert!(response.result["error"].as_str().unwrap().contains("fs.read"));
+    assert!(
+        response.result["error"]
+            .as_str()
+            .unwrap()
+            .contains("fs.read")
+    );
 }
 
 #[tokio::test]
@@ -380,7 +368,12 @@ async fn test_env_get_disallowed_key() {
         json!({"key": "SECRET_KEY", "capabilities": ["env.read"]}),
     );
     let response = transport.invoke(request).await.unwrap();
-    
+
     assert_eq!(response.status, InvokeStatus::Failed);
-    assert!(response.result["error"].as_str().unwrap().contains("not in the allowed list"));
+    assert!(
+        response.result["error"]
+            .as_str()
+            .unwrap()
+            .contains("not in the allowed list")
+    );
 }

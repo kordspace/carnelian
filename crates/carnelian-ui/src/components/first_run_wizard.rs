@@ -114,7 +114,11 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
                         tracing::warn!(error = %e, skill_id = skill_id, "Failed to activate skill");
                         let toast = ToastMessage {
                             id: uuid::Uuid::now_v7().to_string(),
-                            message: format!("⚠️ Failed to activate {}: {}", skill_name(skill_id), e),
+                            message: format!(
+                                "⚠️ Failed to activate {}: {}",
+                                skill_name(skill_id),
+                                e
+                            ),
                             toast_type: ToastType::Warning,
                             duration_secs: 5,
                         };

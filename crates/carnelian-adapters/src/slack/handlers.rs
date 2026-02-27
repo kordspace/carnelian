@@ -22,7 +22,7 @@ use crate::db as channel_db;
 use crate::events;
 use crate::rate_limiter::RateLimiter;
 use crate::spam_detector::SpamDetector;
-use crate::types::{TrustLevel, ChannelType};
+use crate::types::{ChannelType, TrustLevel};
 
 use super::SlackAdapter;
 
@@ -101,8 +101,8 @@ pub fn verify_slack_signature(
     }
 
     // 2. Build base string
-    let body_str = std::str::from_utf8(body)
-        .map_err(|_| anyhow::anyhow!("Invalid UTF-8 in request body"))?;
+    let body_str =
+        std::str::from_utf8(body).map_err(|_| anyhow::anyhow!("Invalid UTF-8 in request body"))?;
     let base_string = format!("v0:{timestamp}:{body_str}");
 
     // 3. Compute HMAC-SHA256
@@ -149,7 +149,12 @@ pub async fn handle_event(
     adapter: &SlackAdapter,
 ) -> anyhow::Result<SlackEventResponse> {
     // 1. Verify signature
-    verify_slack_signature(adapter.signing_secret(), timestamp, payload_bytes, signature)?;
+    verify_slack_signature(
+        adapter.signing_secret(),
+        timestamp,
+        payload_bytes,
+        signature,
+    )?;
 
     // 2. Deserialize payload
     let payload: SlackEventPayload = serde_json::from_slice(payload_bytes)
@@ -191,10 +196,7 @@ pub async fn handle_event(
 }
 
 /// Process a single Slack message event.
-async fn process_message_event(
-    event: &SlackEvent,
-    adapter: &SlackAdapter,
-) -> anyhow::Result<()> {
+async fn process_message_event(event: &SlackEvent, adapter: &SlackAdapter) -> anyhow::Result<()> {
     // 1. Skip bot messages
     if event.bot_id.is_some() {
         tracing::debug!(
@@ -224,7 +226,11 @@ async fn process_message_event(
     // 3. Check for /carnelian command prefix
     let cmd_text = text.trim();
     if cmd_text.starts_with("/carnelian ") || cmd_text == "/carnelian" {
-        let args = if cmd_text.len() > 11 { &cmd_text[11..] } else { "" };
+        let args = if cmd_text.len() > 11 {
+            &cmd_text[11..]
+        } else {
+            ""
+        };
         super::commands::dispatch_command(
             args,
             channel_id,
@@ -270,7 +276,10 @@ async fn process_message_event(
             "Rate limit exceeded"
         );
         adapter
-            .send_message(channel_id, "⏳ Rate limit exceeded. Please wait a moment before sending more messages.")
+            .send_message(
+                channel_id,
+                "⏳ Rate limit exceeded. Please wait a moment before sending more messages.",
+            )
             .await?;
         return Ok(());
     }
@@ -306,23 +315,20 @@ async fn process_message_event(
             "Capability check failed"
         );
         adapter
-            .send_message(channel_id, "🔒 You don't have permission to send messages. Use `/carnelian pair` to connect.")
+            .send_message(
+                channel_id,
+                "🔒 You don't have permission to send messages. Use `/carnelian pair` to connect.",
+            )
             .await?;
         return Ok(());
     }
 
     // 8. Session manager integration
-    let stable_identity = adapter
-        .config()
-        .identity_id
-        .unwrap_or(session.session_id);
+    let stable_identity = adapter.config().identity_id.unwrap_or(session.session_id);
 
     let session_key = format!("agent:{stable_identity}:slack:channel:{channel_id}");
 
-    let conv_session = adapter
-        .session_manager
-        .create_session(&session_key)
-        .await;
+    let conv_session = adapter.session_manager.create_session(&session_key).await;
 
     if let Ok(conv) = conv_session {
         if let Err(e) = adapter
@@ -400,14 +406,21 @@ mod tests {
         // Compute HMAC signature
         type HmacSha256 = Hmac<Sha256>;
         let mut mac = HmacSha256::new_from_slice(test_secret.as_bytes()).unwrap();
-        let base_string = format!("v0:{timestamp}:{}", std::str::from_utf8(&payload_bytes).unwrap());
+        let base_string = format!(
+            "v0:{timestamp}:{}",
+            std::str::from_utf8(&payload_bytes).unwrap()
+        );
         mac.update(base_string.as_bytes());
         let computed_sig = hex::encode(mac.finalize().into_bytes());
         let signature = format!("v0={computed_sig}");
 
         // Verify signature function works
         let result = verify_slack_signature(test_secret, &timestamp, &payload_bytes, &signature);
-        assert!(result.is_ok(), "Signature verification failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Signature verification failed: {:?}",
+            result
+        );
 
         // The response would contain the challenge if we had a full adapter
         // Here we just verify the signature logic which is the core of handle_event

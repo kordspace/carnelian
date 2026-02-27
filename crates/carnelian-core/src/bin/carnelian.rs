@@ -233,8 +233,22 @@ async fn main() {
             handle_skills(command, cli.config, cli.log_level, cli.database_url).await
         }
         Commands::Task { command, url } => handle_task_command(command, &resolve_url(url)).await,
-        Commands::Init { non_interactive, force, resume, key_path } => {
-            handle_init(cli.config, cli.log_level, cli.database_url, non_interactive, force, resume, key_path).await
+        Commands::Init {
+            non_interactive,
+            force,
+            resume,
+            key_path,
+        } => {
+            handle_init(
+                cli.config,
+                cli.log_level,
+                cli.database_url,
+                non_interactive,
+                force,
+                resume,
+                key_path,
+            )
+            .await
         }
         Commands::Ui { web } => handle_ui(web).await,
         Commands::Keygen { output } => handle_keygen(output).await,
@@ -1065,15 +1079,15 @@ fn save_init_state(path: &std::path::Path, state: &InitState) {
 /// Detect hardware - returns (RAM_GB, VRAM_GB)
 pub(crate) fn detect_hardware() -> (f64, f64) {
     use sysinfo::{MemoryKind, RefreshKind, System};
-    
+
     let mut sys = System::new_with_specifics(RefreshKind::new().with_memory(MemoryKind::RAM));
     sys.refresh_all();
-    
+
     let total_ram_gb = sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
-    
+
     // Detect GPU VRAM
     let mut vram_gb: f64 = 0.0;
-    
+
     // Try nvidia-smi first (returns MiB)
     if let Ok(output) = std::process::Command::new("nvidia-smi")
         .args(["--query-gpu=memory.total", "--format=csv,noheader,nounits"])
@@ -1088,7 +1102,7 @@ pub(crate) fn detect_hardware() -> (f64, f64) {
             }
         }
     }
-    
+
     // Fallback to rocm-smi for AMD GPUs
     if vram_gb == 0.0 {
         if let Ok(output) = std::process::Command::new("rocm-smi")
@@ -1117,7 +1131,7 @@ pub(crate) fn detect_hardware() -> (f64, f64) {
             }
         }
     }
-    
+
     (total_ram_gb, vram_gb)
 }
 
@@ -1167,7 +1181,10 @@ async fn handle_init(
     // Helper for yes/no prompts (returns true for yes)
     let prompt_yes_no = |message: &str, default_yes: bool| -> bool {
         let default_str = if default_yes { "Y/n" } else { "y/N" };
-        let response = prompt_or_default(&format!("{} [{}]", message, default_str), if default_yes { "y" } else { "n" });
+        let response = prompt_or_default(
+            &format!("{} [{}]", message, default_str),
+            if default_yes { "y" } else { "n" },
+        );
         response.to_lowercase() == "y" || (response.is_empty() && default_yes)
     };
 
@@ -1257,12 +1274,13 @@ async fn handle_init(
     println!();
     println!(
         "Suggested profile: {} (based on {:.1}GB RAM {:.1}GB VRAM)",
-        suggested_profile,
-        total_ram_gb,
-        vram_gb
+        suggested_profile, total_ram_gb, vram_gb
     );
     let profile = prompt_or_default(
-        &format!("Select machine profile [urim/thummim/custom] (default: {})", suggested_profile),
+        &format!(
+            "Select machine profile [urim/thummim/custom] (default: {})",
+            suggested_profile
+        ),
         suggested_profile,
     );
     let machine_profile = if profile.is_empty() {
@@ -1292,7 +1310,10 @@ async fn handle_init(
         postgres_port
     );
     let database_url = prompt_or_default(
-        &format!("Database URL [postgresql://carnelian:carnelian@localhost:{}/carnelian]", postgres_port),
+        &format!(
+            "Database URL [postgresql://carnelian:carnelian@localhost:{}/carnelian]",
+            postgres_port
+        ),
         &default_db_url,
     );
 
@@ -1305,10 +1326,8 @@ async fn handle_init(
 
     // HTTP port
     let default_http_port = http_port.to_string();
-    let http_port_input = prompt_or_default(
-        &format!("HTTP port [{}]", http_port),
-        &default_http_port,
-    );
+    let http_port_input =
+        prompt_or_default(&format!("HTTP port [{}]", http_port), &default_http_port);
     let http_port: u16 = http_port_input.parse().unwrap_or(http_port);
 
     // Workspace paths
@@ -1332,7 +1351,9 @@ async fn handle_init(
         .join("owner.pem");
 
     // Init state tracking
-    let state_path = PathBuf::from(&home_dir).join(".carnelian").join("init-state.json");
+    let state_path = PathBuf::from(&home_dir)
+        .join(".carnelian")
+        .join("init-state.json");
     let mut init_state = if resume {
         load_init_state(&state_path)
     } else {
@@ -1353,7 +1374,10 @@ async fn handle_init(
                 provided_key_path.display()
             )));
         }
-        println!("✓ Using key from --key-path: {}", provided_key_path.display());
+        println!(
+            "✓ Using key from --key-path: {}",
+            provided_key_path.display()
+        );
         actual_keypair_path = Some(provided_key_path.clone());
         init_state.keypair_generated = true;
         init_state.keypair_path = Some(provided_key_path.clone());
@@ -1371,11 +1395,15 @@ async fn handle_init(
         if gen_key.is_empty() || gen_key == "y" {
             // Idempotency guard: skip if already exists
             if default_keypair_path.exists() {
-                println!("✓ Keypair already exists at {}, skipping", default_keypair_path.display());
+                println!(
+                    "✓ Keypair already exists at {}, skipping",
+                    default_keypair_path.display()
+                );
                 actual_keypair_path = Some(default_keypair_path.clone());
             } else {
                 // Generate keypair - returns (SigningKey, VerifyingKey)
-                let (signing_key, verifying_key) = carnelian_core::crypto::generate_ed25519_keypair();
+                let (signing_key, verifying_key) =
+                    carnelian_core::crypto::generate_ed25519_keypair();
 
                 // Retain signing key for later use (Step 4)
                 init_signing_key = Some(signing_key.clone());
@@ -1383,7 +1411,10 @@ async fn handle_init(
                 // Create parent directories
                 if let Some(parent) = default_keypair_path.parent() {
                     std::fs::create_dir_all(parent).map_err(|e| {
-                        carnelian_common::Error::Config(format!("Failed to create key directory: {}", e))
+                        carnelian_common::Error::Config(format!(
+                            "Failed to create key directory: {}",
+                            e
+                        ))
                     })?;
                 }
 
@@ -1399,12 +1430,18 @@ async fn handle_init(
                     use std::os::unix::fs::PermissionsExt;
                     let permissions = std::fs::Permissions::from_mode(0o600);
                     std::fs::set_permissions(&default_keypair_path, permissions).map_err(|e| {
-                        carnelian_common::Error::Config(format!("Failed to set key permissions: {}", e))
+                        carnelian_common::Error::Config(format!(
+                            "Failed to set key permissions: {}",
+                            e
+                        ))
                     })?;
                 }
 
                 println!("✓ Generated new owner keypair");
-                println!("  Public key (hex): {}", hex::encode(verifying_key.as_bytes()));
+                println!(
+                    "  Public key (hex): {}",
+                    hex::encode(verifying_key.as_bytes())
+                );
                 println!("  Private key file: {}", default_keypair_path.display());
 
                 actual_keypair_path = Some(default_keypair_path.clone());
@@ -1413,7 +1450,8 @@ async fn handle_init(
             init_state.keypair_path = actual_keypair_path.clone();
             save_init_state(&state_path, &init_state);
         } else {
-            let key_path_input = prompt_or_default("Path to existing key file (or press Enter to skip)", "");
+            let key_path_input =
+                prompt_or_default("Path to existing key file (or press Enter to skip)", "");
             if !key_path_input.is_empty() {
                 let path = std::path::Path::new(&key_path_input);
                 if !path.exists() {
@@ -1435,7 +1473,10 @@ async fn handle_init(
     } else if non_interactive && !init_state.keypair_generated && key_path.is_none() {
         // Non-interactive mode: auto-generate key if not exists
         if default_keypair_path.exists() {
-            println!("✓ Keypair already exists at {}, skipping", default_keypair_path.display());
+            println!(
+                "✓ Keypair already exists at {}, skipping",
+                default_keypair_path.display()
+            );
             actual_keypair_path = Some(default_keypair_path.clone());
         } else {
             // Generate keypair - returns (SigningKey, VerifyingKey)
@@ -1462,7 +1503,10 @@ async fn handle_init(
             }
 
             println!("✓ Generated new owner keypair (non-interactive)");
-            println!("  Public key (hex): {}", hex::encode(verifying_key.as_bytes()));
+            println!(
+                "  Public key (hex): {}",
+                hex::encode(verifying_key.as_bytes())
+            );
             println!("  Private key file: {}", default_keypair_path.display());
 
             actual_keypair_path = Some(default_keypair_path.clone());
@@ -1472,7 +1516,10 @@ async fn handle_init(
         save_init_state(&state_path, &init_state);
     } else {
         // Already completed in previous run - use stored keypair_path if available
-        actual_keypair_path = init_state.keypair_path.clone().or(Some(default_keypair_path));
+        actual_keypair_path = init_state
+            .keypair_path
+            .clone()
+            .or(Some(default_keypair_path));
     }
 
     // Write machine.toml
@@ -1483,13 +1530,14 @@ async fn handle_init(
                 // In non-interactive mode, don't overwrite unless force flag is set
                 false
             } else {
-                let overwrite = prompt_or_default("machine.toml already exists. Overwrite? [y/N]", "n");
+                let overwrite =
+                    prompt_or_default("machine.toml already exists. Overwrite? [y/N]", "n");
                 overwrite.to_lowercase() == "y"
             }
         } else {
             true
         };
-        
+
         if should_write {
             write_machine_toml(
                 &machine_toml_path,
@@ -1645,7 +1693,7 @@ async fn handle_init(
             // PostgreSQL readiness retry loop
             const MAX_PG_RETRIES: u32 = 30;
             const PG_RETRY_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
-            
+
             println!("  Waiting for PostgreSQL to be ready...");
             let mut pg_ready = false;
             for attempt in 1..=MAX_PG_RETRIES {
@@ -1661,7 +1709,10 @@ async fn handle_init(
                         break;
                     }
                     Err(_) => {
-                        println!("    … waiting for PostgreSQL ({}/{})", attempt, MAX_PG_RETRIES);
+                        println!(
+                            "    … waiting for PostgreSQL ({}/{})",
+                            attempt, MAX_PG_RETRIES
+                        );
                         tokio::time::sleep(PG_RETRY_INTERVAL).await;
                     }
                 }
@@ -1673,22 +1724,31 @@ async fn handle_init(
             // Ollama readiness check
             if ollama_started {
                 const MAX_OLLAMA_RETRIES: u32 = 30;
-                const OLLAMA_RETRY_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
-                
+                const OLLAMA_RETRY_INTERVAL: std::time::Duration =
+                    std::time::Duration::from_secs(1);
+
                 println!("  Waiting for Ollama to be ready...");
                 let client = reqwest::Client::new();
                 let ollama_url = format!("http://localhost:{}/api/tags", ollama_port);
                 let mut ollama_ready = false;
-                
+
                 for attempt in 1..=MAX_OLLAMA_RETRIES {
-                    match client.get(&ollama_url).timeout(std::time::Duration::from_secs(2)).send().await {
+                    match client
+                        .get(&ollama_url)
+                        .timeout(std::time::Duration::from_secs(2))
+                        .send()
+                        .await
+                    {
                         Ok(resp) if resp.status().is_success() => {
                             println!("    ✓ Ollama is ready");
                             ollama_ready = true;
                             break;
                         }
                         _ => {
-                            println!("    … waiting for Ollama ({}/{})", attempt, MAX_OLLAMA_RETRIES);
+                            println!(
+                                "    … waiting for Ollama ({}/{})",
+                                attempt, MAX_OLLAMA_RETRIES
+                            );
                             tokio::time::sleep(OLLAMA_RETRY_INTERVAL).await;
                         }
                     }
@@ -1760,7 +1820,14 @@ async fn handle_init(
         if start_compose {
             println!("Starting services with docker-compose...");
             match std::process::Command::new("docker-compose")
-                .args(["-f", "docker-compose.yml", "up", "-d", "carnelian-postgres", "carnelian-ollama"])
+                .args([
+                    "-f",
+                    "docker-compose.yml",
+                    "up",
+                    "-d",
+                    "carnelian-postgres",
+                    "carnelian-ollama",
+                ])
                 .status()
             {
                 Ok(status) if status.success() => {
@@ -1788,12 +1855,12 @@ async fn handle_init(
             println!("  - model-usage: Track and optimize AI model usage");
             prompt_yes_no("Activate starter skills?", true)
         };
-        
+
         if activate_skills {
             let starter_skills = vec!["file-analyzer", "code-review", "model-usage"];
             let skill_book_path = PathBuf::from("skills/skill-book");
             let registry_path = PathBuf::from("skills/registry");
-            
+
             // Build config for SkillBook
             let skill_config = if let Some(ref pool) = shared_pool {
                 let mut config = Config::default();
@@ -1803,14 +1870,14 @@ async fn handle_init(
             } else {
                 std::sync::Arc::new(Config::default())
             };
-            
+
             // Create SkillBook instance
             let skill_book = carnelian_core::skill_book::SkillBook::new(
                 skill_book_path.clone(),
                 registry_path.clone(),
                 skill_config,
             );
-            
+
             for skill_id in starter_skills {
                 // Check if already activated using get_entry
                 match skill_book.get_entry(skill_id) {
@@ -1819,14 +1886,17 @@ async fn handle_init(
                     }
                     _ => {
                         // Activate the skill
-                        match skill_book.activate(skill_id, std::collections::HashMap::new()).await {
+                        match skill_book
+                            .activate(skill_id, std::collections::HashMap::new())
+                            .await
+                        {
                             Ok(_) => println!("✓ Activated {}", skill_id),
                             Err(e) => println!("⚠ Failed to activate {}: {}", skill_id, e),
                         }
                     }
                 }
             }
-            
+
             init_state.skills_activated = true;
             save_init_state(&state_path, &init_state);
         }
@@ -1835,29 +1905,35 @@ async fn handle_init(
     // API token configuration (Step 7: Add optional API token prompts)
     let mut github_configured = false;
     let mut openai_configured = false;
-    
+
     // Load signing key if not already loaded (e.g., when using existing keypair)
     if init_signing_key.is_none() {
         let key_path_to_load = actual_keypair_path
             .as_ref()
             .or(init_state.keypair_path.as_ref());
-        
+
         if let Some(key_path) = key_path_to_load {
             if key_path.exists() {
                 match std::fs::read(key_path) {
-                    Ok(key_bytes) => {
-                        match carnelian_core::crypto::bytes_to_keypair(&key_bytes) {
-                            Ok(signing_key) => {
-                                init_signing_key = Some(signing_key);
-                            }
-                            Err(e) => {
-                                println!("⚠ Warning: Could not load signing key from {}: {}", key_path.display(), e);
-                                println!("  API tokens will be stored unencrypted.");
-                            }
+                    Ok(key_bytes) => match carnelian_core::crypto::bytes_to_keypair(&key_bytes) {
+                        Ok(signing_key) => {
+                            init_signing_key = Some(signing_key);
                         }
-                    }
+                        Err(e) => {
+                            println!(
+                                "⚠ Warning: Could not load signing key from {}: {}",
+                                key_path.display(),
+                                e
+                            );
+                            println!("  API tokens will be stored unencrypted.");
+                        }
+                    },
                     Err(e) => {
-                        println!("⚠ Warning: Could not read key file {}: {}", key_path.display(), e);
+                        println!(
+                            "⚠ Warning: Could not read key file {}: {}",
+                            key_path.display(),
+                            e
+                        );
                         println!("  API tokens will be stored unencrypted.");
                     }
                 }
@@ -1870,17 +1946,20 @@ async fn handle_init(
             println!("  API tokens will be stored unencrypted.");
         }
     }
-    
+
     if !non_interactive {
         println!();
         if let Some(ref pool) = shared_pool {
             // GitHub token
-            let github_token = prompt_or_default("GitHub personal access token (optional, press Enter to skip)", "");
+            let github_token = prompt_or_default(
+                "GitHub personal access token (optional, press Enter to skip)",
+                "",
+            );
             if !github_token.is_empty() {
-                let encryption_helper = init_signing_key.as_ref().map(|sk| {
-                    carnelian_core::encryption::EncryptionHelper::new(pool, sk)
-                });
-                
+                let encryption_helper = init_signing_key
+                    .as_ref()
+                    .map(|sk| carnelian_core::encryption::EncryptionHelper::new(pool, sk));
+
                 match Config::update_config_value_encrypted(
                     pool,
                     "api_token.github",
@@ -1892,7 +1971,9 @@ async fn handle_init(
                     None,
                     encryption_helper.as_ref(),
                     1,
-                ).await {
+                )
+                .await
+                {
                     Ok(_) => {
                         println!("✓ GitHub token stored");
                         github_configured = true;
@@ -1902,14 +1983,15 @@ async fn handle_init(
                     }
                 }
             }
-            
+
             // OpenAI API key
-            let openai_key = prompt_or_default("OpenAI API key (optional, press Enter to skip)", "");
+            let openai_key =
+                prompt_or_default("OpenAI API key (optional, press Enter to skip)", "");
             if !openai_key.is_empty() {
-                let encryption_helper = init_signing_key.as_ref().map(|sk| {
-                    carnelian_core::encryption::EncryptionHelper::new(pool, sk)
-                });
-                
+                let encryption_helper = init_signing_key
+                    .as_ref()
+                    .map(|sk| carnelian_core::encryption::EncryptionHelper::new(pool, sk));
+
                 match Config::update_config_value_encrypted(
                     pool,
                     "api_token.openai",
@@ -1921,7 +2003,9 @@ async fn handle_init(
                     None,
                     encryption_helper.as_ref(),
                     1,
-                ).await {
+                )
+                .await
+                {
                     Ok(_) => {
                         println!("✓ OpenAI API key stored");
                         openai_configured = true;
@@ -1932,7 +2016,9 @@ async fn handle_init(
                 }
             }
         } else {
-            println!("Note: API tokens can be configured later via `carnelian init` once the database is running.");
+            println!(
+                "Note: API tokens can be configured later via `carnelian init` once the database is running."
+            );
         }
     }
 
@@ -1948,9 +2034,29 @@ async fn handle_init(
     println!("  Ollama URL:    {}", ollama_url);
     println!("  HTTP port:     {}", http_port);
     println!("  Workspaces:    {}", workspace_paths.join(", "));
-    println!("  Keypair:       {}", actual_keypair_path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "(none)".to_string()));
-    println!("  GitHub token:  {}", if github_configured { "configured" } else { "skipped" });
-    println!("  OpenAI key:    {}", if openai_configured { "configured" } else { "skipped" });
+    println!(
+        "  Keypair:       {}",
+        actual_keypair_path
+            .as_ref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "(none)".to_string())
+    );
+    println!(
+        "  GitHub token:  {}",
+        if github_configured {
+            "configured"
+        } else {
+            "skipped"
+        }
+    );
+    println!(
+        "  OpenAI key:    {}",
+        if openai_configured {
+            "configured"
+        } else {
+            "skipped"
+        }
+    );
     println!();
     println!("Next steps:");
     println!("  1. Start Carnelian:   carnelian start");
@@ -2039,7 +2145,10 @@ async fn handle_keygen(output: Option<PathBuf>) -> carnelian_common::Result<()> 
 
     // Idempotency check: skip if key file already exists
     if output_path.exists() {
-        println!("✓ Keypair already exists at {}, skipping generation", output_path.display());
+        println!(
+            "✓ Keypair already exists at {}, skipping generation",
+            output_path.display()
+        );
         return Ok(());
     }
 

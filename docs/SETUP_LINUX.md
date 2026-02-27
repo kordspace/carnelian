@@ -137,7 +137,7 @@ cargo build --release
 # 3. Run the interactive setup wizard
 # This detects your hardware, sets up Docker containers, creates the database,
 # generates your owner keypair, and activates starter skills.
-# GPU VRAM detection will determine whether you get 'urim' (≥10GB) or 'thummim' (≥6GB).
+# GPU VRAM detection will determine whether you get 'performance' (≥10GB) or 'standard' (≥6GB).
 carnelian init
 
 # 4. Start the system
@@ -154,7 +154,7 @@ carnelian start
 After running `carnelian init`, your system is ready. The wizard automatically:
 - Starts PostgreSQL and Ollama Docker containers
 - Runs database migrations
-- Pulls appropriate models for your GPU profile (`deepseek-r1:7b` for Thummim, `deepseek-r1:32b` for Urim)
+- Pulls appropriate models for your GPU profile (`deepseek-r1:7b` for Standard, `deepseek-r1:32b` for Performance)
 - Generates and secures your owner keypair
 - Activates starter skills
 

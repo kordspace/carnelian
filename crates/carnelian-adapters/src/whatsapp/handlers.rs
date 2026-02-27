@@ -20,7 +20,7 @@ use crate::db as channel_db;
 use crate::events;
 use crate::rate_limiter::RateLimiter;
 use crate::spam_detector::SpamDetector;
-use crate::types::{TrustLevel, ChannelType};
+use crate::types::{ChannelType, TrustLevel};
 
 use super::WhatsAppAdapter;
 
@@ -227,15 +227,16 @@ async fn process_message(
             "Rate limit exceeded"
         );
         adapter
-            .send_message(from, "⏳ Rate limit exceeded. Please wait a moment before sending more messages.")
+            .send_message(
+                from,
+                "⏳ Rate limit exceeded. Please wait a moment before sending more messages.",
+            )
             .await?;
         return Ok(());
     }
 
     // 3. Spam detection (synchronous, no await)
-    let spam_score = adapter
-        .spam_detector
-        .update_score("whatsapp", from, text);
+    let spam_score = adapter.spam_detector.update_score("whatsapp", from, text);
     if adapter.spam_detector.is_spam(spam_score) {
         tracing::info!(
             channel_user_id = %from,
@@ -263,24 +264,21 @@ async fn process_message(
             "Capability check failed"
         );
         adapter
-            .send_message(from, "🔒 You don't have permission to send messages. Use /pair to connect.")
+            .send_message(
+                from,
+                "🔒 You don't have permission to send messages. Use /pair to connect.",
+            )
             .await?;
         return Ok(());
     }
 
     // 5. Session manager integration
-    let stable_identity = adapter
-        .config()
-        .identity_id
-        .unwrap_or(session.session_id);
+    let stable_identity = adapter.config().identity_id.unwrap_or(session.session_id);
 
     let session_key = format!("agent:{stable_identity}:whatsapp:user:{from}");
 
     // Create session if needed and append message
-    let conv_session = adapter
-        .session_manager
-        .create_session(&session_key)
-        .await;
+    let conv_session = adapter.session_manager.create_session(&session_key).await;
 
     if let Ok(conv) = conv_session {
         if let Err(e) = adapter
@@ -358,6 +356,11 @@ mod tests {
 
         let result = handle_verification(&query, "my_verify_token", &event_stream);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid verify token"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid verify token")
+        );
     }
 }

@@ -1018,7 +1018,9 @@ pub async fn activate_skill(
 ) -> Result<ActivateSkillResponse, String> {
     let request = ActivateSkillRequest { config };
     client()
-        .post(format!("{API_BASE_URL}/v1/node-registry/{skill_id}/activate"))
+        .post(format!(
+            "{API_BASE_URL}/v1/node-registry/{skill_id}/activate"
+        ))
         .json(&request)
         .send()
         .await

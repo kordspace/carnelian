@@ -25,11 +25,7 @@ impl NativeOpsTransport {
     /// * `worker_id` - Unique identifier for this worker
     /// * `event_stream` - Event stream for publishing lifecycle events
     /// * `config` - Application configuration
-    pub fn new(
-        worker_id: String,
-        event_stream: Arc<EventStream>,
-        config: Arc<Config>,
-    ) -> Self {
+    pub fn new(worker_id: String, event_stream: Arc<EventStream>, config: Arc<Config>) -> Self {
         let inner = Arc::new(NativeWorkerTransport::new(worker_id, event_stream, config));
         Self { inner }
     }
@@ -56,12 +52,13 @@ impl WorkerTransport for NativeOpsTransport {
         run_id: carnelian_common::types::RunId,
         reason: String,
     ) -> anyhow::Result<()> {
-        self.inner.cancel(run_id, reason).await.map_err(|e| e.into())
+        self.inner
+            .cancel(run_id, reason)
+            .await
+            .map_err(|e| e.into())
     }
 
-    async fn health(
-        &self,
-    ) -> anyhow::Result<carnelian_common::types::HealthResponse> {
+    async fn health(&self) -> anyhow::Result<carnelian_common::types::HealthResponse> {
         self.inner.health().await.map_err(|e| e.into())
     }
 
@@ -76,10 +73,10 @@ impl WorkerTransport for NativeOpsTransport {
 /// when only a specific operation is needed.
 pub mod ops {
     use anyhow::{Context, Result};
-    use serde_json::json;
-    use bollard::exec::{CreateExecOptions, StartExecResults};
     use bollard::container::{LogsOptions, StatsOptions};
+    use bollard::exec::{CreateExecOptions, StartExecResults};
     use futures_util::StreamExt;
+    use serde_json::json;
     use sysinfo::{Disks, Networks, ProcessRefreshKind, RefreshKind, System};
 
     /// Execute git status on the given path.
@@ -143,7 +140,11 @@ pub mod ops {
             .with_context(|| format!("Failed to read file: {}", path))?;
         let original_len = bytes.len();
         let truncated = original_len > max_bytes;
-        let content_bytes = if truncated { &bytes[..max_bytes] } else { &bytes };
+        let content_bytes = if truncated {
+            &bytes[..max_bytes]
+        } else {
+            &bytes
+        };
         let content = String::from_utf8_lossy(content_bytes).to_string();
         Ok(json!({
             "content": content,
@@ -174,16 +175,17 @@ pub mod ops {
             .output()
             .await
             .context("Failed to execute ripgrep")?;
-        
+
         if !output.status.success() {
             let exit_code = output.status.code();
             let stderr = String::from_utf8_lossy(&output.stderr);
             anyhow::bail!(
                 "rg search failed with exit code {:?}: {}",
-                exit_code, stderr
+                exit_code,
+                stderr
             );
         }
-        
+
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         Ok(json!({ "output": stdout }))
     }
@@ -224,22 +226,19 @@ pub mod ops {
             args.push("--cached");
         }
         args.push(path);
-        
+
         let output = tokio::process::Command::new("git")
             .args(&args)
             .output()
             .await
             .context("Failed to execute git diff")?;
-        
+
         if !output.status.success() {
             let exit_code = output.status.code();
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!(
-                "git diff failed with exit code {:?}: {}",
-                exit_code, stderr
-            );
+            anyhow::bail!("git diff failed with exit code {:?}: {}", exit_code, stderr);
         }
-        
+
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         Ok(json!({ "output": stdout }))
     }
@@ -254,16 +253,17 @@ pub mod ops {
             .output()
             .await
             .context("Failed to execute git commit")?;
-        
+
         if !output.status.success() {
             let exit_code = output.status.code();
             let stderr = String::from_utf8_lossy(&output.stderr);
             anyhow::bail!(
                 "git commit failed with exit code {:?}: {}",
-                exit_code, stderr
+                exit_code,
+                stderr
             );
         }
-        
+
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         Ok(json!({ "output": stdout }))
     }
@@ -277,22 +277,19 @@ pub mod ops {
             args.push("--oneline");
         }
         args.push(path);
-        
+
         let output = tokio::process::Command::new("git")
             .args(&args)
             .output()
             .await
             .context("Failed to execute git log")?;
-        
+
         if !output.status.success() {
             let exit_code = output.status.code();
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!(
-                "git log failed with exit code {:?}: {}",
-                exit_code, stderr
-            );
+            anyhow::bail!("git log failed with exit code {:?}: {}", exit_code, stderr);
         }
-        
+
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         Ok(json!({ "output": stdout }))
     }
@@ -307,16 +304,17 @@ pub mod ops {
             .output()
             .await
             .context("Failed to execute git branch")?;
-        
+
         if !output.status.success() {
             let exit_code = output.status.code();
             let stderr = String::from_utf8_lossy(&output.stderr);
             anyhow::bail!(
                 "git branch failed with exit code {:?}: {}",
-                exit_code, stderr
+                exit_code,
+                stderr
             );
         }
-        
+
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         Ok(json!({ "output": stdout }))
     }
@@ -327,19 +325,20 @@ pub mod ops {
     pub async fn docker_exec(container_id: &str, cmd: Vec<String>) -> Result<serde_json::Value> {
         let docker = bollard::Docker::connect_with_local_defaults()
             .context("Failed to connect to Docker")?;
-        
-        let exec = docker.create_exec(
-            container_id,
-            CreateExecOptions {
-                cmd: Some(cmd),
-                attach_stdout: Some(true),
-                attach_stderr: Some(true),
-                ..Default::default()
-            }
-        )
-        .await
-        .context("Failed to create exec")?;
-        
+
+        let exec = docker
+            .create_exec(
+                container_id,
+                CreateExecOptions {
+                    cmd: Some(cmd),
+                    attach_stdout: Some(true),
+                    attach_stderr: Some(true),
+                    ..Default::default()
+                },
+            )
+            .await
+            .context("Failed to create exec")?;
+
         let exec_id = exec.id;
         match docker.start_exec(&exec_id, None).await {
             Ok(StartExecResults::Attached { mut output, .. }) => {
@@ -363,7 +362,7 @@ pub mod ops {
     pub async fn docker_logs(container_id: &str, tail: &str) -> Result<serde_json::Value> {
         let docker = bollard::Docker::connect_with_local_defaults()
             .context("Failed to connect to Docker")?;
-        
+
         let mut logs_stream = docker.logs(
             container_id,
             Some(LogsOptions {
@@ -371,9 +370,9 @@ pub mod ops {
                 stderr: true,
                 tail: tail.to_string(),
                 ..Default::default()
-            })
+            }),
         );
-        
+
         let mut collected = String::new();
         while let Some(chunk) = logs_stream.next().await {
             match chunk {
@@ -381,7 +380,7 @@ pub mod ops {
                 Err(e) => anyhow::bail!("Stream error: {}", e),
             }
         }
-        
+
         Ok(json!({ "output": collected }))
     }
 
@@ -391,19 +390,19 @@ pub mod ops {
     pub async fn docker_stats(container_id: &str) -> Result<serde_json::Value> {
         let docker = bollard::Docker::connect_with_local_defaults()
             .context("Failed to connect to Docker")?;
-        
+
         let mut stats_stream = docker.stats(
             container_id,
             Some(StatsOptions {
                 stream: false,
                 ..Default::default()
-            })
+            }),
         );
-        
+
         match stats_stream.next().await {
             Some(Ok(stats)) => {
-                let stats_value = serde_json::to_value(&stats)
-                    .context("Failed to serialize stats")?;
+                let stats_value =
+                    serde_json::to_value(&stats).context("Failed to serialize stats")?;
                 Ok(json!({ "stats": stats_value }))
             }
             Some(Err(e)) => Err(e.into()),
@@ -416,10 +415,11 @@ pub mod ops {
     /// Requires `system.read` capability.
     pub async fn process_list() -> Result<serde_json::Value> {
         let sys = System::new_with_specifics(
-            RefreshKind::new().with_processes(ProcessRefreshKind::everything())
+            RefreshKind::new().with_processes(ProcessRefreshKind::everything()),
         );
-        
-        let processes: Vec<serde_json::Value> = sys.processes()
+
+        let processes: Vec<serde_json::Value> = sys
+            .processes()
             .iter()
             .map(|(pid, process)| {
                 json!({
@@ -430,7 +430,7 @@ pub mod ops {
                 })
             })
             .collect();
-        
+
         Ok(json!({ "processes": processes }))
     }
 
@@ -439,8 +439,9 @@ pub mod ops {
     /// Requires `system.read` capability.
     pub async fn disk_usage() -> Result<serde_json::Value> {
         let disks = Disks::new_with_refreshed_list();
-        
-        let disks_vec: Vec<serde_json::Value> = disks.iter()
+
+        let disks_vec: Vec<serde_json::Value> = disks
+            .iter()
             .map(|disk| {
                 json!({
                     "name": disk.name().to_string_lossy(),
@@ -451,7 +452,7 @@ pub mod ops {
                 })
             })
             .collect();
-        
+
         Ok(json!({ "disks": disks_vec }))
     }
 
@@ -460,8 +461,9 @@ pub mod ops {
     /// Requires `system.read` capability.
     pub async fn network_stats() -> Result<serde_json::Value> {
         let networks = Networks::new_with_refreshed_list();
-        
-        let networks_vec: Vec<serde_json::Value> = networks.iter()
+
+        let networks_vec: Vec<serde_json::Value> = networks
+            .iter()
             .map(|(interface, data)| {
                 json!({
                     "interface": interface,
@@ -470,7 +472,7 @@ pub mod ops {
                 })
             })
             .collect();
-        
+
         Ok(json!({ "networks": networks_vec }))
     }
 
@@ -479,17 +481,17 @@ pub mod ops {
     /// Requires `env.read` capability. Only allows reading from a predefined allowlist.
     pub async fn env_get(key: &str) -> Result<serde_json::Value> {
         const ALLOWLIST: &[&str] = &[
-            "PATH", "HOME", "USER", "USERNAME", "SHELL", "LANG", "LC_ALL",
-            "PWD", "TERM", "HOSTNAME", "TMPDIR", "TEMP", "TMP"
+            "PATH", "HOME", "USER", "USERNAME", "SHELL", "LANG", "LC_ALL", "PWD", "TERM",
+            "HOSTNAME", "TMPDIR", "TEMP", "TMP",
         ];
-        
+
         if !ALLOWLIST.contains(&key) {
             anyhow::bail!("env var '{}' is not in the allowed list", key);
         }
-        
-        let value = std::env::var(key)
-            .with_context(|| format!("Failed to get env var: {}", key))?;
-        
+
+        let value =
+            std::env::var(key).with_context(|| format!("Failed to get env var: {}", key))?;
+
         Ok(json!({
             "key": key,
             "value": value

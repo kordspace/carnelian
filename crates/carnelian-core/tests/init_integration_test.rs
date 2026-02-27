@@ -220,12 +220,14 @@ async fn test_init_resume() {
     );
 
     // Verify state was updated
-    let updated_state: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(&state_path).expect("Failed to read state")
-    ).expect("Failed to parse state");
-    
+    let updated_state: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&state_path).expect("Failed to read state"))
+            .expect("Failed to parse state");
+
     // After resume, at least some tasks should be marked complete
-    let tasks_completed = updated_state["machine_toml_written"].as_bool().unwrap_or(false)
+    let tasks_completed = updated_state["machine_toml_written"]
+        .as_bool()
+        .unwrap_or(false)
         || updated_state["migrations_run"].as_bool().unwrap_or(false);
     assert!(
         tasks_completed,
