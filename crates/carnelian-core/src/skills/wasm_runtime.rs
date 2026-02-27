@@ -10,8 +10,9 @@ use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
 use wasmtime::{Config, Engine, Linker, Module, Store};
 use wasmtime_wasi::{
-    WasiCtx, WasiCtxBuilder,
+    WasiCtxBuilder,
     pipe::{MemoryInputPipe, MemoryOutputPipe},
+    preview1::WasiP1Ctx,
 };
 
 use crate::skills::skill_trait::{SkillInput, SkillOutput};
@@ -20,7 +21,7 @@ use carnelian_common::{Error, Result};
 /// State for WASM skill execution
 pub struct WasmState {
     /// WASI context for system access
-    wasi: WasiCtx,
+    wasi: WasiP1Ctx,
 
     /// Granted capabilities
     capabilities: Vec<String>,
@@ -180,17 +181,17 @@ impl WasmSkillRuntime {
 
         // Step 4: Build WasiCtx with capability-based access
         let mut wasi_builder = WasiCtxBuilder::new();
-        wasi_builder = wasi_builder.stdin(stdin_pipe);
-        wasi_builder = wasi_builder.stdout(stdout_pipe.clone());
+        wasi_builder.stdin(stdin_pipe);
+        wasi_builder.stdout(stdout_pipe.clone());
 
         // Network: deny by default, allow if capability granted
         if capabilities.contains(&"network".to_string()) {
-            wasi_builder = wasi_builder.inherit_network();
+            wasi_builder.inherit_network();
         }
 
         // Filesystem: allow read if capability granted
         if capabilities.contains(&"fs.read".to_string()) {
-            wasi_builder = wasi_builder
+            wasi_builder
                 .preopened_dir(
                     std::path::PathBuf::from("."),
                     ".",
@@ -200,7 +201,7 @@ impl WasmSkillRuntime {
                 .map_err(|e| Error::Worker(format!("Failed to preopen dir: {}", e)))?;
         }
 
-        let wasi = wasi_builder.build();
+        let wasi = wasi_builder.build_p1();
 
         // Step 5: Create Store with WasmState
         let mut store = Store::new(&skill.engine, WasmState { wasi, capabilities });
