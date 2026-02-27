@@ -5,9 +5,9 @@
 //! - Skill execution
 //! - Concurrent skill execution
 
-use carnelian_core::skills::wasm_runtime::WasmSkillRuntime;
 use carnelian_core::skills::skill_trait::SkillInput;
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use carnelian_core::skills::wasm_runtime::WasmSkillRuntime;
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use serde_json::json;
 use tokio::runtime::Runtime;
 
@@ -25,32 +25,27 @@ fn test_skill_input() -> SkillInput {
 
 fn benchmark_wasm_runtime_creation(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
-    
+
     c.bench_function("wasm_runtime_create", |b| {
-        b.to_async(&rt).iter(|| async {
-            WasmSkillRuntime::new().await
-        });
+        b.to_async(&rt)
+            .iter(|| async { WasmSkillRuntime::new().await });
     });
 }
 
 fn benchmark_skill_input_serialization(c: &mut Criterion) {
     let input = test_skill_input();
-    
+
     c.bench_function("skill_input_serialize", |b| {
-        b.iter(|| {
-            serde_json::to_string(black_box(&input))
-        });
+        b.iter(|| serde_json::to_string(black_box(&input)));
     });
 }
 
 fn benchmark_skill_input_deserialization(c: &mut Criterion) {
     let input = test_skill_input();
     let serialized = serde_json::to_string(&input).unwrap();
-    
+
     c.bench_function("skill_input_deserialize", |b| {
-        b.iter(|| {
-            serde_json::from_str::<SkillInput>(black_box(&serialized))
-        });
+        b.iter(|| serde_json::from_str::<SkillInput>(black_box(&serialized)));
     });
 }
 
