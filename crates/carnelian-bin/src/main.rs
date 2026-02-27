@@ -37,7 +37,6 @@ use bollard::container::{
 use bollard::image::CreateImageOptions;
 use bollard::models::{HostConfig, PortBinding};
 use futures_util::stream::TryStreamExt;
-use sysinfo::{RefreshKind, System};
 
 /// 🔥 Carnelian OS - Local-first AI agent mainframe
 #[derive(Parser)]
@@ -250,7 +249,7 @@ async fn main() {
             .await
         }
         Commands::Ui { web } => handle_ui(web).await,
-        Commands::Keygen { output } => handle_keygen(output).await,
+        Commands::Keygen { output } => handle_keygen(output),
         Commands::Key { command } => {
             handle_key(command, cli.config, cli.log_level, cli.database_url).await
         }
@@ -280,6 +279,7 @@ fn resolve_url(explicit: Option<String>) -> String {
 }
 
 /// Handle the `start` command - launch the orchestrator
+#[allow(clippy::too_many_lines)]
 async fn handle_start(
     config_path: Option<PathBuf>,
     log_level_override: Option<String>,
@@ -1068,6 +1068,7 @@ fn format_event(event: &EventEnvelope) -> String {
 }
 
 /// Handle the `init` command - Interactive setup wizard with Docker and hardware detection
+#[allow(clippy::too_many_lines)]
 async fn handle_init(
     _config_path: Option<PathBuf>,
     _log_level_override: Option<String>,
@@ -1097,6 +1098,7 @@ async fn handle_init(
     );
     sys.refresh_all();
 
+    #[allow(clippy::cast_precision_loss)]
     let total_ram_gb = sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
     println!("  RAM: {:.1} GB", total_ram_gb);
 
@@ -1242,15 +1244,16 @@ async fn handle_init(
     };
 
     // Container setup if Docker is available
-    let mut auto_setup_containers = false;
-    if docker.is_some() {
+    let auto_setup_containers = if docker.is_some() {
         println!();
         print!("Auto-setup PostgreSQL and Ollama containers? [Y/n]: ");
         stdout().flush().unwrap();
         let mut setup = String::new();
         stdin().read_line(&mut setup).unwrap();
-        auto_setup_containers = setup.trim().to_lowercase() != "n";
-    }
+        setup.trim().to_lowercase() != "n"
+    } else {
+        false
+    };
 
     // Default ports and URLs
     let (postgres_port, ollama_port, http_port) = match machine_profile {
@@ -1362,7 +1365,7 @@ async fn handle_init(
             }
 
             // Write private key
-            std::fs::write(&default_keypair_path, &private_key_bytes).map_err(|e| {
+            std::fs::write(&default_keypair_path, private_key_bytes).map_err(|e| {
                 carnelian_common::Error::Config(format!("Failed to write key file: {}", e))
             })?;
 
@@ -1387,7 +1390,9 @@ async fn handle_init(
             let mut key_path_input = String::new();
             stdin().read_line(&mut key_path_input).unwrap();
             let key_path_input = key_path_input.trim();
-            if !key_path_input.is_empty() {
+            if key_path_input.is_empty() {
+                println!("  (No key configured)");
+            } else {
                 let path = std::path::Path::new(key_path_input);
                 if !path.exists() {
                     return Err(carnelian_common::Error::Config(format!(
@@ -1397,8 +1402,6 @@ async fn handle_init(
                 }
                 println!("✓ Using existing key: {}", key_path_input);
                 actual_keypair_path = Some(PathBuf::from(key_path_input));
-            } else {
-                println!("  (No key configured)");
             }
         }
     }
@@ -1410,9 +1413,7 @@ async fn handle_init(
         stdout().flush().unwrap();
         let mut overwrite = String::new();
         stdin().read_line(&mut overwrite).unwrap();
-        if overwrite.trim().to_lowercase() != "y" {
-            println!("Skipped writing machine.toml");
-        } else {
+        if overwrite.trim().to_lowercase() == "y" {
             write_machine_toml(
                 &machine_toml_path,
                 machine_profile,
@@ -1422,6 +1423,8 @@ async fn handle_init(
                 &workspace_paths,
                 actual_keypair_path.as_ref(),
             )?;
+        } else {
+            println!("Skipped writing machine.toml");
         }
     } else {
         write_machine_toml(
@@ -1515,7 +1518,7 @@ async fn handle_init(
                         )
                         .await
                     {
-                        Ok(_) => println!(
+                        Ok(()) => println!(
                             "    ✓ PostgreSQL container started on port {}",
                             postgres_port
                         ),
@@ -1562,7 +1565,9 @@ async fn handle_init(
                         .start_container("carnelian-ollama", None::<StartContainerOptions<String>>)
                         .await
                     {
-                        Ok(_) => println!("    ✓ Ollama container started on port {}", ollama_port),
+                        Ok(()) => {
+                            println!("    ✓ Ollama container started on port {}", ollama_port)
+                        }
                         Err(e) => println!("    ⚠ Failed to start Ollama container: {}", e),
                     }
                 }
@@ -1585,7 +1590,7 @@ async fn handle_init(
     if run_migs.trim().to_lowercase() != "n" {
         // Create minimal config for migrations
         let mut config = Config::default();
-        config.database_url = database_url.clone();
+        config.database_url.clone_from(&database_url);
 
         println!("Connecting to database...");
         if let Err(e) = config.connect_database().await {
@@ -1600,7 +1605,7 @@ async fn handle_init(
             println!("Running migrations...");
             if let Ok(pool) = config.pool() {
                 match carnelian_core::db::run_migrations(pool, None).await {
-                    Ok(_) => println!("✓ Migrations completed"),
+                    Ok(()) => println!("✓ Migrations completed"),
                     Err(e) => {
                         return Err(carnelian_common::Error::ExitCode(
                             3,
@@ -1670,7 +1675,7 @@ async fn handle_init(
 
                 if skill_src.exists() {
                     match std::fs::create_dir_all(&skill_dst) {
-                        Ok(_) => {
+                        Ok(()) => {
                             // Copy skill files
                             if let Ok(entries) = std::fs::read_dir(&skill_src) {
                                 for entry in entries.flatten() {
@@ -1735,11 +1740,9 @@ fn write_machine_toml(
         .collect::<Vec<_>>()
         .join(", ");
 
-    let keypair_line = if let Some(key_path) = owner_keypair_path {
+    let keypair_line = owner_keypair_path.map_or_else(String::new, |key_path| {
         format!("owner_keypair_path = \"{}\"\n", key_path.display())
-    } else {
-        String::new()
-    };
+    });
 
     let content = format!(
         r#"# 🔥 Carnelian OS Machine Configuration
@@ -1777,9 +1780,7 @@ workspace_scan_paths = [{}]
 }
 
 /// Handle the `keygen` command - Generate owner keypair
-async fn handle_keygen(output: Option<PathBuf>) -> carnelian_common::Result<()> {
-    use std::io::Write;
-
+fn handle_keygen(output: Option<PathBuf>) -> carnelian_common::Result<()> {
     // Generate keypair
     let (public_key, private_key_bytes) = carnelian_core::crypto::generate_ed25519_keypair();
 
@@ -1799,7 +1800,7 @@ async fn handle_keygen(output: Option<PathBuf>) -> carnelian_common::Result<()> 
     }
 
     // Write private key
-    std::fs::write(&output_path, &private_key_bytes)
+    std::fs::write(&output_path, private_key_bytes)
         .map_err(|e| carnelian_common::Error::Config(format!("Failed to write key file: {}", e)))?;
 
     // Set permissions on Unix
@@ -1821,7 +1822,7 @@ async fn handle_keygen(output: Option<PathBuf>) -> carnelian_common::Result<()> 
         "   Private key file: {}",
         output_path
             .canonicalize()
-            .unwrap_or(output_path.clone())
+            .unwrap_or_else(|_| output_path.clone())
             .display()
     );
     println!();
@@ -1851,7 +1852,7 @@ async fn handle_key_rotate(
     log_level_override: Option<String>,
     database_url_override: Option<String>,
 ) -> carnelian_common::Result<()> {
-    use std::io::Write;
+    use base64::Engine;
 
     // Load configuration
     let mut config = if let Some(path) = config_path {
@@ -1905,9 +1906,8 @@ async fn handle_key_rotate(
 
     // Store new keypair in config_store as base64-encoded JSON
     let pool = config.pool()?.clone();
-    use base64::Engine;
     let new_value = serde_json::json!({
-        "seed_base64": base64::engine::general_purpose::STANDARD.encode(&new_private_key_bytes)
+        "seed_base64": base64::engine::general_purpose::STANDARD.encode(new_private_key_bytes)
     });
 
     Config::update_config_value(
@@ -1931,7 +1931,7 @@ async fn handle_key_rotate(
     });
 
     // Write new key file
-    std::fs::write(&keypair_path, &new_private_key_bytes).map_err(|e| {
+    std::fs::write(&keypair_path, new_private_key_bytes).map_err(|e| {
         carnelian_common::Error::Config(format!("Failed to write new key file: {}", e))
     })?;
 
@@ -2027,26 +2027,27 @@ async fn handle_ui(web: bool) -> carnelian_common::Result<()> {
     }
 
     // Desktop UI launch
-    let ui_binary = if let Ok(exe_path) = std::env::current_exe() {
-        let same_dir = exe_path
-            .parent()
-            .map(|p| p.join("carnelian-ui"))
-            .unwrap_or_else(|| PathBuf::from("carnelian-ui"));
+    let ui_binary = std::env::current_exe().map_or_else(
+        |_| PathBuf::from("carnelian-ui"),
+        |exe_path| {
+            let same_dir = exe_path
+                .parent()
+                .map(|p| p.join("carnelian-ui"))
+                .unwrap_or_else(|| PathBuf::from("carnelian-ui"));
 
-        #[cfg(windows)]
-        let same_dir = same_dir.with_extension("exe");
+            #[cfg(windows)]
+            let same_dir = same_dir.with_extension("exe");
 
-        if same_dir.exists() {
-            same_dir
-        } else {
-            // Fall back to PATH lookup
-            PathBuf::from("carnelian-ui")
-        }
-    } else {
-        PathBuf::from("carnelian-ui")
-    };
+            if same_dir.exists() {
+                same_dir
+            } else {
+                // Fall back to PATH lookup
+                PathBuf::from("carnelian-ui")
+            }
+        },
+    );
 
-    if !ui_binary.exists() && !which::which(&ui_binary).is_ok() {
+    if !ui_binary.exists() && which::which(&ui_binary).is_err() {
         return Err(carnelian_common::Error::Config(
             "carnelian-ui binary not found. Build it with: cargo build --release -p carnelian-ui"
                 .to_string(),
@@ -2062,6 +2063,7 @@ async fn handle_ui(web: bool) -> carnelian_common::Result<()> {
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
+        #[allow(unsafe_code)]
         unsafe {
             cmd.pre_exec(|| {
                 // Detach from parent process group
@@ -2082,13 +2084,7 @@ async fn handle_ui(web: bool) -> carnelian_common::Result<()> {
 
 /// Serve web UI static files
 async fn serve_web_ui(web_dir: &std::path::Path, port: u16) -> carnelian_common::Result<()> {
-    use axum::{
-        Router,
-        extract::Path,
-        http::StatusCode,
-        response::{Html, IntoResponse},
-        routing::get,
-    };
+    use axum::{Router, http::StatusCode};
     use tokio::net::TcpListener;
     use tower_http::services::ServeDir;
 
@@ -2112,6 +2108,7 @@ async fn serve_web_ui(web_dir: &std::path::Path, port: u16) -> carnelian_common:
 }
 
 /// Handle the `migrate-from-thummim` command - Migrate from Thummim project
+#[allow(clippy::too_many_lines)]
 async fn handle_migrate_from_thummim(
     path: Option<PathBuf>,
     config_path: Option<PathBuf>,
@@ -2201,8 +2198,8 @@ async fn handle_migrate_from_thummim(
     {
         let path = entry.path();
         if path.file_name() == Some(std::ffi::OsStr::new("SKILL.md")) {
-            let skill_dir = path.parent().unwrap();
-            let skill_name = skill_dir
+            let parent_dir = path.parent().unwrap();
+            let skill_name = parent_dir
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown");
