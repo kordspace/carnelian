@@ -1,0 +1,7 @@
+{
+  "name": "palindrome-check",
+  "description": "Check if text is a palindrome (reads same forwards and backwards)",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

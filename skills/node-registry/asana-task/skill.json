@@ -1,0 +1,7 @@
+{
+  "name": "asana-task",
+  "description": "Create and manage Asana tasks and projects",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["asana_api"]
+}
