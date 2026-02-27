@@ -9,7 +9,10 @@ use std::sync::{Arc, Mutex};
 
 use tracing::{info, warn};
 use wasmtime::{Config, Engine, Linker, Module, Store};
-use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, pipe::{MemoryInputPipe, MemoryOutputPipe}};
+use wasmtime_wasi::{
+    WasiCtx, WasiCtxBuilder,
+    pipe::{MemoryInputPipe, MemoryOutputPipe},
+};
 
 use crate::skills::skill_trait::{SkillInput, SkillOutput};
 use carnelian_common::{Error, Result};

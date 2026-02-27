@@ -1,0 +1,7 @@
+{
+  "name": "xor-cipher",
+  "description": "XOR cipher encryption/decryption",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

@@ -1,0 +1,7 @@
+{
+  "name": "factorial",
+  "description": "Calculate factorial of n",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

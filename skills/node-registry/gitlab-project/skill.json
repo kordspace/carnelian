@@ -1,0 +1,7 @@
+{
+  "name": "gitlab-project",
+  "description": "Manage GitLab projects, issues, and merge requests",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["gitlab_api"]
+}

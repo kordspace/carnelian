@@ -1,0 +1,7 @@
+{
+  "name": "min-max",
+  "description": "Find minimum and maximum values in a list",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

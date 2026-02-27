@@ -1,0 +1,7 @@
+{
+  "name": "slugify",
+  "description": "Convert text to URL-friendly slug",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

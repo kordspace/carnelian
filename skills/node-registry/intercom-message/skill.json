@@ -1,0 +1,7 @@
+{
+  "name": "intercom-message",
+  "description": "Send messages and manage conversations via Intercom",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["intercom_api"]
+}

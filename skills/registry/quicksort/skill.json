@@ -1,0 +1,7 @@
+{
+  "name": "quicksort",
+  "description": "Sort numbers using quicksort algorithm",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

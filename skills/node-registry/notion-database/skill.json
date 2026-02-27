@@ -1,0 +1,7 @@
+{
+  "name": "notion-database",
+  "description": "Query and manage Notion databases and pages",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["notion_api"]
+}

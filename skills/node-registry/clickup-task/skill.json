@@ -1,0 +1,7 @@
+{
+  "name": "clickup-task",
+  "description": "Create and manage ClickUp tasks and lists",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["clickup_api"]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "set-operations",
+  "description": "Perform set operations: intersection, union, difference",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

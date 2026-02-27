@@ -1,0 +1,7 @@
+{
+  "name": "duplicates-find",
+  "description": "Find and list duplicate items in a list",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

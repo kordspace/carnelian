@@ -1,0 +1,7 @@
+{
+  "name": "text-wrap",
+  "description": "Wrap text to specified line width",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

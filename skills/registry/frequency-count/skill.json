@@ -1,0 +1,7 @@
+{
+  "name": "frequency-count",
+  "description": "Count frequency of items in a list",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

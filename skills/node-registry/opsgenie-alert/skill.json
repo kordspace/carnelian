@@ -1,0 +1,7 @@
+{
+  "name": "opsgenie-alert",
+  "description": "Create and manage OpsGenie alerts",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["opsgenie_api"]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "chars-remove",
+  "description": "Remove specified characters from text",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

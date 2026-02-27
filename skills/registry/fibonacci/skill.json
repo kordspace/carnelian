@@ -1,0 +1,7 @@
+{
+  "name": "fibonacci",
+  "description": "Calculate Fibonacci sequence up to n numbers",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

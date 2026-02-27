@@ -58,11 +58,11 @@
 //! }).await?;
 //! ```
 
-use async_trait::async_trait;
 use crate::config::Config;
 use crate::events::EventStream;
 use crate::ledger::Ledger;
 use crate::skills::wasm_runtime::WasmSkillRuntime;
+use async_trait::async_trait;
 use bollard::container::{LogsOptions, StatsOptions};
 use bollard::exec::{CreateExecOptions, StartExecResults};
 use carnelian_common::types::{

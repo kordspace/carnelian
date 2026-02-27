@@ -1,0 +1,7 @@
+{
+  "name": "pagerduty-incident",
+  "description": "Manage PagerDuty incidents and alerts",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["pagerduty_api"]
+}

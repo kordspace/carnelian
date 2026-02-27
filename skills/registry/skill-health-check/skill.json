@@ -1,0 +1,7 @@
+{
+  "name": "skill-health-check",
+  "description": "Check health status of any skill in the registry",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

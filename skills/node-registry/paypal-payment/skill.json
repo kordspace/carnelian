@@ -1,0 +1,7 @@
+{
+  "name": "paypal-payment",
+  "description": "Process PayPal payments, create and capture orders",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["paypal_api"]
+}

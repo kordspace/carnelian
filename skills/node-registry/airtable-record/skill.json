@@ -1,0 +1,7 @@
+{
+  "name": "airtable-record",
+  "description": "Manage Airtable base records and databases",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["airtable_api"]
+}

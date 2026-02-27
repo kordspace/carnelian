@@ -10,30 +10,29 @@ use axum::{
     response::IntoResponse,
     routing::{delete, get, post},
 };
-use sqlx::Row;
 use base64::Engine as _;
 use carnelian_common::Result;
 use carnelian_common::types::{
-    AgentXpResponse, AwardXpRequest, AwardXpResponse, CancelTaskRequest,
-    CancelTaskResponse, ConfigureVoiceRequest, ConfigureVoiceResponse, CreateElixirRequest,
-    CreateMemoryRequest, CreateMemoryResponse, CreateTaskRequest, CreateTaskResponse,
-    CreateWorkflowRequest, DetailedHealthResponse, ElixirDraft,
-    EventEnvelope, EventLevel, EventType, ExecuteWorkflowRequest, ExportMemoryRequest,
-    ExportMemoryResponse, GetMemoryResponse, HeartbeatRecord, HeartbeatStatusResponse,
-    IdentityResponse, ImportMemoryRequest, ImportMemoryResponse, LeaderboardEntry,
-    ListElixirsQuery, ListMemoriesResponse,
+    AgentXpResponse, AwardXpRequest, AwardXpResponse, CancelTaskRequest, CancelTaskResponse,
+    ConfigureVoiceRequest, ConfigureVoiceResponse, CreateElixirRequest, CreateMemoryRequest,
+    CreateMemoryResponse, CreateTaskRequest, CreateTaskResponse, CreateWorkflowRequest,
+    DetailedHealthResponse, ElixirDraft, EventEnvelope, EventLevel, EventType,
+    ExecuteWorkflowRequest, ExportMemoryRequest, ExportMemoryResponse, GetMemoryResponse,
+    HeartbeatRecord, HeartbeatStatusResponse, IdentityResponse, ImportMemoryRequest,
+    ImportMemoryResponse, LeaderboardEntry, ListElixirsQuery, ListMemoriesResponse,
     ListProvidersResponse, ListRunsResponse, ListSkillsResponse, ListTasksResponse,
     ListVoicesResponse, ListWorkflowsParams, ListWorkflowsResponse, MemoryDetail,
     MemoryImportResultApi, OllamaStatusResponse, PaginatedRunLogsResponse, ProviderDetail,
-    RunLogEntry, RunLogsQuery, SkillDetail, SkillMetricsDetail,
-    SkillToggleResponse, StatusResponse, TaskDetail, TestVoiceRequest, TestVoiceResponse,
-    TopSkillsQuery, TopSkillsResponse, TranscribeVoiceRequest, TranscribeVoiceResponse,
-    UpdateWorkflowRequest, XpEventDetail, XpHistoryQuery, XpHistoryResponse, XpLeaderboardResponse,
+    RunLogEntry, RunLogsQuery, SkillDetail, SkillMetricsDetail, SkillToggleResponse,
+    StatusResponse, TaskDetail, TestVoiceRequest, TestVoiceResponse, TopSkillsQuery,
+    TopSkillsResponse, TranscribeVoiceRequest, TranscribeVoiceResponse, UpdateWorkflowRequest,
+    XpEventDetail, XpHistoryQuery, XpHistoryResponse, XpLeaderboardResponse,
 };
 use futures_util::{SinkExt, StreamExt};
 use http::{HeaderMap, Method, header};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sqlx::Row;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -6824,7 +6823,6 @@ pub async fn localhost_only(
 
     next.run(req).await
 }
-
 
 // =============================================================================
 // ELIXIR HANDLERS

@@ -1,0 +1,7 @@
+{
+  "name": "newrelic-event",
+  "description": "Send events and query data from NewRelic",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["newrelic_api"]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "monday-board",
+  "description": "Manage Monday.com boards and work items",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["monday_api"]
+}

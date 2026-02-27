@@ -1,0 +1,7 @@
+{
+  "name": "linear-issue",
+  "description": "Create and manage Linear issues and projects",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["linear_api"]
+}

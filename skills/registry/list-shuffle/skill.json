@@ -1,0 +1,7 @@
+{
+  "name": "list-shuffle",
+  "description": "Shuffle a list of items randomly",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

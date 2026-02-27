@@ -1,0 +1,7 @@
+{
+  "name": "mailchimp-campaign",
+  "description": "Create and manage Mailchimp email campaigns",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["mailchimp_api"]
+}

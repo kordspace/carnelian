@@ -1,0 +1,7 @@
+{
+  "name": "subset-sum",
+  "description": "Find combinations that sum to target value",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

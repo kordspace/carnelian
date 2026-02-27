@@ -1,0 +1,7 @@
+{
+  "name": "coda-doc",
+  "description": "Manage Coda documents and pages",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["coda_api"]
+}

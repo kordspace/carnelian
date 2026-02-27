@@ -1,0 +1,7 @@
+{
+  "name": "binary-search",
+  "description": "Binary search algorithm for finding elements in sorted arrays",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

@@ -1,0 +1,7 @@
+{
+  "name": "crc32",
+  "description": "Calculate CRC32 checksum for data integrity",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

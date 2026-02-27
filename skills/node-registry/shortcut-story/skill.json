@@ -1,0 +1,7 @@
+{
+  "name": "shortcut-story",
+  "description": "Manage Shortcut (formerly Clubhouse) stories and projects",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["shortcut_api"]
+}

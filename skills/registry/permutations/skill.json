@@ -1,0 +1,7 @@
+{
+  "name": "permutations",
+  "description": "Generate all permutations of a list of items",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

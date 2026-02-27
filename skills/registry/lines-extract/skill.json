@@ -1,0 +1,7 @@
+{
+  "name": "lines-extract",
+  "description": "Extract lines from text",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}

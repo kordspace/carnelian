@@ -1,0 +1,7 @@
+{
+  "name": "wrike-task",
+  "description": "Manage Wrike tasks and projects",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["wrike_api"]
+}

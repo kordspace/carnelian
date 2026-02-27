@@ -1,0 +1,7 @@
+{
+  "name": "combinations",
+  "description": "Generate k-combinations from a list of items",
+  "runtime": "wasm",
+  "version": "1.0.0",
+  "capabilities_required": []
+}
