@@ -917,7 +917,7 @@ pub struct HeartbeatStatusResponse {
 // =============================================================================
 
 /// Response body for `GET /v1/identity`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IdentityResponse {
     pub identity_id: Uuid,
     pub name: String,
@@ -1635,7 +1635,7 @@ pub struct StatusResponse {
 }
 
 /// Response body for `GET /v1/health/detailed`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DetailedHealthResponse {
     /// Overall health status: "healthy" or "degraded"
     pub status: String,
@@ -1679,8 +1679,8 @@ pub struct ElixirDetail {
     pub updated_at: DateTime<Utc>,
 }
 
-/// A single version history entry from elixir_versions.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// A single version history entry from `elixir_versions`.
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct ElixirVersion {
     pub version_id: Uuid,
     pub elixir_id: Uuid,
@@ -1691,8 +1691,8 @@ pub struct ElixirVersion {
     pub created_at: DateTime<Utc>,
 }
 
-/// A single auto-generated draft proposal from elixir_drafts.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// A single auto-generated draft proposal from `elixir_drafts`.
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct ElixirDraft {
     pub draft_id: Uuid,
     pub skill_id: Uuid,
