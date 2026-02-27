@@ -1446,7 +1446,8 @@ impl WorkerTransport for NativeWorkerTransport {
                         .and_then(|v| v.as_bool())
                         .unwrap_or(true);
 
-                    let mut args = vec!["log", &format!("--max-count={}", max_count)];
+                    let max_count_arg = format!("--max-count={}", max_count);
+                    let mut args = vec!["log", &max_count_arg];
                     if oneline {
                         args.push("--oneline");
                     }

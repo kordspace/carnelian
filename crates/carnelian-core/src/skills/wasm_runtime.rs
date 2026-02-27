@@ -79,7 +79,7 @@ impl WasmSkillRuntime {
 
         // Create linker with WASI
         let mut linker = Linker::new(&engine);
-        wasmtime_wasi::add_to_linker_async(&mut linker)
+        wasmtime_wasi::preview1::add_to_linker_async(&mut linker, |s: &mut WasmState| &mut s.wasi)
             .map_err(|e| Error::Worker(format!("Failed to add WASI to linker: {}", e)))?;
 
         Ok(Self {
@@ -178,10 +178,10 @@ impl WasmSkillRuntime {
             .map_err(|e| Error::Worker(format!("Failed to serialize input: {}", e)))?;
         let stdin_pipe = MemoryInputPipe::new(input_bytes);
 
-        // Step 4: Build WasiP1Ctx with capability-based access
-        let mut wasi_builder = WasiCtxBuilder::new()
-            .stdin(stdin_pipe)
-            .stdout(stdout_pipe.clone());
+        // Step 4: Build WasiCtx with capability-based access
+        let mut wasi_builder = WasiCtxBuilder::new();
+        wasi_builder = wasi_builder.stdin(stdin_pipe);
+        wasi_builder = wasi_builder.stdout(stdout_pipe.clone());
 
         // Network: deny by default, allow if capability granted
         if capabilities.contains(&"network".to_string()) {
