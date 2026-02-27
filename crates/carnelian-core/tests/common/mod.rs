@@ -128,6 +128,7 @@ pub async fn insert_test_message(
     role: &str,
     content: &str,
 ) -> i64 {
+    #[allow(clippy::cast_possible_truncation)]
     let token_estimate = (content.len() / 4) as i32;
     sqlx::query_scalar::<_, i64>(
         r"INSERT INTO session_messages (session_id, role, content, token_estimate, metadata, tool_metadata)
