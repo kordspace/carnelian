@@ -4,21 +4,20 @@
 //! where `T` is the deserialized response type from `carnelian_common::types`.
 
 use carnelian_common::types::{
-    ApprovalActionRequest, ApprovalActionResponse,
-    BatchApprovalRequest, BatchApprovalResponse, CancelTaskRequest,
-    CancelTaskResponse, ChannelDetail, ConfigureVoiceRequest, ConfigureVoiceResponse,
-    CreateChannelApiRequest, CreateChannelResponse, CreateSubAgentApiRequest,
-    CreateSubAgentResponse, CreateTaskRequest, CreateTaskResponse, CreateWorkflowRequest,
-    DetailedHealthResponse, ExecuteWorkflowRequest, GrantCapabilityRequest,
+    ApprovalActionRequest, ApprovalActionResponse, BatchApprovalRequest, BatchApprovalResponse,
+    CancelTaskRequest, CancelTaskResponse, ChannelDetail, ConfigureVoiceRequest,
+    ConfigureVoiceResponse, CreateChannelApiRequest, CreateChannelResponse,
+    CreateSubAgentApiRequest, CreateSubAgentResponse, CreateTaskRequest, CreateTaskResponse,
+    CreateWorkflowRequest, DetailedHealthResponse, ExecuteWorkflowRequest, GrantCapabilityRequest,
     GrantCapabilityResponse, HeartbeatRecord, HeartbeatStatusResponse, IdentityResponse,
     ListApprovalsResponse, ListCapabilitiesResponse, ListChannelsResponse, ListProvidersResponse,
     ListRunsResponse, ListSkillsResponse, ListSubAgentsResponse, ListTasksResponse,
     ListVoicesResponse, ListWorkflowsResponse, MetricsSnapshot, OllamaStatusResponse,
     PaginatedRunLogsResponse, PairChannelApiRequest, PairChannelResponse, RevokeCapabilityResponse,
-    RunDetail, SkillRefreshResponse, SkillToggleResponse, StatusResponse,
-    SubAgentActionResponse, SubAgentDetail, TaskDetail, TestVoiceRequest, TestVoiceResponse,
-    TopSkillsResponse, UpdateChannelApiRequest, UpdateSubAgentApiRequest, UpdateWorkflowRequest,
-    WorkflowDetail, WorkflowExecutionResponse, XpHistoryResponse, XpLeaderboardResponse,
+    RunDetail, SkillRefreshResponse, SkillToggleResponse, StatusResponse, SubAgentActionResponse,
+    SubAgentDetail, TaskDetail, TestVoiceRequest, TestVoiceResponse, TopSkillsResponse,
+    UpdateChannelApiRequest, UpdateSubAgentApiRequest, UpdateWorkflowRequest, WorkflowDetail,
+    WorkflowExecutionResponse, XpHistoryResponse, XpLeaderboardResponse,
 };
 use uuid::Uuid;
 
@@ -929,8 +928,7 @@ pub async fn mark_setup_complete() -> Result<SetupCompleteResponse, String> {
 // ── Skill Book Operations ─────────────────────────────────
 
 use carnelian_common::types::{
-    ActivateSkillRequest, ActivateSkillResponse,
-    DeactivateSkillResponse, SkillBookCatalog,
+    ActivateSkillRequest, ActivateSkillResponse, DeactivateSkillResponse, SkillBookCatalog,
 };
 
 /// List all skills in the Skill Book catalog.
