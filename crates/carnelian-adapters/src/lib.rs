@@ -75,9 +75,9 @@ pub mod events {
     // WhatsApp platform events
     /// Meta hub challenge verification event.
     pub const WHATSAPP_WEBHOOK_VERIFIED: &str = "WhatsAppWebhookVerified";
-    /// Incoming WhatsApp message received.
+    /// Incoming `WhatsApp` message received.
     pub const WHATSAPP_MESSAGE_RECEIVED: &str = "WhatsAppMessageReceived";
-    /// Outgoing WhatsApp message sent.
+    /// Outgoing `WhatsApp` message sent.
     pub const WHATSAPP_MESSAGE_SENT: &str = "WhatsAppMessageSent";
 
     // Slack platform events

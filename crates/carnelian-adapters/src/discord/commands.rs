@@ -15,7 +15,7 @@ use crate::db as channel_db;
 ///
 /// Note: Slash command registration can take up to an hour to propagate.
 /// For development, use guild-specific registration instead.
-pub async fn register_commands(ctx: &Context) -> anyhow::Result<()> {
+pub fn register_commands(ctx: &Context) -> anyhow::Result<()> {
     // For now, we use prefix commands (!pair, !status, etc.)
     // Slash command registration can be added later for production use.
     tracing::debug!("Discord slash command registration placeholder (using prefix commands)");

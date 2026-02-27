@@ -57,6 +57,7 @@ pub struct SlackAdapter {
     /// Shutdown signal sender.
     shutdown_tx: tokio::sync::watch::Sender<bool>,
     /// Shutdown signal receiver (cloneable).
+    #[allow(dead_code)]
     shutdown_rx: tokio::sync::watch::Receiver<bool>,
 }
 

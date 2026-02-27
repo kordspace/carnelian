@@ -41,7 +41,7 @@ impl EventHandler for DiscordHandler {
         );
 
         // Register slash commands
-        if let Err(e) = super::commands::register_commands(&_ctx).await {
+        if let Err(e) = super::commands::register_commands(&_ctx) {
             tracing::warn!(error = %e, "Failed to register Discord slash commands");
         }
     }

@@ -10,6 +10,7 @@ use carnelian_common::{Error, Result};
 
 /// Top-level adapter configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct AdapterConfig {
     /// Whether the Telegram adapter is enabled.
     #[serde(default)]
@@ -19,7 +20,7 @@ pub struct AdapterConfig {
     #[serde(default)]
     pub discord_enabled: bool,
 
-    /// Whether the WhatsApp adapter is enabled.
+    /// Whether the `WhatsApp` adapter is enabled.
     #[serde(default)]
     pub whatsapp_enabled: bool,
 
@@ -36,7 +37,7 @@ pub struct AdapterConfig {
     pub spam_ttl_secs: u64,
 }
 
-fn default_spam_threshold() -> f32 {
+const fn default_spam_threshold() -> f32 {
     0.8
 }
 
