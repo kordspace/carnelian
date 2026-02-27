@@ -66,13 +66,5 @@ mockall = "0.12"
 wiremock = "0.6"
 cargo-tarpaulin = "0.28"
 
-[[bench]]
-name = "memory_benchmarks"
-harness = false
-
-[[bench]]
-name = "skill_benchmarks"
-harness = false
-
 [lints]
 workspace = true

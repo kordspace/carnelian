@@ -118,3 +118,13 @@ debug = true
 
 [profile.dev.package.sqlx-macros]
 opt-level = 3  # Speed up compile-time query checking
+
+[[bench]]
+name = "memory_benchmarks"
+path = "benches/memory_benchmarks.rs"
+harness = false
+
+[[bench]]
+name = "skill_benchmarks"
+path = "benches/skill_benchmarks.rs"
+harness = false
