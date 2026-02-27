@@ -1,0 +1,7 @@
+{
+  "name": "gcp-pubsub-publish",
+  "description": "Publish messages to Google Cloud Pub/Sub topics",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["gcp_pubsub_api"]
+}

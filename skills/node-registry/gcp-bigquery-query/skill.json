@@ -1,0 +1,7 @@
+{
+  "name": "gcp-bigquery-query",
+  "description": "Execute SQL queries on Google BigQuery",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["gcp_bigquery_api"]
+}

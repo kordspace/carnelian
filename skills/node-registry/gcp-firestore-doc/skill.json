@@ -1,0 +1,7 @@
+{
+  "name": "gcp-firestore-doc",
+  "description": "Manage documents in Google Cloud Firestore",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["gcp_firestore_api"]
+}

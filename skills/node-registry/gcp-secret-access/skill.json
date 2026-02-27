@@ -1,0 +1,7 @@
+{
+  "name": "gcp-secret-access",
+  "description": "Access secrets from Google Cloud Secret Manager",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["gcp_secretmanager_api"]
+}

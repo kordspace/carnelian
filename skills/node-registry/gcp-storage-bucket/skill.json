@@ -1,0 +1,7 @@
+{
+  "name": "gcp-storage-bucket",
+  "description": "Manage Google Cloud Storage buckets and objects",
+  "runtime": "node",
+  "version": "1.0.0",
+  "capabilities_required": ["gcp_api"]
+}
