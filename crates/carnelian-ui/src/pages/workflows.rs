@@ -10,6 +10,11 @@
 #![allow(clippy::needless_collect)]
 #![allow(clippy::ptr_arg)]
 #![allow(clippy::redundant_closure_call)]
+#![allow(clippy::shadow_unrelated)]
+#![allow(clippy::ref_option_ref)]
+#![allow(clippy::unnecessary_mut_passed)]
+#![allow(clippy::redundant_locals)]
+#![allow(clippy::ref_option)]
 
 use std::collections::HashMap;
 

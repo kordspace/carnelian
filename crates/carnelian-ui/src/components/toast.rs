@@ -1,6 +1,7 @@
 //! Toast notification overlay component.
 
 #![allow(clippy::match_wildcard_for_single_variants)]
+#![allow(clippy::derive_partial_eq_without_eq)]
 
 use chrono::Utc;
 use dioxus::prelude::*;

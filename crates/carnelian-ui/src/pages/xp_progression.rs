@@ -4,6 +4,8 @@
 #![allow(clippy::suboptimal_flops)]
 #![allow(clippy::cast_precision_loss)]
 #![allow(clippy::option_map_or_none)]
+#![allow(clippy::unnecessary_map_or)]
+#![allow(clippy::if_not_else)]
 
 use dioxus::prelude::*;
 

@@ -3,6 +3,7 @@
 #![allow(clippy::manual_map)]
 #![allow(clippy::bool_to_int_with_if)]
 #![allow(clippy::suboptimal_flops)]
+#![allow(clippy::option_if_let_else)]
 
 use dioxus::prelude::*;
 

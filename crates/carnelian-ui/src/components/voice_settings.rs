@@ -1,6 +1,7 @@
 //! Voice settings component for configuring TTS.
 
 #![allow(clippy::manual_map)]
+#![allow(clippy::option_if_let_else)]
 
 use carnelian_common::types::{ConfigureVoiceRequest, TestVoiceRequest};
 use dioxus::document::eval;
