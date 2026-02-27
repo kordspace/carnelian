@@ -35,7 +35,8 @@ pub fn Settings() -> Element {
     let theme_class = theme.to_class();
     let version = status
         .read()
-        .as_ref().map_or_else(|| "Unknown".to_string(), |s| s.version.clone());
+        .as_ref()
+        .map_or_else(|| "Unknown".to_string(), |s| s.version.clone());
 
     rsx! {
         div { class: "page settings-page {theme_class}",

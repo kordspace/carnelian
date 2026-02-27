@@ -241,12 +241,8 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
 /// Step 1: Prerequisites Check
 #[component]
 fn Step1Prerequisites(health: Option<DetailedHealthResponse>) -> Element {
-    let docker_ok = health
-        .as_ref()
-        .is_some_and(|h| h.database == "connected");
-    let db_ok = health
-        .as_ref()
-        .is_some_and(|h| h.database == "connected");
+    let docker_ok = health.as_ref().is_some_and(|h| h.database == "connected");
+    let db_ok = health.as_ref().is_some_and(|h| h.database == "connected");
 
     rsx! {
         div { class: "wizard-step",

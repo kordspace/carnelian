@@ -1163,7 +1163,10 @@ fn auto_layout(steps: &[WorkflowStepDef], positions: &mut Signal<HashMap<String,
         for (col, &step_id) in layer.iter().enumerate() {
             new_pos.insert(
                 step_id.to_string(),
-                ((col as f64).mul_add(220.0, 80.0), (row as f64).mul_add(120.0, 60.0)),
+                (
+                    (col as f64).mul_add(220.0, 80.0),
+                    (row as f64).mul_add(120.0, 60.0),
+                ),
             );
         }
     }
