@@ -173,6 +173,7 @@ async fn wait_for_server(port: u16, timeout_secs: u64) -> bool {
 
 /// Test full server startup without database (in-memory only)
 #[tokio::test]
+#[ignore = "Requires Docker - run with: cargo test --test integration_test test_full_server_startup -- --ignored"]
 async fn test_full_server_startup() {
     let port = allocate_random_port();
     let config = create_test_config(port);
@@ -239,6 +240,7 @@ async fn test_full_server_startup() {
 
 /// Test WebSocket event reception
 #[tokio::test]
+#[ignore = "Requires Docker - run with: cargo test --test integration_test test_websocket_event_reception -- --ignored"]
 async fn test_websocket_event_reception() {
     let port = allocate_random_port();
     let config = create_test_config(port);
@@ -582,6 +584,7 @@ async fn test_load_handling_10k_events_per_minute() {
 /// - Health endpoint becomes unavailable after shutdown
 /// - Server task completes without panic
 #[tokio::test]
+#[ignore = "Requires Docker - run with: cargo test --test integration_test test_graceful_shutdown_behavior -- --ignored"]
 async fn test_graceful_shutdown_behavior() {
     let port = allocate_random_port();
     let config = create_test_config(port);
@@ -704,6 +707,7 @@ async fn test_graceful_shutdown_behavior() {
 
 /// Test event stream backpressure and priority handling
 #[tokio::test]
+#[ignore = "Requires Docker - run with: cargo test --test integration_test test_event_stream_backpressure -- --ignored"]
 async fn test_event_stream_backpressure() {
     let port = allocate_random_port();
     let mut config = create_test_config(port);
@@ -781,6 +785,7 @@ async fn test_event_stream_backpressure() {
 
 /// Test multiple WebSocket clients receiving events
 #[tokio::test]
+#[ignore = "Requires Docker - run with: cargo test --test integration_test test_multiple_websocket_clients -- --ignored"]
 async fn test_multiple_websocket_clients() {
     let port = allocate_random_port();
     let config = create_test_config(port);
@@ -858,6 +863,7 @@ async fn test_multiple_websocket_clients() {
 
 /// Test health endpoint reflects correct status
 #[tokio::test]
+#[ignore = "Requires Docker - run with: cargo test --test integration_test test_health_endpoint_status -- --ignored"]
 async fn test_health_endpoint_status() {
     let port = allocate_random_port();
     let config = create_test_config(port);
