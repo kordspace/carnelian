@@ -34,19 +34,20 @@ COPY rust-toolchain.toml ./
 # Copy all crate manifests for dependency caching
 COPY crates/carnelian-common/Cargo.toml ./crates/carnelian-common/
 COPY crates/carnelian-core/Cargo.toml ./crates/carnelian-core/
+COPY crates/carnelian-bin/Cargo.toml ./crates/carnelian-bin/
 COPY crates/carnelian-adapters/Cargo.toml ./crates/carnelian-adapters/
 COPY crates/carnelian-ui/Cargo.toml ./crates/carnelian-ui/
 COPY crates/carnelian-worker-node/Cargo.toml ./crates/carnelian-worker-node/
 COPY crates/carnelian-worker-python/Cargo.toml ./crates/carnelian-worker-python/
-COPY crates/carnelian-worker-shell/Cargo.toml ./crates/carnelian-worker-shell/
+COPY crates/carnelian-worker-native/Cargo.toml ./crates/carnelian-worker-native/
 
 # Build dependencies (cached layer)
 RUN mkdir -p crates/carnelian-common/src crates/carnelian-core/src \
-    crates/carnelian-adapters/src crates/carnelian-ui/src \
+    crates/carnelian-bin/src crates/carnelian-adapters/src crates/carnelian-ui/src \
     crates/carnelian-worker-node/src crates/carnelian-worker-python/src \
-    crates/carnelian-worker-shell/src
-RUN echo 'fn main() {}' > crates/carnelian-core/src/main.rs
-RUN cargo build --release --package carnelian-core 2>/dev/null || true
+    crates/carnelian-worker-native/src
+RUN echo 'fn main() {}' > crates/carnelian-bin/src/main.rs
+RUN cargo build --release --package carnelian-bin 2>/dev/null || true
 
 # Copy actual source code
 COPY crates/ ./crates/
@@ -80,7 +81,6 @@ RUN groupadd -r carnelian && useradd -r -g carnelian carnelian
 
 # Copy binary from builder
 COPY --from=builder /app/target/release/carnelian /usr/local/bin/carnelian
-COPY --from=builder /app/crates/carnelian-core/src/bin/migrate /usr/local/bin/carnelian-migrate
 
 # Copy default machine.toml
 COPY --from=builder /app/machine.toml /app/machine.toml.example
