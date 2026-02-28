@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Heartbeat system with database-backed monitoring
 - Safe mode with side-effect blocking
 
-#### Checkpoint 3 Features
+#### Security & Ledger Features
 - **Chain Anchor System**
   - `chain_anchors` database table for storing ledger slice anchors
   - `LocalDbChainAnchor` implementation of the `ChainAnchor` trait
@@ -40,11 +40,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Scoped grant recreation with revocation checking
 
 #### Testing
-- Checkpoint 3 validation test suite (`checkpoint3_validation_test.rs`)
+- Production validation test suite (`production_validation_test.rs`)
 - Cross-instance memory export/import roundtrip tests
 - Chain anchor publication and verification tests
 - Capability enforcement and revocation tests
 - Performance tests for task latency and heartbeat
+- E2E tests with Playwright for desktop UI
 
 #### Documentation
 - `RELEASE_NOTES.md` with highlights and known limitations

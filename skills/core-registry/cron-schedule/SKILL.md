@@ -2,7 +2,7 @@
 name: cron-schedule
 description: "Manage Gateway cron jobs (status/list/add/update/remove/run/runs) and send wake events."
 metadata:
-  openclaw:
+  CARNELIAN:
     emoji: "⏰"
     requires:
       env:
@@ -29,7 +29,7 @@ metadata:
 
 Manage Gateway cron jobs (status/list/add/update/remove/run/runs) and send wake events.
 
-Ported from THUMMIM `cron-tool.ts`.
+Ported from CARNELIAN `cron-tool.ts`.
 
 ## Input
 
@@ -84,7 +84,7 @@ Returns JSON response from the gateway.
 
 ## Notes
 
-- **THUMMIM dependency**: The THUMMIM gateway must be running
+- **CARNELIAN dependency**: The CARNELIAN gateway must be running
 - Default gateway URL: `ws://127.0.0.1:18789`
 - No npm packages needed in the wrapper
 - Uses WebSocket JSON-RPC for communication

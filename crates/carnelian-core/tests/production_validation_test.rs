@@ -1,7 +1,7 @@
-//! Checkpoint 3 Validation Test Suite
+//! Production Validation Test Suite
 //!
-//! Comprehensive validation tests for Checkpoint 3 release criteria.
-//! Run with: cargo test --test `checkpoint3_validation_test` -- --ignored
+//! Comprehensive validation tests for production release criteria.
+//! Run with: `cargo test --test production_validation_test -- --ignored`
 
 use carnelian_common::Result;
 use carnelian_core::chain_anchor::LocalDbChainAnchor;
@@ -564,17 +564,27 @@ async fn test_performance_heartbeat_under_5s() {
 #[test]
 fn test_documentation_all_files_exist() {
     // Check that required documentation files exist
+    // Get the workspace root (3 levels up from crates/carnelian-core/tests/)
+    let workspace_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("Failed to find workspace root");
+
     let files_to_check = [
-        "../README.md",
-        "../LICENSE",
-        "../RELEASE_NOTES.md",
-        "../docs/CHANGELOG.md",
-        "../docs/ARCHITECTURE.md",
+        "README.md",
+        "docs/CHANGELOG.md",
+        "docs/ARCHITECTURE.md",
+        "CONTRIBUTING.md",
+        "SECURITY.md",
     ];
 
     for file in &files_to_check {
-        let path = std::path::Path::new(file);
-        assert!(path.exists(), "Required file should exist: {file}");
+        let path = workspace_root.join(file);
+        assert!(
+            path.exists(),
+            "Required file should exist: {}",
+            path.display()
+        );
     }
 
     tracing::info!("✓ All documentation files exist");

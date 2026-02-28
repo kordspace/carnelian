@@ -2,7 +2,7 @@
 name: gateway-query
 description: "Query and manage Gateway configuration (restart/config.get/config.schema/config.apply/config.patch/update.run)."
 metadata:
-  openclaw:
+  CARNELIAN:
     emoji: "⚙️"
     requires:
       env:
@@ -29,7 +29,7 @@ metadata:
 
 Query and manage Gateway configuration (restart/config.get/config.schema/config.apply/config.patch/update.run).
 
-Ported from THUMMIM `gateway-tool.ts`.
+Ported from CARNELIAN `gateway-tool.ts`.
 
 ## Input
 
@@ -63,7 +63,7 @@ Returns JSON response from the gateway.
 
 ## Notes
 
-- **THUMMIM dependency**: The THUMMIM gateway must be running
+- **CARNELIAN dependency**: The CARNELIAN gateway must be running
 - Default gateway URL: `ws://127.0.0.1:18789`
 - `restart` requires `commands.restart=true` in the gateway config
 - `restart` triggers SIGUSR1 and is fire-and-forget (WebSocket will close)

@@ -2,7 +2,7 @@
 name: system-healthcheck
 description: "Host security hardening and risk-tolerance configuration for Carnelian deployments. Use when a user asks for security audits, firewall/SSH/update hardening, risk posture, exposure review, or version status checks on a machine running Carnelian (laptop, workstation, Pi, VPS)."
 metadata:
-  openclaw:
+  CARNELIAN:
     emoji: "💓"
   carnelian:
     runtime: shell

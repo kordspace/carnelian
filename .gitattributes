@@ -1,11 +1,17 @@
 # Linguist overrides for better language detection
 # See: https://github.com/github/linguist/blob/master/docs/overrides.md
 
-# Mark Makefile as vendored (not counted in language stats)
+# Mark build artifacts and vendored code as not counted
 Makefile linguist-vendored
+target/ linguist-vendored
+*.d linguist-vendored
 
-# Mark all shell scripts as documentation
+# Mark shell scripts as documentation (not counted in stats)
 *.sh linguist-documentation
+
+# Mark documentation and build process files as documentation
+documentation/ linguist-documentation
+*.md linguist-documentation=true
 
 # Ensure Rust files are properly detected
 *.rs linguist-language=Rust
@@ -22,3 +28,9 @@ benches/*.rs linguist-language=Rust
 
 # Mark test files as Rust
 tests/**/*.rs linguist-language=Rust
+crates/**/tests/**/*.rs linguist-language=Rust
+
+# Mark node_modules and Python venv as vendored
+node_modules/ linguist-vendored
+venv/ linguist-vendored
+__pycache__/ linguist-vendored

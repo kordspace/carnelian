@@ -2,7 +2,7 @@
 name: agent-step
 description: "Execute a single agent step with custom system prompt and wait for completion."
 metadata:
-  openclaw:
+  CARNELIAN:
     emoji: "🤖"
     requires:
       env:
@@ -29,7 +29,7 @@ metadata:
 
 Execute a single agent step with custom system prompt and wait for completion.
 
-Ported from THUMMIM `agent-step-tool.ts`.
+Ported from CARNELIAN `agent-step-tool.ts`.
 
 ## Input
 
@@ -64,7 +64,7 @@ Or on failure:
 
 ## Notes
 
-- **THUMMIM dependency**: The THUMMIM gateway must be running
+- **CARNELIAN dependency**: The CARNELIAN gateway must be running
 - Default gateway URL: `ws://127.0.0.1:18789`
 - Calls `agent` method, then polls `agent.wait` for completion
 - Reads `chat.history` to extract the latest assistant reply

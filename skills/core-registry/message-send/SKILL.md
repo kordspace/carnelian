@@ -2,7 +2,7 @@
 name: message-send
 description: "Send a message to any configured channel (Discord, Telegram, Slack, WhatsApp, iMessage, etc.) through the Carnelian gateway unified message API"
 metadata:
-  openclaw:
+  CARNELIAN:
     emoji: "💬"
     requires:
       env:

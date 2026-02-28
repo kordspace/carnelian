@@ -1,15 +1,15 @@
 ---
 name: browser-automation
-description: "Control the OpenClaw browser control server (status/start/stop/tabs/snapshot/screenshot/navigate/act). Routes to the local browser control HTTP server."
+description: "Control the CARNELIAN browser control server (status/start/stop/tabs/snapshot/screenshot/navigate/act). Routes to the local browser control HTTP server."
 metadata:
-  openclaw:
+  CARNELIAN:
     emoji: "🌐"
     requires:
       bins:
         - curl
       env:
-        - OPENCLAW_BROWSER_URL
-    primaryEnv: OPENCLAW_BROWSER_URL
+        - CARNELIAN_BROWSER_URL
+    primaryEnv: CARNELIAN_BROWSER_URL
   carnelian:
     runtime: shell
     version: "1.0.0"
@@ -26,16 +26,16 @@ metadata:
 
 # browser-automation
 
-Control the OpenClaw browser control server (status/start/stop/tabs/snapshot/screenshot/navigate/act).
+Control the CARNELIAN browser control server (status/start/stop/tabs/snapshot/screenshot/navigate/act).
 
-Ported from THUMMIM `browser-automation-tool.ts`.
+Ported from CARNELIAN `browser-automation-tool.ts`.
 
 ## Input
 
 ```typescript
 {
   action: string;           // Required: action to perform
-  profile?: string;         // Optional: browser profile ("chrome" | "openclaw")
+  profile?: string;         // Optional: browser profile ("chrome" | "CARNELIAN")
   targetId?: string;        // Optional: target ID for tab operations
   targetUrl?: string;       // Optional: URL for open/navigate operations
   request?: object;         // Optional: request object for act operation
@@ -67,7 +67,7 @@ Returns JSON response from the browser control server.
 
 ## Notes
 
-- **THUMMIM dependency**: The browser control server is part of the OpenClaw/THUMMIM installation
+- **CARNELIAN dependency**: The browser control server is part of the CARNELIAN/CARNELIAN installation
 - Default server URL: `http://localhost:3000`
 - Playwright is managed by the external browser control server
 - The wrapper never imports Playwright directly

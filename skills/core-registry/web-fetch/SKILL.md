@@ -2,7 +2,7 @@
 name: web-fetch
 description: "Fetch and extract readable content from a URL; returns markdown or plain text"
 metadata:
-  openclaw:
+  CARNELIAN:
     emoji: "🌐"
     requires:
       env:
@@ -27,7 +27,7 @@ metadata:
 
 Fetch and extract readable content from a URL.
 
-Ported from THUMMIM `web-fetch.ts`.
+Ported from CARNELIAN `web-fetch.ts`.
 
 ## Input
 

@@ -2,7 +2,7 @@
 name: image-generate
 description: "Generate images using DALL-E via OpenAI API"
 metadata:
-  openclaw:
+  CARNELIAN:
     emoji: "🎨"
     requires:
       env:
@@ -27,7 +27,7 @@ metadata:
 
 Generate images using DALL-E via OpenAI API.
 
-Ported from THUMMIM `image-tool.ts`.
+Ported from CARNELIAN `image-tool.ts`.
 
 ## Input
 

@@ -2,7 +2,7 @@
 name: cascade-run
 description: "Communicate with Windsurf Cascade via JSONL channel files (message/delegate/request_help/share_context/status)."
 metadata:
-  openclaw:
+  CARNELIAN:
     emoji: "🌊"
   carnelian:
     runtime: node
@@ -22,7 +22,7 @@ metadata:
 
 Communicate with Windsurf Cascade via JSONL channel files (message/delegate/request_help/share_context/status).
 
-Ported from THUMMIM `cascade-tool.ts`.
+Ported from CARNELIAN `cascade-tool.ts`.
 
 ## Input
 
@@ -46,8 +46,8 @@ Ported from THUMMIM `cascade-tool.ts`.
 
 ## Channel Files
 
-- **Outbound**: `$OPENCLAW_HOME/cascade-channel.jsonl` (messages to Cascade)
-- **Inbound**: `$OPENCLAW_HOME/cascade-responses.jsonl` (responses from Cascade)
+- **Outbound**: `$CARNELIAN_HOME/cascade-channel.jsonl` (messages to Cascade)
+- **Inbound**: `$CARNELIAN_HOME/cascade-responses.jsonl` (responses from Cascade)
 
 ## Output
 
@@ -79,8 +79,8 @@ Ported from THUMMIM `cascade-tool.ts`.
 
 ## Notes
 
-- **THUMMIM dependency**: Windsurf Cascade must be running with the MCP bridge configured
-- Default channel directory: `~/.openclaw` or `%USERPROFILE%/.openclaw`
+- **CARNELIAN dependency**: Windsurf Cascade must be running with the MCP bridge configured
+- Default channel directory: `~/.CARNELIAN` or `%USERPROFILE%/.CARNELIAN`
 - `wait=true` polls for up to 120 seconds (2s intervals)
 - Uses `crypto.randomUUID()` for message ID generation
 - No npm packages needed in the wrapper

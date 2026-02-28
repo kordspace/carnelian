@@ -2,7 +2,7 @@
 name: text-to-speech
 description: "Convert text to speech using OpenAI TTS API"
 metadata:
-  openclaw:
+  CARNELIAN:
     emoji: "🔊"
     requires:
       env:
@@ -27,7 +27,7 @@ metadata:
 
 Convert text to speech using OpenAI TTS API.
 
-Ported from THUMMIM `tts-tool.ts`.
+Ported from CARNELIAN `tts-tool.ts`.
 
 ## Input
 

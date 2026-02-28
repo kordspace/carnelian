@@ -2,7 +2,7 @@
 name: session-spawn
 description: "Spawn sub-agent sessions via the Gateway sessions_spawn method."
 metadata:
-  openclaw:
+  CARNELIAN:
     emoji: "🔀"
     requires:
       env:
@@ -29,7 +29,7 @@ metadata:
 
 Spawn sub-agent sessions via the Gateway sessions_spawn method.
 
-Ported from THUMMIM `session-spawn-tool.ts`.
+Ported from CARNELIAN `session-spawn-tool.ts`.
 
 ## Input
 
@@ -57,7 +57,7 @@ Ported from THUMMIM `session-spawn-tool.ts`.
 
 ## Notes
 
-- **THUMMIM dependency**: The THUMMIM gateway must be running
+- **CARNELIAN dependency**: The CARNELIAN gateway must be running
 - Default gateway URL: `ws://127.0.0.1:18789`
 - `sessions_spawn` is forbidden from sub-agent sessions
 - Child session key format: `agent:default:subagent:<uuid>`

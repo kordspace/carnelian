@@ -2,7 +2,7 @@
 name: slack-send
 description: "Send a message to a Slack channel or DM via the Slack Web API"
 metadata:
-  openclaw:
+  CARNELIAN:
     emoji: "💼"
     requires:
       env:
@@ -27,7 +27,7 @@ metadata:
 
 Send a message to a Slack channel or DM via the Slack Web API.
 
-Ported from THUMMIM `slack-actions.ts`.
+Ported from CARNELIAN `slack-actions.ts`.
 
 ## Input
 
@@ -53,6 +53,6 @@ Ported from THUMMIM `slack-actions.ts`.
 ## Notes
 
 - Supports channel IDs (e.g. "C1234567890") or channel names (e.g. "#general")
-- For full action surface (edit, delete, reactions, etc.), reference THUMMIM `slack-actions.ts`
+- For full action surface (edit, delete, reactions, etc.), reference CARNELIAN `slack-actions.ts`
 - Bot must have `chat:write` scope and access to the target channel
 - Media attachments are added via the `attachments` field

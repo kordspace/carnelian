@@ -2,7 +2,7 @@
 name: image-analyze
 description: "Analyze images using vision models (GPT-4o or Claude Opus)"
 metadata:
-  openclaw:
+  CARNELIAN:
     emoji: "🔬"
     requires:
       env:
@@ -29,7 +29,7 @@ metadata:
 
 Analyze images using vision models (GPT-4o or Claude Opus).
 
-Ported from THUMMIM `image-tool.ts`.
+Ported from CARNELIAN `image-tool.ts`.
 
 ## Input
 

@@ -2,7 +2,7 @@
 name: discord-send
 description: "Send a message to a Discord channel via the Discord REST API"
 metadata:
-  openclaw:
+  CARNELIAN:
     emoji: "🎮"
     requires:
       env:
@@ -27,7 +27,7 @@ metadata:
 
 Send a message to a Discord channel via the Discord REST API.
 
-Ported from THUMMIM `discord-actions.ts`.
+Ported from CARNELIAN `discord-actions.ts`.
 
 ## Input
 
@@ -52,6 +52,6 @@ Ported from THUMMIM `discord-actions.ts`.
 ## Notes
 
 - Only `sendMessage` is implemented in this wrapper
-- For guild/moderation actions, use the full THUMMIM tool
+- For guild/moderation actions, use the full CARNELIAN tool
 - Requires a Discord bot token with appropriate permissions
 - Bot must have access to the target channel

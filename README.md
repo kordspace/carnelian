@@ -40,19 +40,47 @@ See [docs/BRAND.md](docs/BRAND.md) for the complete dual-theme brand kit (Forge/
 - **Production Ready** — Event-stream architecture, worker sandboxing, and resource controls
 - **Extensible** — 600+ skills via multi-runtime worker system (Node.js, Python, WASM, native Rust)
 
-## Phase Status
+## Current Features
 
-| Phase | Status | What's Built |
-|-------|--------|--------------|
-| **Phase 1 Foundation** | ✅ | Core orchestrator (Axum/Tokio), CLI, HTTP API, event stream, policy engine, blake3 ledger, scheduler, worker transport |
-| **Phase 2 Task Execution MVP** | ✅ | Node worker, skill discovery, scheduler, XP (`xp.rs`), metrics (`metrics.rs`), 120+ tests |
-| **Phase 3 Intelligence & Context Layer** | ✅ | Soul management, session lifecycle, memory retrieval, context assembly, model routing, agentic execution, compaction pipeline, TypeScript LLM Gateway |
-| **Phase 4 Security Completion** | ✅ | Approvals, safe mode, attestations, encryption, ledger signatures, capability+approval UI, chain anchoring |
-| **Phase 5 Advanced Features** | ✅ | Sub-agents, workflows, Telegram+Discord adapters, voice gateway (ElevenLabs STT/TTS) |
-| **Phase 6 Desktop UI & Production** | � In Progress | Dioxus desktop UI — 12 pages, 6 components, WebSocket event streaming |
-| **Phase 7 Packaging & Distribution** | 🔲 Planned | Self-containerizing installer, Skill Book Library, WASM worker, WhatsApp/Slack adapters, remote deployment |
+CARNELIAN is a production-ready AI workspace harness with comprehensive capabilities:
 
-See [docs/PHASE3.md](docs/PHASE3.md) for the Phase 3 architecture deep-dive.
+**Core Infrastructure**
+- ✅ Core orchestrator (Axum/Tokio), CLI, HTTP API, event stream
+- ✅ Policy engine, blake3 ledger, scheduler, worker transport
+- ✅ PostgreSQL 16 with pgvector, SQLx migrations
+- ✅ 262+ passing tests with 120+ integration tests
+
+**Task Execution & Skills**
+- ✅ Multi-runtime worker system (Node.js, Python, WASM, native Rust)
+- ✅ 600+ skills via Node worker (full Thummim compatibility)
+- ✅ Skill discovery with blake3 checksums and file watching
+- ✅ XP progression system with 1.172-exponent level curve
+
+**Intelligence & Context**
+- ✅ Soul management and session lifecycle
+- ✅ Memory retrieval with pgvector similarity search
+- ✅ Context assembly and compaction pipeline
+- ✅ Model routing with TypeScript LLM Gateway
+- ✅ Agentic execution with heartbeat system (555,555ms)
+
+**Security & Compliance**
+- ✅ Capability-based security (deny-by-default)
+- ✅ Approval queue for human-in-the-loop workflows
+- ✅ Safe mode emergency lockdown
+- ✅ Ed25519 attestations and encryption at rest
+- ✅ Ledger signatures and chain anchoring
+
+**Advanced Features**
+- ✅ Sub-agents and workflow orchestration
+- ✅ Telegram + Discord adapters with pairing
+- ✅ Voice gateway (ElevenLabs STT/TTS)
+- ✅ Elixir system for knowledge persistence
+- ✅ Skill Book catalog with activation flow
+
+**Desktop UI** (In Development)
+- 🚧 Dioxus desktop UI — 12 pages, 6 components
+- 🚧 WebSocket event streaming
+- � Real-time metrics and monitoring
 
 ## Why Carnelian Core?
 

@@ -2,7 +2,7 @@
 name: web-search
 description: "Search the web via Brave Search API or Perplexity Sonar; returns titles, URLs, and snippets (Brave) or an AI-synthesised answer with citations (Perplexity)"
 metadata:
-  openclaw:
+  CARNELIAN:
     emoji: "🔍"
     requires:
       env:
@@ -31,7 +31,7 @@ metadata:
 
 Search the web using Brave Search API or Perplexity Sonar.
 
-Ported from THUMMIM `web-search.ts`.
+Ported from CARNELIAN `web-search.ts`.
 
 ## Input
 

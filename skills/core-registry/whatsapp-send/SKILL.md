@@ -2,7 +2,7 @@
 name: whatsapp-send
 description: "Send a message or reaction via WhatsApp through the Carnelian gateway message API"
 metadata:
-  openclaw:
+  CARNELIAN:
     emoji: "📱"
     requires:
       env:

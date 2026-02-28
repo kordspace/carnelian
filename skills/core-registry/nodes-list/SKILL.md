@@ -2,7 +2,7 @@
 name: nodes-list
 description: "Manage paired nodes (status/describe/pending/approve/reject/notify/camera/screen/location/run)."
 metadata:
-  openclaw:
+  CARNELIAN:
     emoji: "📱"
     requires:
       env:
@@ -29,7 +29,7 @@ metadata:
 
 Manage paired nodes (status/describe/pending/approve/reject/notify/camera/screen/location/run).
 
-Ported from THUMMIM `nodes-tool.ts`.
+Ported from CARNELIAN `nodes-tool.ts`.
 
 ## Input
 
@@ -80,7 +80,7 @@ Varies by action. Camera/screen actions return base64-encoded media:
 
 ## Notes
 
-- **THUMMIM dependency**: Gateway and paired node required for camera/screen/location/run actions
+- **CARNELIAN dependency**: Gateway and paired node required for camera/screen/location/run actions
 - Default gateway URL: `ws://127.0.0.1:18789`
 - Media is returned as base64 since the CARNELIAN worker does not have `saveMediaBuffer`
 - Node identifier can be `nodeId`, `displayName`, or `remoteIp`

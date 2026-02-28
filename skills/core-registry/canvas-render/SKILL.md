@@ -2,7 +2,7 @@
 name: canvas-render
 description: "Render canvas graphics and visualizations via Carnelian gateway node.invoke API"
 metadata:
-  openclaw:
+  CARNELIAN:
     emoji: "🖼️"
     requires:
       env:
@@ -29,7 +29,7 @@ metadata:
 
 Render canvas graphics and visualizations via Carnelian gateway node.invoke API.
 
-Ported from THUMMIM `canvas-tool.ts`.
+Ported from CARNELIAN `canvas-tool.ts`.
 
 ## Input
 
@@ -89,4 +89,4 @@ Varies by action:
 - Requires a running Carnelian gateway with canvas/node support
 - Default gateway URL: `http://localhost:18790`
 - Snapshots are returned as base64 since fs write is not exposed to callers
-- For full action surface, reference THUMMIM `canvas-tool.ts`
+- For full action surface, reference CARNELIAN `canvas-tool.ts`

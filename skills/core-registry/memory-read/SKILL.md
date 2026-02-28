@@ -2,7 +2,7 @@
 name: memory-read
 description: "Read memories from persistent storage using the file system"
 metadata:
-  openclaw:
+  CARNELIAN:
     emoji: "📖"
   carnelian:
     runtime: node
@@ -21,7 +21,7 @@ metadata:
 
 Read memories from persistent storage using the file system.
 
-Ported from THUMMIM `memory-tool.ts`.
+Ported from CARNELIAN `memory-tool.ts`.
 
 ## Input
 

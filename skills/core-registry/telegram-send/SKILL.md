@@ -2,7 +2,7 @@
 name: telegram-send
 description: "Send a message to a Telegram chat via the Telegram Bot API"
 metadata:
-  openclaw:
+  CARNELIAN:
     emoji: "✈️"
     requires:
       env:
@@ -27,7 +27,7 @@ metadata:
 
 Send a message to a Telegram chat via the Telegram Bot API.
 
-Ported from THUMMIM `telegram-actions.ts`.
+Ported from CARNELIAN `telegram-actions.ts`.
 
 ## Input
 
@@ -55,5 +55,5 @@ Ported from THUMMIM `telegram-actions.ts`.
 
 - Supports chat IDs (numeric) or usernames (string starting with @)
 - Messages are sent with HTML parse mode enabled
-- For full action surface (edit, delete, pin, etc.), reference THUMMIM `telegram-actions.ts`
+- For full action surface (edit, delete, pin, etc.), reference CARNELIAN `telegram-actions.ts`
 - Bot must have permission to send messages in the target chat

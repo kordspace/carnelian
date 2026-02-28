@@ -1,0 +1,74 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: carnelian
+          POSTGRES_PASSWORD: carnelian
+          POSTGRES_DB: carnelian
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright dependencies
+        working-directory: tests/e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Build CARNELIAN
+        run: cargo build --release
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: postgresql://carnelian:carnelian@localhost:5432/carnelian
+        run: cargo sqlx migrate run
+
+      - name: Start CARNELIAN server
+        env:
+          DATABASE_URL: postgresql://carnelian:carnelian@localhost:5432/carnelian
+          CARNELIAN_HTTP_PORT: 18789
+        run: |
+          cargo run --release --bin carnelian start &
+          sleep 10
+
+      - name: Run E2E tests
+        working-directory: tests/e2e
+        run: npm test
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: tests/e2e/playwright-report/
+          retention-days: 30
