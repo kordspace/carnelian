@@ -3,6 +3,17 @@
 #![allow(clippy::single_match_else)]
 #![allow(clippy::match_same_arms)]
 #![allow(clippy::map_unwrap_or)]
+#![allow(clippy::branches_sharing_code)]
+#![allow(clippy::needless_borrows_for_generic_args)]
+#![allow(clippy::assigning_clones)]
+#![allow(clippy::items_after_statements)]
+#![allow(clippy::ignored_unit_patterns)]
+#![allow(clippy::option_if_let_else)]
+#![allow(clippy::struct_excessive_bools)]
+#![allow(clippy::doc_markdown)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::if_not_else)]
 
 //! 🔥 Carnelian OS CLI
 //!
@@ -16,9 +27,9 @@
 //! - `carnelian migrate` - Run database migrations
 //! - `carnelian logs` - Stream events from running instance
 
+use std::io::{Write, stdin, stdout};
 use std::path::PathBuf;
 use std::time::Duration;
-use sysinfo::System;
 
 use carnelian_common::types::{CreateTaskRequest, CreateTaskResponse, EventEnvelope, EventLevel};
 use clap::{Parser, Subcommand};
@@ -32,9 +43,10 @@ use carnelian_core::{
 };
 
 use bollard::Docker;
+use bollard::container::StartContainerOptions;
 use bollard::container::{Config as ContainerConfig, CreateContainerOptions};
 use bollard::image::CreateImageOptions;
-use bollard::models::{HostConfig, PortBinding, StartContainerOptions};
+use bollard::models::{HostConfig, PortBinding};
 use futures_util::stream::TryStreamExt;
 
 /// 🔥 Carnelian OS - Local-first AI agent mainframe
@@ -248,7 +260,7 @@ async fn main() {
             .await
         }
         Commands::Ui { web } => handle_ui(web).await,
-        Commands::Keygen { output } => handle_keygen(output).await,
+        Commands::Keygen { output } => handle_keygen(output),
         Commands::Key { command } => {
             handle_key(command, cli.config, cli.log_level, cli.database_url).await
         }
@@ -1075,9 +1087,10 @@ fn save_init_state(path: &std::path::Path, state: &InitState) {
 
 /// Detect hardware - returns (RAM_GB, VRAM_GB)
 pub(crate) fn detect_hardware() -> (f64, f64) {
-    use sysinfo::{RefreshKind, System};
+    use sysinfo::{MemoryRefreshKind, RefreshKind, System};
 
-    let mut sys = System::new_with_specifics(RefreshKind::new().with_memory());
+    let mut sys =
+        System::new_with_specifics(RefreshKind::new().with_memory(MemoryRefreshKind::everything()));
     sys.refresh_all();
 
     let total_ram_gb = sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
@@ -1153,8 +1166,6 @@ async fn handle_init(
     resume: bool,
     key_path: Option<PathBuf>,
 ) -> carnelian_common::Result<()> {
-    use sysinfo::{RefreshKind, System};
-
     // Helper closure for interactive vs non-interactive prompts
     let prompt_or_default = |message: &str, default: &str| -> String {
         if non_interactive {
@@ -1699,7 +1710,7 @@ async fn handle_init(
                 match sqlx::postgres::PgPoolOptions::new()
                     .max_connections(1)
                     .acquire_timeout(std::time::Duration::from_secs(2))
-                    .connect(&database_url)
+                    .connect(database_url.as_str())
                     .await
                 {
                     Ok(_) => {
@@ -1861,9 +1872,9 @@ async fn handle_init(
             let registry_path = PathBuf::from("skills/core-registry");
 
             // Build config for SkillBook
-            let skill_config = if let Some(ref pool) = shared_pool {
+            let skill_config = if let Some(ref _pool) = shared_pool {
                 let mut config = Config::default();
-                config.database_url = database_url.clone();
+                config.database_url.clone_from(&database_url);
                 // Note: Config doesn't have a direct set_pool method, so we'll work without it
                 std::sync::Arc::new(config)
             } else {
@@ -2089,11 +2100,9 @@ fn write_machine_toml(
         .collect::<Vec<_>>()
         .join(", ");
 
-    let keypair_line = if let Some(key_path) = owner_keypair_path {
+    let keypair_line = owner_keypair_path.map_or_else(String::new, |key_path| {
         format!("owner_keypair_path = \"{}\"\n", key_path.display())
-    } else {
-        String::new()
-    };
+    });
 
     let content = format!(
         r#"# 🔥 Carnelian OS Machine Configuration
@@ -2131,9 +2140,7 @@ workspace_scan_paths = [{}]
 }
 
 /// Handle the `keygen` command - Generate owner keypair
-async fn handle_keygen(output: Option<PathBuf>) -> carnelian_common::Result<()> {
-    use std::io::Write;
-
+fn handle_keygen(output: Option<PathBuf>) -> carnelian_common::Result<()> {
     // Determine output path
     let output_path = output.unwrap_or_else(|| {
         let home = std::env::var("HOME")
@@ -2163,7 +2170,7 @@ async fn handle_keygen(output: Option<PathBuf>) -> carnelian_common::Result<()> 
 
     // Write private key using keypair_to_bytes
     let key_bytes = carnelian_core::crypto::keypair_to_bytes(&signing_key);
-    std::fs::write(&output_path, &key_bytes)
+    std::fs::write(&output_path, key_bytes)
         .map_err(|e| carnelian_common::Error::Config(format!("Failed to write key file: {}", e)))?;
 
     // Set permissions on Unix
@@ -2185,7 +2192,7 @@ async fn handle_keygen(output: Option<PathBuf>) -> carnelian_common::Result<()> 
         "   Private key file: {}",
         output_path
             .canonicalize()
-            .unwrap_or(output_path.clone())
+            .unwrap_or_else(|_| output_path.clone())
             .display()
     );
     println!();
@@ -2215,7 +2222,7 @@ async fn handle_key_rotate(
     log_level_override: Option<String>,
     database_url_override: Option<String>,
 ) -> carnelian_common::Result<()> {
-    use std::io::Write;
+    use base64::Engine;
 
     // Load configuration
     let mut config = if let Some(path) = config_path {
@@ -2270,7 +2277,7 @@ async fn handle_key_rotate(
     // Store new keypair in config_store as base64-encoded JSON
     let pool = config.pool()?.clone();
     let new_value = serde_json::json!({
-        "seed_base64": base64::encode(&new_private_key_bytes)
+        "seed_base64": base64::prelude::BASE64_STANDARD.encode(new_private_key_bytes)
     });
 
     Config::update_config_value(
@@ -2294,7 +2301,7 @@ async fn handle_key_rotate(
     });
 
     // Write new key file
-    std::fs::write(&keypair_path, &new_private_key_bytes).map_err(|e| {
+    std::fs::write(&keypair_path, new_private_key_bytes).map_err(|e| {
         carnelian_common::Error::Config(format!("Failed to write new key file: {}", e))
     })?;
 
@@ -2390,26 +2397,27 @@ async fn handle_ui(web: bool) -> carnelian_common::Result<()> {
     }
 
     // Desktop UI launch
-    let ui_binary = if let Ok(exe_path) = std::env::current_exe() {
-        let same_dir = exe_path
-            .parent()
-            .map(|p| p.join("carnelian-ui"))
-            .unwrap_or_else(|| PathBuf::from("carnelian-ui"));
+    let ui_binary = std::env::current_exe().map_or_else(
+        |_| PathBuf::from("carnelian-ui"),
+        |exe_path| {
+            let same_dir = exe_path
+                .parent()
+                .map(|p| p.join("carnelian-ui"))
+                .unwrap_or_else(|| PathBuf::from("carnelian-ui"));
 
-        #[cfg(windows)]
-        let same_dir = same_dir.with_extension("exe");
+            #[cfg(windows)]
+            let same_dir = same_dir.with_extension("exe");
 
-        if same_dir.exists() {
-            same_dir
-        } else {
-            // Fall back to PATH lookup
-            PathBuf::from("carnelian-ui")
-        }
-    } else {
-        PathBuf::from("carnelian-ui")
-    };
+            if same_dir.exists() {
+                same_dir
+            } else {
+                // Fall back to PATH lookup
+                PathBuf::from("carnelian-ui")
+            }
+        },
+    );
 
-    if !ui_binary.exists() && !which::which(&ui_binary).is_ok() {
+    if !ui_binary.exists() && which::which(&ui_binary).is_err() {
         return Err(carnelian_common::Error::Config(
             "carnelian-ui binary not found. Build it with: cargo build --release -p carnelian-ui"
                 .to_string(),
@@ -2428,7 +2436,7 @@ async fn handle_ui(web: bool) -> carnelian_common::Result<()> {
         unsafe {
             cmd.pre_exec(|| {
                 // Detach from parent process group
-                libc::setsid();
+                nix::libc::setsid();
                 Ok(())
             });
         }
@@ -2445,13 +2453,7 @@ async fn handle_ui(web: bool) -> carnelian_common::Result<()> {
 
 /// Serve web UI static files
 async fn serve_web_ui(web_dir: &std::path::Path, port: u16) -> carnelian_common::Result<()> {
-    use axum::{
-        Router,
-        extract::Path,
-        http::StatusCode,
-        response::{Html, IntoResponse},
-        routing::get,
-    };
+    use axum::{Router, http::StatusCode};
     use tokio::net::TcpListener;
     use tower_http::services::ServeDir;
 
@@ -2475,6 +2477,7 @@ async fn serve_web_ui(web_dir: &std::path::Path, port: u16) -> carnelian_common:
 }
 
 /// Handle the `migrate-from-thummim` command - Migrate from Thummim project
+#[allow(clippy::too_many_lines)]
 async fn handle_migrate_from_thummim(
     path: Option<PathBuf>,
     config_path: Option<PathBuf>,
@@ -2564,8 +2567,8 @@ async fn handle_migrate_from_thummim(
     {
         let path = entry.path();
         if path.file_name() == Some(std::ffi::OsStr::new("SKILL.md")) {
-            let skill_dir = path.parent().unwrap();
-            let skill_name = skill_dir
+            let skill_folder = path.parent().unwrap();
+            let skill_name = skill_folder
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown");
