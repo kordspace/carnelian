@@ -1,0 +1,118 @@
+# =============================================================================
+# Docker Ignore Rules
+# =============================================================================
+# These files/directories are excluded from Docker build context
+# to reduce build time and image size
+# =============================================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Rust build artifacts
+target/
+**/target/
+# Note: Cargo.lock is needed for reproducible builds, do not ignore
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation (not needed in build)
+docs/*.md
+!docs/README.md
+docs/MIGRATION_*.md
+docs/COMMIT_*.md
+
+# Node.js / TypeScript (gateway is deprecated)
+gateway/
+gateway/node_modules/
+gateway/dist/
+gateway/**/*.ts
+gateway/**/*.js
+gateway/**/*.json
+
+# Test files and coverage
+tests/
+**/*.test.rs
+**/*_test.rs
+coverage/
+*.profraw
+
+# Local development files
+.env
+.env.*
+!.env.example
+.envrc
+*.local
+
+# Machine-specific configs (will be mounted at runtime)
+machine.toml
+machine-*.toml
+
+# Data directories (mounted as volumes)
+data/
+*.db
+*.db-journal
+postgres-data/
+ollama-models/
+carnelian-data/
+
+# CI/CD files
+.github/
+.gitlab-ci.yml
+.travis.yml
+.pre-commit-config.yaml
+.secrets.baseline
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.log
+logs/
+
+# OS files
+Thumbs.db
+.DS_Store
+.directory
+
+# Binary artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Package manager files
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# SQLx query metadata (needed for offline builds)
+# .sqlx/ is included for SQLX_OFFLINE=true builds
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+
+# Documentation build artifacts
+target/doc/
+
+# Large media files (if any)
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.wav
+*.mp3

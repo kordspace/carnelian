@@ -49,7 +49,6 @@ env/
 .venv
 
 # Docker
-.dockerignore
 docker-compose.override.yml
 
 # IDEs

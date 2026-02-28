@@ -40,7 +40,7 @@ See [docs/BRAND.md](docs/BRAND.md) for the complete dual-theme brand kit (Forge/
 - **Production Ready** — Event-stream architecture, worker sandboxing, and resource controls
 - **Extensible** — 600+ skills via multi-runtime worker system (Node.js, Python, WASM, native Rust)
 
-## Current Features
+## Features
 
 CARNELIAN is a production-ready AI workspace harness with comprehensive capabilities:
 
