@@ -74,7 +74,7 @@ CARNELIAN is a production-ready AI workspace harness with comprehensive capabili
 - ✅ Sub-agents and workflow orchestration
 - ✅ Telegram + Discord adapters with pairing
 - ✅ Voice gateway (ElevenLabs STT/TTS)
-- ✅ Elixir system for knowledge persistence
+- ✅ 🧪 Elixir system for knowledge persistence
 - ✅ Skill Book catalog with activation flow
 
 **Desktop UI** (In Development)

@@ -1,0 +1,24 @@
+# Semgrep ignore patterns for intentional security exceptions
+
+# Test files using temp_dir with unique UUIDs - acceptable for tests
+crates/carnelian-core/src/scheduler.rs
+
+# Native skill loader requires unsafe for FFI - audited and necessary
+crates/carnelian-core/src/skills/native_loader.rs
+
+# current_exe used for UI binary discovery - not security-critical path
+crates/carnelian-bin/src/main.rs
+crates/carnelian-core/src/bin/carnelian.rs
+
+# ML model serialization - pickle is industry standard for sklearn/xgboost/lightgbm
+# Models are generated internally, not from untrusted sources
+skills/python-registry/hyperparameter-tune/main.py
+skills/python-registry/lightgbm-train/main.py
+skills/python-registry/sklearn-predict/main.py
+skills/python-registry/sklearn-train/main.py
+skills/python-registry/xgboost-train/main.py
+
+# Cryptographic hash skills - MD5/SHA1 provided for compatibility, not security
+# Users may need these for checksum verification of legacy systems
+skills/core-registry/crypto-hash/src/main.rs
+skills/core-registry/file-checksum/src/main.rs

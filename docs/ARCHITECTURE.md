@@ -147,7 +147,7 @@ The event system (`crates/carnelian-core/src/events.rs`) implements a bounded-bu
 
 ## Agentic Execution Pipeline
 
-The Phase 3 agentic pipeline drives autonomous behaviour. See [docs/PHASE3.md](PHASE3.md) for the full deep-dive.
+The agentic pipeline drives autonomous behaviour through heartbeat-driven task discovery and execution.
 
 ```mermaid
 sequenceDiagram

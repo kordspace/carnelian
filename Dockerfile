@@ -60,7 +60,7 @@ COPY assets/ ./assets/
 COPY machine.toml.example ./machine.toml
 
 # Build the application
-RUN cargo build --release --package carnelian-core
+RUN cargo build --release --bin carnelian
 
 # -----------------------------------------------------------------------------
 # Stage 2: Runtime

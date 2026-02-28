@@ -223,7 +223,7 @@ pub fn SkillBook() -> Element {
                                     button {
                                         class: "btn-secondary btn-sm",
                                         onclick: {
-                                            let id = skill.id;
+                                            let id = skill.id.clone();
                                             let deactivate = deactivate_skill.clone();
                                             move |_| deactivate(id.clone())
                                         },
@@ -236,7 +236,7 @@ pub fn SkillBook() -> Element {
                                     button {
                                         class: "btn-primary btn-sm",
                                         onclick: {
-                                            let s = skill;
+                                            let s = skill.clone();
                                             let mut open = open_activation.clone();
                                             move |_| open(s.clone())
                                         },
