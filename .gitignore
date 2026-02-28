@@ -60,6 +60,9 @@ docker-compose.override.yml
 *~
 .DS_Store
 
+# Local development tools
+.traycer/
+
 # Environment
 .env
 .env.local
