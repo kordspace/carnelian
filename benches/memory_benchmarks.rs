@@ -6,12 +6,11 @@
 //! - Memory updates
 //! - Batch operations
 
-use carnelian_common::types::CreateMemoryRequest;
-use carnelian_core::memory::MemoryManager;
+use carnelian_core::memory::{MemoryManager, MemorySearchQuery, MemorySource};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
-use serde_json::json;
 use sqlx::PgPool;
 use tokio::runtime::Runtime;
+use uuid::Uuid;
 
 fn create_test_pool() -> PgPool {
     let rt = Runtime::new().unwrap();
@@ -33,18 +32,22 @@ fn test_embedding() -> Vec<f32> {
 fn benchmark_vector_search(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let pool = create_test_pool();
-    let manager = MemoryManager::new(pool.clone());
+    let manager = MemoryManager::new(pool, None);
 
     // Setup: Create test memories
     rt.block_on(async {
+        let identity_id = uuid::Uuid::new_v4();
         for i in 0..100 {
             let _ = manager
-                .create(CreateMemoryRequest {
-                    content: format!("Test memory {}", i),
-                    metadata: json!({"index": i}),
-                    tags: vec![],
-                    identity_id: None,
-                })
+                .create_memory(
+                    identity_id,
+                    &format!("Test memory {i}"),
+                    Some(format!("Summary {i}")),
+                    MemorySource::Observation,
+                    None,
+                    0.5,
+                    None,
+                )
                 .await;
         }
     });
@@ -53,11 +56,17 @@ fn benchmark_vector_search(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("vector_search");
 
-    for limit in [10, 50, 100].iter() {
+    for limit in &[10, 50, 100] {
         group.bench_with_input(BenchmarkId::from_parameter(limit), limit, |b, &limit| {
             b.to_async(&rt).iter(|| async {
                 manager
-                    .search_similar(black_box(&embedding), limit, None)
+                    .search_memories(MemorySearchQuery {
+                        embedding: black_box(embedding.clone()),
+                        identity_id: Uuid::new_v4(),
+                        min_similarity: 0.7,
+                        limit,
+                        sources: None,
+                    })
                     .await
             });
         });
@@ -69,17 +78,20 @@ fn benchmark_vector_search(c: &mut Criterion) {
 fn benchmark_memory_create(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let pool = create_test_pool();
-    let manager = MemoryManager::new(pool);
+    let manager = MemoryManager::new(pool, None);
 
     c.bench_function("memory_create", |b| {
         b.to_async(&rt).iter(|| async {
             manager
-                .create(black_box(CreateMemoryRequest {
-                    content: "Benchmark memory content".to_string(),
-                    metadata: json!({"benchmark": true}),
-                    tags: vec!["benchmark".to_string()],
-                    identity_id: None,
-                }))
+                .create_memory(
+                    black_box(uuid::Uuid::new_v4()),
+                    "Benchmark memory content",
+                    Some("Benchmark summary".to_string()),
+                    MemorySource::Observation,
+                    None,
+                    0.5,
+                    Some(vec!["benchmark".to_string()]),
+                )
                 .await
         });
     });
@@ -88,28 +100,32 @@ fn benchmark_memory_create(c: &mut Criterion) {
 fn benchmark_memory_list(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let pool = create_test_pool();
-    let manager = MemoryManager::new(pool.clone());
+    let manager = MemoryManager::new(pool, None);
 
     // Setup: Create test memories
     rt.block_on(async {
+        let identity_id = uuid::Uuid::new_v4();
         for i in 0..200 {
             let _ = manager
-                .create(CreateMemoryRequest {
-                    content: format!("List test memory {}", i),
-                    metadata: json!({}),
-                    tags: vec![],
-                    identity_id: None,
-                })
+                .create_memory(
+                    identity_id,
+                    &format!("List test memory {i}"),
+                    None,
+                    MemorySource::Observation,
+                    None,
+                    0.5,
+                    None,
+                )
                 .await;
         }
     });
 
     let mut group = c.benchmark_group("memory_list");
 
-    for limit in [10, 50, 100].iter() {
+    for limit in &[10, 50, 100] {
         group.bench_with_input(BenchmarkId::from_parameter(limit), limit, |b, &limit| {
             b.to_async(&rt)
-                .iter(|| async { manager.list(None, None, limit, 0).await });
+                .iter(|| async { manager.load_recent_memories(Uuid::new_v4(), limit).await });
         });
     }
 
@@ -119,23 +135,27 @@ fn benchmark_memory_list(c: &mut Criterion) {
 fn benchmark_concurrent_creates(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let pool = create_test_pool();
-    let manager = MemoryManager::new(pool);
 
     c.bench_function("concurrent_creates_10", |b| {
         b.to_async(&rt).iter(|| async {
             let mut handles = vec![];
 
             for i in 0..10 {
-                let manager_clone = manager.clone();
-                let handle = tokio::spawn(async move {
-                    manager_clone
-                        .create(CreateMemoryRequest {
-                            content: format!("Concurrent memory {}", i),
-                            metadata: json!({}),
-                            tags: vec![],
-                            identity_id: None,
-                        })
+                let handle = tokio::spawn({
+                    let pool_clone = pool.clone();
+                    async move {
+                        let mgr = MemoryManager::new(pool_clone, None);
+                        mgr.create_memory(
+                            Uuid::new_v4(),
+                            &format!("Concurrent memory {i}"),
+                            None,
+                            MemorySource::Observation,
+                            None,
+                            0.5,
+                            None,
+                        )
                         .await
+                    }
                 });
                 handles.push(handle);
             }
