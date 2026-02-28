@@ -2430,19 +2430,8 @@ async fn handle_ui(web: bool) -> carnelian_common::Result<()> {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
 
-    // Only use unsafe pre_exec in non-test builds (tests run with -F unsafe-code)
-    #[cfg(all(unix, not(test)))]
-    {
-        use std::os::unix::process::CommandExt;
-        #[allow(unsafe_code)]
-        unsafe {
-            cmd.pre_exec(|| {
-                // Detach from parent process group
-                nix::libc::setsid();
-                Ok(())
-            });
-        }
-    }
+    // Note: We cannot use pre_exec with setsid() due to -F unsafe-code flag.
+    // The UI process will remain in the same process group as the parent.
 
     let child = cmd
         .spawn()
