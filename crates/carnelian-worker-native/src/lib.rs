@@ -8,17 +8,17 @@ use std::sync::Arc;
 use carnelian_core::worker::{NativeWorkerTransport, WorkerTransport};
 use carnelian_core::{Config, EventStream};
 
-/// Wrapper around NativeWorkerTransport for external use.
+/// Wrapper around `NativeWorkerTransport` for external use.
 ///
 /// This struct provides a standalone, externally-usable interface to the native
 /// operations transport defined inline in carnelian-core. It follows the same
-/// pattern as PythonWorkerTransport in carnelian-worker-python.
+/// pattern as `PythonWorkerTransport` in carnelian-worker-python.
 pub struct NativeOpsTransport {
     inner: Arc<NativeWorkerTransport>,
 }
 
 impl NativeOpsTransport {
-    /// Create a new NativeOpsTransport with the given worker ID and configuration.
+    /// Create a new `NativeOpsTransport` with the given worker ID and configuration.
     ///
     /// # Arguments
     ///
@@ -36,34 +36,32 @@ impl WorkerTransport for NativeOpsTransport {
     async fn invoke(
         &self,
         request: carnelian_common::types::InvokeRequest,
-    ) -> anyhow::Result<carnelian_common::types::InvokeResponse> {
-        self.inner.invoke(request).await.map_err(|e| e.into())
+    ) -> carnelian_core::Result<carnelian_common::types::InvokeResponse> {
+        self.inner.invoke(request).await
     }
 
     async fn stream_events(
         &self,
         run_id: carnelian_common::types::RunId,
-    ) -> anyhow::Result<tokio::sync::mpsc::Receiver<carnelian_common::types::StreamEvent>> {
-        self.inner.stream_events(run_id).await.map_err(|e| e.into())
+    ) -> carnelian_core::Result<tokio::sync::mpsc::Receiver<carnelian_common::types::StreamEvent>>
+    {
+        self.inner.stream_events(run_id).await
     }
 
     async fn cancel(
         &self,
         run_id: carnelian_common::types::RunId,
         reason: String,
-    ) -> anyhow::Result<()> {
-        self.inner
-            .cancel(run_id, reason)
-            .await
-            .map_err(|e| e.into())
+    ) -> carnelian_core::Result<()> {
+        self.inner.cancel(run_id, reason).await
     }
 
-    async fn health(&self) -> anyhow::Result<carnelian_common::types::HealthResponse> {
-        self.inner.health().await.map_err(|e| e.into())
+    async fn health(&self) -> carnelian_core::Result<carnelian_common::types::HealthResponse> {
+        self.inner.health().await
     }
 
-    async fn shutdown(&self) -> anyhow::Result<()> {
-        self.inner.shutdown().await.map_err(|e| e.into())
+    async fn shutdown(&self) -> carnelian_core::Result<()> {
+        self.inner.shutdown().await
     }
 }
 
@@ -82,12 +80,16 @@ pub mod ops {
     /// Execute git status on the given path.
     ///
     /// Requires `git.read` capability.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the git command fails.
     pub async fn git_status(path: &str) -> Result<serde_json::Value> {
         let output = tokio::process::Command::new("git")
             .args(["status", "--porcelain", path])
             .output()
             .await
-            .context("Failed to execute git status")?;
+            .with_context(|| format!("Failed to execute git status on path: {path}"))?;
         let stdout = String::from_utf8_lossy(&output.stdout);
         Ok(json!({ "output": stdout.to_string() }))
     }
@@ -95,10 +97,14 @@ pub mod ops {
     /// Compute blake3 hash of a file.
     ///
     /// Requires `fs.read` capability.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or hashed.
     pub async fn file_hash(path: &str) -> Result<serde_json::Value> {
         let bytes = tokio::fs::read(path)
             .await
-            .with_context(|| format!("Failed to read file: {}", path))?;
+            .with_context(|| format!("Failed to read file: {path}"))?;
         let hash = blake3::hash(&bytes);
         Ok(json!({ "hash": hash.to_hex().to_string() }))
     }
@@ -106,13 +112,17 @@ pub mod ops {
     /// List running Docker containers.
     ///
     /// Requires `docker.read` capability.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the Docker connection or container listing fails.
     pub async fn docker_ps() -> Result<serde_json::Value> {
         let docker = bollard::Docker::connect_with_local_defaults()
             .context("Failed to connect to Docker")?;
         let containers = docker
             .list_containers::<String>(None)
             .await
-            .context("Failed to list containers")?;
+            .with_context(|| "Failed to list containers")?;
         let container_ids: Vec<String> = containers.iter().filter_map(|c| c.id.clone()).collect();
         Ok(json!({ "containers": container_ids }))
     }
@@ -120,7 +130,11 @@ pub mod ops {
     /// List directory entries.
     ///
     /// Requires `fs.read` capability.
-    pub async fn dir_list(path: &str, depth: usize) -> Result<serde_json::Value> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if directory traversal fails.
+    pub fn dir_list(path: &str, depth: usize) -> Result<serde_json::Value> {
         let mut entries = Vec::new();
         for entry in walkdir::WalkDir::new(path).max_depth(depth) {
             match entry {
@@ -134,10 +148,14 @@ pub mod ops {
     /// Read file contents with optional size limit.
     ///
     /// Requires `fs.read` capability.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read.
     pub async fn file_read(path: &str, max_bytes: usize) -> Result<serde_json::Value> {
         let bytes = tokio::fs::read(path)
             .await
-            .with_context(|| format!("Failed to read file: {}", path))?;
+            .with_context(|| format!("Failed to read file: {path}"))?;
         let original_len = bytes.len();
         let truncated = original_len > max_bytes;
         let content_bytes = if truncated {
@@ -156,10 +174,14 @@ pub mod ops {
     /// Write content to a file.
     ///
     /// Requires `fs.write` capability and owner approval.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written.
     pub async fn file_write(path: &str, content: &str) -> Result<serde_json::Value> {
         tokio::fs::write(path, content.as_bytes())
             .await
-            .with_context(|| format!("Failed to write file: {}", path))?;
+            .with_context(|| format!("Failed to write file: {path}"))?;
         Ok(json!({
             "written": true,
             "path": path
@@ -169,21 +191,21 @@ pub mod ops {
     /// Search for pattern in files using ripgrep.
     ///
     /// Requires `fs.read` capability.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the ripgrep command fails.
     pub async fn file_search(pattern: &str, path: &str) -> Result<serde_json::Value> {
         let output = tokio::process::Command::new("rg")
             .args(["--json", pattern, path])
             .output()
             .await
-            .context("Failed to execute ripgrep")?;
+            .with_context(|| "Failed to execute ripgrep")?;
 
         if !output.status.success() {
             let exit_code = output.status.code();
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!(
-                "rg search failed with exit code {:?}: {}",
-                exit_code,
-                stderr
-            );
+            anyhow::bail!("rg search failed with exit code {exit_code:?}: {stderr}");
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
@@ -193,10 +215,14 @@ pub mod ops {
     /// Delete a file.
     ///
     /// Requires `fs.write` capability and owner approval.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be deleted.
     pub async fn file_delete(path: &str) -> Result<serde_json::Value> {
         tokio::fs::remove_file(path)
             .await
-            .with_context(|| format!("Failed to delete file: {}", path))?;
+            .with_context(|| format!("Failed to delete file: {path}"))?;
         Ok(json!({
             "deleted": true,
             "path": path
@@ -206,10 +232,14 @@ pub mod ops {
     /// Move/rename a file.
     ///
     /// Requires `fs.write` capability.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be moved.
     pub async fn file_move(src: &str, dst: &str) -> Result<serde_json::Value> {
         tokio::fs::rename(src, dst)
             .await
-            .with_context(|| format!("Failed to move file from {} to {}", src, dst))?;
+            .with_context(|| format!("Failed to move file from {src} to {dst}"))?;
         Ok(json!({
             "moved": true,
             "src": src,
@@ -220,6 +250,10 @@ pub mod ops {
     /// Execute git diff on the given path.
     ///
     /// Requires `git.read` capability.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the git command fails.
     pub async fn git_diff(path: &str, staged: bool) -> Result<serde_json::Value> {
         let mut args = vec!["diff"];
         if staged {
@@ -231,12 +265,12 @@ pub mod ops {
             .args(&args)
             .output()
             .await
-            .context("Failed to execute git diff")?;
+            .with_context(|| "Failed to execute git diff")?;
 
         if !output.status.success() {
             let exit_code = output.status.code();
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("git diff failed with exit code {:?}: {}", exit_code, stderr);
+            anyhow::bail!("git diff failed with exit code {exit_code:?}: {stderr}");
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
@@ -246,22 +280,22 @@ pub mod ops {
     /// Execute git commit with the given message.
     ///
     /// Requires `git.write` capability and owner approval.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the git command fails.
     pub async fn git_commit(path: &str, message: &str) -> Result<serde_json::Value> {
         let output = tokio::process::Command::new("git")
             .args(["commit", "-m", message])
             .current_dir(path)
             .output()
             .await
-            .context("Failed to execute git commit")?;
+            .with_context(|| "Failed to execute git commit")?;
 
         if !output.status.success() {
             let exit_code = output.status.code();
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!(
-                "git commit failed with exit code {:?}: {}",
-                exit_code,
-                stderr
-            );
+            anyhow::bail!("git commit failed with exit code {exit_code:?}: {stderr}");
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
@@ -271,8 +305,13 @@ pub mod ops {
     /// Execute git log on the given path.
     ///
     /// Requires `git.read` capability.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the git command fails.
     pub async fn git_log(path: &str, max_count: u64, oneline: bool) -> Result<serde_json::Value> {
-        let mut args = vec!["log", &format!("--max-count={}", max_count)];
+        let max_count_arg = format!("--max-count={max_count}");
+        let mut args = vec!["log", &max_count_arg];
         if oneline {
             args.push("--oneline");
         }
@@ -282,12 +321,12 @@ pub mod ops {
             .args(&args)
             .output()
             .await
-            .context("Failed to execute git log")?;
+            .with_context(|| "Failed to execute git log")?;
 
         if !output.status.success() {
             let exit_code = output.status.code();
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("git log failed with exit code {:?}: {}", exit_code, stderr);
+            anyhow::bail!("git log failed with exit code {exit_code:?}: {stderr}");
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
@@ -297,22 +336,22 @@ pub mod ops {
     /// Execute git branch to list branches.
     ///
     /// Requires `git.read` capability.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the git command fails.
     pub async fn git_branch(path: &str) -> Result<serde_json::Value> {
         let output = tokio::process::Command::new("git")
             .args(["branch", "--list"])
             .current_dir(path)
             .output()
             .await
-            .context("Failed to execute git branch")?;
+            .with_context(|| "Failed to execute git branch")?;
 
         if !output.status.success() {
             let exit_code = output.status.code();
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!(
-                "git branch failed with exit code {:?}: {}",
-                exit_code,
-                stderr
-            );
+            anyhow::bail!("git branch failed with exit code {exit_code:?}: {stderr}");
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
@@ -322,6 +361,10 @@ pub mod ops {
     /// Execute a command in a Docker container.
     ///
     /// Requires `docker.exec` capability and owner approval.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the Docker connection or command execution fails.
     pub async fn docker_exec(container_id: &str, cmd: Vec<String>) -> Result<serde_json::Value> {
         let docker = bollard::Docker::connect_with_local_defaults()
             .context("Failed to connect to Docker")?;
@@ -337,7 +380,7 @@ pub mod ops {
                 },
             )
             .await
-            .context("Failed to create exec")?;
+            .with_context(|| "Failed to create exec")?;
 
         let exec_id = exec.id;
         match docker.start_exec(&exec_id, None).await {
@@ -346,7 +389,7 @@ pub mod ops {
                 while let Some(chunk) = output.next().await {
                     match chunk {
                         Ok(msg) => collected.push_str(&msg.to_string()),
-                        Err(e) => anyhow::bail!("Stream error: {}", e),
+                        Err(e) => anyhow::bail!("Stream error: {e}"),
                     }
                 }
                 Ok(json!({ "output": collected }))
@@ -359,6 +402,10 @@ pub mod ops {
     /// Get logs from a Docker container.
     ///
     /// Requires `docker.read` capability.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the Docker connection or log retrieval fails.
     pub async fn docker_logs(container_id: &str, tail: &str) -> Result<serde_json::Value> {
         let docker = bollard::Docker::connect_with_local_defaults()
             .context("Failed to connect to Docker")?;
@@ -377,7 +424,7 @@ pub mod ops {
         while let Some(chunk) = logs_stream.next().await {
             match chunk {
                 Ok(msg) => collected.push_str(&msg.to_string()),
-                Err(e) => anyhow::bail!("Stream error: {}", e),
+                Err(e) => anyhow::bail!("Stream error: {e}"),
             }
         }
 
@@ -387,6 +434,10 @@ pub mod ops {
     /// Get stats from a Docker container.
     ///
     /// Requires `docker.read` capability.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the Docker connection or stats retrieval fails.
     pub async fn docker_stats(container_id: &str) -> Result<serde_json::Value> {
         let docker = bollard::Docker::connect_with_local_defaults()
             .context("Failed to connect to Docker")?;
@@ -413,7 +464,11 @@ pub mod ops {
     /// List running processes.
     ///
     /// Requires `system.read` capability.
-    pub async fn process_list() -> Result<serde_json::Value> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if process information cannot be retrieved.
+    pub fn process_list() -> Result<serde_json::Value> {
         let sys = System::new_with_specifics(
             RefreshKind::new().with_processes(ProcessRefreshKind::everything()),
         );
@@ -437,7 +492,11 @@ pub mod ops {
     /// Get disk usage information.
     ///
     /// Requires `system.read` capability.
-    pub async fn disk_usage() -> Result<serde_json::Value> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if disk information cannot be retrieved.
+    pub fn disk_usage() -> Result<serde_json::Value> {
         let disks = Disks::new_with_refreshed_list();
 
         let disks_vec: Vec<serde_json::Value> = disks
@@ -448,7 +507,7 @@ pub mod ops {
                     "mount_point": disk.mount_point().to_string_lossy(),
                     "total_space": disk.total_space(),
                     "available_space": disk.available_space(),
-                    "file_system": String::from_utf8_lossy(disk.file_system()).to_string()
+                    "file_system": disk.file_system().to_string_lossy().to_string()
                 })
             })
             .collect();
@@ -459,7 +518,11 @@ pub mod ops {
     /// Get network interface statistics.
     ///
     /// Requires `system.read` capability.
-    pub async fn network_stats() -> Result<serde_json::Value> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if network information cannot be retrieved.
+    pub fn network_stats() -> Result<serde_json::Value> {
         let networks = Networks::new_with_refreshed_list();
 
         let networks_vec: Vec<serde_json::Value> = networks
@@ -479,18 +542,21 @@ pub mod ops {
     /// Get an environment variable value.
     ///
     /// Requires `env.read` capability. Only allows reading from a predefined allowlist.
-    pub async fn env_get(key: &str) -> Result<serde_json::Value> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the environment variable is not in the allowlist or cannot be read.
+    pub fn env_get(key: &str) -> Result<serde_json::Value> {
         const ALLOWLIST: &[&str] = &[
             "PATH", "HOME", "USER", "USERNAME", "SHELL", "LANG", "LC_ALL", "PWD", "TERM",
             "HOSTNAME", "TMPDIR", "TEMP", "TMP",
         ];
 
         if !ALLOWLIST.contains(&key) {
-            anyhow::bail!("env var '{}' is not in the allowed list", key);
+            anyhow::bail!("env var '{key}' is not in the allowed list");
         }
 
-        let value =
-            std::env::var(key).with_context(|| format!("Failed to get env var: {}", key))?;
+        let value = std::env::var(key).with_context(|| format!("Failed to get env var: {key}"))?;
 
         Ok(json!({
             "key": key,
