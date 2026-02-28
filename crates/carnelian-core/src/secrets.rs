@@ -81,6 +81,7 @@ pub fn list_available_secrets() -> Result<Vec<String>> {
 }
 
 #[cfg(test)]
+#[allow(unsafe_code)]
 mod tests {
     use super::*;
     use std::env;
@@ -88,8 +89,8 @@ mod tests {
     #[test]
     fn test_is_using_docker_secrets() {
         // Will be false in test environment
-        let using_secrets = is_using_docker_secrets();
-        assert!(!using_secrets || using_secrets); // Just verify it returns a bool
+        let _using_secrets = is_using_docker_secrets();
+        // Just verify it returns a bool without error
     }
 
     #[test]

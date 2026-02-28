@@ -2431,6 +2431,7 @@ async fn handle_ui(web: bool) -> carnelian_common::Result<()> {
         .stderr(std::process::Stdio::null());
 
     #[cfg(unix)]
+    #[allow(unsafe_code)]
     {
         use std::os::unix::process::CommandExt;
         unsafe {

@@ -92,9 +92,8 @@ mod tests {
 
     #[test]
     fn test_create_development_cors() {
-        let layer = create_development_cors();
+        let _layer = create_development_cors();
         // Layer should be created successfully
-        assert!(true);
     }
 
     #[test]
@@ -103,9 +102,8 @@ mod tests {
             "https://example.com".to_string(),
             "https://app.example.com".to_string(),
         ];
-        let layer = create_production_cors(origins);
+        let _layer = create_production_cors(origins);
         // Layer should be created successfully
-        assert!(true);
     }
 
     #[test]
