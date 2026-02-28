@@ -320,7 +320,9 @@ All endpoints are prefixed with `/v1`.
 - **[macOS](docs/SETUP_MACOS.md)** — Homebrew, Apple Silicon notes, CPU-only Ollama
 - **[Linux (Ubuntu/Debian)](docs/SETUP_LINUX.md)** — NVIDIA Container Toolkit, systemd service, headless server
 
-## Quick Start
+## Installation
+
+### Quick Start
 
 ```bash
 # 1. Clone repository
