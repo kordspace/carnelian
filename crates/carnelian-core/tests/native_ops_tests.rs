@@ -129,7 +129,7 @@ async fn test_file_search() {
         .arg("--version")
         .output()
         .await;
-    
+
     if rg_check.is_err() {
         eprintln!("Skipping test_file_search: ripgrep (rg) not installed");
         return;
