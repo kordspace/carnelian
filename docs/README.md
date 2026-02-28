@@ -14,7 +14,7 @@
 ### Getting Started
 - **[GETTING_STARTED.md](GETTING_STARTED.md)** - Quick start guide, installation, and configuration
 - **[INSTALL.md](INSTALL.md)** - Detailed installation instructions
-- **[Setup Guides](.)** - Platform-specific setup:
+- **Setup Guides** - Platform-specific setup:
   - [SETUP_LINUX.md](SETUP_LINUX.md) - Linux installation
   - [SETUP_MACOS.md](SETUP_MACOS.md) - macOS installation
   - [SETUP_WINDOWS.md](SETUP_WINDOWS.md) - Windows installation
