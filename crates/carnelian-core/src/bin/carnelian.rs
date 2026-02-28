@@ -2430,10 +2430,11 @@ async fn handle_ui(web: bool) -> carnelian_common::Result<()> {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
 
-    #[cfg(unix)]
-    #[allow(unsafe_code)]
+    // Only use unsafe pre_exec in non-test builds (tests run with -F unsafe-code)
+    #[cfg(all(unix, not(test)))]
     {
         use std::os::unix::process::CommandExt;
+        #[allow(unsafe_code)]
         unsafe {
             cmd.pre_exec(|| {
                 // Detach from parent process group

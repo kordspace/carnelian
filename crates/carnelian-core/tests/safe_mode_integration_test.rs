@@ -385,7 +385,7 @@ async fn test_safe_mode_blocks_worker_spawn() {
 
     // Attempt to spawn a worker — should fail with SafeModeActive
     let result = worker_manager
-        .spawn_worker(carnelian_core::worker::WorkerRuntime::Node)
+        .spawn_worker(carnelian_core::worker::WorkerRuntime::Node, false)
         .await;
 
     assert!(
