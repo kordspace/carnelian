@@ -7,6 +7,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use carnelian_common::types::{HealthResponse, InvokeRequest, InvokeResponse, RunId};
 use carnelian_core::worker::{ProcessJsonlTransport, WorkerTransport};
 use carnelian_core::{Config, EventStream};
 use tokio::process::{ChildStderr, Command};
@@ -14,6 +15,9 @@ use tokio::process::{ChildStderr, Command};
 /// Detect the Python binary path.
 ///
 /// Tries `python3` first, then falls back to `python`.
+///
+/// # Errors
+///
 /// Returns an error if neither is found.
 pub fn detect_python_binary() -> Result<PathBuf> {
     which::which("python3")
@@ -25,6 +29,14 @@ pub fn detect_python_binary() -> Result<PathBuf> {
 ///
 /// Runs `pip install -r requirements.txt` quietly.
 /// Logs success or failure via tracing.
+///
+/// # Errors
+///
+/// Returns an error if pip install fails.
+///
+/// # Panics
+///
+/// Panics if the requirements.txt path cannot be converted to a string.
 pub async fn install_worker_requirements(python_binary: &PathBuf) -> Result<()> {
     let req_path = PathBuf::from("workers/python-worker/requirements.txt");
 
@@ -58,14 +70,11 @@ pub async fn install_worker_requirements(python_binary: &PathBuf) -> Result<()> 
     } else {
         let code = status.code().unwrap_or(-1);
         tracing::warn!("pip install failed with exit code: {}", code);
-        Err(anyhow::anyhow!(
-            "pip install failed with exit code: {}",
-            code
-        ))
+        Err(anyhow::anyhow!("pip install failed with exit code: {code}"))
     }
 }
 
-/// Newtype wrapper around ProcessJsonlTransport for Python workers.
+/// Newtype wrapper around `ProcessJsonlTransport` for Python workers.
 ///
 /// Provides Python-specific concerns like binary detection and requirements pre-install.
 pub struct PythonWorkerTransport {
@@ -77,6 +86,10 @@ impl PythonWorkerTransport {
     ///
     /// Detects Python binary, pre-installs requirements, and spawns the worker.
     /// Returns the transport and an optional stderr handle.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if Python binary detection, requirements installation, or worker spawn fails.
     pub async fn spawn(
         worker_id: String,
         config: Arc<Config>,
@@ -124,26 +137,27 @@ impl PythonWorkerTransport {
 
 #[async_trait::async_trait]
 impl WorkerTransport for PythonWorkerTransport {
-    async fn invoke(
-        &self,
-        request: carnelian_core::InvokeRequest,
-    ) -> anyhow::Result<carnelian_common::InvokeResult> {
+    async fn invoke(&self, request: InvokeRequest) -> carnelian_core::Result<InvokeResponse> {
         self.inner.invoke(request).await
     }
 
-    async fn stream_events(&self, run_id: String) -> anyhow::Result<carnelian_core::EventStream> {
+    async fn stream_events(
+        &self,
+        run_id: RunId,
+    ) -> carnelian_core::Result<tokio::sync::mpsc::Receiver<carnelian_common::types::StreamEvent>>
+    {
         self.inner.stream_events(run_id).await
     }
 
-    async fn cancel(&self, run_id: String, reason: String) -> anyhow::Result<()> {
+    async fn cancel(&self, run_id: RunId, reason: String) -> carnelian_core::Result<()> {
         self.inner.cancel(run_id, reason).await
     }
 
-    async fn health(&self) -> anyhow::Result<carnelian_common::HealthStatus> {
+    async fn health(&self) -> carnelian_core::Result<HealthResponse> {
         self.inner.health().await
     }
 
-    async fn shutdown(&self) -> anyhow::Result<()> {
+    async fn shutdown(&self) -> carnelian_core::Result<()> {
         self.inner.shutdown().await
     }
 }
