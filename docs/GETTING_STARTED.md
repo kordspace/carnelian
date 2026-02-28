@@ -163,7 +163,7 @@ GATEWAY_PORT=18801
 ## Community & Support
 
 - **GitHub Issues**: [github.com/kordspace/carnelian/issues](https://github.com/kordspace/carnelian/issues)
-- **Documentation**: [docs/](.)
+- **Documentation**: [docs/](../README.md)
 - **License**: MIT
 
 ## What's Next?
