@@ -1,7 +1,7 @@
 //! Anthropic Provider
 //!
 //! Direct integration with Anthropic API for Claude models.
-//! Endpoint: https://api.anthropic.com/v1
+//! Endpoint: <https://api.anthropic.com/v1>
 
 use std::time::Duration;
 

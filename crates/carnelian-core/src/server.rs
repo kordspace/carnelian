@@ -207,7 +207,7 @@ pub struct AppState {
     pub channel_adapters: Arc<RwLock<HashMap<Uuid, Arc<dyn ChannelAdapter>>>>,
     /// Factory for building channel adapters from configuration.
     /// Injected by the binary to avoid cyclic crate dependencies.
-    /// Signature: (state, session_id, channel_type, channel_user_id, bot_token, trust_level, identity_id) -> Result<Arc<dyn ChannelAdapter>>
+    /// Signature: (state, session_id, channel_type, channel_user_id, bot_token, trust_level, identity_id) -> `Result<Arc<dyn ChannelAdapter>>`
     pub channel_adapter_factory: Option<Arc<dyn ChannelAdapterFactory>>,
     /// Correlation ID counter for request tracing
     correlation_counter: Arc<AtomicU64>,

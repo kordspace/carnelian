@@ -1,7 +1,7 @@
 //! Fireworks Provider
 //!
 //! Direct integration with Fireworks AI API for serverless LLM inference.
-//! Endpoint: https://api.fireworks.ai/inference/v1
+//! Endpoint: <https://api.fireworks.ai/inference/v1>
 
 use std::time::Duration;
 

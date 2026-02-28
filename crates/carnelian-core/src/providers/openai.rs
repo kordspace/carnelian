@@ -1,7 +1,7 @@
 //! OpenAI Provider
 //!
 //! Direct integration with OpenAI API for GPT models.
-//! Endpoint: https://api.openai.com/v1
+//! Endpoint: <https://api.openai.com/v1>
 
 use std::time::Duration;
 
