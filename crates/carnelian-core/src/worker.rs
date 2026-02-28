@@ -1646,11 +1646,10 @@ impl WorkerTransport for NativeWorkerTransport {
                         }
                     }
 
-                    if let Some(e) = stream_error {
-                        Err(Error::Worker(format!("Stream error: {}", e)))
-                    } else {
-                        Ok(json!({ "output": collected }))
-                    }
+                    stream_error.map_or_else(
+                        || Ok(json!({ "output": collected })),
+                        |e| Err(Error::Worker(format!("Stream error: {}", e))),
+                    )
                 }
             }
             "docker_stats" => {
