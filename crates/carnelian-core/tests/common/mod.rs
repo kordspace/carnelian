@@ -128,7 +128,7 @@ pub async fn insert_test_message(
     role: &str,
     content: &str,
 ) -> i64 {
-    #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
     let token_estimate = (content.len() / 4) as i32;
     sqlx::query_scalar::<_, i64>(
         r"INSERT INTO session_messages (session_id, role, content, token_estimate, metadata, tool_metadata)
@@ -187,7 +187,9 @@ pub fn create_mock_embedding() -> Vec<f32> {
     let mut embedding = vec![0.0f32; 1536];
     // Create a simple pattern for deterministic testing
     for (i, val) in embedding.iter_mut().enumerate() {
-        *val = ((i as f32) * 0.001).sin();
+        #[allow(clippy::cast_precision_loss)]
+        let i_f32 = i as f32;
+        *val = (i_f32 * 0.001).sin();
     }
     // Normalize to unit vector for cosine similarity
     let norm: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
