@@ -1635,14 +1635,22 @@ impl WorkerTransport for NativeWorkerTransport {
                     );
 
                     let mut collected = String::new();
+                    let mut stream_error = None;
                     while let Some(chunk) = logs_stream.next().await {
                         match chunk {
                             Ok(msg) => collected.push_str(&msg.to_string()),
-                            Err(e) => return Err(Error::Worker(format!("Stream error: {}", e))),
+                            Err(e) => {
+                                stream_error = Some(e);
+                                break;
+                            }
                         }
                     }
 
-                    Ok(json!({ "output": collected }))
+                    if let Some(e) = stream_error {
+                        Err(Error::Worker(format!("Stream error: {}", e)))
+                    } else {
+                        Ok(json!({ "output": collected }))
+                    }
                 }
             }
             "docker_stats" => {
@@ -1775,19 +1783,19 @@ impl WorkerTransport for NativeWorkerTransport {
                         })?;
 
                     if !ALLOWLIST.contains(&key) {
-                        return Err(Error::Permission(format!(
+                        Err(Error::Permission(format!(
                             "env var '{}' is not in the allowed list",
                             key
-                        )));
+                        )))
+                    } else {
+                        let value = std::env::var(key)
+                            .map_err(|e| Error::Worker(format!("Failed to get env var: {}", e)))?;
+
+                        Ok(json!({
+                            "key": key,
+                            "value": value
+                        }))
                     }
-
-                    let value = std::env::var(key)
-                        .map_err(|e| Error::Worker(format!("Failed to get env var: {}", e)))?;
-
-                    Ok(json!({
-                        "key": key,
-                        "value": value
-                    }))
                 }
             }
             _ => Err(Error::Worker(format!(

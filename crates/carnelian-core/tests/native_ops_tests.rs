@@ -127,7 +127,7 @@ async fn test_file_search() {
     let transport = make_transport();
     let request = make_request(
         "file_search",
-        json!({"pattern": "carnelian", "path": "Cargo.toml", "capabilities": ["fs.read"]}),
+        json!({"pattern": "carnelian", "path": ".", "capabilities": ["fs.read"]}),
     );
     let response = transport.invoke(request).await.unwrap();
 
@@ -244,8 +244,9 @@ async fn test_docker_logs() {
     );
     let response = transport.invoke(request).await.unwrap();
 
-    // Success or Failed (no live container) are both acceptable
-    assert!(response.status == InvokeStatus::Success || response.status == InvokeStatus::Failed);
+    // Should handle missing container gracefully (404 error wrapped in Failed status)
+    assert_eq!(response.status, InvokeStatus::Failed);
+    assert!(response.error.is_some());
 }
 
 #[tokio::test]
@@ -337,12 +338,8 @@ async fn test_git_status_missing_capability() {
     let response = transport.invoke(request).await.unwrap();
 
     assert_eq!(response.status, InvokeStatus::Failed);
-    assert!(
-        response.result["error"]
-            .as_str()
-            .unwrap()
-            .contains("git.read")
-    );
+    assert!(response.error.is_some());
+    assert!(response.error.unwrap().contains("git.read"));
 }
 
 #[tokio::test]
@@ -352,12 +349,8 @@ async fn test_file_read_missing_capability() {
     let response = transport.invoke(request).await.unwrap();
 
     assert_eq!(response.status, InvokeStatus::Failed);
-    assert!(
-        response.result["error"]
-            .as_str()
-            .unwrap()
-            .contains("fs.read")
-    );
+    assert!(response.error.is_some());
+    assert!(response.error.unwrap().contains("fs.read"));
 }
 
 #[tokio::test]
@@ -370,10 +363,6 @@ async fn test_env_get_disallowed_key() {
     let response = transport.invoke(request).await.unwrap();
 
     assert_eq!(response.status, InvokeStatus::Failed);
-    assert!(
-        response.result["error"]
-            .as_str()
-            .unwrap()
-            .contains("not in the allowed list")
-    );
+    assert!(response.error.is_some());
+    assert!(response.error.unwrap().contains("not in the allowed list"));
 }
