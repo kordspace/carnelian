@@ -209,13 +209,12 @@ mod tests {
     #[test]
     fn test_encryption_helper_key_derivation_deterministic() {
         let (signing, _) = generate_ed25519_keypair();
-        
+
         let key1_hex = hex::encode(derive_aes_storage_key(&signing));
         let key2_hex = hex::encode(derive_aes_storage_key(&signing));
-        
+
         assert_eq!(
-            key1_hex,
-            key2_hex,
+            key1_hex, key2_hex,
             "same signing key must produce same AES key"
         );
     }
@@ -224,13 +223,12 @@ mod tests {
     fn test_encryption_helper_different_keys() {
         let (signing1, _) = generate_ed25519_keypair();
         let (signing2, _) = generate_ed25519_keypair();
-        
+
         let key1_hex = hex::encode(derive_aes_storage_key(&signing1));
         let key2_hex = hex::encode(derive_aes_storage_key(&signing2));
-        
+
         assert_ne!(
-            key1_hex,
-            key2_hex,
+            key1_hex, key2_hex,
             "different signing keys must produce different AES keys"
         );
     }
@@ -238,14 +236,10 @@ mod tests {
     #[test]
     fn test_key_hex_length() {
         let (signing, _) = generate_ed25519_keypair();
-        
+
         let key_hex = hex::encode(derive_aes_storage_key(&signing));
-        
-        assert_eq!(
-            key_hex.len(),
-            64,
-            "hex-encoded 32-byte key = 64 chars"
-        );
+
+        assert_eq!(key_hex.len(), 64, "hex-encoded 32-byte key = 64 chars");
     }
 
     #[tokio::test]
