@@ -78,11 +78,11 @@ pub fn validate_content_type(req: &Request, config: &ValidationConfig) -> Result
 /// Sanitize string input to prevent XSS and SQL injection
 pub fn sanitize_string(input: &str) -> String {
     input
+        .replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&#x27;")
-        .replace('&', "&amp;")
         .replace('/', "&#x2F;")
 }
 

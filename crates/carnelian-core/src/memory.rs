@@ -338,7 +338,7 @@ impl ChainAnchor for NoOpChainAnchor {
     }
 
     async fn get_anchor_proof(&self, _anchor_id: &str) -> Result<Option<JsonValue>> {
-        Ok(None)
+        Ok(Some(serde_json::json!({"status": "not_implemented"})))
     }
 }
 

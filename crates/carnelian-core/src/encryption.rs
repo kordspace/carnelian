@@ -209,16 +209,13 @@ mod tests {
     #[test]
     fn test_encryption_helper_key_derivation_deterministic() {
         let (signing, _) = generate_ed25519_keypair();
-        let pool = sqlx::postgres::PgPoolOptions::new()
-            .max_connections(1)
-            .connect_lazy("postgresql://test:test@localhost:5432/test")
-            .expect("lazy pool");
-
-        let helper1 = EncryptionHelper::new(&pool, &signing);
-        let helper2 = EncryptionHelper::new(&pool, &signing);
+        
+        let key1_hex = hex::encode(derive_aes_storage_key(&signing));
+        let key2_hex = hex::encode(derive_aes_storage_key(&signing));
+        
         assert_eq!(
-            helper1.key_hex(),
-            helper2.key_hex(),
+            key1_hex,
+            key2_hex,
             "same signing key must produce same AES key"
         );
     }
@@ -227,16 +224,13 @@ mod tests {
     fn test_encryption_helper_different_keys() {
         let (signing1, _) = generate_ed25519_keypair();
         let (signing2, _) = generate_ed25519_keypair();
-        let pool = sqlx::postgres::PgPoolOptions::new()
-            .max_connections(1)
-            .connect_lazy("postgresql://test:test@localhost:5432/test")
-            .expect("lazy pool");
-
-        let helper1 = EncryptionHelper::new(&pool, &signing1);
-        let helper2 = EncryptionHelper::new(&pool, &signing2);
+        
+        let key1_hex = hex::encode(derive_aes_storage_key(&signing1));
+        let key2_hex = hex::encode(derive_aes_storage_key(&signing2));
+        
         assert_ne!(
-            helper1.key_hex(),
-            helper2.key_hex(),
+            key1_hex,
+            key2_hex,
             "different signing keys must produce different AES keys"
         );
     }
@@ -244,14 +238,11 @@ mod tests {
     #[test]
     fn test_key_hex_length() {
         let (signing, _) = generate_ed25519_keypair();
-        let pool = sqlx::postgres::PgPoolOptions::new()
-            .max_connections(1)
-            .connect_lazy("postgresql://test:test@localhost:5432/test")
-            .expect("lazy pool");
-
-        let helper = EncryptionHelper::new(&pool, &signing);
+        
+        let key_hex = hex::encode(derive_aes_storage_key(&signing));
+        
         assert_eq!(
-            helper.key_hex().len(),
+            key_hex.len(),
             64,
             "hex-encoded 32-byte key = 64 chars"
         );

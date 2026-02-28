@@ -802,31 +802,31 @@ fn build_router(state: AppState) -> Router {
         )
         // Skill Book endpoints
         .route("/v1/node-registry", get(list_skill_book_handler))
-        .route("/v1/node-registry/:id", get(get_skill_book_entry_handler))
+        .route("/v1/node-registry/{id}", get(get_skill_book_entry_handler))
         .route(
-            "/v1/node-registry/:id/activate",
+            "/v1/node-registry/{id}/activate",
             post(activate_skill_handler),
         )
         .route(
-            "/v1/node-registry/:id/deactivate",
+            "/v1/node-registry/{id}/deactivate",
             delete(deactivate_skill_handler),
         )
         // Elixir endpoints
         .route("/v1/elixirs/search", get(search_elixirs_handler))
         .route("/v1/elixirs/drafts", get(list_elixir_drafts_handler))
         .route(
-            "/v1/elixirs/drafts/:id/approve",
+            "/v1/elixirs/drafts/{id}/approve",
             post(approve_elixir_draft_handler),
         )
         .route(
-            "/v1/elixirs/drafts/:id/reject",
+            "/v1/elixirs/drafts/{id}/reject",
             post(reject_elixir_draft_handler),
         )
         .route(
             "/v1/elixirs",
             get(list_elixirs_handler).post(create_elixir_handler),
         )
-        .route("/v1/elixirs/:id", get(get_elixir_handler))
+        .route("/v1/elixirs/{id}", get(get_elixir_handler))
         // API Key endpoint (localhost-only via middleware)
         .route("/v1/config/api-key", get(get_api_key_handler))
         // Revocation sync endpoint
@@ -6054,6 +6054,7 @@ mod tests {
 
         let request = Request::builder()
             .uri("/v1/status")
+            .header("host", "localhost:18789")
             .body(Body::empty())
             .unwrap();
 
@@ -6105,6 +6106,7 @@ mod tests {
 
         let request = Request::builder()
             .uri("/v1/status")
+            .header("host", "localhost:18789")
             .body(Body::empty())
             .unwrap();
 
