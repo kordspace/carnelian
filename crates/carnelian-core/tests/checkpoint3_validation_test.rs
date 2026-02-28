@@ -1,21 +1,16 @@
 //! Checkpoint 3 Validation Test Suite
 //!
 //! Comprehensive validation tests for Checkpoint 3 release criteria.
-//! Run with: cargo test --test checkpoint3_validation_test -- --ignored
+//! Run with: cargo test --test `checkpoint3_validation_test` -- --ignored
 
 use carnelian_common::Result;
-use carnelian_common::types::{
-    AwardXpRequest, ConfigureVoiceRequest, CreateMemoryRequest, CreateTaskRequest,
-    ExportMemoryRequest, ImportMemoryRequest, PublishAnchorRequest,
-};
 use carnelian_core::chain_anchor::LocalDbChainAnchor;
 use carnelian_core::ledger::Ledger;
 use carnelian_core::memory::{ChainAnchor, MemoryManager, MemorySource};
 use carnelian_core::model_router::ModelRouter;
 use carnelian_core::policy::PolicyEngine;
 use carnelian_core::voice::VoiceGateway;
-use carnelian_core::xp::XpManager;
-use carnelian_core::{AppState, Config, EventStream, SafeModeGuard, Scheduler, WorkerManager};
+use carnelian_core::{Config, EventStream, SafeModeGuard, Scheduler, WorkerManager};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
@@ -24,7 +19,7 @@ use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 use tokio::time::Instant;
 use uuid::Uuid;
 
-/// PostgreSQL test container configuration
+/// `PostgreSQL` test container configuration
 fn create_postgres_container() -> testcontainers::ContainerRequest<GenericImage> {
     GenericImage::new("pgvector/pgvector", "pg16")
         .with_env_var("POSTGRES_USER", "carnelian")
@@ -32,40 +27,28 @@ fn create_postgres_container() -> testcontainers::ContainerRequest<GenericImage>
         .with_env_var("POSTGRES_DB", "carnelian")
 }
 
-/// Allocate a random port for testing
-fn allocate_random_port() -> u16 {
-    18000 + (rand::random::<u16>() % 1000)
-}
-
 /// Setup test database and run migrations
 async fn setup_test_db(container: &ContainerAsync<GenericImage>) -> Result<PgPool> {
     let host = container.get_host().await.map_err(|e| {
-        carnelian_common::Error::DatabaseMessage(format!("Failed to get container host: {}", e))
+        carnelian_common::Error::DatabaseMessage(format!("Failed to get container host: {e}"))
     })?;
     let port = container.get_host_port_ipv4(5432).await.map_err(|e| {
-        carnelian_common::Error::DatabaseMessage(format!("Failed to get container port: {}", e))
+        carnelian_common::Error::DatabaseMessage(format!("Failed to get container port: {e}"))
     })?;
 
-    let db_url = format!(
-        "postgresql://carnelian:carnelian@{}:{}/carnelian",
-        host, port
-    );
+    let db_url = format!("postgresql://carnelian:carnelian@{host}:{port}/carnelian");
 
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
         .connect(&db_url)
         .await
-        .map_err(|e| {
-            carnelian_common::Error::DatabaseMessage(format!("Failed to connect: {}", e))
-        })?;
+        .map_err(|e| carnelian_common::Error::DatabaseMessage(format!("Failed to connect: {e}")))?;
 
     // Run migrations
-    sqlx::migrate!("../db/migrations")
+    sqlx::migrate!("../../db/migrations")
         .run(&pool)
         .await
-        .map_err(|e| {
-            carnelian_common::Error::DatabaseMessage(format!("Migration failed: {}", e))
-        })?;
+        .map_err(|e| carnelian_common::Error::DatabaseMessage(format!("Migration failed: {e}")))?;
 
     Ok(pool)
 }
@@ -292,10 +275,12 @@ async fn test_complete_feature_set_task_execution() {
     )));
 
     // Start scheduler
-    {
-        let mut sched = scheduler.lock().await;
-        sched.start().await.expect("Failed to start scheduler");
-    }
+    scheduler
+        .lock()
+        .await
+        .start()
+        .await
+        .expect("Failed to start scheduler");
 
     // Create a test task
     let identity_id: Option<Uuid> = sqlx::query_scalar(
@@ -305,7 +290,7 @@ async fn test_complete_feature_set_task_execution() {
     .await
     .ok()
     .flatten()
-    .or(Some(Uuid::new_v4()));
+    .or_else(|| Some(Uuid::new_v4()));
 
     let row: Option<(Uuid,)> = sqlx::query_as(
         r"INSERT INTO tasks (title, description, skill_id, priority, requires_approval, created_by, state)
@@ -322,13 +307,12 @@ async fn test_complete_feature_set_task_execution() {
     assert!(row.is_some(), "Task should be created");
 
     // Shutdown scheduler
-    {
-        let mut sched = scheduler.lock().await;
-        sched
-            .shutdown()
-            .await
-            .expect("Failed to shutdown scheduler");
-    }
+    scheduler
+        .lock()
+        .await
+        .shutdown()
+        .await
+        .expect("Failed to shutdown scheduler");
 
     tracing::info!("✓ Complete feature set task execution test passed");
 }
@@ -520,7 +504,7 @@ async fn test_performance_task_execution_latency_under_2s() {
               VALUES ($1, $2, NULL, 3, false, 'pending')
               RETURNING task_id",
         )
-        .bind(format!("Performance test task {}", i))
+        .bind(format!("Performance test task {i}"))
         .bind("Testing task creation latency")
         .fetch_one(&pool)
         .await
@@ -590,7 +574,7 @@ fn test_documentation_all_files_exist() {
 
     for file in &files_to_check {
         let path = std::path::Path::new(file);
-        assert!(path.exists(), "Required file should exist: {}", file);
+        assert!(path.exists(), "Required file should exist: {file}");
     }
 
     tracing::info!("✓ All documentation files exist");
