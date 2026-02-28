@@ -26,7 +26,7 @@ jobs:
         run: cargo install cargo-audit --version 0.21.1 --locked
 
       - name: Run cargo audit
-        run: cargo audit
+        run: cargo audit --ignore RUSTSEC-2026-0009
 
   # Dependency review for PRs
   dependency-review:

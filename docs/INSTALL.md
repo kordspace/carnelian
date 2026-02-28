@@ -145,7 +145,7 @@ carnelian init --non-interactive 2>&1 | head -20
 
 ### Getting Help
 
-- Check [platform setup guides](.) for OS-specific details
+- Check platform setup guides ([Windows](SETUP_WINDOWS.md), [macOS](SETUP_MACOS.md), [Linux](SETUP_LINUX.md)) for OS-specific details
 - Review [ARCHITECTURE.md](ARCHITECTURE.md) for system design
 - File issues on [GitHub Issues](https://github.com/carnelian/carnelian/issues)
 

@@ -182,7 +182,7 @@ jobs:
           SQLX_OFFLINE: true
 
       - name: Run database migrations
-        run: cargo run --bin carnelian -- migrate --database-url postgresql://test:test@localhost:5432/carnelian_test
+        run: cargo run -p carnelian-bin --bin carnelian -- migrate --database-url postgresql://test:test@localhost:5432/carnelian_test
         env:
           SQLX_OFFLINE: true
 
@@ -246,7 +246,7 @@ jobs:
           SQLX_OFFLINE: true
 
       - name: Run database migrations
-        run: cargo run --release --bin carnelian -- migrate --database-url postgresql://carnelian:carnelian@localhost:5432/carnelian
+        run: cargo run --release -p carnelian-bin --bin carnelian -- migrate --database-url postgresql://carnelian:carnelian@localhost:5432/carnelian
         env:
           SQLX_OFFLINE: true
 
