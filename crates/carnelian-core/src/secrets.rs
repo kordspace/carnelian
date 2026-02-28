@@ -94,13 +94,17 @@ mod tests {
 
     #[test]
     fn test_read_secret_from_env() {
-        env::set_var("TEST_SECRET", "test_value");
+        unsafe {
+            env::set_var("TEST_SECRET", "test_value");
+        }
 
         let result = read_secret("nonexistent_secret", "TEST_SECRET");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "test_value");
 
-        env::remove_var("TEST_SECRET");
+        unsafe {
+            env::remove_var("TEST_SECRET");
+        }
     }
 
     #[test]
@@ -111,24 +115,32 @@ mod tests {
 
     #[test]
     fn test_get_database_password_fallback() {
-        env::set_var("POSTGRES_PASSWORD", "test_db_password");
+        unsafe {
+            env::set_var("POSTGRES_PASSWORD", "test_db_password");
+        }
 
         let result = get_database_password();
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "test_db_password");
 
-        env::remove_var("POSTGRES_PASSWORD");
+        unsafe {
+            env::remove_var("POSTGRES_PASSWORD");
+        }
     }
 
     #[test]
     fn test_get_carnelian_api_key_fallback() {
-        env::set_var("CARNELIAN_API_KEY", "test_api_key");
+        unsafe {
+            env::set_var("CARNELIAN_API_KEY", "test_api_key");
+        }
 
         let result = get_carnelian_api_key();
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "test_api_key");
 
-        env::remove_var("CARNELIAN_API_KEY");
+        unsafe {
+            env::remove_var("CARNELIAN_API_KEY");
+        }
     }
 
     #[test]

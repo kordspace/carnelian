@@ -16,9 +16,7 @@
 //! ```
 
 use std::fs;
-use std::path::PathBuf;
 use std::process::Command;
-use std::time::Duration;
 
 use tempfile::TempDir;
 
@@ -132,7 +130,7 @@ async fn test_init_force_overwrite() {
     // Pre-create machine.toml
     let machine_toml_path = home_path.join("machine.toml");
     fs::write(&machine_toml_path, "# Old content").expect("Failed to write machine.toml");
-    let original_mtime = fs::metadata(&machine_toml_path)
+    let _original_mtime = fs::metadata(&machine_toml_path)
         .expect("Failed to get metadata")
         .modified()
         .expect("Failed to get modified time");
@@ -168,7 +166,7 @@ async fn test_init_force_overwrite() {
     );
 
     // Verify mtime changed (file was modified)
-    let new_mtime = fs::metadata(&machine_toml_path)
+    let _new_mtime = fs::metadata(&machine_toml_path)
         .expect("Failed to get metadata")
         .modified()
         .expect("Failed to get modified time");

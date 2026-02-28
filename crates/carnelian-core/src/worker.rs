@@ -3424,7 +3424,7 @@ mod tests {
         let event_stream = Arc::new(EventStream::new(100, 10));
         let mut manager = WorkerManager::new(config, event_stream);
 
-        let result = manager.spawn_worker(WorkerRuntime::Node).await;
+        let result = manager.spawn_worker(WorkerRuntime::Node, false).await;
         assert!(result.is_err());
         assert!(
             result
