@@ -336,4 +336,3 @@ rm -rf gateway/
 - [Database Migrations](../db/migrations/README.md)
 - [Machine Configuration](../machine.toml.example)
 - [API Documentation](API.md)
-- [Troubleshooting Guide](TROUBLESHOOTING.md)
