@@ -36,7 +36,6 @@
 - **[REMOTE_DEPLOY.md](REMOTE_DEPLOY.md)** - Remote deployment strategies
 
 ### Advanced Topics
-- **[PHASE3.md](PHASE3.md)** - Agentic execution engine deep-dive
 - **[LOGGING.md](LOGGING.md)** - Logging philosophy and conventions
 - **[ATTESTATION.md](ATTESTATION.md)** - Cryptographic attestation system
 
