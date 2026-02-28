@@ -205,7 +205,7 @@ pub fn SkillBook() -> Element {
                 div { class: "empty-state", "No skills found in this category" }
             } else {
                 div { class: "skills-grid",
-                    for skill in filtered_skills {
+                    for skill in filtered_skills.iter() {
                         div { class: "skill-card",
                             key: "{skill.id}",
                             div { class: "card-header",
