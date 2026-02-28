@@ -20,8 +20,11 @@ documentation/ linguist-documentation
 *.ts linguist-language=TypeScript
 *.tsx linguist-language=TypeScript
 
-# Mark generated SQLx files as generated (not counted)
+# Mark generated files as generated (not counted)
 .sqlx/*.json linguist-generated
+**/dist/**/*.js linguist-generated
+gateway/dist/*.js linguist-generated
+workers/node-worker/dist/*.js linguist-generated
 
 # Mark benchmark files as Rust
 benches/*.rs linguist-language=Rust

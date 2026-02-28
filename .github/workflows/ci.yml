@@ -24,7 +24,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libglib2.0-dev
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -56,7 +56,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libglib2.0-dev
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -146,7 +146,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libglib2.0-dev
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -192,6 +192,85 @@ jobs:
           SQLX_OFFLINE: true
           DATABASE_URL: postgresql://test:test@localhost:5432/carnelian_test
 
+  # E2E tests with Playwright
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: rust-build-test
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: carnelian
+          POSTGRES_PASSWORD: carnelian
+          POSTGRES_DB: carnelian
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libglib2.0-dev
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: carnelian-rust
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright dependencies
+        working-directory: tests/e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Build CARNELIAN
+        run: cargo build --release
+        env:
+          SQLX_OFFLINE: true
+
+      - name: Run database migrations
+        run: cargo run --release --bin carnelian -- migrate --database-url postgresql://carnelian:carnelian@localhost:5432/carnelian
+        env:
+          SQLX_OFFLINE: true
+
+      - name: Start CARNELIAN server
+        env:
+          DATABASE_URL: postgresql://carnelian:carnelian@localhost:5432/carnelian
+          CARNELIAN_HTTP_PORT: 18789
+          SQLX_OFFLINE: true
+        run: |
+          cargo run --release --bin carnelian start &
+          sleep 10
+
+      - name: Run E2E tests
+        working-directory: tests/e2e
+        run: npm test
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: tests/e2e/playwright-report/
+          retention-days: 30
+
   # Secret scanning
   secrets:
     name: Secret Scanning
@@ -215,3 +294,34 @@ jobs:
           detect-secrets scan --baseline .secrets.baseline > /tmp/new_baseline.json
           # Audit will return non-zero if there are unaudited secrets
           detect-secrets audit .secrets.baseline --report
+
+  # Documentation checks
+  check-docs:
+    name: Documentation Check
+    runs-on: ubuntu-latest
+    needs: rust-lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for broken links in markdown
+        run: |
+          # Check that all referenced files exist
+          for file in $(find docs -name "*.md"); do
+            echo "Checking $file"
+            grep -oP '\[.*?\]\(\K[^)]+' "$file" | while read link; do
+              if [[ "$link" != http* ]] && [[ "$link" != "#"* ]]; then
+                if [[ ! -f "$link" ]] && [[ ! -f "$(dirname $file)/$link" ]]; then
+                  echo "Broken link in $file: $link"
+                  exit 1
+                fi
+              fi
+            done
+          done
+
+      - name: Check README completeness
+        run: |
+          # Ensure key sections exist
+          grep -q "## Installation" README.md || (echo "Missing Installation section" && exit 1)
+          grep -q "## Features" README.md || (echo "Missing Features section" && exit 1)
+          grep -q "## Documentation" README.md || (echo "Missing Documentation section" && exit 1)

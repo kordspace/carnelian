@@ -1,6 +1,6 @@
 # Test configuration file for unit tests
 
-machine_profile = "urim"
+machine_profile = "performance"
 http_port = 19000
 database_url = "postgresql://test:test@localhost:5432/test_db"
 ollama_url = "http://localhost:11434"
