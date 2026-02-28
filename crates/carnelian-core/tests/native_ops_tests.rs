@@ -124,6 +124,17 @@ async fn test_file_hash() {
 
 #[tokio::test]
 async fn test_file_search() {
+    // Check if ripgrep is installed
+    let rg_check = tokio::process::Command::new("rg")
+        .arg("--version")
+        .output()
+        .await;
+    
+    if rg_check.is_err() {
+        eprintln!("Skipping test_file_search: ripgrep (rg) not installed");
+        return;
+    }
+
     let transport = make_transport();
     let request = make_request(
         "file_search",

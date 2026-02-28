@@ -114,6 +114,7 @@ fn create_test_ledger() -> Arc<Ledger> {
 }
 
 #[tokio::test]
+#[ignore = "Requires Docker - run with: cargo test --test server_integration_test test_websocket_event_streaming -- --ignored"]
 async fn test_websocket_event_streaming() {
     // Allocate a random available port
     let port = allocate_random_port().await;
@@ -191,6 +192,7 @@ async fn test_websocket_event_streaming() {
 }
 
 #[tokio::test]
+#[ignore = "Requires Docker - run with: cargo test --test server_integration_test test_websocket_backpressure -- --ignored"]
 async fn test_websocket_backpressure() {
     // Allocate a random available port
     let port = allocate_random_port().await;
@@ -285,6 +287,7 @@ async fn test_server_port_configuration() {
 }
 
 #[tokio::test]
+#[ignore = "Requires Docker - run with: cargo test --test server_integration_test test_event_json_serialization -- --ignored"]
 async fn test_event_json_serialization() {
     // Allocate a random available port
     let port = allocate_random_port().await;

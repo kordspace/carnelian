@@ -1299,8 +1299,12 @@ impl Config {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,no_run
+    /// # use carnelian_core::config::Config;
+    /// # use carnelian_common::error::Error;
+    /// # let config = Config::default();
     /// let signature = config.sign_message(b"Hello, world!")?;
+    /// # Ok::<(), Error>(())
     /// ```
     pub fn sign_message(&self, message: &[u8]) -> Result<Signature> {
         let signing_key = self
