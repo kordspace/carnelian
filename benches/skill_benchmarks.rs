@@ -9,7 +9,6 @@ use carnelian_core::skills::skill_trait::SkillInput;
 use carnelian_core::skills::wasm_runtime::WasmSkillRuntime;
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use serde_json::json;
-use tokio::runtime::Runtime;
 
 fn test_skill_input() -> SkillInput {
     SkillInput {
@@ -24,11 +23,8 @@ fn test_skill_input() -> SkillInput {
 }
 
 fn benchmark_wasm_runtime_creation(c: &mut Criterion) {
-    let rt = Runtime::new().unwrap();
-
     c.bench_function("wasm_runtime_create", |b| {
-        b.to_async(&rt)
-            .iter(|| async { WasmSkillRuntime::new().await });
+        b.iter(WasmSkillRuntime::new);
     });
 }
 
