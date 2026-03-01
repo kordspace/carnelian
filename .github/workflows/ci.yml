@@ -49,8 +49,6 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
         env:
           SQLX_OFFLINE: true
-          RUSTC_WRAPPER: sccache
-          SCCACHE_GHA_ENABLED: "true"
 
   # Rust build and test
   rust-build-test:
@@ -92,8 +90,6 @@ jobs:
         run: cargo build --workspace --all-targets
         env:
           SQLX_OFFLINE: true
-          RUSTC_WRAPPER: sccache
-          SCCACHE_GHA_ENABLED: "true"
 
       - name: Run tests
         run: cargo test --workspace
@@ -104,8 +100,6 @@ jobs:
         run: cargo doc --workspace --no-deps
         env:
           SQLX_OFFLINE: true
-          RUSTC_WRAPPER: sccache
-          SCCACHE_GHA_ENABLED: "true"
 
   # Node.js worker validation
   node-worker:
@@ -203,23 +197,17 @@ jobs:
         run: cargo build --workspace --tests
         env:
           SQLX_OFFLINE: true
-          RUSTC_WRAPPER: sccache
-          SCCACHE_GHA_ENABLED: "true"
 
       - name: Run database migrations
         run: cargo run -p carnelian-bin --bin carnelian -- migrate --database-url postgresql://test:test@localhost:5432/carnelian_test
         env:
           SQLX_OFFLINE: true
-          RUSTC_WRAPPER: sccache
-          SCCACHE_GHA_ENABLED: "true"
 
       - name: Run integration tests
         run: cargo test --workspace -- --ignored
         env:
           SQLX_OFFLINE: true
           DATABASE_URL: postgresql://test:test@localhost:5432/carnelian_test
-          RUSTC_WRAPPER: sccache
-          SCCACHE_GHA_ENABLED: "true"
 
   # E2E tests with Playwright
   e2e-tests:
@@ -278,23 +266,17 @@ jobs:
         run: cargo build --release
         env:
           SQLX_OFFLINE: true
-          RUSTC_WRAPPER: sccache
-          SCCACHE_GHA_ENABLED: "true"
 
       - name: Run database migrations
         run: cargo run --release -p carnelian-bin --bin carnelian -- migrate --database-url postgresql://carnelian:carnelian@localhost:5432/carnelian
         env:
           SQLX_OFFLINE: true
-          RUSTC_WRAPPER: sccache
-          SCCACHE_GHA_ENABLED: "true"
 
       - name: Start CARNELIAN server
         env:
           DATABASE_URL: postgresql://carnelian:carnelian@localhost:5432/carnelian
           CARNELIAN_HTTP_PORT: 18789
           SQLX_OFFLINE: true
-          RUSTC_WRAPPER: sccache
-          SCCACHE_GHA_ENABLED: "true"
         run: |
           cargo run --release --bin carnelian start &
           sleep 10
