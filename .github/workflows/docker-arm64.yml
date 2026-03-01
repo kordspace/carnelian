@@ -46,7 +46,7 @@ jobs:
 
       - name: Install cargo-zigbuild
         run: |
-          cargo install cargo-zigbuild --locked
+          cargo install cargo-zigbuild --version 0.21.8 --locked
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2

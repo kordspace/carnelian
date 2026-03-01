@@ -70,6 +70,7 @@ jobs:
 
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.4
+        continue-on-error: true
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
@@ -169,6 +170,7 @@ jobs:
 
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.4
+        continue-on-error: true
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
@@ -252,6 +254,7 @@ jobs:
 
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.4
+        continue-on-error: true
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
