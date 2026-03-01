@@ -100,7 +100,7 @@ jobs:
           CARNELIAN_BIND_ADDRESS: 127.0.0.1
           SQLX_OFFLINE: true
         run: |
-          cargo run --release --bin carnelian start > server.log 2>&1 &
+          cargo run --release -p carnelian-bin --bin carnelian start > server.log 2>&1 &
           SERVER_PID=$!
           echo "Server PID: $SERVER_PID"
           
