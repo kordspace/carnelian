@@ -640,7 +640,7 @@ impl Ledger {
         limit: i64,
     ) -> Result<Vec<LedgerEvent>> {
         let rows: Vec<LedgerEvent> = sqlx::query_as(
-            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata FROM ledger_events WHERE actor_id = $1 ORDER BY ts DESC LIMIT $2",
+            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata, quantum_salt FROM ledger_events WHERE actor_id = $1 ORDER BY ts DESC LIMIT $2",
         )
         .bind(actor_id)
         .bind(limit)
@@ -658,7 +658,7 @@ impl Ledger {
         limit: i64,
     ) -> Result<Vec<LedgerEvent>> {
         let rows: Vec<LedgerEvent> = sqlx::query_as(
-            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata FROM ledger_events WHERE action_type = $1 ORDER BY ts DESC LIMIT $2",
+            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata, quantum_salt FROM ledger_events WHERE action_type = $1 ORDER BY ts DESC LIMIT $2",
         )
         .bind(action_type)
         .bind(limit)
@@ -675,7 +675,7 @@ impl Ledger {
         correlation_id: Uuid,
     ) -> Result<Vec<LedgerEvent>> {
         let rows: Vec<LedgerEvent> = sqlx::query_as(
-            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata FROM ledger_events WHERE correlation_id = $1 ORDER BY ts ASC",
+            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata, quantum_salt FROM ledger_events WHERE correlation_id = $1 ORDER BY ts ASC",
         )
         .bind(correlation_id)
         .fetch_all(&self.pool)

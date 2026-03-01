@@ -69,6 +69,7 @@ use carnelian_common::types::{
     EventEnvelope, EventLevel, EventType, InvokeRequest, InvokeStatus, RunId,
 };
 use carnelian_common::{Error, Result};
+use carnelian_magic::entropy_arc_impl as _;
 use rand::seq::SliceRandom;
 use serde_json::json;
 use sqlx::PgPool;
@@ -396,21 +397,22 @@ impl Scheduler {
                         tracing::debug!("Generated quantum-salted correlation ID");
                         uuid
                     } else {
-                        tracing::warn!("Failed to convert entropy bytes to UUID, falling back to now_v7");
-                        Uuid::now_v7()
+                        tracing::warn!("Failed to convert entropy bytes to UUID, falling back to rand");
+                        Uuid::from_bytes(rand::random())
                     }
                 }
                 Ok(Err(e)) => {
-                    tracing::warn!(error = %e, "Entropy provider failed, falling back to now_v7");
-                    Uuid::now_v7()
+                    tracing::warn!(error = %e, "Entropy provider failed, falling back to rand");
+                    Uuid::from_bytes(rand::random())
                 }
                 Err(_) => {
-                    tracing::warn!("Entropy provider timeout, falling back to now_v7");
-                    Uuid::now_v7()
+                    tracing::warn!("Entropy provider timeout, falling back to rand");
+                    Uuid::from_bytes(rand::random())
                 }
             }
         } else {
-            Uuid::now_v7()
+            // No entropy provider configured - use rand::thread_rng() as requested
+            Uuid::from_bytes(rand::random())
         };
 
         // Query for default identity (Lian)
