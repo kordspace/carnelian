@@ -96,7 +96,7 @@ jobs:
       - name: Start CARNELIAN server
         env:
           DATABASE_URL: postgresql://carnelian:carnelian@localhost:5432/carnelian
-          CARNELIAN_HTTP_PORT: 8080
+          CARNELIAN_HTTP_PORT: 18789
           CARNELIAN_BIND_ADDRESS: 127.0.0.1
           SQLX_OFFLINE: true
         run: |
@@ -106,7 +106,7 @@ jobs:
           
           # Wait for server to be ready (max 60 seconds)
           for i in {1..60}; do
-            if curl -s http://127.0.0.1:8080/v1/health > /dev/null 2>&1; then
+            if curl -s http://127.0.0.1:18789/v1/health > /dev/null 2>&1; then
               echo "Server is ready after $i seconds"
               break
             fi
@@ -126,11 +126,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install k6
 
-      - name: Run load tests
+      - name: Run k6 load test
         working-directory: tests/performance
-        timeout-minutes: 10
         run: k6 run load_test.js
-      
+        timeout-minutes: 10
+        env:
+          BASE_URL: http://127.0.0.1:18789
+
       - name: Show server logs on failure
         if: failure()
         run: cat server.log || echo "No server log found"

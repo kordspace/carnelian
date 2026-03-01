@@ -91,11 +91,16 @@ COPY --from=builder /app/machine.toml /app/machine.toml.example
 # Copy skills directory structure (for runtime skill discovery)
 COPY --from=builder /app/skills/ /app/skills/
 
-# Create data directory
-RUN mkdir -p /app/data && chown -R carnelian:carnelian /app
+WORKDIR /app
+RUN chown carnelian:carnelian /app && \
+    mkdir -p /var/run && \
+    chown carnelian:carnelian /var/run
 
 # Switch to non-root user
 USER carnelian
+
+# Set HOME to writable directory for PID file
+ENV HOME=/app
 
 # Expose the API port
 EXPOSE 18789

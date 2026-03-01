@@ -29,13 +29,9 @@ docs/*.md
 docs/MIGRATION_*.md
 docs/COMMIT_*.md
 
-# Node.js / TypeScript (gateway is deprecated)
-gateway/
+# Node.js / TypeScript - exclude build artifacts only
 gateway/node_modules/
 gateway/dist/
-gateway/**/*.ts
-gateway/**/*.js
-gateway/**/*.json
 
 # Test files and coverage
 tests/

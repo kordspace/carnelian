@@ -44,6 +44,11 @@ jobs:
         with:
           targets: aarch64-unknown-linux-gnu
 
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.11.0
+
       - name: Install cargo-zigbuild
         run: |
           cargo install cargo-zigbuild --version 0.21.8 --locked

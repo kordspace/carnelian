@@ -31,7 +31,7 @@ export const options = {
     },
 };
 
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
+const BASE_URL = __ENV.BASE_URL || 'http://localhost:18789';
 const API_KEY = __ENV.API_KEY || 'test_api_key';
 
 const headers = {
@@ -41,7 +41,7 @@ const headers = {
 
 export default function() {
     // Test 1: Health check
-    const healthResponse = http.get(`${BASE_URL}/health`);
+    const healthResponse = http.get(`${BASE_URL}/v1/health`);
     check(healthResponse, {
         'health check status is 200': (r) => r.status === 200,
     });
@@ -146,7 +146,7 @@ export function setup() {
     console.log(`Target stages: 10 -> 50 -> 100 users`);
     
     // Verify server is accessible
-    const healthCheck = http.get(`${BASE_URL}/health`);
+    const healthCheck = http.get(`${BASE_URL}/v1/health`);
     if (healthCheck.status !== 200) {
         throw new Error('Server health check failed. Is CARNELIAN running?');
     }
