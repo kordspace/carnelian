@@ -2088,26 +2088,25 @@ impl MemoryManager {
     /// Verify a ledger proof by recomputing the event hash and checking the
     /// Ed25519 `core_signature` against the owner public key when present.
     async fn verify_ledger_proof(&self, proof: &LedgerProofMaterial) -> Result<bool> {
-        // Query the actual ledger event to compare
-        let row: Option<(String, DateTime<Utc>, Option<Uuid>, String, String)> = sqlx::query_as(
-            r"SELECT action_type, ts, actor_id, payload_hash, event_hash
-              FROM ledger_events
-              WHERE event_id = $1",
+        // Fetch the event from the ledger including quantum_salt
+        let row: Option<(String, DateTime<Utc>, Option<Uuid>, String, String, Option<Vec<u8>>)> = sqlx::query_as(
+            "SELECT action_type, ts, actor_id, payload_hash, event_hash, quantum_salt FROM ledger_events WHERE event_id = $1",
         )
         .bind(proof.event_id)
         .fetch_optional(&self.pool)
-        .await?;
+        .await
+        .map_err(Error::Database)?;
 
         match row {
-            Some((action_type, ts, actor_id, payload_hash, stored_hash)) => {
-                // Recompute event hash
+            Some((action_type, ts, actor_id, payload_hash, stored_hash, quantum_salt)) => {
+                // Recompute event hash with quantum_salt for verification
                 let computed = Ledger::compute_event_hash(
                     &ts,
                     actor_id,
                     &action_type,
                     &payload_hash,
                     proof.prev_hash.as_deref(),
-                    None,
+                    quantum_salt.as_deref(),
                 );
                 if computed != stored_hash || stored_hash != proof.event_hash {
                     return Ok(false);
