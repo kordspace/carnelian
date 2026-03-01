@@ -9,6 +9,7 @@ members = [
     "crates/carnelian-common",
     "crates/carnelian-adapters",
     "crates/carnelian-bin",
+    "crates/carnelian-magic",
 ]
 exclude = [
     "skills/registry",

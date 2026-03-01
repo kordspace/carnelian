@@ -1039,6 +1039,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "carnelian-magic"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "blake3",
+ "carnelian-common",
+ "chrono",
+ "hex",
+ "rand 0.8.5",
+ "reqwest 0.13.1",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "carnelian-ui"
 version = "0.1.0"
 dependencies = [

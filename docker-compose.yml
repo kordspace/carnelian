@@ -182,7 +182,7 @@ services:
     environment:
       DATABASE_URL: postgresql://carnelian:carnelian@carnelian-postgres:5432/carnelian
       CARNELIAN_OLLAMA_URL: http://carnelian-ollama:11434
-      CARNELIAN_GATEWAY_URL: http://carnelian-gateway:18790
+      # CARNELIAN_GATEWAY_URL: http://carnelian-gateway:18790  # Optional - uncomment if using gateway
       CARNELIAN_ENV: production
       LOG_LEVEL: INFO
     volumes:
