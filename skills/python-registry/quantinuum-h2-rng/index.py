@@ -1,6 +1,8 @@
 """Quantinuum H2 Quantum RNG Skill
 
 Generates quantum entropy using Quantinuum H-series devices via pytket circuits.
+
+NOTE: This is the canonical entry file. main.py is kept in sync for runtime compatibility.
 """
 
 from typing import Dict, Any

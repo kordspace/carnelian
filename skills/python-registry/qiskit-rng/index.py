@@ -1,6 +1,8 @@
 """Qiskit Quantum RNG Skill
 
 Generates quantum entropy using IBM Quantum backends via Qiskit circuits.
+
+NOTE: This is the canonical entry file. main.py is kept in sync for runtime compatibility.
 """
 
 from typing import Dict, Any

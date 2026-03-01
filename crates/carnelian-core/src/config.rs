@@ -1065,6 +1065,70 @@ impl Config {
             }
         }
 
+        // MAGIC subsystem validation
+        if self.magic.enabled {
+            // Validate entropy_mix_ratio is within [0.0, 1.0]
+            if !(0.0..=1.0).contains(&self.magic.entropy_mix_ratio) {
+                return Err(Error::Config(format!(
+                    "magic.entropy_mix_ratio must be between 0.0 and 1.0, got {}",
+                    self.magic.entropy_mix_ratio
+                )));
+            }
+
+            // Validate timeout is positive
+            if self.magic.entropy_timeout_ms == 0 {
+                return Err(Error::Config(
+                    "magic.entropy_timeout_ms must be > 0".to_string(),
+                ));
+            }
+
+            // Validate bit counts are positive
+            if self.magic.quantinuum_n_bits == 0 {
+                return Err(Error::Config(
+                    "magic.quantinuum_n_bits must be > 0".to_string(),
+                ));
+            }
+
+            // Validate Quantum Origin URL when enabled (non-empty API key implies enabled)
+            if !self.magic.quantum_origin_api_key.is_empty() {
+                if self.magic.quantum_origin_url.is_empty() {
+                    return Err(Error::Config(
+                        "magic.quantum_origin_url cannot be empty when API key is set".to_string(),
+                    ));
+                }
+                if !self.magic.quantum_origin_url.starts_with("http://")
+                    && !self.magic.quantum_origin_url.starts_with("https://")
+                {
+                    return Err(Error::Config(
+                        "magic.quantum_origin_url must be a valid HTTP URL".to_string(),
+                    ));
+                }
+            }
+
+            // Validate Quantinuum device name when enabled
+            if self.magic.quantinuum_enabled && self.magic.quantinuum_device.is_empty() {
+                return Err(Error::Config(
+                    "magic.quantinuum_device cannot be empty when quantinuum_enabled is true"
+                        .to_string(),
+                ));
+            }
+
+            // Validate Qiskit backend name when enabled
+            if self.magic.qiskit_enabled && self.magic.qiskit_backend.is_empty() {
+                return Err(Error::Config(
+                    "magic.qiskit_backend cannot be empty when qiskit_enabled is true".to_string(),
+                ));
+            }
+
+            // Validate mantra cooldown is reasonable
+            if self.magic.mantra_cooldown_beats > 1000 {
+                tracing::warn!(
+                    beats = self.magic.mantra_cooldown_beats,
+                    "magic.mantra_cooldown_beats is very high, may delay mantra operations"
+                );
+            }
+        }
+
         Ok(())
     }
 
