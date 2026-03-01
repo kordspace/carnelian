@@ -192,9 +192,9 @@ pub async fn store_keypair_in_db(
     let seed = signing_key.to_bytes();
 
     sqlx::query(
-        r"INSERT INTO config_store (key, value_blob, encrypted, updated_at)
-          VALUES ('owner_keypair', $1, $2, NOW())
-          ON CONFLICT (key) DO UPDATE SET value_blob = $1, encrypted = $2, updated_at = NOW()",
+        r"INSERT INTO config_store (key, value, value_blob, encrypted, updated_at)
+          VALUES ('owner_keypair', '{}'::jsonb, $1, $2, NOW())
+          ON CONFLICT (key) DO UPDATE SET value = '{}'::jsonb, value_blob = $1, encrypted = $2, updated_at = NOW()",
     )
     .bind(seed.as_slice())
     .bind(encrypted)
@@ -215,7 +215,7 @@ pub async fn store_keypair_in_db(
 /// `encrypted` flag is set, the caller must decrypt before calling this,
 /// or use `Config::load_owner_keypair_from_db()` which handles decryption.
 pub async fn load_keypair_from_db(pool: &PgPool) -> Result<Option<SigningKey>> {
-    let row: Option<(Vec<u8>, bool)> = sqlx::query_as(
+    let row: Option<(Option<Vec<u8>>, bool)> = sqlx::query_as(
         "SELECT value_blob, encrypted FROM config_store WHERE key = 'owner_keypair'",
     )
     .fetch_optional(pool)
@@ -223,9 +223,13 @@ pub async fn load_keypair_from_db(pool: &PgPool) -> Result<Option<SigningKey>> {
     .map_err(|e| Error::Crypto(format!("Failed to query keypair from database: {}", e)))?;
 
     match row {
-        Some((blob, false)) => {
+        Some((Some(blob), false)) => {
             let key = keypair_from_bytes(&blob)?;
             Ok(Some(key))
+        }
+        Some((None, _)) => {
+            // Row exists but value_blob is NULL - treat as no keypair
+            Ok(None)
         }
         Some((_, true)) => Err(Error::Crypto(
             "Keypair is encrypted; use Config::load_owner_keypair_from_db() for decryption"

@@ -1,0 +1,199 @@
+name: Docker ARM64 (Cross-Compilation)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+    paths:
+      - 'crates/**'
+      - 'Dockerfile'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Cross-compile ARM64 binary on AMD64 runner (much faster than QEMU)
+  cross-compile-arm64:
+    name: Cross-Compile ARM64
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libglib2.0-dev \
+            gcc-aarch64-linux-gnu \
+            g++-aarch64-linux-gnu
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+
+      - name: Install cargo-zigbuild
+        run: |
+          cargo install cargo-zigbuild --locked
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: carnelian-rust-arm64
+          key: arm64-cross-${{ hashFiles('**/Cargo.lock') }}
+          cache-on-failure: true
+
+      - name: Cross-compile for ARM64
+        env:
+          SQLX_OFFLINE: true
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: |
+          # Use zigbuild for better cross-compilation support
+          cargo zigbuild --release --target aarch64-unknown-linux-gnu --bin carnelian
+          
+          # Verify the binary
+          file target/aarch64-unknown-linux-gnu/release/carnelian
+          
+          # Create output directory
+          mkdir -p target/docker-arm64
+          cp target/aarch64-unknown-linux-gnu/release/carnelian target/docker-arm64/
+
+      - name: Upload ARM64 binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: carnelian-arm64-binary
+          path: target/docker-arm64/carnelian
+          retention-days: 7
+
+  # Build ARM64 Docker image using pre-compiled binary
+  build-arm64-image:
+    name: Build ARM64 Docker Image
+    runs-on: ubuntu-latest
+    needs: cross-compile-arm64
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download ARM64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: carnelian-arm64-binary
+          path: target/docker-arm64/
+
+      - name: Make binary executable
+        run: chmod +x target/docker-arm64/carnelian
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Create Dockerfile for pre-built binary
+        run: |
+          cat > Dockerfile.arm64 << 'EOF'
+          FROM debian:bookworm-slim AS runtime
+          
+          # Install runtime dependencies
+          RUN apt-get update && apt-get install -y \
+              ca-certificates \
+              libssl3 \
+              && rm -rf /var/lib/apt/lists/*
+          
+          # Create app user
+          RUN useradd -m -u 1000 carnelian
+          
+          # Copy pre-built binary
+          COPY --chown=carnelian:carnelian target/docker-arm64/carnelian /usr/local/bin/carnelian
+          
+          # Set working directory
+          WORKDIR /app
+          RUN chown carnelian:carnelian /app
+          
+          USER carnelian
+          
+          EXPOSE 18789
+          
+          ENTRYPOINT ["/usr/local/bin/carnelian"]
+          CMD ["start"]
+          EOF
+
+      - name: Build and push ARM64 image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.arm64
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}-arm64
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,mode=max,scope=arm64
+
+  # Create multi-arch manifest combining AMD64 and ARM64
+  create-manifest:
+    name: Create Multi-Arch Manifest
+    runs-on: ubuntu-latest
+    needs: [build-arm64-image]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Create and push manifest
+        run: |
+          for tag in ${{ steps.meta.outputs.tags }}; do
+            docker manifest create $tag \
+              ${tag}-amd64 \
+              ${tag}-arm64
+            docker manifest push $tag
+          done
