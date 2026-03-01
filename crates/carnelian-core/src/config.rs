@@ -1001,7 +1001,7 @@ impl Config {
     /// This should be called after database connection is established.
     /// Looks for key `owner_keypair` in the `config_store` table.
     ///
-    /// For non-encrypted keys, delegates to [`crypto::load_keypair_from_db`]
+    /// For non-encrypted keys, delegates to [`crate::crypto::load_keypair_from_db`]
     /// which reads the raw 32-byte seed directly. Encrypted keys are decrypted
     /// in-place using `CARNELIAN_KEYPAIR_PASSPHRASE` before parsing.
     ///

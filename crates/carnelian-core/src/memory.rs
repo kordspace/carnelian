@@ -1564,7 +1564,7 @@ impl MemoryManager {
     /// all envelopes into a single CBOR batch. When a `signing_key` is provided,
     /// the **entire** serialized `Vec<MemoryEnvelope>` CBOR is signed as a unit
     /// (64-byte Ed25519 signature prefix). Individual envelopes within the batch
-    /// are not individually signed. Use [`import_memories_batch`] to import the
+    /// are not individually signed. Use `import_memories_batch` to import the
     /// result; it performs batch-level signature verification and propagates the
     /// `verified` status to each imported memory.
     pub async fn export_memories_batch(
@@ -1814,11 +1814,11 @@ impl MemoryManager {
     /// are **not** individually signed. When `verify_signature` is `true`, this
     /// method verifies the batch-level signature against `public_key`, which
     /// guarantees integrity of all contained envelopes. Each envelope is then
-    /// imported via [`import_memory`] with `verify_signature=false` (since the
+    /// imported via `import_memory` with `verify_signature=false` (since the
     /// batch signature already covers them). The `verified` field on each
     /// [`MemoryImportResult`] reflects the batch-level verification outcome.
     ///
-    /// For single imports via [`import_memory`], the per-envelope signature
+    /// For single imports via `import_memory`, the per-envelope signature
     /// (64-byte prefix on individual CBOR) is verified directly.
     pub async fn import_memories_batch(
         &self,

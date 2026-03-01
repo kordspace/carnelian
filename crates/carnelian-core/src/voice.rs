@@ -28,7 +28,7 @@ const MAX_CONCURRENT_REQUESTS: usize = 5;
 /// Gateway for ElevenLabs voice services (STT, TTS, voice listing).
 ///
 /// Wraps a `reqwest::Client` with a semaphore-based rate limiter to cap
-/// concurrent outbound requests at [`MAX_CONCURRENT_REQUESTS`].
+/// concurrent outbound requests at `MAX_CONCURRENT_REQUESTS`.
 pub struct VoiceGateway {
     http_client: reqwest::Client,
     rate_limiter: Arc<Semaphore>,

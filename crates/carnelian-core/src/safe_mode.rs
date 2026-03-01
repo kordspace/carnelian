@@ -61,7 +61,7 @@ impl SafeModeGuard {
 
     /// Check whether safe mode is currently enabled.
     ///
-    /// Uses [`Config::read_config_value`] to transparently handle both plaintext
+    /// Uses [`crate::config::Config::read_config_value`] to transparently handle both plaintext
     /// and encrypted entries in `config_store`. Returns `false` (disabled) if the
     /// key is not found or cannot be parsed.
     pub async fn is_enabled(&self) -> Result<bool> {

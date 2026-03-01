@@ -1177,8 +1177,8 @@ impl ContextWindow {
 
     /// Compute provenance and log context integrity to the ledger in one step.
     ///
-    /// This is a convenience wrapper around [`compute_provenance`] and
-    /// [`log_to_ledger`] that returns both the ledger `event_id` and the
+    /// This is a convenience wrapper around `compute_provenance` and
+    /// `log_to_ledger` that returns both the ledger `event_id` and the
     /// full [`ContextProvenance`] record. Use this when the caller needs
     /// the provenance metadata (e.g., for correlation with downstream events)
     /// in addition to the ledger audit trail.

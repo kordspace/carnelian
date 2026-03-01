@@ -814,8 +814,8 @@ impl SessionManager {
 
     /// Append a message and automatically check whether compaction is needed.
     ///
-    /// Delegates to [`append_message`] for the core insert, then calls
-    /// [`check_and_compact_if_needed`]. Compaction errors are logged but
+    /// Delegates to `append_message` for the core insert, then calls
+    /// `check_and_compact_if_needed`. Compaction errors are logged but
     /// do **not** fail the append — the message is already committed.
     ///
     /// Returns `(message_id, Option<CompactionOutcome>)`.
