@@ -196,8 +196,9 @@ services:
         condition: service_healthy
       carnelian-ollama:
         condition: service_healthy
-      carnelian-gateway:
-        condition: service_healthy
+      # Gateway is optional - comment out to run without it
+      # carnelian-gateway:
+      #   condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:18789/v1/health"]
       interval: 15s
