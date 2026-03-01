@@ -246,6 +246,10 @@ pub struct Config {
     #[serde(default = "default_cors_origins")]
     pub cors_origins: Vec<String>,
 
+    /// MAGIC quantum entropy subsystem configuration
+    #[serde(default)]
+    pub magic: MagicConfig,
+
     /// Database pool (not serialized, initialized separately)
     #[serde(skip)]
     db_pool: Option<Arc<PgPool>>,
@@ -286,6 +290,77 @@ impl Default for MachineConfig {
             gpu_enabled: false,
             default_model: "deepseek-r1:7b".to_string(),
             auto_restart_workers: true,
+        }
+    }
+}
+
+/// MAGIC quantum entropy subsystem configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MagicConfig {
+    /// Enable MAGIC quantum entropy subsystem
+    #[serde(default = "magic_default_enabled")]
+    pub enabled: bool,
+
+    /// Quantum Origin API base URL
+    #[serde(default = "magic_default_quantum_origin_url")]
+    pub quantum_origin_url: String,
+
+    /// Quantum Origin API key (set via CARNELIAN_QUANTUM_ORIGIN_API_KEY env var)
+    #[serde(default = "magic_default_quantum_origin_api_key")]
+    pub quantum_origin_api_key: String,
+
+    /// Enable Quantinuum H2 RNG via Python skill
+    #[serde(default = "magic_default_quantinuum_enabled")]
+    pub quantinuum_enabled: bool,
+
+    /// Quantinuum device name (H1-1E = emulator, H2-1 = real hardware)
+    #[serde(default = "magic_default_quantinuum_device")]
+    pub quantinuum_device: String,
+
+    /// Number of bits to request from Quantinuum
+    #[serde(default = "magic_default_quantinuum_n_bits")]
+    pub quantinuum_n_bits: u32,
+
+    /// Enable Qiskit/IBM Quantum RNG via Python skill
+    #[serde(default = "magic_default_qiskit_enabled")]
+    pub qiskit_enabled: bool,
+
+    /// Qiskit backend name
+    #[serde(default = "magic_default_qiskit_backend")]
+    pub qiskit_backend: String,
+
+    /// Entropy provider timeout in milliseconds
+    #[serde(default = "magic_default_entropy_timeout_ms")]
+    pub entropy_timeout_ms: u64,
+
+    /// Fraction of bytes sourced from quantum provider (0.0-1.0)
+    #[serde(default = "magic_default_entropy_mix_ratio")]
+    pub entropy_mix_ratio: f64,
+
+    /// Log entropy generation events
+    #[serde(default = "magic_default_log_entropy_events")]
+    pub log_entropy_events: bool,
+
+    /// Mantra cooldown in heartbeat cycles
+    #[serde(default = "magic_default_mantra_cooldown_beats")]
+    pub mantra_cooldown_beats: u32,
+}
+
+impl Default for MagicConfig {
+    fn default() -> Self {
+        Self {
+            enabled: magic_default_enabled(),
+            quantum_origin_url: magic_default_quantum_origin_url(),
+            quantum_origin_api_key: magic_default_quantum_origin_api_key(),
+            quantinuum_enabled: magic_default_quantinuum_enabled(),
+            quantinuum_device: magic_default_quantinuum_device(),
+            quantinuum_n_bits: magic_default_quantinuum_n_bits(),
+            qiskit_enabled: magic_default_qiskit_enabled(),
+            qiskit_backend: magic_default_qiskit_backend(),
+            entropy_timeout_ms: magic_default_entropy_timeout_ms(),
+            entropy_mix_ratio: magic_default_entropy_mix_ratio(),
+            log_entropy_events: magic_default_log_entropy_events(),
+            mantra_cooldown_beats: magic_default_mantra_cooldown_beats(),
         }
     }
 }
@@ -419,6 +494,54 @@ fn default_tool_clear_age_secs() -> i64 {
     3600
 }
 
+fn magic_default_enabled() -> bool {
+    false
+}
+
+fn magic_default_quantum_origin_url() -> String {
+    "https://origin.quantinuum.com".to_string()
+}
+
+fn magic_default_quantum_origin_api_key() -> String {
+    String::new()
+}
+
+fn magic_default_quantinuum_enabled() -> bool {
+    false
+}
+
+fn magic_default_quantinuum_device() -> String {
+    "H1-1E".to_string()
+}
+
+fn magic_default_quantinuum_n_bits() -> u32 {
+    256
+}
+
+fn magic_default_qiskit_enabled() -> bool {
+    false
+}
+
+fn magic_default_qiskit_backend() -> String {
+    "ibm_brisbane".to_string()
+}
+
+fn magic_default_entropy_timeout_ms() -> u64 {
+    5000
+}
+
+fn magic_default_entropy_mix_ratio() -> f64 {
+    0.5
+}
+
+fn magic_default_log_entropy_events() -> bool {
+    true
+}
+
+fn magic_default_mantra_cooldown_beats() -> u32 {
+    3
+}
+
 /// Machine profile determining resource limits and default model
 ///
 /// # Variants
@@ -493,6 +616,7 @@ impl Default for Config {
             adapter_discord_enabled: false,
             adapter_spam_threshold: default_adapter_spam_threshold(),
             cors_origins: default_cors_origins(),
+            magic: MagicConfig::default(),
             db_pool: None,
             owner_signing_key: None,
         }
@@ -739,6 +863,11 @@ impl Config {
             if !origins.is_empty() {
                 self.cors_origins = origins;
             }
+        }
+
+        // CARNELIAN_QUANTUM_ORIGIN_API_KEY — Quantum Origin API key for MAGIC subsystem
+        if let Ok(val) = std::env::var("CARNELIAN_QUANTUM_ORIGIN_API_KEY") {
+            self.magic.quantum_origin_api_key = val;
         }
 
         // SESSION_EXPIRY_HOURS — default session TTL in hours (0 = never)

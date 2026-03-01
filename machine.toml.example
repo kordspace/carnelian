@@ -204,3 +204,38 @@ workspace_scan_paths = ["."]
 #
 # bot_token      = ""   # xoxb-... OAuth Bot Token
 # signing_secret = ""   # Used to verify Slack request signatures (HMAC-SHA256)
+
+# =============================================================================
+# MAGIC — Mixed Authenticated Quantum Intelligence Core
+# =============================================================================
+# Quantum-enhanced entropy for key generation, ledger salting, and mantras.
+# All quantum providers are optional; OS CSPRNG is always the safe fallback.
+#
+# MAGIC never blocks core operations — all quantum calls time out gracefully.
+
+[magic]
+enabled = true
+
+# Quantum Origin (REST API — simplest setup)
+# Create an account at quantinuum.com to obtain an API key.
+quantum_origin_url = "https://origin.quantinuum.com"
+quantum_origin_api_key = ""   # set via CARNELIAN_QUANTUM_ORIGIN_API_KEY env var
+
+# Quantinuum H2 RNG (pytket circuit-based)
+# Requires: pip install pytket pytket-quantinuum
+# Authenticate with: carnelian magic auth
+quantinuum_enabled = false
+quantinuum_device = "H1-1E"   # H1-1E = emulator (free), H2-1 = real hardware
+quantinuum_n_bits = 256
+
+# Qiskit / IBM Quantum
+# Requires: pip install qiskit qiskit-ibm-runtime
+# Set IBM_QUANTUM_TOKEN env var (from quantum.ibm.com)
+qiskit_enabled = false
+qiskit_backend = "ibm_brisbane"
+
+# General entropy settings
+entropy_timeout_ms = 5000
+entropy_mix_ratio = 0.5       # fraction of bytes sourced from quantum provider
+log_entropy_events = true
+mantra_cooldown_beats = 3
