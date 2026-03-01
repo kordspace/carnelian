@@ -56,6 +56,8 @@
 
 use carnelian_common::{Error, Result};
 use carnelian_magic::{EntropyProvider, MixedEntropyProvider};
+// Import Arc impl to enable EntropyProvider methods on Arc<MixedEntropyProvider>
+use carnelian_magic::entropy_arc_impl as _;
 use chrono::{DateTime, Timelike, Utc};
 use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};

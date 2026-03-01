@@ -37,8 +37,9 @@
 //! - MantraTree placeholder for future integration
 
 pub mod entropy;
-pub mod error;
-pub mod mantra;
+pub mod entropy_arc_impl;
+mod error;
+mod mantra;
 
 pub use entropy::{
     EntropyHealth, EntropyProvider, MixedEntropyProvider,
