@@ -332,12 +332,18 @@ impl Ledger {
         // Update in-memory cache only after successful commit
         *self.last_hash.write().await = Some(event_hash.clone());
 
-        // Log entropy event to magic_entropy_log if quantum salt was used
-        if let Some(ref salt) = resolved_salt {
+        // Log entropy event to magic_entropy_log for every request (success and failure)
+        if let Some(provider) = entropy_provider {
             let log_id = Uuid::now_v7();
-            let source = entropy_provider
-                .map(|p| "mixed")
-                .unwrap_or("unknown");
+            let source = "mixed";
+            let bytes_requested = 16i32;
+            let quantum_available = resolved_salt.is_some();
+            let latency_ms = if resolved_salt.is_some() {
+                // We already measured latency during salt generation above
+                None // Will be set by the spawn block if we track it
+            } else {
+                None
+            };
             
             // Fire-and-forget entropy log write
             let pool = self.pool.clone();
@@ -346,12 +352,13 @@ impl Ledger {
             tokio::spawn(async move {
                 let _ = sqlx::query(
                     r"INSERT INTO magic_entropy_log (log_id, ts, source, bytes_requested, quantum_available, latency_ms, correlation_id)
-                      VALUES ($1, NOW(), $2, $3, $4, NULL, $5)"
+                      VALUES ($1, NOW(), $2, $3, $4, $5, $6)"
                 )
                 .bind(log_id)
-                .bind(&source_owned)
-                .bind(16_i32)
-                .bind(true)
+                .bind(source_owned)
+                .bind(bytes_requested)
+                .bind(quantum_available)
+                .bind(latency_ms)
                 .bind(correlation_id_owned)
                 .execute(&pool)
                 .await;

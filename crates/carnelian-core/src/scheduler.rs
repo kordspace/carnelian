@@ -69,13 +69,14 @@ use carnelian_common::types::{
     EventEnvelope, EventLevel, EventType, InvokeRequest, InvokeStatus, RunId,
 };
 use carnelian_common::{Error, Result};
-use carnelian_magic::entropy_arc_impl as _;
 use rand::seq::SliceRandom;
 use serde_json::json;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+// Import Arc impl to enable EntropyProvider methods on Arc<MixedEntropyProvider>
+use carnelian_magic::entropy_arc_impl as _;
 use tokio::sync::watch;
 use uuid::Uuid;
 
