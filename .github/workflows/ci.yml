@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, development]
   pull_request:
-    branches: [main]
+    branches: [main, development]
   workflow_dispatch:
 
 # Cancel in-progress runs when a new commit is pushed to the same branch/PR
