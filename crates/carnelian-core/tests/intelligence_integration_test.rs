@@ -2289,6 +2289,8 @@ async fn test_heartbeat_correlation_end_to_end() {
             Some(correlation_id),
             None,
             None,
+            None,
+            None,
         )
         .await
         .expect("Failed to log heartbeat");
@@ -2528,6 +2530,8 @@ async fn test_agentic_loop_ledger_audit() {
                 "correlation_id": Uuid::now_v7(),
             }),
             Some(Uuid::now_v7()),
+            None,
+            None,
             None,
             None,
         )

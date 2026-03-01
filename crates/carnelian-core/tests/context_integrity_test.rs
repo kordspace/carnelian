@@ -165,11 +165,12 @@ async fn test_correlation_id_links_context_to_model_call() {
             Some(identity_id),
             "model.call.request",
             json!({
-                "model": "deepseek-r1:7b",
-                "provider": "ollama",
+                "model": "test-model",
                 "correlation_id": correlation_id,
             }),
             Some(correlation_id),
+            None,
+            None,
             None,
             None,
         )

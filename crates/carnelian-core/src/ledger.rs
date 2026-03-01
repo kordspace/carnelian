@@ -55,6 +55,7 @@
 //! ```
 
 use carnelian_common::{Error, Result};
+use carnelian_magic::{EntropyProvider, MixedEntropyProvider};
 use chrono::{DateTime, Timelike, Utc};
 use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
@@ -233,7 +234,7 @@ impl Ledger {
         owner_signing_key: Option<&SigningKey>,
         metadata: Option<JsonValue>,
         quantum_salt: Option<Vec<u8>>,
-        entropy_provider: Option<&carnelian_magic::MixedEntropyProvider>,
+        entropy_provider: Option<&Arc<carnelian_magic::MixedEntropyProvider>>,
     ) -> Result<i64> {
         let payload_hash = Self::compute_payload_hash(&payload);
         // Truncate to microsecond precision to match PostgreSQL TIMESTAMPTZ storage.
@@ -516,6 +517,7 @@ impl Ledger {
             owner_signing_key,
             None,
             None,
+            None,
         )
         .await
     }
@@ -535,6 +537,7 @@ impl Ledger {
             }),
             None,
             owner_signing_key,
+            None,
             None,
             None,
         )
@@ -619,6 +622,7 @@ impl Ledger {
             }),
             None,
             owner_signing_key,
+            None,
             None,
             None,
         )
@@ -881,29 +885,29 @@ mod tests {
         let payload_hash = "abc123";
         let prev_hash = Some("def456");
 
-        let base_hash = Ledger::compute_event_hash(&ts, actor, action, payload_hash, prev_hash);
+        let base_hash = Ledger::compute_event_hash(&ts, actor, action, payload_hash, prev_hash, None);
 
         // Changing any field should produce a different hash
         let different_action =
-            Ledger::compute_event_hash(&ts, actor, "other.action", payload_hash, prev_hash);
+            Ledger::compute_event_hash(&ts, actor, "other.action", payload_hash, prev_hash, None);
         assert_ne!(base_hash, different_action);
 
         let different_actor =
-            Ledger::compute_event_hash(&ts, Some(Uuid::new_v4()), action, payload_hash, prev_hash);
+            Ledger::compute_event_hash(&ts, Some(Uuid::new_v4()), action, payload_hash, prev_hash, None);
         assert_ne!(base_hash, different_actor);
 
         let different_prev =
-            Ledger::compute_event_hash(&ts, actor, action, payload_hash, Some("other"));
+            Ledger::compute_event_hash(&ts, actor, action, payload_hash, Some("other"), None);
         assert_ne!(base_hash, different_prev);
 
-        let no_prev = Ledger::compute_event_hash(&ts, actor, action, payload_hash, None);
+        let no_prev = Ledger::compute_event_hash(&ts, actor, action, payload_hash, None, None);
         assert_ne!(base_hash, no_prev);
     }
 
     #[test]
     fn test_compute_event_hash_genesis() {
         let ts = Utc::now();
-        let hash = Ledger::compute_event_hash(&ts, None, "genesis", "empty", None);
+        let hash = Ledger::compute_event_hash(&ts, None, "genesis", "empty", None, None);
         assert_eq!(hash.len(), 64);
     }
 

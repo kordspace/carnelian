@@ -2107,6 +2107,7 @@ impl MemoryManager {
                     &action_type,
                     &payload_hash,
                     proof.prev_hash.as_deref(),
+                    None,
                 );
                 if computed != stored_hash || stored_hash != proof.event_hash {
                     return Ok(false);

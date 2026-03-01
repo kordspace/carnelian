@@ -1939,7 +1939,7 @@ impl AgenticEngine {
     ) {
         if let Err(e) = self
             .ledger
-            .append_event(actor_id, action_type, payload, correlation_id, None, None)
+            .append_event(actor_id, action_type, payload, correlation_id, None, None, None, None)
             .await
         {
             tracing::warn!(
