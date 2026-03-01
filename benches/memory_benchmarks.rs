@@ -15,8 +15,8 @@ use uuid::Uuid;
 fn create_test_pool() -> PgPool {
     let rt = Runtime::new().unwrap();
     rt.block_on(async {
-        let database_url = std::env::var("TEST_DATABASE_URL").unwrap_or_else(|_| {
-            "postgres://postgres:postgres@localhost:5432/carnelian_test".to_string()
+        let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+            "postgresql://carnelian:carnelian@localhost:5432/carnelian".to_string()
         });
 
         sqlx::PgPool::connect(&database_url)
