@@ -109,6 +109,8 @@ pub struct LedgerEvent {
     pub correlation_id: Option<Uuid>,
     /// Additional metadata (JSON)
     pub metadata: Option<JsonValue>,
+    /// 16-byte quantum salt from MixedEntropyProvider (NULL when MAGIC is disabled)
+    pub quantum_salt: Option<Vec<u8>>,
 }
 
 /// Tamper-resistant audit ledger backed by PostgreSQL with blake3 hash-chaining.
@@ -176,7 +178,7 @@ impl Ledger {
     /// Compute the blake3 hash of a ledger event.
     ///
     /// The hash covers all critical fields concatenated as:
-    /// `timestamp || actor_id || action_type || payload_hash || prev_hash`
+    /// `timestamp || actor_id || action_type || payload_hash || prev_hash || quantum_salt`
     ///
     /// This ensures any change to any field will produce a different hash.
     #[must_use]
@@ -186,6 +188,7 @@ impl Ledger {
         action_type: &str,
         payload_hash: &str,
         prev_hash: Option<&str>,
+        quantum_salt: Option<&[u8]>,
     ) -> String {
         let mut input = String::new();
         input.push_str(&ts.to_rfc3339());
@@ -193,6 +196,7 @@ impl Ledger {
         input.push_str(action_type);
         input.push_str(payload_hash);
         input.push_str(prev_hash.unwrap_or("genesis"));
+        input.push_str(&quantum_salt.map_or_else(|| "no-salt".to_string(), hex::encode));
         let hash = blake3::hash(input.as_bytes());
         hex::encode(hash.as_bytes())
     }
@@ -228,6 +232,8 @@ impl Ledger {
         correlation_id: Option<Uuid>,
         owner_signing_key: Option<&SigningKey>,
         metadata: Option<JsonValue>,
+        quantum_salt: Option<Vec<u8>>,
+        entropy_provider: Option<&carnelian_magic::MixedEntropyProvider>,
     ) -> Result<i64> {
         let payload_hash = Self::compute_payload_hash(&payload);
         // Truncate to microsecond precision to match PostgreSQL TIMESTAMPTZ storage.
@@ -249,12 +255,36 @@ impl Ledger {
         .await
         .map_err(Error::Database)?;
 
+        // Resolve quantum salt: use provided salt, or generate from entropy provider
+        let resolved_salt = if let Some(salt) = quantum_salt {
+            Some(salt)
+        } else if let Some(provider) = entropy_provider {
+            let start = std::time::Instant::now();
+            match provider.get_bytes(16).await {
+                Ok(salt_bytes) => {
+                    let latency_ms = start.elapsed().as_millis() as i64;
+                    tracing::debug!(
+                        latency_ms = latency_ms,
+                        "Generated quantum salt for ledger event"
+                    );
+                    Some(salt_bytes)
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "Failed to generate quantum salt, proceeding without");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         let event_hash = Self::compute_event_hash(
             &ts,
             actor_id,
             action_type,
             &payload_hash,
             prev_hash.as_deref(),
+            resolved_salt.as_deref(),
         );
 
         // Sign privileged actions with the owner's Ed25519 key
@@ -275,8 +305,8 @@ impl Ledger {
 
         let event_id: i64 = sqlx::query_scalar(
             r"
-            INSERT INTO ledger_events (ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            INSERT INTO ledger_events (ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata, quantum_salt)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING event_id
             ",
         )
@@ -289,6 +319,7 @@ impl Ledger {
         .bind(&core_signature)
         .bind(correlation_id)
         .bind(&metadata_value)
+        .bind(&resolved_salt)
         .fetch_one(&mut *tx)
         .await
         .map_err(Error::Database)?;
@@ -298,11 +329,38 @@ impl Ledger {
         // Update in-memory cache only after successful commit
         *self.last_hash.write().await = Some(event_hash.clone());
 
+        // Log entropy event to magic_entropy_log if quantum salt was used
+        if let Some(ref salt) = resolved_salt {
+            let log_id = Uuid::now_v7();
+            let source = entropy_provider
+                .map(|p| "mixed")
+                .unwrap_or("unknown");
+            
+            // Fire-and-forget entropy log write
+            let pool = self.pool.clone();
+            let source_owned = source.to_string();
+            let correlation_id_owned = correlation_id;
+            tokio::spawn(async move {
+                let _ = sqlx::query(
+                    r"INSERT INTO magic_entropy_log (log_id, ts, source, bytes_requested, quantum_available, latency_ms, correlation_id)
+                      VALUES ($1, NOW(), $2, $3, $4, NULL, $5)"
+                )
+                .bind(log_id)
+                .bind(&source_owned)
+                .bind(16_i32)
+                .bind(true)
+                .bind(correlation_id_owned)
+                .execute(&pool)
+                .await;
+            });
+        }
+
         tracing::info!(
             event_id = event_id,
             action_type = %action_type,
             actor_id = ?actor_id,
             signed = core_signature.is_some(),
+            quantum_salt = resolved_salt.is_some(),
             "Ledger event appended"
         );
 
@@ -339,7 +397,7 @@ impl Ledger {
     /// `Ok(true)` if the chain is intact, `Ok(false)` if tampering is detected.
     pub async fn verify_chain(&self, owner_public_key: Option<&str>) -> Result<bool> {
         let rows: Vec<LedgerEvent> = sqlx::query_as(
-            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata FROM ledger_events ORDER BY event_id ASC",
+            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata, quantum_salt FROM ledger_events ORDER BY event_id ASC",
         )
         .fetch_all(&self.pool)
         .await
@@ -371,6 +429,7 @@ impl Ledger {
                 &event.action_type,
                 &event.payload_hash,
                 event.prev_hash.as_deref(),
+                event.quantum_salt.as_deref(),
             );
 
             if computed_hash != event.event_hash {
@@ -456,6 +515,7 @@ impl Ledger {
             None,
             owner_signing_key,
             None,
+            None,
         )
         .await
     }
@@ -475,6 +535,7 @@ impl Ledger {
             }),
             None,
             owner_signing_key,
+            None,
             None,
         )
         .await
@@ -499,6 +560,8 @@ impl Ledger {
             }),
             None,
             owner_signing_key,
+            None,
+            None,
             None,
         )
         .await
@@ -536,6 +599,8 @@ impl Ledger {
             correlation_id,
             None, // session.compacted is not a privileged action
             None,
+            None,
+            None,
         )
         .await
     }
@@ -554,6 +619,7 @@ impl Ledger {
             }),
             None,
             owner_signing_key,
+            None,
             None,
         )
         .await
@@ -775,6 +841,8 @@ impl Ledger {
             None,
             owner_signing_key,
             None,
+            None,
+            None,
         )
         .await
     }
@@ -864,6 +932,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .expect("append_event failed");
@@ -931,6 +1001,8 @@ mod tests {
                     None,
                     None,
                     None,
+                    None,
+                    None,
                 )
                 .await
                 .expect("append_event failed");
@@ -991,12 +1063,14 @@ mod tests {
                 None,
                 Some(&signing_key),
                 None,
+                None,
+                None,
             )
             .await
             .expect("append_event failed");
 
         let event: LedgerEvent = sqlx::query_as(
-            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata FROM ledger_events WHERE event_id = $1",
+            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata, quantum_salt FROM ledger_events WHERE event_id = $1",
         )
         .bind(event_id)
         .fetch_one(&pool)
@@ -1041,7 +1115,7 @@ mod tests {
 
         // Mix of signed privileged and unsigned non-privileged events
         ledger
-            .append_event(None, "test.action", serde_json::json!({}), None, None, None)
+            .append_event(None, "test.action", serde_json::json!({}), None, None, None, None, None)
             .await
             .expect("append failed");
         ledger
@@ -1051,6 +1125,8 @@ mod tests {
                 serde_json::json!({"g": 1}),
                 None,
                 Some(&signing_key),
+                None,
+                None,
                 None,
             )
             .await
@@ -1063,11 +1139,13 @@ mod tests {
                 None,
                 Some(&signing_key),
                 None,
+                None,
+                None,
             )
             .await
             .expect("append failed");
         ledger
-            .append_event(None, "test.other", serde_json::json!({}), None, None, None)
+            .append_event(None, "test.other", serde_json::json!({}), None, None, None, None, None)
             .await
             .expect("append failed");
 
@@ -1111,6 +1189,8 @@ mod tests {
                 serde_json::json!({"test": true}),
                 None,
                 Some(&signing_key),
+                None,
+                None,
                 None,
             )
             .await

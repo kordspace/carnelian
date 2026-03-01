@@ -994,6 +994,7 @@ dependencies = [
  "bytes",
  "cargo-tarpaulin",
  "carnelian-common",
+ "carnelian-magic",
  "chrono",
  "ciborium",
  "clap 4.5.57",

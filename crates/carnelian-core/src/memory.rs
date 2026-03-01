@@ -1779,6 +1779,8 @@ impl MemoryManager {
                     None,
                     None,
                     None,
+                    None,
+                    None,
                 )
                 .await
             {

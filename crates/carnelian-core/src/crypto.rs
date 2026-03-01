@@ -25,6 +25,7 @@
 //! - All signature operations use `ed25519_dalek` which is constant-time
 
 use carnelian_common::{Error, Result};
+use carnelian_magic::EntropyProvider;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::rngs::OsRng;
 use sqlx::PgPool;
@@ -39,6 +40,34 @@ pub fn generate_ed25519_keypair() -> (SigningKey, VerifyingKey) {
     let signing_key = SigningKey::generate(&mut OsRng);
     let verifying_key = signing_key.verifying_key();
     (signing_key, verifying_key)
+}
+
+/// Generate a new Ed25519 keypair using entropy from a MAGIC entropy provider.
+///
+/// Uses quantum-enhanced entropy when available, falling back to OS entropy on failure.
+/// Returns `(SigningKey, VerifyingKey)` where the signing key contains the 32-byte
+/// seed derived from the entropy provider.
+///
+/// # Errors
+///
+/// Returns an error if the entropy provider fails to generate 32 bytes or if the
+/// resulting bytes cannot be converted to a valid Ed25519 signing key.
+pub async fn generate_ed25519_keypair_with_entropy(
+    provider: &dyn EntropyProvider,
+) -> Result<(SigningKey, VerifyingKey)> {
+    let entropy_bytes = provider
+        .get_bytes(32)
+        .await
+        .map_err(|e| Error::Crypto(format!("Entropy provider failed: {}", e)))?;
+
+    let seed: [u8; 32] = entropy_bytes
+        .try_into()
+        .map_err(|_| Error::Crypto("Failed to convert entropy bytes to 32-byte seed".to_string()))?;
+
+    let signing_key = SigningKey::from_bytes(&seed);
+    let verifying_key = signing_key.verifying_key();
+
+    Ok((signing_key, verifying_key))
 }
 
 /// Serialize a signing key to its 32-byte seed representation.

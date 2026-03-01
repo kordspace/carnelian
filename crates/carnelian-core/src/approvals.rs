@@ -199,6 +199,8 @@ impl ApprovalQueue {
                 request.correlation_id,
                 Some(owner_signing_key),
                 None,
+                None,
+                None,
             )
             .await
         {
@@ -282,6 +284,8 @@ impl ApprovalQueue {
                 }),
                 request.correlation_id,
                 Some(owner_signing_key),
+                None,
+                None,
                 None,
             )
             .await

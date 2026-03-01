@@ -119,6 +119,10 @@ pub struct Scheduler {
     workflow_engine: Option<Arc<WorkflowEngine>>,
     /// XP manager for awarding experience points on task completion
     xp_manager: Option<Arc<crate::xp::XpManager>>,
+    /// MantraTree for MAGIC quantum-enhanced operations
+    mantra_tree: Option<Arc<carnelian_magic::MantraTree>>,
+    /// Entropy provider for quantum-salted correlation IDs and ledger events
+    entropy_provider: Option<Arc<carnelian_magic::MixedEntropyProvider>>,
 }
 
 impl Scheduler {
@@ -168,6 +172,8 @@ impl Scheduler {
             safe_mode_guard,
             workflow_engine: None,
             xp_manager: None,
+            mantra_tree: None,
+            entropy_provider: None,
         }
     }
 
@@ -179,6 +185,16 @@ impl Scheduler {
     /// Set the XP manager for awarding experience points on task completion.
     pub fn set_xp_manager(&mut self, xp_manager: Arc<crate::xp::XpManager>) {
         self.xp_manager = Some(xp_manager);
+    }
+
+    /// Set the MantraTree for MAGIC quantum-enhanced operations.
+    pub fn set_mantra_tree(&mut self, tree: Arc<carnelian_magic::MantraTree>) {
+        self.mantra_tree = Some(tree);
+    }
+
+    /// Set the entropy provider for quantum-salted correlation IDs and ledger events.
+    pub fn set_entropy_provider(&mut self, provider: Arc<carnelian_magic::MixedEntropyProvider>) {
+        self.entropy_provider = Some(provider);
     }
 
     /// Set a shared metrics collector (called from server to share with AppState).
@@ -222,6 +238,8 @@ impl Scheduler {
         let safe_mode_guard = self.safe_mode_guard.clone();
         let workflow_engine = self.workflow_engine.clone();
         let xp_manager = self.xp_manager.clone();
+        let mantra_tree = self.mantra_tree.clone();
+        let entropy_provider = self.entropy_provider.clone();
 
         tokio::spawn(async move {
             Self::run_heartbeat_loop(
@@ -238,6 +256,8 @@ impl Scheduler {
                 safe_mode_guard,
                 workflow_engine,
                 xp_manager,
+                mantra_tree,
+                entropy_provider,
             )
             .await;
         });
@@ -278,6 +298,8 @@ impl Scheduler {
         safe_mode_guard: Arc<crate::safe_mode::SafeModeGuard>,
         workflow_engine: Option<Arc<WorkflowEngine>>,
         xp_manager: Option<Arc<crate::xp::XpManager>>,
+        mantra_tree: Option<Arc<carnelian_magic::MantraTree>>,
+        entropy_provider: Option<Arc<carnelian_magic::MixedEntropyProvider>>,
     ) {
         let mut ticker = tokio::time::interval(interval);
         // Skip the first immediate tick
@@ -294,6 +316,7 @@ impl Scheduler {
                         &config,
                         &model_router,
                         &ledger,
+                        &entropy_provider,
                     ).await {
                         tracing::warn!(error = %e, "Heartbeat execution failed");
                     }
@@ -357,9 +380,38 @@ impl Scheduler {
         config: &Config,
         model_router: &ModelRouter,
         ledger: &Ledger,
+        entropy_provider: &Option<Arc<carnelian_magic::MixedEntropyProvider>>,
     ) -> Result<()> {
         let start = std::time::Instant::now();
-        let correlation_id = Uuid::now_v7();
+        
+        // Generate quantum-salted correlation ID if entropy provider is available
+        let correlation_id = if let Some(provider) = entropy_provider {
+            match tokio::time::timeout(
+                std::time::Duration::from_millis(config.magic.entropy_timeout_ms),
+                provider.get_bytes(16)
+            ).await {
+                Ok(Ok(entropy_bytes)) => {
+                    if let Ok(bytes_array) = <[u8; 16]>::try_from(entropy_bytes.as_slice()) {
+                        let uuid = Uuid::from_bytes(bytes_array);
+                        tracing::debug!("Generated quantum-salted correlation ID");
+                        uuid
+                    } else {
+                        tracing::warn!("Failed to convert entropy bytes to UUID, falling back to now_v7");
+                        Uuid::now_v7()
+                    }
+                }
+                Ok(Err(e)) => {
+                    tracing::warn!(error = %e, "Entropy provider failed, falling back to now_v7");
+                    Uuid::now_v7()
+                }
+                Err(_) => {
+                    tracing::warn!("Entropy provider timeout, falling back to now_v7");
+                    Uuid::now_v7()
+                }
+            }
+        } else {
+            Uuid::now_v7()
+        };
 
         // Query for default identity (Lian)
         let identity_id: Option<Uuid> = sqlx::query_scalar(
@@ -560,13 +612,14 @@ impl Scheduler {
                 Some(identity_id),
                 "heartbeat.completed",
                 json!({
-                    "heartbeat_id": heartbeat_id,
-                    "status": status,
-                    "tasks_queued": tasks_queued,
-                    "duration_ms": duration_ms,
                     "mantra": mantra,
+                    "reason": reason,
+                    "status": status,
+                    "duration_ms": duration_ms,
                 }),
                 Some(correlation_id),
+                None,
+                None,
                 None,
                 None,
             )

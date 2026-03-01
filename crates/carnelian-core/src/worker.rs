@@ -2933,6 +2933,8 @@ impl WorkerManager {
                                                             None,
                                                             None,
                                                             None,
+                                                            None,
+                                                            None,
                                                         ).await {
                                                             tracing::warn!(worker_id = %worker_id, error = %e, "Failed to log quarantine to ledger");
                                                         }
@@ -3128,6 +3130,8 @@ impl WorkerManager {
                             "reason": result.mismatch_reason,
                             "attestation": attestation_data,
                         }),
+                        None,
+                        None,
                         None,
                         None,
                         None,

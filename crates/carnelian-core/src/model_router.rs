@@ -620,6 +620,8 @@ impl ModelRouter {
                         "total_tokens": prov.total_tokens,
                         "segment_counts": prov.segment_counts,
                     })),
+                    None,
+                    None,
                 )
                 .await
             {
@@ -639,6 +641,8 @@ impl ModelRouter {
                     "correlation_id": correlation_id,
                 }),
                 Some(correlation_id),
+                None,
+                None,
                 None,
                 None,
             )
@@ -687,6 +691,8 @@ impl ModelRouter {
                     "correlation_id": correlation_id,
                 }),
                 Some(correlation_id),
+                None,
+                None,
                 None,
                 None,
             )
@@ -775,6 +781,8 @@ impl ModelRouter {
                         "total_tokens": prov.total_tokens,
                         "segment_counts": prov.segment_counts,
                     })),
+                    None,
+                    None,
                 )
                 .await
             {
@@ -794,6 +802,8 @@ impl ModelRouter {
                     "correlation_id": correlation_id,
                 }),
                 Some(correlation_id),
+                None,
+                None,
                 None,
                 None,
             )
@@ -894,6 +904,8 @@ impl ModelRouter {
                             "correlation_id": correlation_id,
                         }),
                         Some(correlation_id),
+                        None,
+                        None,
                         None,
                         None,
                     )

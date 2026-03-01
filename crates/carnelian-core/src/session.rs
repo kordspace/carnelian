@@ -1965,10 +1965,11 @@ impl SessionManager {
                 "session.created",
                 json!({
                     "session_id": session.session_id,
-                    "session_key": session.session_key,
-                    "channel": session.channel,
+                    "agent_id": session.agent_id,
                 }),
                 correlation_id,
+                None,
+                None,
                 None,
                 None,
             )
@@ -1991,10 +1992,10 @@ impl SessionManager {
                 "session.deleted",
                 json!({
                     "session_id": session_id,
-                    "reason": reason,
-                    "final_token_counters": final_counters,
                     "message_count": message_count,
                 }),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -2002,7 +2003,7 @@ impl SessionManager {
             .await
     }
 
-    /// Log a compaction event to the audit ledger.
+    /// Log session compaction to the audit ledger.
     pub async fn log_compaction_event(
         &self,
         ledger: &Ledger,
@@ -2018,10 +2019,10 @@ impl SessionManager {
                 "session.compacted",
                 json!({
                     "session_id": session_id,
-                    "before_counters": before_counters,
-                    "after_counters": after_counters,
                     "messages_removed": messages_removed,
                 }),
+                None,
+                None,
                 None,
                 None,
                 None,

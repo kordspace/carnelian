@@ -1162,6 +1162,8 @@ impl ContextWindow {
                 Some(correlation_id),
                 None,
                 Some(metadata),
+                None,
+                None,
             )
             .await?;
 
@@ -1242,6 +1244,8 @@ impl ContextWindow {
                 Some(correlation_id),
                 None,
                 Some(metadata),
+                None,
+                None,
             )
             .await?;
 

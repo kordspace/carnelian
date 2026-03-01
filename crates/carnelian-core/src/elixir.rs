@@ -15,12 +15,35 @@ use carnelian_common::types::{
     ListElixirsQuery, ListElixirsResponse, RejectDraftResponse,
 };
 use carnelian_common::{Error, Result};
+use carnelian_magic::EntropyProvider;
 use serde_json::Value as JsonValue;
 use sqlx::{PgPool, Row};
 use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::xp::{XpManager, XpSource};
+
+/// Compute a blake3 integrity index for elixir content, optionally mixing quantum salt.
+///
+/// This provides a tamper-evident hash that can be enhanced with quantum entropy
+/// when MAGIC is enabled. The hash covers the content and optional quantum salt.
+///
+/// # Arguments
+///
+/// * `content` - The elixir dataset content to hash
+/// * `quantum_salt` - Optional 16-byte quantum salt from MixedEntropyProvider
+///
+/// # Returns
+///
+/// Hex-encoded blake3 hash of the content (and salt if provided)
+pub fn compute_integrity_index(content: &[u8], quantum_salt: Option<&[u8]>) -> String {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(content);
+    if let Some(salt) = quantum_salt {
+        hasher.update(salt);
+    }
+    hex::encode(hasher.finalize().as_bytes())
+}
 
 pub struct ElixirManager {
     pool: PgPool,
