@@ -6,7 +6,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Workflow Execution', () => {
   const apiKey = process.env.API_KEY || 'test_api_key';
-  const baseURL = process.env.BASE_URL || 'http://localhost:8080';
+  const baseURL = process.env.BASE_URL || 'http://localhost:18789';
 
   test('should create a new workflow', async ({ request }) => {
     const response = await request.post(`${baseURL}/api/workflows`, {

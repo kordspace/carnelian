@@ -11,7 +11,7 @@ import { test, expect } from '@playwright/test';
 test.describe('CARNELIAN Desktop UI', () => {
   test.beforeEach(async ({ page }) => {
     // Navigate to the UI (adjust URL based on your setup)
-    await page.goto('http://localhost:8080');
+    await page.goto('http://localhost:18789');
   });
 
   test('should load dashboard page', async ({ page }) => {
@@ -61,7 +61,7 @@ test.describe('CARNELIAN Desktop UI', () => {
 
 test.describe('CARNELIAN Task Management', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:8080/tasks');
+    await page.goto('http://localhost:18789/tasks');
   });
 
   test('should create new task', async ({ page }) => {
@@ -81,7 +81,7 @@ test.describe('CARNELIAN Task Management', () => {
 
 test.describe('CARNELIAN Skills Management', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:8080/skills');
+    await page.goto('http://localhost:18789/skills');
   });
 
   test('should display skill registry', async ({ page }) => {
@@ -104,7 +104,7 @@ test.describe('CARNELIAN Skills Management', () => {
 
 test.describe('CARNELIAN Approvals', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:8080/approvals');
+    await page.goto('http://localhost:18789/approvals');
   });
 
   test('should display approval queue', async ({ page }) => {
