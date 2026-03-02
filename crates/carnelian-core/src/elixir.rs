@@ -124,7 +124,8 @@ impl ElixirManager {
         .map_err(Error::Database)?;
 
         if let Some(salt) = quantum_salt {
-            let hash = compute_integrity_index(req.dataset.as_bytes(), Some(&salt));
+            let dataset_bytes = serde_json::to_vec(&req.dataset).unwrap_or_default();
+            let hash = compute_integrity_index(&dataset_bytes, Some(&salt));
             sqlx::query("UPDATE elixirs SET security_integrity_hash = $1 WHERE elixir_id = $2")
                 .bind(&hash)
                 .bind(elixir_id)

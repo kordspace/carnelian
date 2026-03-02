@@ -203,6 +203,8 @@ pub struct AppState {
     pub skill_book: Arc<crate::skill_book::SkillBook>,
     /// Elixir manager for knowledge artifact lifecycle
     pub elixir_manager: Arc<crate::elixir::ElixirManager>,
+    /// MAGIC entropy provider for quantum-enhanced randomness
+    pub entropy_provider: Option<Arc<carnelian_magic::MixedEntropyProvider>>,
     /// Active channel adapters keyed by session_id
     pub channel_adapters: Arc<RwLock<HashMap<Uuid, Arc<dyn ChannelAdapter>>>>,
     /// Factory for building channel adapters from configuration.
@@ -235,6 +237,7 @@ impl AppState {
         voice_gateway: Arc<crate::voice::VoiceGateway>,
         skill_book: Arc<crate::skill_book::SkillBook>,
         elixir_manager: Arc<crate::elixir::ElixirManager>,
+        entropy_provider: Option<Arc<carnelian_magic::MixedEntropyProvider>>,
     ) -> Self {
         Self {
             config,
@@ -254,6 +257,7 @@ impl AppState {
             voice_gateway,
             skill_book,
             elixir_manager,
+            entropy_provider,
             channel_adapters: Arc::new(RwLock::new(HashMap::new())),
             channel_adapter_factory: None,
             correlation_counter: Arc::new(AtomicU64::new(0)),
@@ -490,6 +494,20 @@ impl Server {
             ))
         };
 
+        // Initialize MAGIC entropy provider if enabled
+        let entropy_provider = if self.config.magic.enabled {
+            let pool = self.config.pool().expect("Database pool required for MixedEntropyProvider");
+            let provider = carnelian_magic::MixedEntropyProvider::new(
+                pool.clone(),
+                self.config.magic.clone(),
+            );
+            tracing::info!("MAGIC entropy provider initialized");
+            Some(Arc::new(provider))
+        } else {
+            tracing::debug!("MAGIC entropy subsystem disabled in configuration");
+            None
+        };
+
         let state = AppState::new(
             self.config.clone(),
             self.event_stream.clone(),
@@ -507,6 +525,7 @@ impl Server {
             voice_gateway,
             skill_book,
             elixir_manager,
+            entropy_provider.clone(),
         );
 
         // Wire in the adapter factory if configured
@@ -519,11 +538,14 @@ impl Server {
             state
         };
 
-        // Share the metrics collector and workflow engine with the scheduler
+        // Share the metrics collector, workflow engine, and entropy provider with the scheduler
         {
             let mut scheduler = self.scheduler.lock().await;
             scheduler.set_metrics(state.metrics.clone());
             scheduler.set_workflow_engine(state.workflow_engine.clone());
+            if let Some(ref provider) = entropy_provider {
+                scheduler.set_entropy_provider(provider.clone());
+            }
         }
         state.event_stream.set_metrics(state.metrics.clone());
 
@@ -834,6 +856,14 @@ fn build_router(state: AppState) -> Router {
             "/v1/memory/revoked-grants",
             get(list_revoked_grants_handler),
         )
+        // MAGIC entropy endpoints
+        .route("/v1/magic/entropy/health", get(magic_entropy_health_handler))
+        .route("/v1/magic/entropy/sample", post(magic_entropy_sample_handler))
+        .route("/v1/magic/config", get(magic_get_config_handler))
+        .route("/v1/magic/config", post(magic_update_config_handler))
+        .route("/v1/magic/auth/quantinuum/login", post(magic_quantinuum_login_handler))
+        .route("/v1/magic/auth/quantinuum/refresh", post(magic_quantinuum_refresh_handler))
+        .route("/v1/magic/auth/status", get(magic_auth_status_handler))
         // Apply auth middleware to all protected routes
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
