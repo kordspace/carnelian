@@ -81,6 +81,7 @@ impl ElixirManager {
         &self,
         req: CreateElixirRequest,
         created_by: Option<Uuid>,
+        quantum_salt: Option<Vec<u8>>,
     ) -> Result<ElixirDetail> {
         let mut tx = self.pool.begin().await.map_err(Error::Database)?;
 
@@ -286,6 +287,7 @@ impl ElixirManager {
         &self,
         draft_id: Uuid,
         reviewed_by: Option<Uuid>,
+        quantum_salt: Option<Vec<u8>>,
     ) -> Result<ApproveDraftResponse> {
         let draft_row =
             sqlx::query("SELECT * FROM elixir_drafts WHERE draft_id = $1 AND status = 'pending'")
@@ -301,6 +303,7 @@ impl ElixirManager {
         let proposed_name: String = draft_row.get("proposed_name");
         let proposed_description: Option<String> = draft_row.get("proposed_description");
         let dataset: JsonValue = draft_row.get("dataset");
+        let dataset_bytes = serde_json::to_vec(&dataset).unwrap_or_default();
 
         let mut tx = self.pool.begin().await.map_err(Error::Database)?;
 

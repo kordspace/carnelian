@@ -259,8 +259,8 @@ impl Ledger {
         .map_err(Error::Database)?;
 
         // Resolve quantum salt: use provided salt, or generate from entropy provider
-        let resolved_salt = if let Some(salt) = quantum_salt {
-            Some(salt)
+        let (resolved_salt, entropy_latency_ms) = if let Some(salt) = quantum_salt {
+            (Some(salt), None)
         } else if let Some(provider) = entropy_provider {
             let start = std::time::Instant::now();
             match provider.get_bytes(16).await {
@@ -270,15 +270,16 @@ impl Ledger {
                         latency_ms = latency_ms,
                         "Generated quantum salt for ledger event"
                     );
-                    Some(salt_bytes)
+                    (Some(salt_bytes), Some(latency_ms))
                 }
                 Err(e) => {
-                    tracing::warn!(error = %e, "Failed to generate quantum salt, proceeding without");
-                    None
+                    let latency_ms = start.elapsed().as_millis() as i64;
+                    tracing::warn!(error = %e, latency_ms = latency_ms, "Failed to generate quantum salt, proceeding without");
+                    (None, Some(latency_ms))
                 }
             }
         } else {
-            None
+            (None, None)
         };
 
         let event_hash = Self::compute_event_hash(
@@ -695,7 +696,7 @@ impl Ledger {
     /// Query the most recent ledger events.
     pub async fn get_recent_events(&self, limit: i64) -> Result<Vec<LedgerEvent>> {
         let rows: Vec<LedgerEvent> = sqlx::query_as(
-            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata FROM ledger_events ORDER BY ts DESC LIMIT $1",
+            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata, quantum_salt FROM ledger_events ORDER BY ts DESC LIMIT $1",
         )
         .bind(limit)
         .fetch_all(&self.pool)
