@@ -16,6 +16,7 @@ doc = false
 carnelian-core = { path = "../carnelian-core" }
 carnelian-adapters = { path = "../carnelian-adapters" }
 carnelian-common = { path = "../carnelian-common" }
+carnelian-magic = { path = "../carnelian-magic" }
 
 # Async runtime
 tokio = { workspace = true }

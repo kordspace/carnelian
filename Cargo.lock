@@ -940,6 +940,7 @@ dependencies = [
  "carnelian-adapters",
  "carnelian-common",
  "carnelian-core",
+ "carnelian-magic",
  "chrono",
  "clap 4.5.57",
  "dotenvy",

@@ -55,7 +55,11 @@ use futures_util::stream::TryStreamExt;
   carnelian task create \"Task\" --priority 10  Create high-priority task
   carnelian logs -f --level ERROR    Stream only ERROR events
   carnelian logs --url http://remote:18789  Connect to remote instance
-  carnelian --database-url postgres://user:pass@host/db migrate  Use specific database")]
+  carnelian --database-url postgres://user:pass@host/db migrate  Use specific database
+  carnelian magic auth               Authenticate with Quantinuum H2
+  carnelian magic status             Show MAGIC provider health
+  carnelian magic sample 64          Sample 64 bytes of quantum entropy
+  carnelian magic providers          List all entropy providers")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -175,6 +179,16 @@ enum Commands {
         #[arg(long)]
         path: Option<PathBuf>,
     },
+
+    /// MAGIC quantum entropy subsystem
+    Magic {
+        #[command(subcommand)]
+        command: MagicCommands,
+
+        /// URL of the Carnelian server
+        #[arg(long, env = "CARNELIAN_URL")]
+        url: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -208,6 +222,29 @@ enum TaskCommands {
 enum KeyCommands {
     /// Rotate the owner keypair
     Rotate,
+}
+
+#[derive(Subcommand)]
+enum MagicCommands {
+    /// Authenticate with Quantinuum (or refresh token)
+    Auth {
+        /// Refresh the existing token instead of re-authenticating
+        #[arg(long)]
+        refresh: bool,
+    },
+
+    /// Show authentication and provider health status
+    Status,
+
+    /// Draw a sample of quantum-mixed entropy bytes
+    Sample {
+        /// Number of bytes to sample (default: 32)
+        #[arg(default_value_t = 32)]
+        bytes: usize,
+    },
+
+    /// List all configured entropy providers and their availability
+    Providers,
 }
 
 #[tokio::main]
@@ -255,6 +292,9 @@ async fn main() {
         }
         Commands::MigrateFromThummim { path } => {
             handle_migrate_from_thummim(path, cli.config, cli.log_level, cli.database_url).await
+        }
+        Commands::Magic { command, url } => {
+            handle_magic(command, &resolve_url(url)).await
         }
     };
 
