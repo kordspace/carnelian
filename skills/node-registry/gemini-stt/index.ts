@@ -10,14 +10,6 @@ export async function execute(
   context: SkillContext,
   params: GeminiSTTParams
 ): Promise<SkillResult> {
-  const { gateway } = context;
-
-  if (!gateway) {
-    return {
-      success: false,
-      error: 'Gateway connection not available',
-    };
-  }
 
   if (!params.audioUrl) {
     return {
@@ -27,15 +19,28 @@ export async function execute(
   }
 
   try {
-    const response = await gateway.call('gemini.stt', {
-      audioUrl: params.audioUrl,
-      languageCode: params.languageCode || 'en-US',
-      model: params.model || 'gemini-1.5-flash',
+    const response = await fetch(`${context.gateway}/internal/gemini/stt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        audioUrl: params.audioUrl,
+        languageCode: params.languageCode || 'en-US',
+        model: params.model || 'gemini-1.5-flash',
+      }),
     });
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `Gemini STT failed: ${response.statusText}`,
+      };
+    }
+
+    const data = await response.json();
 
     return {
       success: true,
-      data: response,
+      data,
     };
   } catch (error) {
     return {

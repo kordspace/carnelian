@@ -10,15 +10,6 @@ export async function execute(
   context: SkillContext,
   params: LockAcquireParams
 ): Promise<SkillResult> {
-  const { gateway } = context;
-
-  if (!gateway) {
-    return {
-      success: false,
-      error: 'Gateway connection not available',
-    };
-  }
-
   if (!params.resource) {
     return {
       success: false,
@@ -27,15 +18,27 @@ export async function execute(
   }
 
   try {
-    const response = await gateway.call('lock.acquire', {
-      resource: params.resource,
-      timeout: params.timeout || 5000,
-      ttl: params.ttl || 30000,
+    const response = await fetch(`${context.gateway}/internal/lock/acquire`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        resource: params.resource,
+        timeout: params.timeout || 5000,
+        ttl: params.ttl || 30000,
+      }),
     });
 
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `Failed to acquire lock: ${response.statusText}`,
+      };
+    }
+
+    const data = await response.json();
     return {
       success: true,
-      data: response,
+      data,
     };
   } catch (error) {
     return {

@@ -14,15 +14,6 @@ export async function execute(
   context: SkillContext,
   params: BookStackPageParams
 ): Promise<SkillResult> {
-  const { gateway } = context;
-
-  if (!gateway) {
-    return {
-      success: false,
-      error: 'Gateway connection not available',
-    };
-  }
-
   if (!params.action) {
     return {
       success: false,
@@ -31,19 +22,31 @@ export async function execute(
   }
 
   try {
-    const response = await gateway.call('bookstack.page', {
-      action: params.action,
-      bookId: params.bookId,
-      chapterId: params.chapterId,
-      pageId: params.pageId,
-      name: params.name,
-      html: params.html,
-      markdown: params.markdown,
+    const response = await fetch(`${context.gateway}/internal/bookstack/page`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: params.action,
+        bookId: params.bookId,
+        chapterId: params.chapterId,
+        pageId: params.pageId,
+        name: params.name,
+        html: params.html,
+        markdown: params.markdown,
+      }),
     });
 
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `BookStack operation failed: ${response.statusText}`,
+      };
+    }
+
+    const data = await response.json();
     return {
       success: true,
-      data: response,
+      data,
     };
   } catch (error) {
     return {

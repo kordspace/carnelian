@@ -55,6 +55,7 @@ CREATE INDEX idx_mantra_entries_enabled ON mantra_entries(enabled);
 CREATE INDEX idx_mantra_history_ts ON mantra_history(ts DESC);
 CREATE INDEX idx_mantra_history_heartbeat_id ON mantra_history(heartbeat_id);
 CREATE INDEX idx_mantra_history_category_id ON mantra_history(category_id);
+CREATE INDEX idx_mantra_history_entry_ts ON mantra_history(entry_id, ts DESC);
 
 -- =============================================================================
 -- Section 3: Seed — 18 Mantra Categories

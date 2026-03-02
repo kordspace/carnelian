@@ -14,6 +14,8 @@ export interface SkillContext {
   parameters: Record<string, unknown>;
   /** Gateway URL for making API calls back to Carnelian */
   gateway: string;
+  /** Gateway URL (alternative property name) */
+  gateway_url: string;
   /** Correlation ID for request tracing */
   correlation_id: string | null;
   /** Timeout deadline (epoch ms) */
