@@ -7685,7 +7685,8 @@ async fn magic_auth_status_handler(State(state): State<AppState>) -> impl IntoRe
     .await
     .unwrap_or(None);
 
-    let quantinuum_authenticated = if let Some((Some(expiry_str),)) = quantinuum_expiry {
+    let quantinuum_expiry_clone = quantinuum_expiry.clone();
+    let quantinuum_authenticated = if let Some((Some(expiry_str),)) = quantinuum_expiry_clone {
         if let Ok(expiry) = chrono::DateTime::parse_from_rfc3339(&expiry_str) {
             expiry.with_timezone(&chrono::Utc) > chrono::Utc::now()
         } else {
