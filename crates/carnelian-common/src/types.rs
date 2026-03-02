@@ -1835,7 +1835,8 @@ pub struct AddMantraEntryRequest {
 pub struct UpdateMantraEntryRequest {
     pub text: Option<String>,
     pub enabled: Option<bool>,
-    pub elixir_id: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub elixir_id: Option<Option<Uuid>>,
 }
 
 /// A single mantra history record.
@@ -1878,6 +1879,8 @@ pub struct MantraSimulateResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntropySampleRequest {
     pub bytes: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
 }
 
 /// Response body for POST /v1/magic/entropy/sample.

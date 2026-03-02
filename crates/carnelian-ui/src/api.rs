@@ -1105,10 +1105,13 @@ pub async fn magic_entropy_health() -> Result<serde_json::Value, String> {
 }
 
 /// Sample entropy bytes.
-pub async fn magic_entropy_sample(bytes: usize) -> Result<EntropySampleResponse, String> {
+pub async fn magic_entropy_sample(
+    bytes: usize,
+    provider: Option<String>,
+) -> Result<EntropySampleResponse, String> {
     client()
         .post(format!("{API_BASE_URL}/v1/magic/entropy/sample"))
-        .json(&EntropySampleRequest { bytes })
+        .json(&EntropySampleRequest { bytes, provider })
         .send()
         .await
         .map_err(|e| format!("Request failed: {e}"))?
@@ -1182,7 +1185,7 @@ pub async fn magic_mantra_update(
     entry_id: Uuid,
     text: Option<String>,
     enabled: Option<bool>,
-    elixir_id: Option<Uuid>,
+    elixir_id: Option<Option<Uuid>>,
 ) -> Result<MantraEntryDetail, String> {
     client()
         .put(format!(
