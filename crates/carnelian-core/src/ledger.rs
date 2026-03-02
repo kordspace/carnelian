@@ -263,7 +263,7 @@ impl Ledger {
             (Some(salt), None)
         } else if let Some(provider) = entropy_provider {
             let start = std::time::Instant::now();
-            match provider.get_bytes(16).await {
+            match provider.as_ref().get_bytes(16).await {
                 Ok(salt_bytes) => {
                     let latency_ms = start.elapsed().as_millis() as i64;
                     tracing::debug!(
