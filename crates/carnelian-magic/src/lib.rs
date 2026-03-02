@@ -39,7 +39,7 @@
 pub mod entropy;
 pub mod entropy_arc_impl;
 mod error;
-mod mantra;
+pub mod mantra;
 
 pub use entropy::{
     EntropyHealth, EntropyProvider, MixedEntropyProvider,
@@ -47,4 +47,10 @@ pub use entropy::{
     QuantinuumH2Provider, QiskitProvider, SkillBridge,
 };
 pub use error::{MagicError, Result};
-pub use mantra::MantraTree;
+pub use mantra::{
+    MantraCategory,
+    MantraContext,
+    MantraEntry,
+    MantraSelection,
+    MantraTree,
+};

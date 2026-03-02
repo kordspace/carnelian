@@ -20,6 +20,7 @@ tracing = { workspace = true }
 hex = { workspace = true }
 carnelian-common = { path = "../carnelian-common" }
 rand = "0.8"
+sqlx = { workspace = true }
 
 [lints]
 workspace = true

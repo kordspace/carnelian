@@ -24,6 +24,9 @@ pub enum MagicError {
     #[error("Skill bridge error: {0}")]
     SkillBridgeError(String),
 
+    #[error("Database error: {0}")]
+    Database(#[from] sqlx::Error),
+
     /// JSON parsing failure
     #[error("JSON error: {0}")]
     JsonError(#[from] serde_json::Error),
