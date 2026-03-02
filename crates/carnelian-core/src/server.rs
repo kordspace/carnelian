@@ -61,8 +61,8 @@ use crate::sub_agent::{CreateSubAgentRequest, SubAgentManager, UpdateSubAgentReq
 use crate::worker::{WorkerManager, WorkerRuntime};
 use crate::{Config, EventStream, Scheduler, db, policy::PolicyEngine};
 
-// Import MAGIC entropy provider and Arc trait implementations
-use carnelian_magic::entropy_arc_impl as _;
+// Import MAGIC entropy provider and trait
+use carnelian_magic::EntropyProvider;
 
 use carnelian_common::{ChannelAdapter, ChannelAdapterFactory};
 use std::collections::HashMap;
@@ -500,7 +500,46 @@ impl Server {
         // Initialize MAGIC entropy provider if enabled
         let entropy_provider = if self.config.magic.enabled {
             let pool = self.config.pool().expect("Database pool required for MixedEntropyProvider");
-            let provider = carnelian_magic::MixedEntropyProvider::new(pool.clone(), self.config.magic.clone());
+            
+            // Build QuantumOrigin provider if API key is configured
+            let quantum_origin = if !self.config.magic.quantum_origin_api_key.is_empty() {
+                Some(carnelian_magic::QuantumOriginProvider::new(
+                    self.config.magic.quantum_origin_url.clone(),
+                    self.config.magic.quantum_origin_api_key.clone(),
+                    std::time::Duration::from_millis(self.config.magic.entropy_timeout_ms),
+                ))
+            } else {
+                None
+            };
+            
+            // Build Quantinuum provider if enabled
+            let quantinuum = if self.config.magic.quantinuum_enabled {
+                Some(carnelian_magic::QuantinuumH2Provider::new(
+                    pool.clone(),
+                    self.config.magic.quantinuum_device.clone(),
+                    self.config.magic.quantinuum_n_bits,
+                ))
+            } else {
+                None
+            };
+            
+            // Build Qiskit provider if enabled
+            let qiskit = if self.config.magic.qiskit_enabled {
+                Some(carnelian_magic::QiskitProvider::new(
+                    pool.clone(),
+                    self.config.magic.qiskit_backend.clone(),
+                ))
+            } else {
+                None
+            };
+            
+            let node_id = uuid::Uuid::now_v7();
+            let provider = carnelian_magic::MixedEntropyProvider::new(
+                quantum_origin,
+                quantinuum,
+                qiskit,
+                node_id,
+            );
             tracing::info!("MAGIC entropy provider initialized");
             Some(Arc::new(provider))
         } else {
