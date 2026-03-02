@@ -66,6 +66,8 @@ use carnelian_magic::EntropyProvider;
 // Import Arc trait implementations - this enables EntropyProvider methods on Arc<MixedEntropyProvider>
 #[allow(unused_imports)]
 use carnelian_magic::entropy_arc_impl;
+// Import MAGIC mantra types
+use carnelian_magic::mantra::{MantraContext, MantraEntry, MantraTree};
 
 use carnelian_common::{ChannelAdapter, ChannelAdapterFactory};
 use std::collections::HashMap;
@@ -7856,22 +7858,6 @@ async fn magic_auth_status_handler(State(state): State<AppState>) -> impl IntoRe
 // MAGIC MANTRA HANDLERS
 // =============================================================================
 
-#[derive(Debug, Serialize)]
-struct MantraCategoryRow {
-    category_id: uuid::Uuid,
-    name: String,
-    base_weight: i32,
-    cooldown_beats: i32,
-    mantra_count: i64,
-    elixir_types: Vec<String>,
-    enabled: bool,
-}
-
-#[derive(Debug, Serialize)]
-struct ListMantrasResponse {
-    categories: Vec<MantraCategoryRow>,
-}
-
 /// GET /v1/magic/mantras - List all mantra categories with entry counts
 async fn magic_list_mantras_handler(State(state): State<AppState>) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -7885,16 +7871,15 @@ async fn magic_list_mantras_handler(State(state): State<AppState>) -> impl IntoR
         }
     };
 
-    let rows = match sqlx::query(
-        r"
-        SELECT mc.category_id, mc.name, mc.base_weight, mc.cooldown_beats,
-               mc.elixir_types, mc.enabled,
-               COUNT(me.entry_id) AS mantra_count
+    let rows = match sqlx::query_as::<_, (uuid::Uuid, String, Option<String>, i32, i32, bool, i64)>(
+        r#"
+        SELECT mc.category_id, mc.name, mc.description, mc.base_weight, mc.cooldown_beats, mc.enabled,
+               COUNT(me.entry_id) FILTER (WHERE me.enabled = true) AS entry_count
         FROM mantra_categories mc
-        LEFT JOIN mantra_entries me ON me.category_id = mc.category_id AND me.enabled = true
+        LEFT JOIN mantra_entries me ON me.category_id = mc.category_id
         GROUP BY mc.category_id
         ORDER BY mc.name
-        "
+        "#
     )
     .fetch_all(pool)
     .await
@@ -7909,36 +7894,22 @@ async fn magic_list_mantras_handler(State(state): State<AppState>) -> impl IntoR
         }
     };
 
-    let categories: Vec<MantraCategoryRow> = rows
-        .iter()
-        .map(|row| MantraCategoryRow {
-            category_id: row.get("category_id"),
-            name: row.get("name"),
-            base_weight: row.get("base_weight"),
-            cooldown_beats: row.get("cooldown_beats"),
-            mantra_count: row.get("mantra_count"),
-            elixir_types: row.get("elixir_types"),
-            enabled: row.get("enabled"),
+    let categories: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|(category_id, name, description, base_weight, cooldown_beats, enabled, entry_count)| {
+            json!({
+                "category_id": category_id,
+                "name": name,
+                "description": description,
+                "base_weight": base_weight,
+                "cooldown_beats": cooldown_beats,
+                "enabled": enabled,
+                "entry_count": entry_count,
+            })
         })
         .collect();
 
-    (StatusCode::OK, Json(ListMantrasResponse { categories })).into_response()
-}
-
-#[derive(Debug, Serialize)]
-struct MantraEntryRow {
-    entry_id: uuid::Uuid,
-    text: String,
-    use_count: i32,
-    enabled: bool,
-    elixir_id: Option<uuid::Uuid>,
-}
-
-#[derive(Debug, Serialize)]
-struct ListCategoryEntriesResponse {
-    category_id: uuid::Uuid,
-    category_name: String,
-    entries: Vec<MantraEntryRow>,
+    (StatusCode::OK, Json(json!({"categories": categories}))).into_response()
 }
 
 /// GET /v1/magic/mantras/categories/{id} - List entries for a category
@@ -7957,44 +7928,19 @@ async fn magic_list_category_entries_handler(
         }
     };
 
-    // Check category exists
-    let category_name: Option<String> = match sqlx::query_scalar(
-        "SELECT name FROM mantra_categories WHERE category_id = $1"
-    )
-    .bind(category_id)
-    .fetch_optional(pool)
-    .await
-    {
-        Ok(name) => name,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("Query failed: {}", e)})),
-            )
-                .into_response();
-        }
-    };
-
-    let category_name = match category_name {
-        Some(name) => name,
-        None => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(json!({"error": format!("Category {} not found", category_id)})),
-            )
-                .into_response();
-        }
-    };
-
-    // Fetch entries
-    let rows = match sqlx::query(
-        "SELECT entry_id, text, use_count, enabled, elixir_id FROM mantra_entries WHERE category_id = $1 ORDER BY use_count DESC"
+    let entries = match sqlx::query_as::<_, MantraEntry>(
+        r#"
+        SELECT entry_id, category_id, text, use_count, enabled, elixir_id
+        FROM mantra_entries
+        WHERE category_id = $1
+        ORDER BY use_count ASC
+        "#
     )
     .bind(category_id)
     .fetch_all(pool)
     .await
     {
-        Ok(r) => r,
+        Ok(e) => e,
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -8004,24 +7950,12 @@ async fn magic_list_category_entries_handler(
         }
     };
 
-    let entries: Vec<MantraEntryRow> = rows
-        .iter()
-        .map(|row| MantraEntryRow {
-            entry_id: row.get("entry_id"),
-            text: row.get("text"),
-            use_count: row.get("use_count"),
-            enabled: row.get("enabled"),
-            elixir_id: row.get("elixir_id"),
-        })
-        .collect();
-
     (
         StatusCode::OK,
-        Json(ListCategoryEntriesResponse {
-            category_id,
-            category_name,
-            entries,
-        }),
+        Json(json!({
+            "entries": entries,
+            "category_id": category_id,
+        })),
     )
         .into_response()
 }
@@ -8032,7 +7966,7 @@ struct AddMantraEntryRequest {
     elixir_id: Option<uuid::Uuid>,
 }
 
-/// POST /v1/magic/mantras/categories/{id}/entries - Add new mantra entry
+/// POST /v1/magic/mantras/categories/{id}/entries - Add a new mantra entry
 async fn magic_add_mantra_entry_handler(
     State(state): State<AppState>,
     Path(category_id): Path<uuid::Uuid>,
@@ -8057,12 +7991,12 @@ async fn magic_add_mantra_entry_handler(
             .into_response();
     }
 
-    let entry_id: uuid::Uuid = match sqlx::query_scalar(
-        r"
-        INSERT INTO mantra_entries (entry_id, category_id, text, use_count, enabled, elixir_id)
-        VALUES (gen_random_uuid(), $1, $2, 0, true, $3)
-        RETURNING entry_id
-        "
+    let entry = match sqlx::query_as::<_, MantraEntry>(
+        r#"
+        INSERT INTO mantra_entries (category_id, text, elixir_id)
+        VALUES ($1, $2, $3)
+        RETURNING entry_id, category_id, text, use_count, enabled, elixir_id
+        "#
     )
     .bind(category_id)
     .bind(&body.text)
@@ -8070,8 +8004,17 @@ async fn magic_add_mantra_entry_handler(
     .fetch_one(pool)
     .await
     {
-        Ok(id) => id,
+        Ok(e) => e,
         Err(e) => {
+            if let sqlx::Error::Database(db_err) = &e {
+                if db_err.message().contains("foreign key") {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({"error": "Invalid category_id"})),
+                    )
+                        .into_response();
+                }
+            }
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"error": format!("Insert failed: {}", e)})),
@@ -8080,24 +8023,17 @@ async fn magic_add_mantra_entry_handler(
         }
     };
 
-    (
-        StatusCode::CREATED,
-        Json(json!({
-            "entry_id": entry_id,
-            "category_id": category_id,
-        })),
-    )
-        .into_response()
+    (StatusCode::CREATED, Json(serde_json::to_value(entry).unwrap())).into_response()
 }
 
 #[derive(Debug, Deserialize)]
 struct UpdateMantraEntryRequest {
     text: Option<String>,
     enabled: Option<bool>,
-    elixir_id: Option<Option<uuid::Uuid>>,
+    elixir_id: Option<uuid::Uuid>,
 }
 
-/// PUT /v1/magic/mantras/entries/{id} - Update mantra entry
+/// PUT /v1/magic/mantras/entries/{id} - Update a mantra entry
 async fn magic_update_mantra_entry_handler(
     State(state): State<AppState>,
     Path(entry_id): Path<uuid::Uuid>,
@@ -8114,70 +8050,44 @@ async fn magic_update_mantra_entry_handler(
         }
     };
 
-    let mut updates = Vec::new();
-    let mut param_idx = 2_u32;
+    let entry = match sqlx::query_as::<_, MantraEntry>(
+        r#"
+        UPDATE mantra_entries
+        SET text = COALESCE($1, text),
+            enabled = COALESCE($2, enabled),
+            elixir_id = COALESCE($3, elixir_id)
+        WHERE entry_id = $4
+        RETURNING entry_id, category_id, text, use_count, enabled, elixir_id
+        "#
+    )
+    .bind(body.text.as_ref())
+    .bind(body.enabled)
+    .bind(body.elixir_id)
+    .bind(entry_id)
+    .fetch_optional(pool)
+    .await
+    {
+        Ok(Some(e)) => e,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": format!("Entry {} not found", entry_id)})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Update failed: {}", e)})),
+            )
+                .into_response();
+        }
+    };
 
-    if body.text.is_some() {
-        updates.push(format!("text = ${}", param_idx));
-        param_idx += 1;
-    }
-    if body.enabled.is_some() {
-        updates.push(format!("enabled = ${}", param_idx));
-        param_idx += 1;
-    }
-    if body.elixir_id.is_some() {
-        updates.push(format!("elixir_id = ${}", param_idx));
-    }
-
-    if updates.is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": "No fields to update"})),
-        )
-            .into_response();
-    }
-
-    let set_clause = updates.join(", ");
-    let query_str = format!(
-        "UPDATE mantra_entries SET {} WHERE entry_id = $1 RETURNING entry_id",
-        set_clause
-    );
-
-    let mut query = sqlx::query_scalar::<_, uuid::Uuid>(&query_str).bind(entry_id);
-
-    if let Some(ref text) = body.text {
-        query = query.bind(text);
-    }
-    if let Some(enabled) = body.enabled {
-        query = query.bind(enabled);
-    }
-    if let Some(ref elixir_id) = body.elixir_id {
-        query = query.bind(elixir_id);
-    }
-
-    match query.fetch_optional(pool).await {
-        Ok(Some(_)) => (
-            StatusCode::OK,
-            Json(json!({
-                "updated": true,
-                "entry_id": entry_id,
-            })),
-        )
-            .into_response(),
-        Ok(None) => (
-            StatusCode::NOT_FOUND,
-            Json(json!({"error": format!("Entry {} not found", entry_id)})),
-        )
-            .into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("Update failed: {}", e)})),
-        )
-            .into_response(),
-    }
+    (StatusCode::OK, Json(serde_json::to_value(entry).unwrap())).into_response()
 }
 
-/// DELETE /v1/magic/mantras/entries/{id} - Soft-delete mantra entry
+/// DELETE /v1/magic/mantras/entries/{id} - Soft-delete a mantra entry
 async fn magic_delete_mantra_entry_handler(
     State(state): State<AppState>,
     Path(entry_id): Path<uuid::Uuid>,
@@ -8193,29 +8103,31 @@ async fn magic_delete_mantra_entry_handler(
         }
     };
 
-    match sqlx::query("UPDATE mantra_entries SET enabled = false WHERE entry_id = $1")
-        .bind(entry_id)
-        .execute(pool)
-        .await
+    match sqlx::query_scalar::<_, uuid::Uuid>(
+        r#"
+        UPDATE mantra_entries
+        SET enabled = false
+        WHERE entry_id = $1
+        RETURNING entry_id
+        "#
+    )
+    .bind(entry_id)
+    .fetch_optional(pool)
+    .await
     {
-        Ok(result) => {
-            if result.rows_affected() > 0 {
-                (
-                    StatusCode::OK,
-                    Json(json!({
-                        "disabled": true,
-                        "entry_id": entry_id,
-                    })),
-                )
-                    .into_response()
-            } else {
-                (
-                    StatusCode::NOT_FOUND,
-                    Json(json!({"error": format!("Entry {} not found", entry_id)})),
-                )
-                    .into_response()
-            }
-        }
+        Ok(Some(_)) => (
+            StatusCode::OK,
+            Json(json!({
+                "entry_id": entry_id,
+                "disabled": true,
+            })),
+        )
+            .into_response(),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Entry {} not found", entry_id)})),
+        )
+            .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": format!("Delete failed: {}", e)})),
@@ -8224,33 +8136,8 @@ async fn magic_delete_mantra_entry_handler(
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct MantraHistoryQuery {
-    limit: Option<i64>,
-}
-
-#[derive(Debug, Serialize)]
-struct MantraHistoryEntry {
-    history_id: uuid::Uuid,
-    category_id: uuid::Uuid,
-    entry_id: uuid::Uuid,
-    mantra_text: Option<String>,
-    entropy_source: Option<String>,
-    context_weights: serde_json::Value,
-    suggested_skill_ids: Vec<uuid::Uuid>,
-    ts: String,
-}
-
-#[derive(Debug, Serialize)]
-struct MantraHistoryResponse {
-    entries: Vec<MantraHistoryEntry>,
-}
-
-/// GET /v1/magic/mantras/history - Get mantra selection history
-async fn magic_mantra_history_handler(
-    State(state): State<AppState>,
-    Query(query): Query<MantraHistoryQuery>,
-) -> impl IntoResponse {
+/// GET /v1/magic/mantras/history - Get recent mantra selection history
+async fn magic_mantra_history_handler(State(state): State<AppState>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(e) => {
@@ -8262,19 +8149,25 @@ async fn magic_mantra_history_handler(
         }
     };
 
-    let limit = query.limit.unwrap_or(50).clamp(1, 200);
-
-    let rows = match sqlx::query(
-        r"
-        SELECT mh.history_id, mh.category_id, mh.entry_id, me.text AS mantra_text,
-               mh.entropy_source, mh.context_weights, mh.suggested_skill_ids, mh.ts
-        FROM mantra_history mh
-        LEFT JOIN mantra_entries me ON me.entry_id = mh.entry_id
-        ORDER BY mh.ts DESC
-        LIMIT $1
-        "
+    let rows = match sqlx::query_as::<_, (
+        uuid::Uuid,
+        chrono::DateTime<chrono::Utc>,
+        uuid::Uuid,
+        uuid::Uuid,
+        String,
+        Option<serde_json::Value>,
+        Option<serde_json::Value>,
+        Vec<uuid::Uuid>,
+        Option<uuid::Uuid>,
+    )>(
+        r#"
+        SELECT history_id, ts, category_id, entry_id, entropy_source,
+               context_snapshot, context_weights, suggested_skill_ids, elixir_reference
+        FROM mantra_history
+        ORDER BY ts DESC
+        LIMIT 10
+        "#
     )
-    .bind(limit)
     .fetch_all(pool)
     .await
     {
@@ -8288,21 +8181,24 @@ async fn magic_mantra_history_handler(
         }
     };
 
-    let entries: Vec<MantraHistoryEntry> = rows
-        .iter()
-        .map(|row| MantraHistoryEntry {
-            history_id: row.get("history_id"),
-            category_id: row.get("category_id"),
-            entry_id: row.get("entry_id"),
-            mantra_text: row.get("mantra_text"),
-            entropy_source: row.get("entropy_source"),
-            context_weights: row.get::<Option<serde_json::Value>, _>("context_weights").unwrap_or(serde_json::Value::Null),
-            suggested_skill_ids: row.get("suggested_skill_ids"),
-            ts: row.get::<chrono::DateTime<chrono::Utc>, _>("ts").to_rfc3339(),
+    let history: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|(history_id, ts, category_id, entry_id, entropy_source, context_snapshot, context_weights, suggested_skill_ids, elixir_reference)| {
+            json!({
+                "history_id": history_id,
+                "ts": ts,
+                "category_id": category_id,
+                "entry_id": entry_id,
+                "entropy_source": entropy_source,
+                "context_snapshot": context_snapshot,
+                "context_weights": context_weights,
+                "suggested_skill_ids": suggested_skill_ids,
+                "elixir_reference": elixir_reference,
+            })
         })
         .collect();
 
-    (StatusCode::OK, Json(MantraHistoryResponse { entries })).into_response()
+    (StatusCode::OK, Json(json!({"history": history}))).into_response()
 }
 
 /// GET /v1/magic/mantras/context - Get current mantra context
@@ -8332,16 +8228,8 @@ async fn magic_mantra_context_handler(State(state): State<AppState>) -> impl Int
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct SimulateMantraRequest {
-    entropy_hex: Option<String>,
-}
-
-/// POST /v1/magic/mantras/simulate - Simulate mantra selection
-async fn magic_mantra_simulate_handler(
-    State(state): State<AppState>,
-    Json(body): Json<SimulateMantraRequest>,
-) -> impl IntoResponse {
+/// POST /v1/magic/mantras/simulate - Simulate mantra selection with live entropy
+async fn magic_mantra_simulate_handler(State(state): State<AppState>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(e) => {
@@ -8353,56 +8241,49 @@ async fn magic_mantra_simulate_handler(
         }
     };
 
-    // Obtain entropy bytes
-    let entropy_bytes: Vec<u8> = if let Some(ref hex_str) = body.entropy_hex {
-        match hex::decode(hex_str) {
-            Ok(bytes) => {
-                if bytes.len() < 8 {
-                    return (
-                        StatusCode::BAD_REQUEST,
-                        Json(json!({"error": format!("Entropy must be at least 8 bytes, got {}", bytes.len())})),
-                    )
-                        .into_response();
-                }
-                bytes
-            }
-            Err(e) => {
+    // Build context
+    let context = match MantraTree::build_context(pool).await {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to build context: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    // Get entropy bytes
+    let entropy_bytes = match &state.entropy_provider {
+        Some(provider) => match provider.get_bytes(8).await {
+            Ok(bytes) => bytes,
+            Err(_) => {
                 return (
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({"error": format!("Invalid hex: {}", e)})),
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(json!({"error": "Entropy provider unavailable — cannot simulate"})),
                 )
                     .into_response();
             }
+        },
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "Entropy provider unavailable — cannot simulate"})),
+            )
+                .into_response();
         }
-    } else {
-        rand::random::<[u8; 8]>().to_vec()
     };
 
-    // Build context (use fallback if build fails)
-    let context = match carnelian_magic::MantraTree::build_context(pool).await {
-        Ok(ctx) => ctx,
-        Err(_) => carnelian_magic::MantraContext::default_for_fallback(),
-    };
-
-    // Create temporary tree and preload
-    let mut tree = carnelian_magic::MantraTree::new(None);
-    if let Err(e) = tree.preload(pool).await {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("Preload failed: {}", e)})),
-        )
-            .into_response();
-    }
-
-    // Select mantra (no INSERT to mantra_history)
-    match tree.select(&entropy_bytes, &context).await {
+    // Create tree and select
+    let tree = MantraTree::new(None);
+    match tree.select_with_pool(&entropy_bytes, &context, pool).await {
         Ok(selection) => (
             StatusCode::OK,
             Json(serde_json::to_value(selection).unwrap_or_default()),
         )
             .into_response(),
         Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::SERVICE_UNAVAILABLE,
             Json(json!({"error": e.to_string()})),
         )
             .into_response(),
