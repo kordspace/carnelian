@@ -7083,3 +7083,616 @@ async fn reject_elixir_draft_handler(
             .into_response(),
     }
 }
+
+// =============================================================================
+// MAGIC ENTROPY HANDLERS
+// =============================================================================
+
+/// GET /v1/magic/entropy/health - Check entropy provider health
+async fn magic_entropy_health_handler(State(state): State<AppState>) -> impl IntoResponse {
+    match &state.entropy_provider {
+        Some(provider) => {
+            let health = provider.health().await;
+            (StatusCode::OK, Json(json!(health))).into_response()
+        }
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"error": "MAGIC entropy subsystem is disabled"})),
+        )
+            .into_response(),
+    }
+}
+
+/// POST /v1/magic/entropy/sample - Generate entropy sample
+#[derive(Debug, Deserialize)]
+struct EntropySampleRequest {
+    #[serde(default = "default_sample_bytes")]
+    bytes: usize,
+}
+
+fn default_sample_bytes() -> usize {
+    32
+}
+
+async fn magic_entropy_sample_handler(
+    State(state): State<AppState>,
+    Json(body): Json<EntropySampleRequest>,
+) -> impl IntoResponse {
+    let bytes = body.bytes.clamp(1, 1024);
+
+    match &state.entropy_provider {
+        Some(provider) => match provider.get_bytes(bytes).await {
+            Ok(entropy_bytes) => {
+                let hex_encoded = hex::encode(&entropy_bytes);
+                (
+                    StatusCode::OK,
+                    Json(json!({
+                        "bytes": bytes,
+                        "hex": hex_encoded,
+                        "source": provider.source_name(),
+                    })),
+                )
+                    .into_response()
+            }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Entropy generation failed: {}", e)})),
+            )
+                .into_response(),
+        },
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"error": "MAGIC entropy subsystem is disabled"})),
+        )
+            .into_response(),
+    }
+}
+
+/// GET /v1/magic/config - Get MAGIC configuration (with masked API keys)
+async fn magic_get_config_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let config = &state.config.magic;
+    
+    let masked_config = json!({
+        "enabled": config.enabled,
+        "quantum_origin_url": config.quantum_origin_url,
+        "quantum_origin_api_key": if config.quantum_origin_api_key.is_empty() { "" } else { "***MASKED***" },
+        "quantinuum_enabled": config.quantinuum_enabled,
+        "quantinuum_device": config.quantinuum_device,
+        "quantinuum_n_bits": config.quantinuum_n_bits,
+        "qiskit_enabled": config.qiskit_enabled,
+        "qiskit_backend": config.qiskit_backend,
+        "entropy_timeout_ms": config.entropy_timeout_ms,
+        "entropy_mix_ratio": config.entropy_mix_ratio,
+        "log_entropy_events": config.log_entropy_events,
+        "mantra_cooldown_beats": config.mantra_cooldown_beats,
+    });
+
+    (StatusCode::OK, Json(masked_config)).into_response()
+}
+
+/// POST /v1/magic/config - Update MAGIC configuration
+#[derive(Debug, Deserialize)]
+struct MagicConfigUpdate {
+    quantum_origin_api_key: Option<String>,
+    quantinuum_enabled: Option<bool>,
+    qiskit_enabled: Option<bool>,
+}
+
+async fn magic_update_config_handler(
+    State(state): State<AppState>,
+    Json(body): Json<MagicConfigUpdate>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Database pool error: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let encryption = state.config.encryption_helper();
+
+    if let Some(api_key) = body.quantum_origin_api_key {
+        let enc = match encryption {
+            Some(e) => e,
+            None => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "Encryption not available - owner signing key not loaded"})),
+                )
+                    .into_response();
+            }
+        };
+
+        let ciphertext = match enc.encrypt_text(&api_key).await {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": format!("Encryption failed: {}", e)})),
+                )
+                    .into_response();
+            }
+        };
+
+        if let Err(e) = sqlx::query(
+            r"INSERT INTO config_store (key, value, value_blob, encrypted, updated_at)
+              VALUES ($1, '{}'::jsonb, $2, true, NOW())
+              ON CONFLICT (key) DO UPDATE
+                SET value = '{}'::jsonb, value_blob = $2, encrypted = true, updated_at = NOW()",
+        )
+        .bind("magic.quantum_origin_api_key")
+        .bind(&ciphertext)
+        .execute(pool)
+        .await
+        {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to store API key: {}", e)})),
+            )
+                .into_response();
+        }
+    }
+
+    if let Some(enabled) = body.quantinuum_enabled {
+        if let Err(e) = sqlx::query(
+            r"INSERT INTO config_store (key, value_text, encrypted, updated_at)
+              VALUES ($1, $2, false, NOW())
+              ON CONFLICT (key) DO UPDATE
+                SET value_text = $2, encrypted = false, updated_at = NOW()",
+        )
+        .bind("magic.quantinuum_enabled")
+        .bind(enabled.to_string())
+        .execute(pool)
+        .await
+        {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to store quantinuum_enabled: {}", e)})),
+            )
+                .into_response();
+        }
+    }
+
+    if let Some(enabled) = body.qiskit_enabled {
+        if let Err(e) = sqlx::query(
+            r"INSERT INTO config_store (key, value_text, encrypted, updated_at)
+              VALUES ($1, $2, false, NOW())
+              ON CONFLICT (key) DO UPDATE
+                SET value_text = $2, encrypted = false, updated_at = NOW()",
+        )
+        .bind("magic.qiskit_enabled")
+        .bind(enabled.to_string())
+        .execute(pool)
+        .await
+        {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to store qiskit_enabled: {}", e)})),
+            )
+                .into_response();
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({"message": "Configuration updated successfully"})),
+    )
+        .into_response()
+}
+
+/// POST /v1/magic/auth/quantinuum/login - Login to Quantinuum and persist tokens
+#[derive(Debug, Deserialize)]
+struct QuantinuumLoginRequest {
+    email: String,
+    password: String,
+}
+
+async fn magic_quantinuum_login_handler(
+    State(state): State<AppState>,
+    Json(body): Json<QuantinuumLoginRequest>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Database pool error: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let encryption = match state.config.encryption_helper() {
+        Some(e) => e,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Encryption not available - owner signing key not loaded"})),
+            )
+                .into_response();
+        }
+    };
+
+    let client = reqwest::Client::new();
+    let login_response = match client
+        .post("https://qapi.quantinuum.com/v1/login")
+        .json(&json!({
+            "email": body.email,
+            "password": body.password,
+        }))
+        .send()
+        .await
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": format!("Quantinuum login request failed: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    if !login_response.status().is_success() {
+        let status = login_response.status();
+        let error_text = login_response.text().await.unwrap_or_default();
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": format!("Quantinuum login failed ({}): {}", status, error_text)})),
+        )
+            .into_response();
+    }
+
+    let login_data: serde_json::Value = match login_response.json().await {
+        Ok(data) => data,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": format!("Failed to parse Quantinuum response: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let id_token = match login_data.get("id-token").and_then(|v| v.as_str()) {
+        Some(t) => t,
+        None => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": "Quantinuum response missing id-token"})),
+            )
+                .into_response();
+        }
+    };
+
+    let refresh_token = match login_data.get("refresh-token").and_then(|v| v.as_str()) {
+        Some(t) => t,
+        None => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": "Quantinuum response missing refresh-token"})),
+            )
+                .into_response();
+        }
+    };
+
+    let id_token_cipher = match encryption.encrypt_text(id_token).await {
+        Ok(c) => c,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to encrypt id-token: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let refresh_token_cipher = match encryption.encrypt_text(refresh_token).await {
+        Ok(c) => c,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to encrypt refresh-token: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    if let Err(e) = sqlx::query(
+        r"INSERT INTO config_store (key, value, value_blob, encrypted, updated_at)
+          VALUES ($1, '{}'::jsonb, $2, true, NOW())
+          ON CONFLICT (key) DO UPDATE
+            SET value = '{}'::jsonb, value_blob = $2, encrypted = true, updated_at = NOW()",
+    )
+    .bind("magic.quantinuum_id_token")
+    .bind(&id_token_cipher)
+    .execute(pool)
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to store id-token: {}", e)})),
+        )
+            .into_response();
+    }
+
+    if let Err(e) = sqlx::query(
+        r"INSERT INTO config_store (key, value, value_blob, encrypted, updated_at)
+          VALUES ($1, '{}'::jsonb, $2, true, NOW())
+          ON CONFLICT (key) DO UPDATE
+            SET value = '{}'::jsonb, value_blob = $2, encrypted = true, updated_at = NOW()",
+    )
+    .bind("magic.quantinuum_refresh_token")
+    .bind(&refresh_token_cipher)
+    .execute(pool)
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to store refresh-token: {}", e)})),
+        )
+            .into_response();
+    }
+
+    let expiry_ts = chrono::Utc::now() + chrono::Duration::hours(1);
+    if let Err(e) = sqlx::query(
+        r"INSERT INTO config_store (key, value_text, encrypted, updated_at)
+          VALUES ($1, $2, false, NOW())
+          ON CONFLICT (key) DO UPDATE
+            SET value_text = $2, encrypted = false, updated_at = NOW()",
+    )
+    .bind("magic.quantinuum_token_expiry")
+    .bind(expiry_ts.to_rfc3339())
+    .execute(pool)
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to store token expiry: {}", e)})),
+        )
+            .into_response();
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "message": "Quantinuum login successful",
+            "token_expiry": expiry_ts.to_rfc3339(),
+        })),
+    )
+        .into_response()
+}
+
+/// POST /v1/magic/auth/quantinuum/refresh - Refresh Quantinuum tokens
+async fn magic_quantinuum_refresh_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Database pool error: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let encryption = match state.config.encryption_helper() {
+        Some(e) => e,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Encryption not available - owner signing key not loaded"})),
+            )
+                .into_response();
+        }
+    };
+
+    let refresh_token_row: Option<(Option<Vec<u8>>,)> = match sqlx::query_as(
+        "SELECT value_blob FROM config_store WHERE key = $1 AND encrypted = true",
+    )
+    .bind("magic.quantinuum_refresh_token")
+    .fetch_optional(pool)
+    .await
+    {
+        Ok(row) => row,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to load refresh token: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let refresh_token_cipher = match refresh_token_row.and_then(|(blob,)| blob) {
+        Some(c) => c,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "No refresh token found - please login first"})),
+            )
+                .into_response();
+        }
+    };
+
+    let refresh_token = match encryption.decrypt_bytes(&refresh_token_cipher).await {
+        Ok(plaintext) => String::from_utf8_lossy(&plaintext).to_string(),
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to decrypt refresh token: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let client = reqwest::Client::new();
+    let refresh_response = match client
+        .post("https://qapi.quantinuum.com/v1/refresh")
+        .json(&json!({
+            "refresh-token": refresh_token,
+        }))
+        .send()
+        .await
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": format!("Quantinuum refresh request failed: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    if !refresh_response.status().is_success() {
+        let status = refresh_response.status();
+        let error_text = refresh_response.text().await.unwrap_or_default();
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": format!("Quantinuum refresh failed ({}): {}", status, error_text)})),
+        )
+            .into_response();
+    }
+
+    let refresh_data: serde_json::Value = match refresh_response.json().await {
+        Ok(data) => data,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": format!("Failed to parse Quantinuum response: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let id_token = match refresh_data.get("id-token").and_then(|v| v.as_str()) {
+        Some(t) => t,
+        None => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": "Quantinuum response missing id-token"})),
+            )
+                .into_response();
+        }
+    };
+
+    let id_token_cipher = match encryption.encrypt_text(id_token).await {
+        Ok(c) => c,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to encrypt id-token: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    if let Err(e) = sqlx::query(
+        r"INSERT INTO config_store (key, value, value_blob, encrypted, updated_at)
+          VALUES ($1, '{}'::jsonb, $2, true, NOW())
+          ON CONFLICT (key) DO UPDATE
+            SET value = '{}'::jsonb, value_blob = $2, encrypted = true, updated_at = NOW()",
+    )
+    .bind("magic.quantinuum_id_token")
+    .bind(&id_token_cipher)
+    .execute(pool)
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to store id-token: {}", e)})),
+        )
+            .into_response();
+    }
+
+    let expiry_ts = chrono::Utc::now() + chrono::Duration::hours(1);
+    if let Err(e) = sqlx::query(
+        r"INSERT INTO config_store (key, value_text, encrypted, updated_at)
+          VALUES ($1, $2, false, NOW())
+          ON CONFLICT (key) DO UPDATE
+            SET value_text = $2, encrypted = false, updated_at = NOW()",
+    )
+    .bind("magic.quantinuum_token_expiry")
+    .bind(expiry_ts.to_rfc3339())
+    .execute(pool)
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to store token expiry: {}", e)})),
+        )
+            .into_response();
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "message": "Quantinuum tokens refreshed successfully",
+            "token_expiry": expiry_ts.to_rfc3339(),
+        })),
+    )
+        .into_response()
+}
+
+/// GET /v1/magic/auth/status - Check authentication status for quantum providers
+async fn magic_auth_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Database pool error: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let quantinuum_expiry: Option<(Option<String>,)> = sqlx::query_as(
+        "SELECT value_text FROM config_store WHERE key = $1",
+    )
+    .bind("magic.quantinuum_token_expiry")
+    .fetch_optional(pool)
+    .await
+    .unwrap_or(None);
+
+    let quantinuum_authenticated = if let Some((Some(expiry_str),)) = quantinuum_expiry {
+        if let Ok(expiry) = chrono::DateTime::parse_from_rfc3339(&expiry_str) {
+            expiry.with_timezone(&chrono::Utc) > chrono::Utc::now()
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    let quantum_origin_configured: Option<(i64,)> = sqlx::query_as(
+        "SELECT COUNT(*) FROM config_store WHERE key = $1",
+    )
+    .bind("magic.quantum_origin_api_key")
+    .fetch_optional(pool)
+    .await
+    .unwrap_or(None);
+
+    let quantum_origin_authenticated = quantum_origin_configured
+        .map(|(count,)| count > 0)
+        .unwrap_or(false);
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "quantinuum": {
+                "authenticated": quantinuum_authenticated,
+                "expiry": quantinuum_expiry.and_then(|(exp,)| exp),
+            },
+            "quantum_origin": {
+                "configured": quantum_origin_authenticated,
+            },
+        })),
+    )
+        .into_response()
+}
