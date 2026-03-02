@@ -8,7 +8,7 @@ use axum::{
     extract::{Path, Query, State, WebSocketUpgrade, ws::Message},
     http::StatusCode,
     response::IntoResponse,
-    routing::{delete, get, post, put},
+    routing::{delete, get, patch, post, put},
 };
 use base64::Engine as _;
 use carnelian_common::Result;
@@ -893,7 +893,9 @@ fn build_router(state: AppState) -> Router {
         .route("/v1/magic/auth/quantinuum/refresh", post(magic_quantinuum_refresh_handler))
         .route("/v1/magic/auth/status", get(magic_auth_status_handler))
         // MAGIC mantra endpoints
-        .route("/v1/magic/mantras", get(magic_list_mantras_handler))
+        .route("/v1/magic/mantras", get(magic_list_mantras_handler).post(magic_add_mantra_entry_handler))
+        .route("/v1/magic/mantras/{category_id}", get(magic_list_category_entries_handler))
+        .route("/v1/magic/mantras/{entry_id}", patch(magic_update_mantra_entry_handler).delete(magic_delete_mantra_entry_handler))
         .route("/v1/magic/mantras/categories/{id}", get(magic_list_category_entries_handler))
         .route("/v1/magic/mantras/categories/{id}/entries", post(magic_add_mantra_entry_handler))
         .route("/v1/magic/mantras/entries/{id}", put(magic_update_mantra_entry_handler).delete(magic_delete_mantra_entry_handler))
@@ -7964,12 +7966,14 @@ async fn magic_list_category_entries_handler(
 struct AddMantraEntryRequest {
     text: String,
     elixir_id: Option<uuid::Uuid>,
+    category_id: Option<uuid::Uuid>,
 }
 
-/// POST /v1/magic/mantras/categories/{id}/entries - Add a new mantra entry
+/// POST /v1/magic/mantras - Add a new mantra entry (category_id from payload)
+/// POST /v1/magic/mantras/categories/{id}/entries - Add a new mantra entry (category_id from path)
 async fn magic_add_mantra_entry_handler(
     State(state): State<AppState>,
-    Path(category_id): Path<uuid::Uuid>,
+    path: Option<Path<uuid::Uuid>>,
     Json(body): Json<AddMantraEntryRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -7981,6 +7985,21 @@ async fn magic_add_mantra_entry_handler(
             )
                 .into_response();
         }
+    };
+
+    // Get category_id from path or payload
+    let category_id = match path {
+        Some(Path(id)) => id,
+        None => match body.category_id {
+            Some(id) => id,
+            None => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "category_id required in request body"})),
+                )
+                    .into_response();
+            }
+        },
     };
 
     if body.text.trim().is_empty() {
@@ -8030,10 +8049,12 @@ async fn magic_add_mantra_entry_handler(
 struct UpdateMantraEntryRequest {
     text: Option<String>,
     enabled: Option<bool>,
-    elixir_id: Option<uuid::Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    elixir_id: Option<Option<uuid::Uuid>>,
 }
 
 /// PUT /v1/magic/mantras/entries/{id} - Update a mantra entry
+/// PATCH /v1/magic/mantras/{entry_id} - Update a mantra entry
 async fn magic_update_mantra_entry_handler(
     State(state): State<AppState>,
     Path(entry_id): Path<uuid::Uuid>,
@@ -8050,23 +8071,51 @@ async fn magic_update_mantra_entry_handler(
         }
     };
 
-    let entry = match sqlx::query_as::<_, MantraEntry>(
-        r#"
-        UPDATE mantra_entries
-        SET text = COALESCE($1, text),
-            enabled = COALESCE($2, enabled),
-            elixir_id = COALESCE($3, elixir_id)
-        WHERE entry_id = $4
-        RETURNING entry_id, category_id, text, use_count, enabled, elixir_id
-        "#
-    )
-    .bind(body.text.as_ref())
-    .bind(body.enabled)
-    .bind(body.elixir_id)
-    .bind(entry_id)
-    .fetch_optional(pool)
-    .await
-    {
+    // Build dynamic UPDATE query based on which fields are present
+    let mut updates = Vec::new();
+    let mut param_idx = 1_u32;
+
+    if body.text.is_some() {
+        updates.push(format!("text = ${}", param_idx));
+        param_idx += 1;
+    }
+    if body.enabled.is_some() {
+        updates.push(format!("enabled = ${}", param_idx));
+        param_idx += 1;
+    }
+    if let Some(elixir_value) = &body.elixir_id {
+        updates.push(format!("elixir_id = ${}", param_idx));
+        param_idx += 1;
+    }
+
+    if updates.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "No fields to update"})),
+        )
+            .into_response();
+    }
+
+    let set_clause = updates.join(", ");
+    let query_str = format!(
+        "UPDATE mantra_entries SET {} WHERE entry_id = ${} RETURNING entry_id, category_id, text, use_count, enabled, elixir_id",
+        set_clause, param_idx
+    );
+
+    let mut query = sqlx::query_as::<_, MantraEntry>(&query_str);
+
+    if let Some(ref text) = body.text {
+        query = query.bind(text);
+    }
+    if let Some(enabled) = body.enabled {
+        query = query.bind(enabled);
+    }
+    if let Some(ref elixir_value) = body.elixir_id {
+        query = query.bind(elixir_value);
+    }
+    query = query.bind(entry_id);
+
+    let entry = match query.fetch_optional(pool).await {
         Ok(Some(e)) => e,
         Ok(None) => {
             return (
