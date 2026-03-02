@@ -80,7 +80,7 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
         let mut step = step.clone();
         move || {
             let current = *step.read();
-            if current < 5 {
+            if current < 6 {
                 step.set(current + 1);
             }
         }
@@ -182,6 +182,9 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
                 selected_skills: selected_skills.clone(),
             }
         },
+        6 => rsx! {
+            Step6MagicSetup {}
+        },
         _ => rsx! { div {} },
     };
 
@@ -191,11 +194,11 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
                 // Header
                 div { class: "wizard-header",
                     h2 { "🔥 Carnelian OS Setup" }
-                    p { "Step {*step.read()} of 5" }
+                    p { "Step {*step.read()} of 6" }
                     div { class: "progress-bar",
                         div {
                             class: "progress-fill",
-                            style: "width: {*step.read() * 20}%",
+                            style: "width: {*step.read() * 100 / 6}%",
                         }
                     }
                 }
@@ -214,7 +217,7 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
                             "← Back"
                         }
                     }
-                    if *step.read() < 5 {
+                    if *step.read() < 6 {
                         button {
                             class: "btn-primary",
                             onclick: move |_| next_step(),
@@ -449,5 +452,218 @@ fn skill_name(id: &str) -> &'static str {
         "web-search" => "🌐 Web Search",
         "telegram-notify" => "💬 Telegram Notify",
         _ => "Unknown Skill",
+    }
+}
+
+#[component]
+fn Step6MagicSetup() -> Element {
+    let mut quantum_origin_key = use_signal(String::new);
+    let mut quantinuum_email = use_signal(String::new);
+    let mut quantinuum_password = use_signal(String::new);
+    let mut ibm_token = use_signal(String::new);
+    let mut auth_status = use_signal(|| None::<carnelian_common::types::MagicAuthStatusResponse>);
+    let mut loading = use_signal(|| false);
+    let mut feedback = use_signal(String::new);
+
+    use_hook(|| {
+        spawn(async move {
+            if let Ok(status) = api::magic_auth_status().await {
+                auth_status.set(Some(status));
+            }
+        });
+    });
+
+    let save_quantum_origin = move || {
+        spawn(async move {
+            loading.set(true);
+            let key = quantum_origin_key.read().clone();
+            match api::magic_update_config(Some(key), None, None).await {
+                Ok(_) => {
+                    if let Ok(status) = api::magic_auth_status().await {
+                        auth_status.set(Some(status));
+                    }
+                    feedback.set("Quantum Origin key saved ✓".to_string());
+                }
+                Err(e) => {
+                    feedback.set(format!("Error: {}", e));
+                }
+            }
+            loading.set(false);
+        });
+    };
+
+    let authenticate_quantinuum = move || {
+        spawn(async move {
+            loading.set(true);
+            let email = quantinuum_email.read().clone();
+            let password = quantinuum_password.read().clone();
+            match api::magic_quantinuum_login(email, password).await {
+                Ok(resp) => {
+                    if let Ok(status) = api::magic_auth_status().await {
+                        auth_status.set(Some(status));
+                    }
+                    feedback.set(format!("Authenticated ✓ {}", resp.message));
+                    quantinuum_password.set(String::new());
+                }
+                Err(e) => {
+                    feedback.set(format!("Error: {}", e));
+                }
+            }
+            loading.set(false);
+        });
+    };
+
+    let test_ibm_connection = move || {
+        spawn(async move {
+            loading.set(true);
+            match api::magic_update_config(None, None, Some(true)).await {
+                Ok(_) => {
+                    match api::magic_entropy_health().await {
+                        Ok(_) => {
+                            feedback.set("IBM Quantum connection verified ✓".to_string());
+                        }
+                        Err(e) => {
+                            feedback.set(format!("Connection test failed: {}", e));
+                        }
+                    }
+                }
+                Err(e) => {
+                    feedback.set(format!("Error: {}", e));
+                }
+            }
+            loading.set(false);
+        });
+    };
+
+    rsx! {
+        div { class: "step-content",
+            h3 { "✨ MAGIC Setup (Optional)" }
+            p { "Configure quantum entropy providers for enhanced randomness" }
+
+            div { class: "info-box",
+                p { "Install quantum skill dependencies:" }
+                code { "pip install qiskit qiskit-ibm-runtime pennylane" }
+            }
+
+            // Quantum Origin Section
+            div { class: "provider-section",
+                h4 { "Quantum Origin" }
+                {
+                    if let Some(status) = auth_status.read().as_ref() {
+                        if status.quantum_origin.configured {
+                            rsx! { span { class: "badge-success", "✅ Configured" } }
+                        } else {
+                            rsx! { span { class: "badge-inactive", "⚪ Not Configured" } }
+                        }
+                    } else {
+                        rsx! { span {} }
+                    }
+                }
+                input {
+                    r#type: "password",
+                    value: "{quantum_origin_key}",
+                    oninput: move |e| quantum_origin_key.set(e.value().clone()),
+                    placeholder: "API Key",
+                    disabled: *loading.read()
+                }
+                div { class: "button-group",
+                    button {
+                        onclick: move |_| save_quantum_origin(),
+                        disabled: *loading.read() || quantum_origin_key.read().is_empty(),
+                        "Save Key"
+                    }
+                    button {
+                        class: "btn-secondary",
+                        onclick: move |_| quantum_origin_key.set(String::new()),
+                        "Skip"
+                    }
+                }
+            }
+
+            // Quantinuum Section
+            div { class: "provider-section",
+                h4 { "Quantinuum" }
+                {
+                    if let Some(status) = auth_status.read().as_ref() {
+                        if status.quantinuum.authenticated {
+                            rsx! {
+                                span { class: "badge-success", "✅ Authenticated" }
+                                if let Some(exp) = &status.quantinuum.expiry {
+                                    span { class: "expiry-text", " until {exp}" }
+                                }
+                            }
+                        } else {
+                            rsx! { span { class: "badge-inactive", "⚪ Not Authenticated" } }
+                        }
+                    } else {
+                        rsx! { span {} }
+                    }
+                }
+                input {
+                    r#type: "email",
+                    value: "{quantinuum_email}",
+                    oninput: move |e| quantinuum_email.set(e.value().clone()),
+                    placeholder: "Email",
+                    disabled: *loading.read()
+                }
+                input {
+                    r#type: "password",
+                    value: "{quantinuum_password}",
+                    oninput: move |e| quantinuum_password.set(e.value().clone()),
+                    placeholder: "Password",
+                    disabled: *loading.read()
+                }
+                div { class: "button-group",
+                    button {
+                        onclick: move |_| authenticate_quantinuum(),
+                        disabled: *loading.read() || quantinuum_email.read().is_empty() || quantinuum_password.read().is_empty(),
+                        "Authenticate"
+                    }
+                    button {
+                        class: "btn-secondary",
+                        onclick: move |_| {
+                            quantinuum_email.set(String::new());
+                            quantinuum_password.set(String::new());
+                        },
+                        "Skip"
+                    }
+                }
+            }
+
+            // IBM Quantum Section
+            div { class: "provider-section",
+                h4 { "IBM Quantum" }
+                input {
+                    r#type: "password",
+                    value: "{ibm_token}",
+                    oninput: move |e| ibm_token.set(e.value().clone()),
+                    placeholder: "IBM Quantum Token",
+                    disabled: *loading.read()
+                }
+                div { class: "button-group",
+                    button {
+                        onclick: move |_| test_ibm_connection(),
+                        disabled: *loading.read() || ibm_token.read().is_empty(),
+                        "Test Connection"
+                    }
+                    button {
+                        class: "btn-secondary",
+                        onclick: move |_| ibm_token.set(String::new()),
+                        "Skip"
+                    }
+                }
+            }
+
+            // Feedback message
+            if !feedback.read().is_empty() {
+                div { class: "feedback-message",
+                    p { "{feedback}" }
+                }
+            }
+
+            div { class: "info-box",
+                p { "You can configure MAGIC providers later from the ✨ MAGIC page" }
+            }
+        }
     }
 }
