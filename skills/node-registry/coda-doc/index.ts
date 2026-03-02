@@ -1,4 +1,4 @@
-import type { SkillContext, SkillResult } from '../../../workers/node-worker/src/types';
+import type { SkillContext, SkillResult } from '../../types';
 
 interface CodaDocParams {
   action: 'create_page' | 'update_page' | 'get_page' | 'list_pages' | 'delete_page';

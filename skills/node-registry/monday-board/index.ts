@@ -1,4 +1,4 @@
-import type { SkillContext, SkillResult } from '../../../workers/node-worker/src/types';
+import type { SkillContext, SkillResult } from '../../types';
 
 interface MondayBoardParams {
   action: 'create_item' | 'update_item' | 'move_item' | 'get_board' | 'list_boards';

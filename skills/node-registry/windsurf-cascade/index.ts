@@ -1,4 +1,4 @@
-import type { SkillContext, SkillResult } from '../../../workers/node-worker/src/types';
+import type { SkillContext, SkillResult } from '../../types';
 import { writeFileSync, readFileSync, existsSync, appendFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 

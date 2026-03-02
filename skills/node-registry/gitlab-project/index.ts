@@ -1,4 +1,4 @@
-import type { SkillContext, SkillResult } from '../../../workers/node-worker/src/types';
+import type { SkillContext, SkillResult } from '../../types';
 
 interface GitLabProjectParams {
   action: 'create_project' | 'create_issue' | 'create_merge_request' | 'list_projects' | 'get_project';
