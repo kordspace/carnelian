@@ -61,8 +61,11 @@ use crate::sub_agent::{CreateSubAgentRequest, SubAgentManager, UpdateSubAgentReq
 use crate::worker::{WorkerManager, WorkerRuntime};
 use crate::{Config, EventStream, Scheduler, db, policy::PolicyEngine};
 
-// Import MAGIC entropy provider, trait, and Arc implementations
-use carnelian_magic::{EntropyProvider, entropy_arc_impl as _};
+// Import MAGIC entropy provider and trait
+use carnelian_magic::EntropyProvider;
+// Import Arc trait implementations - this enables EntropyProvider methods on Arc<MixedEntropyProvider>
+#[allow(unused_imports)]
+use carnelian_magic::entropy_arc_impl;
 
 use carnelian_common::{ChannelAdapter, ChannelAdapterFactory};
 use std::collections::HashMap;
@@ -7143,7 +7146,7 @@ async fn magic_entropy_sample_handler(
     let bytes = body.bytes.clamp(1, 1024);
 
     match &state.entropy_provider {
-        Some(provider) => match provider.as_ref().get_bytes(bytes).await {
+        Some(provider) => match provider.get_bytes(bytes).await {
             Ok(entropy_bytes) => {
                 let hex_encoded = hex::encode(&entropy_bytes);
                 (
@@ -7151,7 +7154,7 @@ async fn magic_entropy_sample_handler(
                     Json(json!({
                         "bytes": bytes,
                         "hex": hex_encoded,
-                        "source": provider.as_ref().source_name(),
+                        "source": provider.source_name(),
                     })),
                 )
                     .into_response()
@@ -7328,7 +7331,7 @@ async fn magic_quantinuum_login_handler(
         }
     };
 
-    let encryption = match state.config.encryption_helper() {
+    let encryption = match state.config.as_ref().encryption_helper() {
         Some(e) => e,
         None => {
             return (
@@ -7502,7 +7505,7 @@ async fn magic_quantinuum_refresh_handler(State(state): State<AppState>) -> impl
         }
     };
 
-    let encryption = match state.config.encryption_helper() {
+    let encryption = match state.config.as_ref().encryption_helper() {
         Some(e) => e,
         None => {
             return (
