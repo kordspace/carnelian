@@ -69,7 +69,6 @@ use carnelian_common::types::{
     EventEnvelope, EventLevel, EventType, InvokeRequest, InvokeStatus, RunId,
 };
 use carnelian_common::{Error, Result};
-use rand::seq::SliceRandom;
 use serde_json::json;
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -80,14 +79,6 @@ use carnelian_magic::{EntropyProvider, entropy_arc_impl as _};
 use tokio::sync::watch;
 use uuid::Uuid;
 
-/// Static list of mantras for the heartbeat system
-const MANTRAS: &[&str] = &[
-    "What wants to emerge?",
-    "Be present and authentic",
-    "Share a brief thought",
-    "Notice what's alive",
-    "Trust the process",
-];
 
 /// Background task scheduler managing heartbeats, task queue polling, and task execution.
 ///
@@ -319,6 +310,7 @@ impl Scheduler {
                         &model_router,
                         &ledger,
                         &entropy_provider,
+                        &mantra_tree,
                     ).await {
                         tracing::warn!(error = %e, "Heartbeat execution failed");
                     }
@@ -383,6 +375,7 @@ impl Scheduler {
         model_router: &ModelRouter,
         ledger: &Ledger,
         entropy_provider: &Option<Arc<carnelian_magic::MixedEntropyProvider>>,
+        mantra_tree: &Option<Arc<carnelian_magic::MantraTree>>,
     ) -> Result<()> {
         let start = std::time::Instant::now();
         
@@ -432,8 +425,82 @@ impl Scheduler {
             }
         };
 
-        // Select mantra
-        let mantra = Self::select_mantra(pool, identity_id).await?;
+        // ── Mantra Selection (MAGIC subsystem) ──────────────────────────
+        // Obtain 8 bytes of entropy for mantra selection
+        let entropy_bytes: Vec<u8> = if let Some(provider) = entropy_provider {
+            match tokio::time::timeout(
+                std::time::Duration::from_millis(config.magic.entropy_timeout_ms),
+                provider.as_ref().get_bytes(8)
+            ).await {
+                Ok(Ok(bytes)) => {
+                    tracing::debug!("Generated quantum entropy for mantra selection");
+                    bytes
+                }
+                Ok(Err(e)) => {
+                    tracing::warn!(error = %e, "Entropy provider failed for mantra, falling back to rand");
+                    rand::random::<[u8; 8]>().to_vec()
+                }
+                Err(_) => {
+                    tracing::warn!("Entropy provider timeout for mantra, falling back to rand");
+                    rand::random::<[u8; 8]>().to_vec()
+                }
+            }
+        } else {
+            rand::random::<[u8; 8]>().to_vec()
+        };
+
+        // MAGIC path: build context and select mantra
+        let mut mantra_selection: Option<carnelian_magic::MantraSelection> = None;
+        let mut mantra_context: Option<carnelian_magic::MantraContext> = None;
+        let mantra_text: Option<String>;
+
+        if let Some(tree) = mantra_tree {
+            // Build context from DB
+            match carnelian_magic::MantraTree::build_context(pool).await {
+                Ok(context) => {
+                    mantra_context = Some(context.clone());
+                    // Select mantra using preloaded tree or with pool
+                    match tree.select_with_pool(&entropy_bytes, &context, pool).await {
+                        Ok(selection) => {
+                            mantra_text = Some(selection.mantra_text.clone());
+                            mantra_selection = Some(selection);
+                            tracing::debug!("MAGIC mantra selection succeeded");
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = %e, "MAGIC mantra selection failed, using fallback");
+                            // Fallback: random mantra from DB
+                            mantra_text = sqlx::query_scalar::<_, Option<String>>(
+                                "SELECT text FROM mantra_entries WHERE enabled = true ORDER BY RANDOM() LIMIT 1"
+                            )
+                            .fetch_optional(pool)
+                            .await
+                            .map_err(Error::Database)?
+                            .flatten();
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "MAGIC context build failed, using fallback");
+                    // Fallback: random mantra from DB
+                    mantra_text = sqlx::query_scalar::<_, Option<String>>(
+                        "SELECT text FROM mantra_entries WHERE enabled = true ORDER BY RANDOM() LIMIT 1"
+                    )
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(Error::Database)?
+                    .flatten();
+                }
+            }
+        } else {
+            // MAGIC disabled: fallback to random mantra from DB
+            mantra_text = sqlx::query_scalar::<_, Option<String>>(
+                "SELECT text FROM mantra_entries WHERE enabled = true ORDER BY RANDOM() LIMIT 1"
+            )
+            .fetch_optional(pool)
+            .await
+            .map_err(Error::Database)?
+            .flatten();
+        }
 
         // Count pending tasks
         let tasks_queued: i64 = sqlx::query_scalar::<_, Option<i64>>(
@@ -470,7 +537,7 @@ impl Scheduler {
         let task_summary = format!(
             "Current state: {} pending tasks in queue. Mantra: \"{}\"",
             tasks_queued,
-            mantra.as_deref().unwrap_or("none")
+            mantra_text.as_deref().unwrap_or("none")
         );
         ctx.add_raw_segment(
             crate::context::SegmentPriority::P2,
@@ -501,7 +568,7 @@ impl Scheduler {
                 format!(
                     "Pending tasks: {}. Mantra: \"{}\"",
                     tasks_queued,
-                    mantra.as_deref().unwrap_or("none")
+                    mantra_text.as_deref().unwrap_or("none")
                 )
             }
         };
@@ -512,18 +579,31 @@ impl Scheduler {
         }
 
         // ── Model Call ───────────────────────────────────────────────────
+        // Prepare system and user messages based on MAGIC selection
+        let system_content = if let Some(ref selection) = mantra_selection {
+            format!("{}\n\n{}", selection.system_message, context_text)
+        } else {
+            context_text
+        };
+
+        let user_content = if let Some(ref selection) = mantra_selection {
+            selection.user_message.clone()
+        } else {
+            "Reflect briefly on the current state. Note any observations or planning thoughts. Keep it concise (2-3 sentences).".to_string()
+        };
+
         let request = CompletionRequest {
             model: "deepseek-r1:7b".to_string(),
             messages: vec![
                 Message {
                     role: "system".to_string(),
-                    content: context_text,
+                    content: system_content,
                     name: None,
                     tool_call_id: None,
                 },
                 Message {
                     role: "user".to_string(),
-                    content: "Reflect briefly on the current state. Note any observations or planning thoughts. Keep it concise (2-3 sentences).".to_string(),
+                    content: user_content,
                     name: None,
                     tool_call_id: None,
                 },
@@ -599,7 +679,7 @@ impl Scheduler {
             ",
         )
         .bind(identity_id)
-        .bind(&mantra)
+        .bind(&mantra_text)
         .bind(tasks_queued as i32)
         .bind(&status)
         .bind(duration_ms)
@@ -609,16 +689,53 @@ impl Scheduler {
         .await
         .map_err(Error::Database)?;
 
+        // Persist mantra_history row if MAGIC selection succeeded
+        if let Some(ref selection) = mantra_selection {
+            if let Err(e) = sqlx::query(
+                r"
+                INSERT INTO mantra_history (heartbeat_id, category_id, entry_id, context_snapshot, context_weights, suggested_skill_ids, entropy_source)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                "
+            )
+            .bind(heartbeat_id)
+            .bind(selection.category_id)
+            .bind(selection.entry_id)
+            .bind(serde_json::to_value(&mantra_context).ok())
+            .bind(serde_json::to_value(&selection.context_weights).ok())
+            .bind(&selection.suggested_skill_ids)
+            .bind(&selection.entropy_source)
+            .execute(pool)
+            .await
+            {
+                tracing::warn!(error = %e, "Failed to persist mantra_history");
+            }
+
+            // Increment use_count on selected entry
+            if let Err(e) = sqlx::query("UPDATE mantra_entries SET use_count = use_count + 1 WHERE entry_id = $1")
+                .bind(selection.entry_id)
+                .execute(pool)
+                .await
+            {
+                tracing::warn!(error = %e, "Failed to increment mantra entry use_count");
+            }
+        }
+
         // Log to ledger
         if let Err(e) = ledger
             .append_event(
                 Some(identity_id),
                 "heartbeat.completed",
                 json!({
-                    "mantra": mantra,
+                    "mantra": mantra_text,
                     "reason": reason,
                     "status": status,
                     "duration_ms": duration_ms,
+                    "mantra_category": mantra_selection.as_ref().map(|s| s.category.as_db_name()),
+                    "entropy_source": mantra_selection.as_ref().map(|s| s.entropy_source.as_str()).unwrap_or("os_random"),
+                    "context_weights": mantra_selection.as_ref().map(|s| &s.context_weights),
+                    "suggested_skill_ids": mantra_selection.as_ref().map(|s| &s.suggested_skill_ids),
+                    "elixir_reference": mantra_selection.as_ref().and_then(|s| s.elixir_reference),
+                    "elixir_drafts_pending": mantra_context.as_ref().map(|c| c.elixir_drafts_pending).unwrap_or(0),
                 }),
                 Some(correlation_id),
                 None,
@@ -640,11 +757,17 @@ impl Scheduler {
                 json!({
                     "heartbeat_id": heartbeat_id,
                     "identity_id": identity_id,
-                    "mantra": mantra,
+                    "mantra": mantra_text,
                     "tasks_queued": tasks_queued,
                     "duration_ms": duration_ms,
                     "status": status,
                     "correlation_id": correlation_id,
+                    "mantra_category": mantra_selection.as_ref().map(|s| s.category.as_db_name()),
+                    "entropy_source": mantra_selection.as_ref().map(|s| s.entropy_source.as_str()).unwrap_or("os_random"),
+                    "context_weights": mantra_selection.as_ref().map(|s| &s.context_weights),
+                    "suggested_skill_ids": mantra_selection.as_ref().map(|s| &s.suggested_skill_ids),
+                    "elixir_reference": mantra_selection.as_ref().and_then(|s| s.elixir_reference),
+                    "elixir_drafts_pending": mantra_context.as_ref().map(|c| c.elixir_drafts_pending).unwrap_or(0),
                 }),
             )
             .with_correlation_id(correlation_id),
@@ -722,7 +845,7 @@ impl Scheduler {
         tracing::info!(
             heartbeat_id = %heartbeat_id,
             identity_id = %identity_id,
-            mantra = ?mantra,
+            mantra = ?mantra_text,
             tasks_queued = tasks_queued,
             workspace_scanned = ws_scanned,
             workspace_safe = ws_safe,
@@ -737,40 +860,6 @@ impl Scheduler {
         Ok(())
     }
 
-    /// Select a mantra using "first unknown, then random rotation" strategy.
-    ///
-    /// # Strategy
-    ///
-    /// 1. Query previously used mantras for this identity
-    /// 2. Find mantras not yet used (set difference)
-    /// 3. If unknown mantras exist, return the first one
-    /// 4. Otherwise, randomly select from the full rotation
-    async fn select_mantra(pool: &PgPool, identity_id: Uuid) -> Result<Option<String>> {
-        // Query used mantras
-        let used_mantras: Vec<String> = sqlx::query_scalar(
-            r"SELECT DISTINCT mantra FROM heartbeat_history WHERE identity_id = $1 AND mantra IS NOT NULL",
-        )
-        .bind(identity_id)
-        .fetch_all(pool)
-        .await
-        .map_err(Error::Database)?;
-
-        // Find unknown mantras (not yet used)
-        let unknown: Vec<&str> = MANTRAS
-            .iter()
-            .copied()
-            .filter(|m| !used_mantras.iter().any(|u| u == *m))
-            .collect();
-
-        if !unknown.is_empty() {
-            // Return first unknown mantra
-            return Ok(Some(unknown[0].to_string()));
-        }
-
-        // All mantras used, select randomly
-        let mut rng = rand::thread_rng();
-        Ok(MANTRAS.choose(&mut rng).map(|s| (*s).to_string()))
-    }
 
     /// Poll the task queue for pending work and dispatch tasks to workers.
     ///
@@ -2118,12 +2207,6 @@ mod tests {
         )
     }
 
-    #[test]
-    #[allow(clippy::len_zero)]
-    fn test_mantras_defined() {
-        assert!(MANTRAS.len() > 0, "Mantras list should not be empty");
-        assert_eq!(MANTRAS.len(), 5, "Should have 5 mantras defined");
-    }
 
     #[tokio::test]
     async fn test_scheduler_creation() {
