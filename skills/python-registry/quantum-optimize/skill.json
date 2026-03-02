@@ -1,0 +1,7 @@
+{
+  "name": "quantum-optimize",
+  "description": "Quantum-seeded simulated annealing optimizer for query plans and data-loading problems",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": []
+}
