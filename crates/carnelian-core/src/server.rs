@@ -500,10 +500,7 @@ impl Server {
         // Initialize MAGIC entropy provider if enabled
         let entropy_provider = if self.config.magic.enabled {
             let pool = self.config.pool().expect("Database pool required for MixedEntropyProvider");
-            let provider = carnelian_magic::MixedEntropyProvider::new(
-                pool.clone(),
-                self.config.magic.clone(),
-            );
+            let provider = carnelian_magic::MixedEntropyProvider::new(pool.clone(), self.config.magic.clone());
             tracing::info!("MAGIC entropy provider initialized");
             Some(Arc::new(provider))
         } else {
