@@ -506,32 +506,15 @@ impl Server {
                 Some(carnelian_magic::QuantumOriginProvider::new(
                     self.config.magic.quantum_origin_url.clone(),
                     self.config.magic.quantum_origin_api_key.clone(),
-                    std::time::Duration::from_millis(self.config.magic.entropy_timeout_ms),
                 ))
             } else {
                 None
             };
             
-            // Build Quantinuum provider if enabled
-            let quantinuum = if self.config.magic.quantinuum_enabled {
-                Some(carnelian_magic::QuantinuumH2Provider::new(
-                    pool.clone(),
-                    self.config.magic.quantinuum_device.clone(),
-                    self.config.magic.quantinuum_n_bits,
-                ))
-            } else {
-                None
-            };
-            
-            // Build Qiskit provider if enabled
-            let qiskit = if self.config.magic.qiskit_enabled {
-                Some(carnelian_magic::QiskitProvider::new(
-                    pool.clone(),
-                    self.config.magic.qiskit_backend.clone(),
-                ))
-            } else {
-                None
-            };
+            // TODO: Quantinuum and Qiskit providers require SkillBridge implementation
+            // These will be enabled once the skill bridge is wired up
+            let quantinuum = None;
+            let qiskit = None;
             
             let node_id = uuid::Uuid::now_v7();
             let provider = carnelian_magic::MixedEntropyProvider::new(
