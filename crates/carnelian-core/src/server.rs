@@ -892,9 +892,9 @@ fn build_router(state: AppState) -> Router {
         .route("/v1/magic/auth/status", get(magic_auth_status_handler))
         // MAGIC mantra endpoints
         .route("/v1/magic/mantras", get(magic_list_mantras_handler))
-        .route("/v1/magic/mantras/categories/:id", get(magic_list_category_entries_handler))
-        .route("/v1/magic/mantras/categories/:id/entries", post(magic_add_mantra_entry_handler))
-        .route("/v1/magic/mantras/entries/:id", put(magic_update_mantra_entry_handler).delete(magic_delete_mantra_entry_handler))
+        .route("/v1/magic/mantras/categories/{id}", get(magic_list_category_entries_handler))
+        .route("/v1/magic/mantras/categories/{id}/entries", post(magic_add_mantra_entry_handler))
+        .route("/v1/magic/mantras/entries/{id}", put(magic_update_mantra_entry_handler).delete(magic_delete_mantra_entry_handler))
         .route("/v1/magic/mantras/history", get(magic_mantra_history_handler))
         .route("/v1/magic/mantras/context", get(magic_mantra_context_handler))
         .route("/v1/magic/mantras/simulate", post(magic_mantra_simulate_handler))
@@ -8296,7 +8296,7 @@ async fn magic_mantra_history_handler(
             entry_id: row.get("entry_id"),
             mantra_text: row.get("mantra_text"),
             entropy_source: row.get("entropy_source"),
-            context_weights: row.get::<serde_json::Value, _>("context_weights"),
+            context_weights: row.get::<Option<serde_json::Value>, _>("context_weights").unwrap_or(serde_json::Value::Null),
             suggested_skill_ids: row.get("suggested_skill_ids"),
             ts: row.get::<chrono::DateTime<chrono::Utc>, _>("ts").to_rfc3339(),
         })
@@ -8356,7 +8356,16 @@ async fn magic_mantra_simulate_handler(
     // Obtain entropy bytes
     let entropy_bytes: Vec<u8> = if let Some(ref hex_str) = body.entropy_hex {
         match hex::decode(hex_str) {
-            Ok(bytes) => bytes,
+            Ok(bytes) => {
+                if bytes.len() < 8 {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({"error": format!("Entropy must be at least 8 bytes, got {}", bytes.len())})),
+                    )
+                        .into_response();
+                }
+                bytes
+            }
             Err(e) => {
                 return (
                     StatusCode::BAD_REQUEST,
