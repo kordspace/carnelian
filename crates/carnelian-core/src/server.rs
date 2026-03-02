@@ -7114,7 +7114,7 @@ async fn reject_elixir_draft_handler(
 async fn magic_entropy_health_handler(State(state): State<AppState>) -> impl IntoResponse {
     match &state.entropy_provider {
         Some(provider) => {
-            let health = provider.health().await;
+            let health = provider.as_ref().health().await;
             (StatusCode::OK, Json(json!(health))).into_response()
         }
         None => (
@@ -7143,7 +7143,7 @@ async fn magic_entropy_sample_handler(
     let bytes = body.bytes.clamp(1, 1024);
 
     match &state.entropy_provider {
-        Some(provider) => match provider.get_bytes(bytes).await {
+        Some(provider) => match provider.as_ref().get_bytes(bytes).await {
             Ok(entropy_bytes) => {
                 let hex_encoded = hex::encode(&entropy_bytes);
                 (
@@ -7151,7 +7151,7 @@ async fn magic_entropy_sample_handler(
                     Json(json!({
                         "bytes": bytes,
                         "hex": hex_encoded,
-                        "source": provider.source_name(),
+                        "source": provider.as_ref().source_name(),
                     })),
                 )
                     .into_response()
