@@ -8,7 +8,7 @@ use axum::{
     extract::{Path, Query, State, WebSocketUpgrade, ws::Message},
     http::StatusCode,
     response::IntoResponse,
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
 };
 use base64::Engine as _;
 use carnelian_common::Result;
@@ -568,7 +568,7 @@ impl Server {
             let mut scheduler = self.scheduler.lock().await;
             scheduler.set_metrics(state.metrics.clone());
             scheduler.set_workflow_engine(state.workflow_engine.clone());
-            if let Some(ref provider) = entropy_provider {
+            if let Some(provider) = state.entropy_provider.as_ref() {
                 scheduler.set_entropy_provider(provider.clone());
             }
         }
@@ -887,6 +887,7 @@ fn build_router(state: AppState) -> Router {
         .route("/v1/magic/config", get(magic_get_config_handler))
         .route("/v1/magic/config", post(magic_update_config_handler))
         .route("/v1/magic/auth/quantinuum/login", post(magic_quantinuum_login_handler))
+        .route("/v1/magic/auth/quantinuum", put(magic_quantinuum_persist_handler))
         .route("/v1/magic/auth/quantinuum/refresh", post(magic_quantinuum_refresh_handler))
         .route("/v1/magic/auth/status", get(magic_auth_status_handler))
         // Apply auth middleware to all protected routes
@@ -7486,7 +7487,127 @@ async fn magic_quantinuum_login_handler(
         StatusCode::OK,
         Json(json!({
             "message": "Quantinuum login successful",
-            "token_expiry": expiry_ts.to_rfc3339(),
+            "expires_at": expiry_ts.to_rfc3339(),
+        })),
+    )
+        .into_response()
+}
+
+/// PUT /v1/magic/auth/quantinuum - Persist Quantinuum tokens (for CLI direct login)
+#[derive(Debug, Deserialize)]
+struct QuantinuumPersistRequest {
+    id_token: String,
+    refresh_token: String,
+    expires_at: String,
+}
+
+async fn magic_quantinuum_persist_handler(
+    State(state): State<AppState>,
+    Json(body): Json<QuantinuumPersistRequest>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Database pool error: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let encryption = match state.config.owner_signing_key().map(|sk| crate::encryption::EncryptionHelper::new(pool, sk)) {
+        Some(e) => e,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Encryption not available - owner signing key not loaded"})),
+            )
+                .into_response();
+        }
+    };
+
+    let id_token_cipher = match encryption.encrypt_text(&body.id_token).await {
+        Ok(c) => c,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to encrypt id-token: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let refresh_token_cipher = match encryption.encrypt_text(&body.refresh_token).await {
+        Ok(c) => c,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to encrypt refresh-token: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    if let Err(e) = sqlx::query(
+        r"INSERT INTO config_store (key, value, value_blob, encrypted, updated_at)
+          VALUES ($1, '{}'::jsonb, $2, true, NOW())
+          ON CONFLICT (key) DO UPDATE
+            SET value = '{}'::jsonb, value_blob = $2, encrypted = true, updated_at = NOW()",
+    )
+    .bind("magic.quantinuum_id_token")
+    .bind(&id_token_cipher)
+    .execute(pool)
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to store id-token: {}", e)})),
+        )
+            .into_response();
+    }
+
+    if let Err(e) = sqlx::query(
+        r"INSERT INTO config_store (key, value, value_blob, encrypted, updated_at)
+          VALUES ($1, '{}'::jsonb, $2, true, NOW())
+          ON CONFLICT (key) DO UPDATE
+            SET value = '{}'::jsonb, value_blob = $2, encrypted = true, updated_at = NOW()",
+    )
+    .bind("magic.quantinuum_refresh_token")
+    .bind(&refresh_token_cipher)
+    .execute(pool)
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to store refresh-token: {}", e)})),
+        )
+            .into_response();
+    }
+
+    if let Err(e) = sqlx::query(
+        r"INSERT INTO config_store (key, value_text, encrypted, updated_at)
+          VALUES ($1, $2, false, NOW())
+          ON CONFLICT (key) DO UPDATE
+            SET value_text = $2, encrypted = false, updated_at = NOW()",
+    )
+    .bind("magic.quantinuum_token_expiry")
+    .bind(&body.expires_at)
+    .execute(pool)
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to store token expiry: {}", e)})),
+        )
+            .into_response();
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "message": "Quantinuum tokens persisted successfully",
+            "expires_at": body.expires_at,
         })),
     )
         .into_response()
