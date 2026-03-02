@@ -390,7 +390,7 @@ impl Scheduler {
         let correlation_id = if let Some(provider) = entropy_provider {
             match tokio::time::timeout(
                 std::time::Duration::from_millis(config.magic.entropy_timeout_ms),
-                provider.get_bytes(16)
+                provider.as_ref().get_bytes(16)
             ).await {
                 Ok(Ok(entropy_bytes)) => {
                     if let Ok(bytes_array) = <[u8; 16]>::try_from(entropy_bytes.as_slice()) {
@@ -1595,12 +1595,34 @@ impl Scheduler {
             // This returns immediately, freeing the worker slot.
             let pool = pool.clone();
             tokio::spawn(async move {
-                tokio::time::sleep(Duration::from_secs(retry_delay_secs)).await;
-
-                if let Err(e) = sqlx::query(
-                    r"UPDATE tasks SET state = 'pending', updated_at = NOW() WHERE task_id = $1 AND state = 'failed'",
-                )
-                .bind(task_id)
+                match timeout(Duration::from_secs(2), provider.as_ref().get_bytes(16)).await {
+                    Ok(result) => {
+                        if let Err(e) = sqlx::query(
+                            r"UPDATE tasks SET state = 'pending', updated_at = NOW() WHERE task_id = $1 AND state = 'failed'",
+                        )
+                        .bind(task_id)
+                        .execute(&pool)
+                        .await
+                        {
+                            tracing::error!(
+                                task_id = %task_id,
+                                error = %e,
+                                "Failed to reset task to pending after retry delay"
+                            );
+                        } else {
+                            tracing::debug!(
+                                task_id = %task_id,
+                                "Task reset to pending after retry delay"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            task_id = %task_id,
+                            error = %e,
+                            "Failed to reset task to pending after retry delay"
+                        );
+                    }
                 .execute(&pool)
                 .await
                 {
