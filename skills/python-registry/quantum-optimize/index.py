@@ -38,6 +38,7 @@ def _simulated_anneal(problem: Dict[str, Any], rng) -> Dict[str, Any]:
     else:
         # Fallback: optimize a default range
         current_plan = list(range(10))
+        operations = list(range(10))  # Create default operations for mapping
     
     n = len(current_plan)
     
@@ -74,8 +75,12 @@ def _simulated_anneal(problem: Dict[str, Any], rng) -> Dict[str, Any]:
         # Cool down temperature
         temperature *= cooling_rate
     
+    # Map optimized indices back to actual operations
+    optimized_operations = [operations[idx] for idx in best_plan]
+    
     return {
-        "optimized_plan": best_plan,
+        "optimized_plan": optimized_operations,
+        "index_order": best_plan,
         "cost_estimate": float(best_cost),
         "iterations": steps
     }
@@ -116,8 +121,20 @@ def execute(context: Dict[str, Any]) -> Dict[str, Any]:
             # Use numpy's default entropy (non-deterministic)
             rng = np.random.default_rng()
         
-        # Get problem specification
-        problem = context.get("problem", {})
+        # Get problem specification and normalize input
+        problem_input = context.get("problem", {})
+        
+        # Normalize input: support both dict and non-dict inputs
+        if not isinstance(problem_input, dict):
+            # Convert description-style or other inputs to dict
+            problem = {
+                "operations": [str(problem_input)] if problem_input else [],
+                "steps": 500,
+                "temperature": 1.0,
+                "cooling_rate": 0.995
+            }
+        else:
+            problem = problem_input
         
         # Run simulated annealing
         result = _simulated_anneal(problem, rng)
