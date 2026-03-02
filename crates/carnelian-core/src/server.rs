@@ -7331,7 +7331,7 @@ async fn magic_quantinuum_login_handler(
         }
     };
 
-    let encryption = match state.config.as_ref().encryption_helper() {
+    let encryption = match state.config.owner_signing_key().map(|sk| crate::encryption::EncryptionHelper::new(pool, sk)) {
         Some(e) => e,
         None => {
             return (
@@ -7505,7 +7505,7 @@ async fn magic_quantinuum_refresh_handler(State(state): State<AppState>) -> impl
         }
     };
 
-    let encryption = match state.config.as_ref().encryption_helper() {
+    let encryption = match state.config.owner_signing_key().map(|sk| crate::encryption::EncryptionHelper::new(pool, sk)) {
         Some(e) => e,
         None => {
             return (
