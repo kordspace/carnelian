@@ -61,6 +61,9 @@ use crate::sub_agent::{CreateSubAgentRequest, SubAgentManager, UpdateSubAgentReq
 use crate::worker::{WorkerManager, WorkerRuntime};
 use crate::{Config, EventStream, Scheduler, db, policy::PolicyEngine};
 
+// Import MAGIC entropy provider and Arc trait implementations
+use carnelian_magic::entropy_arc_impl as _;
+
 use carnelian_common::{ChannelAdapter, ChannelAdapterFactory};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
