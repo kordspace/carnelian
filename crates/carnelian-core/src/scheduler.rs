@@ -426,33 +426,36 @@ impl Scheduler {
         };
 
         // ── Mantra Selection (MAGIC subsystem) ──────────────────────────
-        // Obtain 8 bytes of entropy for mantra selection
-        let entropy_bytes: Vec<u8> = if let Some(provider) = entropy_provider {
+        // Obtain 8 bytes of entropy for mantra selection and track actual source
+        let (entropy_bytes, actual_entropy_source): (Vec<u8>, &str) = if let Some(provider) = entropy_provider {
             match tokio::time::timeout(
                 std::time::Duration::from_millis(config.magic.entropy_timeout_ms),
                 provider.as_ref().get_bytes(8)
             ).await {
                 Ok(Ok(bytes)) => {
                     tracing::debug!("Generated quantum entropy for mantra selection");
-                    bytes
+                    (bytes, "quantum")
                 }
                 Ok(Err(e)) => {
                     tracing::warn!(error = %e, "Entropy provider failed for mantra, falling back to rand");
-                    rand::random::<[u8; 8]>().to_vec()
+                    (rand::random::<[u8; 8]>().to_vec(), "os_random")
                 }
                 Err(_) => {
                     tracing::warn!("Entropy provider timeout for mantra, falling back to rand");
-                    rand::random::<[u8; 8]>().to_vec()
+                    (rand::random::<[u8; 8]>().to_vec(), "os_random")
                 }
             }
         } else {
-            rand::random::<[u8; 8]>().to_vec()
+            (rand::random::<[u8; 8]>().to_vec(), "os_random")
         };
 
         // MAGIC path: build context and select mantra
         let mut mantra_selection: Option<carnelian_magic::MantraSelection> = None;
         let mut mantra_context: Option<carnelian_magic::MantraContext> = None;
         let mantra_text: Option<String>;
+        // Track fallback selection metadata for mantra_history
+        let mut fallback_entry_id: Option<Uuid> = None;
+        let mut fallback_category_id: Option<Uuid> = None;
 
         if let Some(tree) = mantra_tree {
             // Build context from DB
@@ -468,38 +471,65 @@ impl Scheduler {
                         }
                         Err(e) => {
                             tracing::warn!(error = %e, "MAGIC mantra selection failed, using fallback");
-                            // Fallback: random mantra from DB
-                            mantra_text = sqlx::query_scalar::<_, Option<String>>(
-                                "SELECT text FROM mantra_entries WHERE enabled = true ORDER BY RANDOM() LIMIT 1"
+                            // Fallback: fetch all eligible entries and select with OS-random
+                            let entries: Vec<(Uuid, Uuid, String)> = sqlx::query_as(
+                                "SELECT entry_id, category_id, text FROM mantra_entries WHERE enabled = true"
                             )
-                            .fetch_optional(pool)
+                            .fetch_all(pool)
                             .await
-                            .map_err(Error::Database)?
-                            .flatten();
+                            .map_err(Error::Database)?;
+                            
+                            if !entries.is_empty() {
+                                let idx = rand::random::<usize>() % entries.len();
+                                let (entry_id, category_id, text) = &entries[idx];
+                                fallback_entry_id = Some(*entry_id);
+                                fallback_category_id = Some(*category_id);
+                                mantra_text = Some(text.clone());
+                            } else {
+                                mantra_text = None;
+                            }
                         }
                     }
                 }
                 Err(e) => {
                     tracing::warn!(error = %e, "MAGIC context build failed, using fallback");
-                    // Fallback: random mantra from DB
-                    mantra_text = sqlx::query_scalar::<_, Option<String>>(
-                        "SELECT text FROM mantra_entries WHERE enabled = true ORDER BY RANDOM() LIMIT 1"
+                    // Fallback: fetch all eligible entries and select with OS-random
+                    let entries: Vec<(Uuid, Uuid, String)> = sqlx::query_as(
+                        "SELECT entry_id, category_id, text FROM mantra_entries WHERE enabled = true"
                     )
-                    .fetch_optional(pool)
+                    .fetch_all(pool)
                     .await
-                    .map_err(Error::Database)?
-                    .flatten();
+                    .map_err(Error::Database)?;
+                    
+                    if !entries.is_empty() {
+                        let idx = rand::random::<usize>() % entries.len();
+                        let (entry_id, category_id, text) = &entries[idx];
+                        fallback_entry_id = Some(*entry_id);
+                        fallback_category_id = Some(*category_id);
+                        mantra_text = Some(text.clone());
+                    } else {
+                        mantra_text = None;
+                    }
                 }
             }
         } else {
-            // MAGIC disabled: fallback to random mantra from DB
-            mantra_text = sqlx::query_scalar::<_, Option<String>>(
-                "SELECT text FROM mantra_entries WHERE enabled = true ORDER BY RANDOM() LIMIT 1"
+            // MAGIC disabled: fetch all eligible entries and select with OS-random
+            let entries: Vec<(Uuid, Uuid, String)> = sqlx::query_as(
+                "SELECT entry_id, category_id, text FROM mantra_entries WHERE enabled = true"
             )
-            .fetch_optional(pool)
+            .fetch_all(pool)
             .await
-            .map_err(Error::Database)?
-            .flatten();
+            .map_err(Error::Database)?;
+            
+            if !entries.is_empty() {
+                let idx = rand::random::<usize>() % entries.len();
+                let (entry_id, category_id, text) = &entries[idx];
+                fallback_entry_id = Some(*entry_id);
+                fallback_category_id = Some(*category_id);
+                mantra_text = Some(text.clone());
+            } else {
+                mantra_text = None;
+            }
         }
 
         // Count pending tasks
@@ -581,7 +611,7 @@ impl Scheduler {
         // ── Model Call ───────────────────────────────────────────────────
         // Prepare system and user messages based on MAGIC selection
         let system_content = if let Some(ref selection) = mantra_selection {
-            format!("{}\n\n{}", selection.system_message, context_text)
+            format!("{}\n\n{}", context_text, selection.system_message)
         } else {
             context_text
         };
@@ -689,8 +719,9 @@ impl Scheduler {
         .await
         .map_err(Error::Database)?;
 
-        // Persist mantra_history row if MAGIC selection succeeded
+        // Persist mantra_history row for every heartbeat
         if let Some(ref selection) = mantra_selection {
+            // MAGIC success path - use full selection data
             if let Err(e) = sqlx::query(
                 r"
                 INSERT INTO mantra_history (heartbeat_id, category_id, entry_id, context_snapshot, context_weights, suggested_skill_ids, entropy_source)
@@ -703,7 +734,7 @@ impl Scheduler {
             .bind(serde_json::to_value(&mantra_context).ok())
             .bind(serde_json::to_value(&selection.context_weights).ok())
             .bind(&selection.suggested_skill_ids)
-            .bind(&selection.entropy_source)
+            .bind(actual_entropy_source)
             .execute(pool)
             .await
             {
@@ -718,6 +749,35 @@ impl Scheduler {
             {
                 tracing::warn!(error = %e, "Failed to increment mantra entry use_count");
             }
+        } else if fallback_entry_id.is_some() && fallback_category_id.is_some() {
+            // Fallback path - use captured entry/category IDs with sane defaults
+            if let Err(e) = sqlx::query(
+                r"
+                INSERT INTO mantra_history (heartbeat_id, category_id, entry_id, context_snapshot, context_weights, suggested_skill_ids, entropy_source)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                "
+            )
+            .bind(heartbeat_id)
+            .bind(fallback_category_id.unwrap())
+            .bind(fallback_entry_id.unwrap())
+            .bind(None::<serde_json::Value>)  // No context snapshot for fallback
+            .bind(None::<serde_json::Value>)  // No context weights for fallback
+            .bind(&Vec::<Uuid>::new())        // Empty suggested_skill_ids
+            .bind(actual_entropy_source)
+            .execute(pool)
+            .await
+            {
+                tracing::warn!(error = %e, "Failed to persist fallback mantra_history");
+            }
+
+            // Increment use_count on selected entry
+            if let Err(e) = sqlx::query("UPDATE mantra_entries SET use_count = use_count + 1 WHERE entry_id = $1")
+                .bind(fallback_entry_id.unwrap())
+                .execute(pool)
+                .await
+            {
+                tracing::warn!(error = %e, "Failed to increment fallback mantra entry use_count");
+            }
         }
 
         // Log to ledger
@@ -731,7 +791,7 @@ impl Scheduler {
                     "status": status,
                     "duration_ms": duration_ms,
                     "mantra_category": mantra_selection.as_ref().map(|s| s.category.as_db_name()),
-                    "entropy_source": mantra_selection.as_ref().map(|s| s.entropy_source.as_str()).unwrap_or("os_random"),
+                    "entropy_source": actual_entropy_source,
                     "context_weights": mantra_selection.as_ref().map(|s| &s.context_weights),
                     "suggested_skill_ids": mantra_selection.as_ref().map(|s| &s.suggested_skill_ids),
                     "elixir_reference": mantra_selection.as_ref().and_then(|s| s.elixir_reference),
@@ -763,7 +823,7 @@ impl Scheduler {
                     "status": status,
                     "correlation_id": correlation_id,
                     "mantra_category": mantra_selection.as_ref().map(|s| s.category.as_db_name()),
-                    "entropy_source": mantra_selection.as_ref().map(|s| s.entropy_source.as_str()).unwrap_or("os_random"),
+                    "entropy_source": actual_entropy_source,
                     "context_weights": mantra_selection.as_ref().map(|s| &s.context_weights),
                     "suggested_skill_ids": mantra_selection.as_ref().map(|s| &s.suggested_skill_ids),
                     "elixir_reference": mantra_selection.as_ref().and_then(|s| s.elixir_reference),
