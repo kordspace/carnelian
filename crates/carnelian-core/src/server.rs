@@ -7218,7 +7218,7 @@ async fn magic_update_config_handler(
         }
     };
 
-    let encryption = state.config.encryption_helper();
+    let encryption = state.config.owner_signing_key().map(|sk| crate::encryption::EncryptionHelper::new(pool, sk));
 
     if let Some(api_key) = body.quantum_origin_api_key {
         let enc = match encryption {
