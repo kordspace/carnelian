@@ -890,6 +890,14 @@ fn build_router(state: AppState) -> Router {
         .route("/v1/magic/auth/quantinuum", put(magic_quantinuum_persist_handler))
         .route("/v1/magic/auth/quantinuum/refresh", post(magic_quantinuum_refresh_handler))
         .route("/v1/magic/auth/status", get(magic_auth_status_handler))
+        // MAGIC mantra endpoints
+        .route("/v1/magic/mantras", get(magic_list_mantras_handler))
+        .route("/v1/magic/mantras/categories/:id", get(magic_list_category_entries_handler))
+        .route("/v1/magic/mantras/categories/:id/entries", post(magic_add_mantra_entry_handler))
+        .route("/v1/magic/mantras/entries/:id", put(magic_update_mantra_entry_handler).delete(magic_delete_mantra_entry_handler))
+        .route("/v1/magic/mantras/history", get(magic_mantra_history_handler))
+        .route("/v1/magic/mantras/context", get(magic_mantra_context_handler))
+        .route("/v1/magic/mantras/simulate", post(magic_mantra_simulate_handler))
         // Apply auth middleware to all protected routes
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
@@ -7842,4 +7850,552 @@ async fn magic_auth_status_handler(State(state): State<AppState>) -> impl IntoRe
         })),
     )
         .into_response()
+}
+
+// =============================================================================
+// MAGIC MANTRA HANDLERS
+// =============================================================================
+
+#[derive(Debug, Serialize)]
+struct MantraCategoryRow {
+    category_id: uuid::Uuid,
+    name: String,
+    base_weight: i32,
+    cooldown_beats: i32,
+    mantra_count: i64,
+    elixir_types: Vec<String>,
+    enabled: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct ListMantrasResponse {
+    categories: Vec<MantraCategoryRow>,
+}
+
+/// GET /v1/magic/mantras - List all mantra categories with entry counts
+async fn magic_list_mantras_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Database unavailable: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let rows = match sqlx::query(
+        r"
+        SELECT mc.category_id, mc.name, mc.base_weight, mc.cooldown_beats,
+               mc.elixir_types, mc.enabled,
+               COUNT(me.entry_id) AS mantra_count
+        FROM mantra_categories mc
+        LEFT JOIN mantra_entries me ON me.category_id = mc.category_id AND me.enabled = true
+        GROUP BY mc.category_id
+        ORDER BY mc.name
+        "
+    )
+    .fetch_all(pool)
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Query failed: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let categories: Vec<MantraCategoryRow> = rows
+        .iter()
+        .map(|row| MantraCategoryRow {
+            category_id: row.get("category_id"),
+            name: row.get("name"),
+            base_weight: row.get("base_weight"),
+            cooldown_beats: row.get("cooldown_beats"),
+            mantra_count: row.get("mantra_count"),
+            elixir_types: row.get("elixir_types"),
+            enabled: row.get("enabled"),
+        })
+        .collect();
+
+    (StatusCode::OK, Json(ListMantrasResponse { categories })).into_response()
+}
+
+#[derive(Debug, Serialize)]
+struct MantraEntryRow {
+    entry_id: uuid::Uuid,
+    text: String,
+    use_count: i32,
+    enabled: bool,
+    elixir_id: Option<uuid::Uuid>,
+}
+
+#[derive(Debug, Serialize)]
+struct ListCategoryEntriesResponse {
+    category_id: uuid::Uuid,
+    category_name: String,
+    entries: Vec<MantraEntryRow>,
+}
+
+/// GET /v1/magic/mantras/categories/{id} - List entries for a category
+async fn magic_list_category_entries_handler(
+    State(state): State<AppState>,
+    Path(category_id): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Database unavailable: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    // Check category exists
+    let category_name: Option<String> = match sqlx::query_scalar(
+        "SELECT name FROM mantra_categories WHERE category_id = $1"
+    )
+    .bind(category_id)
+    .fetch_optional(pool)
+    .await
+    {
+        Ok(name) => name,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Query failed: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let category_name = match category_name {
+        Some(name) => name,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": format!("Category {} not found", category_id)})),
+            )
+                .into_response();
+        }
+    };
+
+    // Fetch entries
+    let rows = match sqlx::query(
+        "SELECT entry_id, text, use_count, enabled, elixir_id FROM mantra_entries WHERE category_id = $1 ORDER BY use_count DESC"
+    )
+    .bind(category_id)
+    .fetch_all(pool)
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Query failed: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let entries: Vec<MantraEntryRow> = rows
+        .iter()
+        .map(|row| MantraEntryRow {
+            entry_id: row.get("entry_id"),
+            text: row.get("text"),
+            use_count: row.get("use_count"),
+            enabled: row.get("enabled"),
+            elixir_id: row.get("elixir_id"),
+        })
+        .collect();
+
+    (
+        StatusCode::OK,
+        Json(ListCategoryEntriesResponse {
+            category_id,
+            category_name,
+            entries,
+        }),
+    )
+        .into_response()
+}
+
+#[derive(Debug, Deserialize)]
+struct AddMantraEntryRequest {
+    text: String,
+    elixir_id: Option<uuid::Uuid>,
+}
+
+/// POST /v1/magic/mantras/categories/{id}/entries - Add new mantra entry
+async fn magic_add_mantra_entry_handler(
+    State(state): State<AppState>,
+    Path(category_id): Path<uuid::Uuid>,
+    Json(body): Json<AddMantraEntryRequest>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Database unavailable: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    if body.text.trim().is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Text cannot be empty"})),
+        )
+            .into_response();
+    }
+
+    let entry_id: uuid::Uuid = match sqlx::query_scalar(
+        r"
+        INSERT INTO mantra_entries (entry_id, category_id, text, use_count, enabled, elixir_id)
+        VALUES (gen_random_uuid(), $1, $2, 0, true, $3)
+        RETURNING entry_id
+        "
+    )
+    .bind(category_id)
+    .bind(&body.text)
+    .bind(body.elixir_id)
+    .fetch_one(pool)
+    .await
+    {
+        Ok(id) => id,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Insert failed: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    (
+        StatusCode::CREATED,
+        Json(json!({
+            "entry_id": entry_id,
+            "category_id": category_id,
+        })),
+    )
+        .into_response()
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateMantraEntryRequest {
+    text: Option<String>,
+    enabled: Option<bool>,
+    elixir_id: Option<Option<uuid::Uuid>>,
+}
+
+/// PUT /v1/magic/mantras/entries/{id} - Update mantra entry
+async fn magic_update_mantra_entry_handler(
+    State(state): State<AppState>,
+    Path(entry_id): Path<uuid::Uuid>,
+    Json(body): Json<UpdateMantraEntryRequest>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Database unavailable: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let mut updates = Vec::new();
+    let mut param_idx = 2_u32;
+
+    if body.text.is_some() {
+        updates.push(format!("text = ${}", param_idx));
+        param_idx += 1;
+    }
+    if body.enabled.is_some() {
+        updates.push(format!("enabled = ${}", param_idx));
+        param_idx += 1;
+    }
+    if body.elixir_id.is_some() {
+        updates.push(format!("elixir_id = ${}", param_idx));
+    }
+
+    if updates.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "No fields to update"})),
+        )
+            .into_response();
+    }
+
+    let set_clause = updates.join(", ");
+    let query_str = format!(
+        "UPDATE mantra_entries SET {} WHERE entry_id = $1 RETURNING entry_id",
+        set_clause
+    );
+
+    let mut query = sqlx::query_scalar::<_, uuid::Uuid>(&query_str).bind(entry_id);
+
+    if let Some(ref text) = body.text {
+        query = query.bind(text);
+    }
+    if let Some(enabled) = body.enabled {
+        query = query.bind(enabled);
+    }
+    if let Some(ref elixir_id) = body.elixir_id {
+        query = query.bind(elixir_id);
+    }
+
+    match query.fetch_optional(pool).await {
+        Ok(Some(_)) => (
+            StatusCode::OK,
+            Json(json!({
+                "updated": true,
+                "entry_id": entry_id,
+            })),
+        )
+            .into_response(),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Entry {} not found", entry_id)})),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Update failed: {}", e)})),
+        )
+            .into_response(),
+    }
+}
+
+/// DELETE /v1/magic/mantras/entries/{id} - Soft-delete mantra entry
+async fn magic_delete_mantra_entry_handler(
+    State(state): State<AppState>,
+    Path(entry_id): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Database unavailable: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    match sqlx::query("UPDATE mantra_entries SET enabled = false WHERE entry_id = $1")
+        .bind(entry_id)
+        .execute(pool)
+        .await
+    {
+        Ok(result) => {
+            if result.rows_affected() > 0 {
+                (
+                    StatusCode::OK,
+                    Json(json!({
+                        "disabled": true,
+                        "entry_id": entry_id,
+                    })),
+                )
+                    .into_response()
+            } else {
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(json!({"error": format!("Entry {} not found", entry_id)})),
+                )
+                    .into_response()
+            }
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Delete failed: {}", e)})),
+        )
+            .into_response(),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct MantraHistoryQuery {
+    limit: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+struct MantraHistoryEntry {
+    history_id: uuid::Uuid,
+    category_id: uuid::Uuid,
+    entry_id: uuid::Uuid,
+    mantra_text: Option<String>,
+    entropy_source: Option<String>,
+    context_weights: serde_json::Value,
+    suggested_skill_ids: Vec<uuid::Uuid>,
+    ts: String,
+}
+
+#[derive(Debug, Serialize)]
+struct MantraHistoryResponse {
+    entries: Vec<MantraHistoryEntry>,
+}
+
+/// GET /v1/magic/mantras/history - Get mantra selection history
+async fn magic_mantra_history_handler(
+    State(state): State<AppState>,
+    Query(query): Query<MantraHistoryQuery>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Database unavailable: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let limit = query.limit.unwrap_or(50).clamp(1, 200);
+
+    let rows = match sqlx::query(
+        r"
+        SELECT mh.history_id, mh.category_id, mh.entry_id, me.text AS mantra_text,
+               mh.entropy_source, mh.context_weights, mh.suggested_skill_ids, mh.ts
+        FROM mantra_history mh
+        LEFT JOIN mantra_entries me ON me.entry_id = mh.entry_id
+        ORDER BY mh.ts DESC
+        LIMIT $1
+        "
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Query failed: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let entries: Vec<MantraHistoryEntry> = rows
+        .iter()
+        .map(|row| MantraHistoryEntry {
+            history_id: row.get("history_id"),
+            category_id: row.get("category_id"),
+            entry_id: row.get("entry_id"),
+            mantra_text: row.get("mantra_text"),
+            entropy_source: row.get("entropy_source"),
+            context_weights: row.get::<serde_json::Value, _>("context_weights"),
+            suggested_skill_ids: row.get("suggested_skill_ids"),
+            ts: row.get::<chrono::DateTime<chrono::Utc>, _>("ts").to_rfc3339(),
+        })
+        .collect();
+
+    (StatusCode::OK, Json(MantraHistoryResponse { entries })).into_response()
+}
+
+/// GET /v1/magic/mantras/context - Get current mantra context
+async fn magic_mantra_context_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Database unavailable: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    match carnelian_magic::MantraTree::build_context(pool).await {
+        Ok(context) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(context).unwrap_or_default()),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SimulateMantraRequest {
+    entropy_hex: Option<String>,
+}
+
+/// POST /v1/magic/mantras/simulate - Simulate mantra selection
+async fn magic_mantra_simulate_handler(
+    State(state): State<AppState>,
+    Json(body): Json<SimulateMantraRequest>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Database unavailable: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    // Obtain entropy bytes
+    let entropy_bytes: Vec<u8> = if let Some(ref hex_str) = body.entropy_hex {
+        match hex::decode(hex_str) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": format!("Invalid hex: {}", e)})),
+                )
+                    .into_response();
+            }
+        }
+    } else {
+        rand::random::<[u8; 8]>().to_vec()
+    };
+
+    // Build context (use fallback if build fails)
+    let context = match carnelian_magic::MantraTree::build_context(pool).await {
+        Ok(ctx) => ctx,
+        Err(_) => carnelian_magic::MantraContext::default_for_fallback(),
+    };
+
+    // Create temporary tree and preload
+    let mut tree = carnelian_magic::MantraTree::new(None);
+    if let Err(e) = tree.preload(pool).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Preload failed: {}", e)})),
+        )
+            .into_response();
+    }
+
+    // Select mantra (no INSERT to mantra_history)
+    match tree.select(&entropy_bytes, &context).await {
+        Ok(selection) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(selection).unwrap_or_default()),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
 }
