@@ -76,7 +76,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 // Import Arc impl to enable EntropyProvider methods on Arc<MixedEntropyProvider>
-use carnelian_magic::entropy_arc_impl as _;
+use carnelian_magic::{EntropyProvider, entropy_arc_impl as _};
 use tokio::sync::watch;
 use uuid::Uuid;
 
