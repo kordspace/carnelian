@@ -29,6 +29,7 @@ pub fn TabNav() -> Element {
         ("Settings", Route::Settings {}),
         ("Skill Book", Route::SkillBook {}),
         ("Elixirs 🧪", Route::Elixirs {}),
+        ("✨ MAGIC", Route::Magic {}),
         ("Workflows", Route::Workflows {}),
         ("XP", Route::XpProgression {}),
         ("Voice", Route::VoiceSettingsPage {}),

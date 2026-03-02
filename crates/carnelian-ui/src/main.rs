@@ -59,6 +59,8 @@ pub enum Route {
     SkillBook {},
     #[route("/elixirs")]
     Elixirs {},
+    #[route("/magic")]
+    Magic {},
 }
 
 #[tokio::main]
@@ -251,4 +253,10 @@ fn SkillBook() -> Element {
 #[component]
 fn Elixirs() -> Element {
     pages::elixirs::Elixirs()
+}
+
+/// Magic page (delegates to `pages::magic`).
+#[component]
+fn Magic() -> Element {
+    pages::magic::Magic()
 }
