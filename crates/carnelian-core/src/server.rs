@@ -6880,7 +6880,7 @@ async fn create_elixir_handler(
 ) -> impl IntoResponse {
     let created_by = body.created_by;
 
-    match state.elixir_manager.create_elixir(body, created_by).await {
+    match state.elixir_manager.create_elixir(body, created_by, None).await {
         Ok(elixir) => (
             StatusCode::CREATED,
             Json(serde_json::to_value(elixir).unwrap_or_default()),
@@ -7008,7 +7008,7 @@ async fn approve_elixir_draft_handler(
 ) -> impl IntoResponse {
     match state
         .elixir_manager
-        .approve_draft(draft_id, body.reviewed_by)
+        .approve_draft(draft_id, body.reviewed_by, None)
         .await
     {
         Ok(response) => (

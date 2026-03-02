@@ -334,19 +334,13 @@ impl Ledger {
         *self.last_hash.write().await = Some(event_hash.clone());
 
         // Log entropy event to magic_entropy_log for every request (success and failure)
-        if let Some(provider) = entropy_provider {
+        if entropy_provider.is_some() {
             let log_id = Uuid::now_v7();
             let source = "mixed";
             let bytes_requested = 16i32;
             let quantum_available = resolved_salt.is_some();
-            let latency_ms = if resolved_salt.is_some() {
-                // We already measured latency during salt generation above
-                None // Will be set by the spawn block if we track it
-            } else {
-                None
-            };
+            let latency_ms = entropy_latency_ms;
             
-            // Fire-and-forget entropy log write
             let pool = self.pool.clone();
             let source_owned = source.to_string();
             let correlation_id_owned = correlation_id;

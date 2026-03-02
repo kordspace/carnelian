@@ -123,6 +123,16 @@ impl ElixirManager {
         .await
         .map_err(Error::Database)?;
 
+        if let Some(salt) = quantum_salt {
+            let hash = compute_integrity_index(req.dataset.as_bytes(), Some(&salt));
+            sqlx::query("UPDATE elixirs SET security_integrity_hash = $1 WHERE elixir_id = $2")
+                .bind(&hash)
+                .bind(elixir_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(Error::Database)?;
+        }
+
         tx.commit().await.map_err(Error::Database)?;
 
         // Award XP for elixir creation
@@ -353,6 +363,16 @@ impl ElixirManager {
         .execute(&mut *tx)
         .await
         .map_err(Error::Database)?;
+
+        if let Some(salt) = quantum_salt {
+            let hash = compute_integrity_index(&dataset_bytes, Some(&salt));
+            sqlx::query("UPDATE elixirs SET security_integrity_hash = $1 WHERE elixir_id = $2")
+                .bind(&hash)
+                .bind(elixir_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(Error::Database)?;
+        }
 
         tx.commit().await.map_err(Error::Database)?;
 
