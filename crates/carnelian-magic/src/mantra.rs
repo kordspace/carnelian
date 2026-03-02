@@ -171,14 +171,12 @@ pub struct MantraSelection {
 // =============================================================================
 
 pub struct MantraTree {
-    cooldown_beats: i32,
+    // Cooldown is now per-category from DB, not a tree-level setting
 }
 
 impl MantraTree {
-    pub fn new(cooldown_beats: Option<i32>) -> Self {
-        Self {
-            cooldown_beats: cooldown_beats.unwrap_or(3),
-        }
+    pub fn new(_cooldown_beats: Option<i32>) -> Self {
+        Self {}
     }
 
     /// Build MantraContext from database queries
@@ -214,42 +212,42 @@ impl MantraTree {
         .unwrap_or(0);
 
         let capability_changes_last_hour: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM capability_grants WHERE granted_at > NOW() - INTERVAL '1 hour'"
+            "SELECT COUNT(*) FROM capability_grants WHERE created_at > NOW() - INTERVAL '1 hour'"
         )
         .fetch_optional(&mut *tx)
         .await?
         .unwrap_or(0);
 
         let sub_agents_active: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM sub_agents WHERE status = 'active'"
+            "SELECT COUNT(*) FROM sub_agents WHERE terminated_at IS NULL"
         )
         .fetch_optional(&mut *tx)
         .await?
         .unwrap_or(0);
 
         let soul_file_age_days: i64 = sqlx::query_scalar(
-            "SELECT COALESCE(EXTRACT(EPOCH FROM (NOW() - MAX(updated_at))) / 86400, 9999)::bigint FROM soul_directives WHERE identity_id = (SELECT identity_id FROM identities WHERE name = 'Lian' LIMIT 1)"
+            "SELECT COALESCE(EXTRACT(EPOCH FROM (NOW() - updated_at)) / 86400, 9999)::bigint FROM identities WHERE name = 'Lian' AND identity_type = 'core' LIMIT 1"
         )
         .fetch_optional(&mut *tx)
         .await?
         .unwrap_or(9999);
 
         let new_skills_last_24h: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM skills WHERE created_at > NOW() - INTERVAL '24 hours'"
+            "SELECT COUNT(*) FROM skills WHERE discovered_at > NOW() - INTERVAL '24 hours'"
         )
         .fetch_optional(&mut *tx)
         .await?
         .unwrap_or(0);
 
         let unread_channel_messages: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM channel_messages WHERE read_at IS NULL"
+            "SELECT COUNT(*) FROM session_messages WHERE role = 'user' AND ts > NOW() - INTERVAL '1 hour'"
         )
         .fetch_optional(&mut *tx)
         .await?
         .unwrap_or(0);
 
         let workflow_executions_last_hour: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM workflow_executions WHERE started_at > NOW() - INTERVAL '1 hour'"
+            "SELECT COUNT(*) FROM tasks WHERE skill_id IN (SELECT skill_id FROM skills WHERE name LIKE 'workflow-%') AND created_at > NOW() - INTERVAL '1 hour'"
         )
         .fetch_optional(&mut *tx)
         .await?
@@ -270,10 +268,34 @@ impl MantraTree {
         .await?
         .unwrap_or(0);
 
+        // Compute uptime from first heartbeat
+        let uptime_hours: f64 = sqlx::query_scalar(
+            "SELECT COALESCE(EXTRACT(EPOCH FROM (NOW() - MIN(ts))) / 3600, 0.0) FROM heartbeat_history"
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        .unwrap_or(0.0);
+
+        // Compute model cost percentage from recent usage
+        let model_cost_pct: f64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(input_tokens + output_tokens) * 100.0 / NULLIF(1000000, 0), 0.0) FROM model_usage WHERE created_at > NOW() - INTERVAL '1 hour'"
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        .unwrap_or(0.0);
+
+        // Check for high latency from recent heartbeats
+        let avg_latency_ms: f64 = sqlx::query_scalar(
+            "SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (ts - LAG(ts) OVER (ORDER BY ts))) * 1000), 0.0) FROM heartbeat_history WHERE ts > NOW() - INTERVAL '5 minutes'"
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        .unwrap_or(0.0);
+        let high_latency = avg_latency_ms > 5000.0;
+
         tx.commit().await?;
 
         let local_hour = chrono::Local::now().hour() as u8;
-        let uptime_hours = 0.0; // TODO: track actual uptime
 
         Ok(MantraContext {
             recent_error_count,
@@ -281,24 +303,37 @@ impl MantraTree {
             idle_beats,
             elixir_drafts_pending,
             capability_changes_last_hour,
-            model_cost_pct: 0.0, // TODO: compute from model usage
+            model_cost_pct,
             sub_agents_active,
             soul_file_age_days,
             new_skills_last_24h,
             magic_enabled: true,
-            high_latency: false, // TODO: track latency
+            high_latency,
             unread_channel_messages,
             local_hour,
             uptime_hours,
             elixir_quality_by_category,
-            quantum_providers_available: vec![], // TODO: query from entropy provider
+            quantum_providers_available: vec!["os".into()],
             workflow_executions_last_hour,
             active_sessions,
         })
     }
 
-    /// Select a mantra using quantum entropy and context weights
+    /// Select a mantra using quantum entropy and context weights (consumer-facing API)
     pub async fn select(
+        &self,
+        _entropy: &[u8],
+        _context: &MantraContext,
+    ) -> Result<MantraSelection> {
+        // This method requires preloaded category and entry data
+        // For now, return an error directing to use select_with_pool
+        Err(MagicError::EntropyUnavailable(
+            "Use select_with_pool for DB-backed selection".into(),
+        ))
+    }
+
+    /// Select a mantra using quantum entropy and context weights with DB access
+    pub async fn select_with_pool(
         &self,
         entropy: &[u8],
         context: &MantraContext,
@@ -322,16 +357,24 @@ impl MantraTree {
             return Err(MagicError::EntropyUnavailable("No enabled mantra categories".into()));
         }
 
-        // Fetch recently used category_ids
-        let recent_category_ids: Vec<Uuid> = sqlx::query_scalar(
-            "SELECT category_id FROM mantra_history ORDER BY ts DESC LIMIT $1"
+        // Fetch recently used category_ids with their usage order
+        // We need to check per-category cooldown, so fetch more history
+        let max_cooldown = categories.iter().map(|(_, _, _, cd, _, _)| *cd).max().unwrap_or(3);
+        let recent_history: Vec<(Uuid, i64)> = sqlx::query_as(
+            "SELECT category_id, ROW_NUMBER() OVER (ORDER BY ts DESC) as position FROM mantra_history ORDER BY ts DESC LIMIT $1"
         )
-        .bind(self.cooldown_beats)
+        .bind(max_cooldown)
         .fetch_all(pool)
         .await?;
 
+        // Build a map of category_id -> most recent position (1-indexed)
+        let mut category_last_used: HashMap<Uuid, i64> = HashMap::new();
+        for (cat_id, position) in recent_history {
+            category_last_used.entry(cat_id).or_insert(position);
+        }
+
         // Compute weights
-        let weights = self.compute_weights(context, &categories, &recent_category_ids);
+        let weights = self.compute_weights(context, &categories, &category_last_used);
 
         // Weighted pick for category
         let (selected_cat_id, selected_cat_name, system_msg, user_msg) = 
@@ -396,11 +439,11 @@ impl MantraTree {
         &self,
         context: &MantraContext,
         categories: &[(Uuid, String, i32, i32, String, String)],
-        recent_category_ids: &[Uuid],
+        category_last_used: &HashMap<Uuid, i64>,
     ) -> HashMap<String, i32> {
         let mut weights = HashMap::new();
 
-        for (cat_id, name, base_weight, _, _, _) in categories {
+        for (cat_id, name, base_weight, cooldown_beats, _, _) in categories {
             let mut weight = *base_weight;
 
             // Apply context bonuses based on category
@@ -418,9 +461,11 @@ impl MantraTree {
                 _ => {}
             }
 
-            // Apply cooldown
-            if recent_category_ids.contains(cat_id) {
-                weight = 0;
+            // Apply per-category cooldown enforcement
+            if let Some(&last_position) = category_last_used.get(cat_id) {
+                if last_position <= *cooldown_beats as i64 {
+                    weight = 0;
+                }
             }
 
             weights.insert(name.clone(), weight);
@@ -552,7 +597,8 @@ mod tests {
             (Uuid::new_v4(), "Code Development".into(), 1, 3, "".into(), "".into()),
         ];
 
-        let weights = tree.compute_weights(&context, &categories, &[]);
+        let category_last_used = HashMap::new();
+        let weights = tree.compute_weights(&context, &categories, &category_last_used);
 
         assert!(weights.get("System Health").copied().unwrap_or(0) >= 4);
         assert_eq!(weights.get("Code Development").copied().unwrap_or(0), 1);
@@ -569,8 +615,9 @@ mod tests {
             (Uuid::new_v4(), "Code Development".into(), 1, 3, "".into(), "".into()),
         ];
 
-        let recent = vec![cat_id];
-        let weights = tree.compute_weights(&context, &categories, &recent);
+        let mut category_last_used = HashMap::new();
+        category_last_used.insert(cat_id, 1); // Used in position 1 (most recent)
+        let weights = tree.compute_weights(&context, &categories, &category_last_used);
 
         assert_eq!(weights.get("System Health").copied().unwrap_or(0), 0);
         assert_eq!(weights.get("Code Development").copied().unwrap_or(0), 1);
