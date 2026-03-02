@@ -542,7 +542,7 @@ mod tests {
             &self,
             _skill_id: &str,
             input: serde_json::Value,
-        ) -> Result<serde_json::Value, MagicError> {
+        ) -> Result<serde_json::Value> {
             if self.fail {
                 return Err(MagicError::SkillBridgeError("mock failure".into()));
             }
@@ -694,5 +694,56 @@ mod tests {
         // Second and third should be unavailable (failing quantum providers)
         assert!(!health_vec[1].available);
         assert!(!health_vec[2].available);
+    }
+
+    #[tokio::test]
+    async fn test_provider_priority_selection() {
+        // Test 1: Higher-priority provider succeeds, lower-priority not used
+        let quantinuum_success = QuantinuumH2Provider::new(Arc::new(MockSkillBridge { fail: false }));
+        let qiskit_fail = QiskitProvider::new(Arc::new(MockSkillBridge { fail: true }));
+
+        let provider = MixedEntropyProvider::new(
+            None,
+            Some(quantinuum_success),
+            Some(qiskit_fail),
+            uuid::Uuid::new_v4(),
+        );
+
+        // Should succeed using quantinuum (priority 2), not attempt qiskit (priority 3)
+        let result = provider.get_bytes(32).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 32);
+
+        // Test 2: Higher-priority fails, next provider is attempted
+        let quantinuum_fail = QuantinuumH2Provider::new(Arc::new(MockSkillBridge { fail: true }));
+        let qiskit_success = QiskitProvider::new(Arc::new(MockSkillBridge { fail: false }));
+
+        let provider = MixedEntropyProvider::new(
+            None,
+            Some(quantinuum_fail),
+            Some(qiskit_success),
+            uuid::Uuid::new_v4(),
+        );
+
+        // Should fall through quantinuum to qiskit, then mix with OS
+        let result = provider.get_bytes(32).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 32);
+
+        // Test 3: All quantum fail, OS fallback succeeds
+        let quantinuum_fail = QuantinuumH2Provider::new(Arc::new(MockSkillBridge { fail: true }));
+        let qiskit_fail = QiskitProvider::new(Arc::new(MockSkillBridge { fail: true }));
+
+        let provider = MixedEntropyProvider::new(
+            None,
+            Some(quantinuum_fail),
+            Some(qiskit_fail),
+            uuid::Uuid::new_v4(),
+        );
+
+        // Should fall back to OS (priority 4) and succeed
+        let result = provider.get_bytes(32).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 32);
     }
 }

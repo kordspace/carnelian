@@ -27,7 +27,7 @@ export CARNELIAN_QUANTUM_ORIGIN_API_KEY="your-api-key-here"
 [magic]
 enabled = true
 quantum_origin_api_key = "your-api-key-here"
-quantum_origin_url = "https://qrng.quantinuum.com/api/v1"
+quantum_origin_url = "https://origin.quantinuum.com"
 ```
 
 The provider uses a 5-second timeout and performs a single automatic retry on network errors.
@@ -155,14 +155,14 @@ GROUP BY source;
 | Field | Type | Default | Env Override | Description |
 |-------|------|---------|--------------|-------------|
 | `enabled` | `bool` | `false` | `CARNELIAN_MAGIC_ENABLED` | Master switch for MAGIC subsystem |
+| `quantum_origin_url` | `string` | `"https://origin.quantinuum.com"` | `CARNELIAN_QUANTUM_ORIGIN_URL` | Quantum Origin API base URL |
 | `quantum_origin_api_key` | `string` | `""` | `CARNELIAN_QUANTUM_ORIGIN_API_KEY` | Quantinuum Quantum Origin API key |
-| `quantum_origin_url` | `string` | `"https://qrng.quantinuum.com/api/v1"` | `CARNELIAN_QUANTUM_ORIGIN_URL` | Quantum Origin API base URL |
 | `quantinuum_enabled` | `bool` | `false` | `CARNELIAN_QUANTINUUM_ENABLED` | Enable Quantinuum H2 provider |
 | `quantinuum_device` | `string` | `"H1-1E"` | `CARNELIAN_QUANTINUUM_DEVICE` | Quantinuum device name (`H1-1E`, `H2-1`, etc.) |
+| `quantinuum_n_bits` | `u32` | `256` | `CARNELIAN_QUANTINUUM_N_BITS` | Number of bits to request from Quantinuum |
 | `qiskit_enabled` | `bool` | `false` | `CARNELIAN_QISKIT_ENABLED` | Enable IBM Qiskit provider |
 | `qiskit_backend` | `string` | `"ibm_brisbane"` | `CARNELIAN_QISKIT_BACKEND` | IBM Quantum backend name |
 | `entropy_timeout_ms` | `u64` | `5000` | `CARNELIAN_ENTROPY_TIMEOUT_MS` | Timeout for entropy requests (milliseconds) |
-| `log_entropy_events` | `bool` | `false` | `CARNELIAN_LOG_ENTROPY_EVENTS` | Log all entropy requests to `magic_entropy_log` |
-| `quantum_salt_length` | `usize` | `16` | `CARNELIAN_QUANTUM_SALT_LENGTH` | Bytes of quantum salt for ledger events |
-| `retry_count` | `u32` | `1` | `CARNELIAN_ENTROPY_RETRY_COUNT` | Number of retries for failed entropy requests |
-| `health_check_interval_secs` | `u64` | `300` | `CARNELIAN_ENTROPY_HEALTH_CHECK_INTERVAL` | Interval between provider health checks (seconds) |
+| `entropy_mix_ratio` | `f64` | `0.5` | `CARNELIAN_ENTROPY_MIX_RATIO` | Fraction of bytes sourced from quantum provider (0.0-1.0) |
+| `log_entropy_events` | `bool` | `true` | `CARNELIAN_LOG_ENTROPY_EVENTS` | Log all entropy requests to `magic_entropy_log` |
+| `mantra_cooldown_beats` | `u32` | `3` | `CARNELIAN_MANTRA_COOLDOWN_BEATS` | Mantra cooldown in heartbeat cycles |
