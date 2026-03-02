@@ -1595,34 +1595,11 @@ impl Scheduler {
             // This returns immediately, freeing the worker slot.
             let pool = pool.clone();
             tokio::spawn(async move {
-                match timeout(Duration::from_secs(2), provider.as_ref().get_bytes(16)).await {
-                    Ok(result) => {
-                        if let Err(e) = sqlx::query(
-                            r"UPDATE tasks SET state = 'pending', updated_at = NOW() WHERE task_id = $1 AND state = 'failed'",
-                        )
-                        .bind(task_id)
-                        .execute(&pool)
-                        .await
-                        {
-                            tracing::error!(
-                                task_id = %task_id,
-                                error = %e,
-                                "Failed to reset task to pending after retry delay"
-                            );
-                        } else {
-                            tracing::debug!(
-                                task_id = %task_id,
-                                "Task reset to pending after retry delay"
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            task_id = %task_id,
-                            error = %e,
-                            "Failed to reset task to pending after retry delay"
-                        );
-                    }
+                tokio::time::sleep(Duration::from_secs(delay_secs)).await;
+                if let Err(e) = sqlx::query(
+                    r"UPDATE tasks SET state = 'pending', updated_at = NOW() WHERE task_id = $1 AND state = 'failed'",
+                )
+                .bind(task_id)
                 .execute(&pool)
                 .await
                 {
