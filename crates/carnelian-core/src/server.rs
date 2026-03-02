@@ -61,8 +61,8 @@ use crate::sub_agent::{CreateSubAgentRequest, SubAgentManager, UpdateSubAgentReq
 use crate::worker::{WorkerManager, WorkerRuntime};
 use crate::{Config, EventStream, Scheduler, db, policy::PolicyEngine};
 
-// Import MAGIC entropy provider and trait
-use carnelian_magic::EntropyProvider;
+// Import MAGIC entropy provider, trait, and Arc implementations
+use carnelian_magic::{EntropyProvider, entropy_arc_impl as _};
 
 use carnelian_common::{ChannelAdapter, ChannelAdapterFactory};
 use std::collections::HashMap;
