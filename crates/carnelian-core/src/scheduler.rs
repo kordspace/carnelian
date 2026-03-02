@@ -1594,8 +1594,9 @@ impl Scheduler {
             // Spawn a detached timer to reset the task to 'pending' after the delay.
             // This returns immediately, freeing the worker slot.
             let pool = pool.clone();
+            let retry_delay = config.task_retry_delay_secs;
             tokio::spawn(async move {
-                tokio::time::sleep(Duration::from_secs(delay_secs)).await;
+                tokio::time::sleep(Duration::from_secs(retry_delay)).await;
                 if let Err(e) = sqlx::query(
                     r"UPDATE tasks SET state = 'pending', updated_at = NOW() WHERE task_id = $1 AND state = 'failed'",
                 )
