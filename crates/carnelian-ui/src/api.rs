@@ -1079,3 +1079,245 @@ pub async fn elixirs_draft_reject(draft_id: Uuid) -> Result<RejectDraftResponse,
         .await
         .map_err(|e| format!("Parse failed: {e}"))
 }
+
+// ── MAGIC Operations ──────────────────────────────────
+
+use carnelian_common::types::{
+    AddMantraEntryRequest, EntropyLogResponse, EntropySampleRequest, EntropySampleResponse,
+    ListMantraCategoriesResponse, ListMantraEntriesResponse, MagicAuthStatusResponse,
+    MagicConfigResponse, MagicConfigUpdateRequest, MagicElixirsRehashResponse,
+    MantraEntryDetail, MantraHistoryResponse, MantraSimulateResponse, QuantinuumLoginRequest,
+    QuantinuumLoginResponse, QuantinuumRefreshResponse, UpdateMantraEntryRequest,
+};
+
+// ── Entropy functions ──
+
+/// Get entropy health status.
+pub async fn magic_entropy_health() -> Result<serde_json::Value, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/magic/entropy/health"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Sample entropy bytes.
+pub async fn magic_entropy_sample(bytes: usize) -> Result<EntropySampleResponse, String> {
+    client()
+        .post(format!("{API_BASE_URL}/v1/magic/entropy/sample"))
+        .json(&EntropySampleRequest { bytes })
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<EntropySampleResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Get entropy log entries.
+#[allow(dead_code)]
+pub async fn magic_entropy_log(limit: i64) -> Result<EntropyLogResponse, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/magic/entropy/log?limit={limit}"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<EntropyLogResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+// ── Mantra functions ──
+
+/// List all mantra categories.
+pub async fn magic_mantras_list() -> Result<ListMantraCategoriesResponse, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/magic/mantras"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<ListMantraCategoriesResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// List mantra entries for a category.
+pub async fn magic_mantras_by_category(
+    category_id: Uuid,
+) -> Result<ListMantraEntriesResponse, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/magic/mantras/{category_id}"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<ListMantraEntriesResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Add a new mantra entry.
+pub async fn magic_mantra_add(
+    category_id: Uuid,
+    text: String,
+    elixir_id: Option<Uuid>,
+) -> Result<MantraEntryDetail, String> {
+    client()
+        .post(format!(
+            "{API_BASE_URL}/v1/magic/mantras/categories/{category_id}/entries"
+        ))
+        .json(&AddMantraEntryRequest { text, elixir_id })
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<MantraEntryDetail>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Update a mantra entry.
+pub async fn magic_mantra_update(
+    entry_id: Uuid,
+    text: Option<String>,
+    enabled: Option<bool>,
+    elixir_id: Option<Uuid>,
+) -> Result<MantraEntryDetail, String> {
+    client()
+        .put(format!(
+            "{API_BASE_URL}/v1/magic/mantras/entries/{entry_id}"
+        ))
+        .json(&UpdateMantraEntryRequest {
+            text,
+            enabled,
+            elixir_id,
+        })
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<MantraEntryDetail>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Get mantra selection history.
+pub async fn magic_mantra_history() -> Result<MantraHistoryResponse, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/magic/mantras/history"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<MantraHistoryResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Simulate a mantra selection.
+pub async fn magic_mantra_simulate() -> Result<MantraSimulateResponse, String> {
+    client()
+        .post(format!("{API_BASE_URL}/v1/magic/mantras/simulate"))
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<MantraSimulateResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+// ── Auth & Config functions ──
+
+/// Get MAGIC configuration.
+pub async fn magic_get_config() -> Result<MagicConfigResponse, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/magic/config"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<MagicConfigResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Update MAGIC configuration.
+pub async fn magic_update_config(
+    quantum_origin_api_key: Option<String>,
+    quantinuum_enabled: Option<bool>,
+    qiskit_enabled: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    client()
+        .post(format!("{API_BASE_URL}/v1/magic/config"))
+        .json(&MagicConfigUpdateRequest {
+            quantum_origin_api_key,
+            quantinuum_enabled,
+            qiskit_enabled,
+        })
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Login to Quantinuum.
+pub async fn magic_quantinuum_login(
+    email: String,
+    password: String,
+) -> Result<QuantinuumLoginResponse, String> {
+    client()
+        .post(format!(
+            "{API_BASE_URL}/v1/magic/auth/quantinuum/login"
+        ))
+        .json(&QuantinuumLoginRequest { email, password })
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<QuantinuumLoginResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Refresh Quantinuum token.
+pub async fn magic_quantinuum_refresh() -> Result<QuantinuumRefreshResponse, String> {
+    client()
+        .post(format!(
+            "{API_BASE_URL}/v1/magic/auth/quantinuum/refresh"
+        ))
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<QuantinuumRefreshResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+/// Get MAGIC authentication status.
+pub async fn magic_auth_status() -> Result<MagicAuthStatusResponse, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/magic/auth/status"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<MagicAuthStatusResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
+// ── Elixir MAGIC function ──
+
+/// Rehash all elixirs with quantum entropy.
+#[allow(dead_code)]
+pub async fn magic_elixirs_rehash() -> Result<MagicElixirsRehashResponse, String> {
+    client()
+        .post(format!("{API_BASE_URL}/v1/magic/elixirs/rehash"))
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<MagicElixirsRehashResponse>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
