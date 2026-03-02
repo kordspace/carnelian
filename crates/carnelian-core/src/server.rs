@@ -886,6 +886,8 @@ fn build_router(state: AppState) -> Router {
         // MAGIC entropy endpoints
         .route("/v1/magic/entropy/health", get(magic_entropy_health_handler))
         .route("/v1/magic/entropy/sample", post(magic_entropy_sample_handler))
+        .route("/v1/magic/entropy/log", get(magic_entropy_log_handler))
+        .route("/v1/magic/elixirs/rehash", post(magic_elixirs_rehash_handler))
         .route("/v1/magic/config", get(magic_get_config_handler))
         .route("/v1/magic/config", post(magic_update_config_handler))
         .route("/v1/magic/auth/quantinuum/login", post(magic_quantinuum_login_handler))
@@ -7130,8 +7132,25 @@ async fn reject_elixir_draft_handler(
 async fn magic_entropy_health_handler(State(state): State<AppState>) -> impl IntoResponse {
     match &state.entropy_provider {
         Some(provider) => {
-            let health = provider.as_ref().health().await;
-            (StatusCode::OK, Json(json!(health))).into_response()
+            // Try to downcast to MixedEntropyProvider to get all provider health
+            let provider_arc = provider.as_ref();
+            if let Some(mixed) = (provider_arc as &dyn std::any::Any).downcast_ref::<carnelian_magic::entropy::MixedEntropyProvider>() {
+                let all_health = mixed.all_health().await;
+                let mut health_map = serde_json::Map::new();
+                for h in all_health {
+                    health_map.insert(h.source.clone(), json!({
+                        "available": h.available,
+                        "latency_ms": h.latency_ms,
+                        "error": h.error,
+                        "checked_at": h.checked_at,
+                    }));
+                }
+                (StatusCode::OK, Json(json!(health_map))).into_response()
+            } else {
+                // Fallback for non-mixed providers
+                let health = provider_arc.health().await;
+                (StatusCode::OK, Json(json!(health))).into_response()
+            }
         }
         None => (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -7184,6 +7203,147 @@ async fn magic_entropy_sample_handler(
         )
             .into_response(),
     }
+}
+
+/// GET /v1/magic/entropy/log - Get entropy log entries
+async fn magic_entropy_log_handler(
+    State(state): State<AppState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Database pool error: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let limit: i64 = params
+        .get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20)
+        .clamp(1, 100);
+
+    // Query entropy_log table if it exists, otherwise return empty array
+    let result = sqlx::query(
+        r#"
+        SELECT ts, source, bytes_requested, quantum_available, latency_ms
+        FROM entropy_log
+        ORDER BY ts DESC
+        LIMIT $1
+        "#
+    )
+    .bind(limit)
+    .fetch_all(&*pool)
+    .await;
+
+    match result {
+        Ok(rows) => {
+            let entries: Vec<serde_json::Value> = rows
+                .iter()
+                .map(|row| {
+                    json!({
+                        "ts": row.try_get::<chrono::DateTime<chrono::Utc>, _>("ts").ok(),
+                        "source": row.try_get::<String, _>("source").ok(),
+                        "bytes_requested": row.try_get::<i32, _>("bytes_requested").ok(),
+                        "quantum_available": row.try_get::<bool, _>("quantum_available").ok(),
+                        "latency_ms": row.try_get::<Option<i64>, _>("latency_ms").ok().flatten(),
+                    })
+                })
+                .collect();
+            (StatusCode::OK, Json(json!({"entries": entries}))).into_response()
+        }
+        Err(_) => {
+            // Table doesn't exist yet, return empty array
+            (StatusCode::OK, Json(json!({"entries": []}))).into_response()
+        }
+    }
+}
+
+/// POST /v1/magic/elixirs/rehash - Rehash all elixirs with fresh entropy
+async fn magic_elixirs_rehash_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Database pool error: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    // Get entropy provider
+    let provider = match &state.entropy_provider {
+        Some(p) => p,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "MAGIC entropy subsystem is disabled"})),
+            )
+                .into_response();
+        }
+    };
+
+    // Fetch all elixirs
+    let elixirs = match sqlx::query(
+        r#"
+        SELECT elixir_id, name
+        FROM elixirs
+        WHERE active = true
+        "#
+    )
+    .fetch_all(&*pool)
+    .await
+    {
+        Ok(rows) => rows,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to fetch elixirs: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let mut rehashed = 0;
+    for elixir in elixirs {
+        // Generate 32 bytes of entropy for each elixir
+        if let Ok(entropy_bytes) = provider.as_ref().get_bytes(32).await {
+            let hex_hash = hex::encode(&entropy_bytes);
+            // Get elixir_id from row
+            if let Ok(elixir_id) = elixir.try_get::<uuid::Uuid, _>("elixir_id") {
+                // Update elixir with new quantum hash
+                if sqlx::query(
+                    r#"
+                    UPDATE elixirs
+                    SET quantum_hash = $1, updated_at = NOW()
+                    WHERE elixir_id = $2
+                    "#
+                )
+                .bind(&hex_hash)
+                .bind(&elixir_id)
+                .execute(&*pool)
+                .await
+                .is_ok()
+                {
+                    rehashed += 1;
+                }
+            }
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "rehashed": rehashed,
+            "message": format!("Rehashed {} elixirs with fresh entropy", rehashed)
+        })),
+    )
+        .into_response()
 }
 
 /// GET /v1/magic/config - Get MAGIC configuration (with masked API keys)
