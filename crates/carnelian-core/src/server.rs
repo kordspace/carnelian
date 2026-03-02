@@ -7146,7 +7146,7 @@ async fn magic_entropy_sample_handler(
     let bytes = body.bytes.clamp(1, 1024);
 
     match &state.entropy_provider {
-        Some(provider) => match provider.get_bytes(bytes).await {
+        Some(provider) => match provider.as_ref().as_ref().get_bytes(bytes).await {
             Ok(entropy_bytes) => {
                 let hex_encoded = hex::encode(&entropy_bytes);
                 (
