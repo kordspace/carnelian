@@ -2468,7 +2468,7 @@ async fn handle_magic_auth(url: &str, refresh: bool) -> carnelian_common::Result
                 carnelian_common::Error::Config(format!("Failed to parse response: {}", e))
             })?;
             
-            let expires_at = body["expires_at"].as_str().unwrap_or("unknown");
+            let expires_at = body["token_expiry"].as_str().unwrap_or("unknown");
             println!("✓ Token refreshed");
             println!("   Expires at: {}", expires_at);
         } else {
@@ -2480,31 +2480,65 @@ async fn handle_magic_auth(url: &str, refresh: bool) -> carnelian_common::Result
             )));
         }
     } else {
-        use std::io::{stdin, stdout, Write};
+        use std::io::{stdout, Write};
         
         print!("Email: ");
         stdout().flush().map_err(|e| {
             carnelian_common::Error::Config(format!("Failed to flush stdout: {}", e))
         })?;
         let mut email = String::new();
-        stdin().read_line(&mut email).map_err(|e| {
+        std::io::stdin().read_line(&mut email).map_err(|e| {
             carnelian_common::Error::Config(format!("Failed to read email: {}", e))
         })?;
 
-        print!("Password (input hidden): ");
-        stdout().flush().map_err(|e| {
-            carnelian_common::Error::Config(format!("Failed to flush stdout: {}", e))
-        })?;
-        let mut password = String::new();
-        stdin().read_line(&mut password).map_err(|e| {
+        let password = rpassword::prompt_password("Password: ").map_err(|e| {
             carnelian_common::Error::Config(format!("Failed to read password: {}", e))
         })?;
 
-        let resp = client
-            .post(format!("{}/v1/magic/auth/quantinuum/login", url.trim_end_matches('/')))
+        // Call Quantinuum API directly
+        let qapi_resp = client
+            .post("https://qapi.quantinuum.com/v1/login")
             .json(&serde_json::json!({
                 "email": email.trim(),
                 "password": password.trim()
+            }))
+            .send()
+            .await
+            .map_err(|e| {
+                carnelian_common::Error::Connection(format!("Quantinuum login request failed: {}", e))
+            })?;
+
+        if !qapi_resp.status().is_success() {
+            let status = qapi_resp.status();
+            let error_text = qapi_resp.text().await.unwrap_or_default();
+            return Err(carnelian_common::Error::Config(format!(
+                "Quantinuum login failed ({}): {}",
+                status, error_text
+            )));
+        }
+
+        let qapi_data: serde_json::Value = qapi_resp.json().await.map_err(|e| {
+            carnelian_common::Error::Config(format!("Failed to parse Quantinuum response: {}", e))
+        })?;
+
+        let id_token = qapi_data["id-token"].as_str().ok_or_else(|| {
+            carnelian_common::Error::Config("Quantinuum response missing id-token".to_string())
+        })?;
+
+        let refresh_token = qapi_data["refresh-token"].as_str().ok_or_else(|| {
+            carnelian_common::Error::Config("Quantinuum response missing refresh-token".to_string())
+        })?;
+
+        // Calculate expiry (1 hour from now)
+        let expires_at = (chrono::Utc::now() + chrono::Duration::hours(1)).to_rfc3339();
+
+        // Persist tokens via PUT to Carnelian server
+        let persist_resp = client
+            .put(format!("{}/v1/magic/auth/quantinuum", url.trim_end_matches('/')))
+            .json(&serde_json::json!({
+                "id_token": id_token,
+                "refresh_token": refresh_token,
+                "expires_at": expires_at
             }))
             .send()
             .await
@@ -2519,19 +2553,19 @@ async fn handle_magic_auth(url: &str, refresh: bool) -> carnelian_common::Result
                 }
             })?;
 
-        if resp.status().is_success() {
-            let body: serde_json::Value = resp.json().await.map_err(|e| {
+        if persist_resp.status().is_success() {
+            let body: serde_json::Value = persist_resp.json().await.map_err(|e| {
                 carnelian_common::Error::Config(format!("Failed to parse response: {}", e))
             })?;
             
-            let expires_at = body["expires_at"].as_str().unwrap_or("unknown");
+            let stored_expiry = body["expires_at"].as_str().unwrap_or(&expires_at);
             println!("✓ Authenticated");
-            println!("   Expires at: {}", expires_at);
+            println!("   Expires at: {}", stored_expiry);
         } else {
-            let body: serde_json::Value = resp.json().await.unwrap_or_default();
+            let body: serde_json::Value = persist_resp.json().await.unwrap_or_default();
             let error_msg = body["error"].as_str().unwrap_or("unknown error");
             return Err(carnelian_common::Error::Config(format!(
-                "Authentication failed: {}",
+                "Failed to persist tokens: {}",
                 error_msg
             )));
         }

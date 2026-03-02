@@ -526,3 +526,173 @@ impl EntropyProvider for MixedEntropyProvider {
         }
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    /// Mock SkillBridge for testing quantum providers without network calls
+    struct MockSkillBridge {
+        fail: bool,
+    }
+
+    #[async_trait::async_trait]
+    impl SkillBridge for MockSkillBridge {
+        async fn invoke_skill(
+            &self,
+            _skill_id: &str,
+            input: serde_json::Value,
+        ) -> Result<serde_json::Value, MagicError> {
+            if self.fail {
+                return Err(MagicError::SkillBridgeError("mock failure".into()));
+            }
+
+            // Infer byte count from input (n_bits or shots field)
+            let n_bytes = if let Some(n_bits) = input.get("n_bits").and_then(|v| v.as_u64()) {
+                (n_bits / 8) as usize
+            } else if let Some(shots) = input.get("shots").and_then(|v| v.as_u64()) {
+                (shots / 8) as usize
+            } else {
+                32 // default
+            };
+
+            // Return mock quantum bytes (0xAB repeated)
+            let mock_bytes = vec![0xABu8; n_bytes];
+            Ok(serde_json::json!({
+                "bytes": hex::encode(mock_bytes)
+            }))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_os_provider_byte_count() {
+        let provider = OsEntropyProvider::new();
+
+        // Test 64 bytes
+        let result = provider.get_bytes(64).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 64);
+
+        // Test 1 byte
+        let result = provider.get_bytes(1).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 1);
+
+        // Test 0 bytes
+        let result = provider.get_bytes(0).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_os_provider_always_available() {
+        let provider = OsEntropyProvider::new();
+
+        // is_available should always return true
+        assert!(provider.is_available().await);
+
+        // health should show available
+        let health = provider.health().await;
+        assert!(health.available);
+        assert_eq!(health.source, "os");
+    }
+
+    #[tokio::test]
+    async fn test_entropy_health_fields() {
+        let provider = OsEntropyProvider::new();
+        let health = provider.health().await;
+
+        // Verify all fields are populated correctly
+        assert!(health.available);
+        assert!(health.error.is_none());
+        assert!(health.latency_ms.is_some());
+        assert_eq!(health.source, "os");
+
+        // checked_at should be within 5 seconds of now
+        let now = chrono::Utc::now();
+        let diff = (now - health.checked_at).num_seconds().abs();
+        assert!(diff < 5, "checked_at timestamp is too far from current time");
+    }
+
+    #[tokio::test]
+    async fn test_mixed_provider_os_fallback() {
+        // Create failing quantum providers
+        let quantinuum = QuantinuumH2Provider::new(Arc::new(MockSkillBridge { fail: true }));
+        let qiskit = QiskitProvider::new(Arc::new(MockSkillBridge { fail: true }));
+
+        // Create mixed provider with no Quantum Origin, only failing quantum providers
+        let provider = MixedEntropyProvider::new(
+            None,
+            Some(quantinuum),
+            Some(qiskit),
+            uuid::Uuid::new_v4(),
+        );
+
+        // Should fall back to OS and succeed
+        let result = provider.get_bytes(32).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 32);
+    }
+
+    #[tokio::test]
+    async fn test_mixed_provider_quantum_path() {
+        // Create successful quantum provider
+        let quantinuum = QuantinuumH2Provider::new(Arc::new(MockSkillBridge { fail: false }));
+
+        // Create mixed provider with working quantum source
+        let provider = MixedEntropyProvider::new(
+            None,
+            Some(quantinuum),
+            None,
+            uuid::Uuid::new_v4(),
+        );
+
+        // Get mixed entropy
+        let mixed_result = provider.get_bytes(32).await;
+        assert!(mixed_result.is_ok());
+        let mixed_bytes = mixed_result.unwrap();
+        assert_eq!(mixed_bytes.len(), 32);
+
+        // Get pure OS entropy for comparison
+        let os_provider = OsEntropyProvider::new();
+        let os_result = os_provider.get_bytes(32).await;
+        assert!(os_result.is_ok());
+        let os_bytes = os_result.unwrap();
+
+        // Mixed bytes should differ from pure OS bytes (probabilistically guaranteed)
+        // The blake3 mixing ensures they won't be identical
+        assert_ne!(
+            mixed_bytes, os_bytes,
+            "Mixed entropy should differ from pure OS entropy"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_mixed_provider_all_health() {
+        // Create failing quantum providers
+        let quantinuum = QuantinuumH2Provider::new(Arc::new(MockSkillBridge { fail: true }));
+        let qiskit = QiskitProvider::new(Arc::new(MockSkillBridge { fail: true }));
+
+        // Create mixed provider
+        let provider = MixedEntropyProvider::new(
+            None,
+            Some(quantinuum),
+            Some(qiskit),
+            uuid::Uuid::new_v4(),
+        );
+
+        // Get health for all providers
+        let health_vec = provider.all_health().await;
+
+        // Should have 3 providers: os, quantinuum, qiskit
+        assert_eq!(health_vec.len(), 3);
+
+        // First should be OS and available
+        assert_eq!(health_vec[0].source, "os");
+        assert!(health_vec[0].available);
+
+        // Second and third should be unavailable (failing quantum providers)
+        assert!(!health_vec[1].available);
+        assert!(!health_vec[2].available);
+    }
+}

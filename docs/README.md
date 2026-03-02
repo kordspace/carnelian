@@ -38,6 +38,7 @@
 ### Advanced Topics
 - **[LOGGING.md](LOGGING.md)** - Logging philosophy and conventions
 - **[ATTESTATION.md](ATTESTATION.md)** - Cryptographic attestation system
+- **[MAGIC.md](MAGIC.md)** - Quantum entropy subsystem setup and reference
 
 ### Branding & Design
 - **[BRAND.md](BRAND.md)** - Brand identity, logos, and color palette
