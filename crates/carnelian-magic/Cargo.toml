@@ -21,6 +21,7 @@ hex = { workspace = true }
 carnelian-common = { path = "../carnelian-common" }
 rand = "0.8"
 rand_chacha = "0.3"
+rayon = "1.10"
 sqlx = { workspace = true }
 pqcrypto-dilithium = { workspace = true }
 pqcrypto-kyber = { workspace = true }
