@@ -46,8 +46,8 @@ pub fn Ledger() -> Element {
         let actor_filter = actor_filter.clone();
         let from_ts_filter = from_ts_filter.clone();
         let to_ts_filter = to_ts_filter.clone();
-        let offset = *offset.read();
-        let limit = *limit.read();
+        let offset = offset.clone();
+        let limit = limit.clone();
 
         move || {
             loading.set(true);
@@ -55,11 +55,13 @@ pub fn Ledger() -> Element {
             let actor_id = actor_filter.read().clone();
             let from_ts = from_ts_filter.read().clone();
             let to_ts = to_ts_filter.read().clone();
+            let current_offset = *offset.read();
+            let current_limit = *limit.read();
 
             spawn(async move {
                 match api::list_ledger_events(
-                    limit,
-                    offset,
+                    current_limit,
+                    current_offset,
                     if action_type.is_empty() {
                         None
                     } else {

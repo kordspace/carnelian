@@ -49,7 +49,10 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
 
     // Load initial data
     use_hook({
+        // Dioxus Signal<T> requires .clone() for multi-closure capture even when T: Copy
+        #[allow(clippy::clone_on_copy)]
         let mut health_status = health_status.clone();
+        #[allow(clippy::clone_on_copy)]
         let mut identity = identity.clone();
         move || {
             spawn(async move {
@@ -71,6 +74,8 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
 
     // Navigation handlers
     let mut next_step = {
+        // Dioxus Signal<T> requires .clone() for multi-closure capture
+        #[allow(clippy::clone_on_copy)]
         let mut step = step.clone();
         move || {
             let current = *step.read();
@@ -81,6 +86,8 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
     };
 
     let mut prev_step = {
+        // Dioxus Signal<T> requires .clone() for multi-closure capture
+        #[allow(clippy::clone_on_copy)]
         let mut step = step.clone();
         move || {
             let current = *step.read();
@@ -92,7 +99,10 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
 
     let complete_wizard = {
         let on_complete = props.on_complete.clone();
+        // Dioxus Signal<T> requires .clone() for multi-closure capture
+        #[allow(clippy::clone_on_copy)]
         let mut toasts = toasts.clone();
+        #[allow(clippy::clone_on_copy)]
         let selected_skills = selected_skills.clone();
         move || {
             spawn(async move {
