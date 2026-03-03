@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logos/carnelian-logo.svg" alt="Carnelian OS" width="400">
+  <img src="assets/logos/carnelian-logo.svg" alt="Carnelian Core" width="400">
 </p>
 
 <p align="center">
@@ -19,7 +19,7 @@
 |--------|------|------|
 | 🔥 | **Carnelian Core** | AI workspace harness — the runtime that orchestrates agents |
 | 🦎 | **Lian** | Agent personality — the spirit that reasons and decides |
-| 💎 | **Foundation** | Architectural guarantees — security, ledger, auditability |
+| 💎 | **Carnelian Core** | Architectural guarantees — security, ledger, auditability |
 | 🔮 | **MAGIC** | Quantum intelligence layer — entropy, mantras, optimization |
 
 ### Brand Assets
@@ -34,22 +34,6 @@ See [docs/BRAND.md](docs/BRAND.md) for the complete dual-theme brand kit (Forge/
 ## Overview
 
 🔥 **Carnelian Core** is an AI workspace harness built in Rust that provides the foundational infrastructure for autonomous agent orchestration. It combines capability-based security, event-stream architecture, and local-first LLM execution to create a safe, auditable environment for AI-driven task automation.
-
-## Phase Status
-
-| Phase | Status | Scope |
-|-------|--------|-------|
-| 1 | ✅ Done | Foundation — Core orchestrator, CLI, HTTP API, Policy, Ledger |
-| 2 | ✅ Done | Task Execution — Workers, JSONL transport, skill discovery |
-| 3 | ✅ Done | Intelligence — Soul, Memory, Context, Agentic loop, LLM Gateway |
-| 4 | ✅ Done | Security — Attestation, encryption, safe mode, approval queue |
-| 5 | ✅ Done | Advanced Features — Sub-agents, workflows, channel adapters, voice |
-| 6 | ✅ Done | Production — pgvector, XP system, chain anchor, metrics |
-| 7 | ✅ Done | Settings, Ledger UI & Skill Book — Dioxus pages, Skill Book catalog |
-| 8 | ✅ Done | Worker Ecosystem — WASM runtime, native ops worker, bulk import tooling |
-| 9 | ✅ Done | Skills Import & Elixirs — Elixir system, RAG retrieval, quality scoring |
-| 10 | ✅ Done | MAGIC — Quantum entropy providers, mantra matrix, quantum circuit skills |
-| 11 | 🚧 In Progress | Docs, Branding & v1.0.0 Release — README overhaul, CHANGELOG, version bump |
 
 **Core Value Proposition:**
 - **Workspace Automation** — Autonomous task discovery, scheduling, and execution
@@ -130,7 +114,7 @@ graph TD
     Workers[Worker Pool\nNode / Python / WASM / Native]
     Quantum[Quantum Providers\nQuantum Origin / H2 / Qiskit]
 
-    DB[(PostgreSQL 16\n+ pgvector\n15 migrations)]
+    DB[(PostgreSQL 16\n+ pgvector\n18 migrations)]
     Ollama[Ollama Service :11434]
     Remote[Remote LLM APIs]
 
@@ -361,6 +345,8 @@ carnelian/
 │   │   │   ├── policy.rs         # Capability-based security engine
 │   │   │   ├── ledger.rs         # blake3 hash-chain audit trail
 │   │   │   ├── skills.rs         # Skill discovery, manifest validation, file watcher
+│   │   │   ├── skills/
+│   │   │   │   └── wasm_runtime.rs  # WASM skill runtime (wasmtime + WASI P1)
 │   │   │   ├── agentic.rs        # Agentic loop, heartbeat turn, compaction pipeline
 │   │   │   ├── approvals.rs      # Approval queue, human-in-the-loop
 │   │   │   ├── attestation.rs    # Worker attestation, Ed25519 verification
@@ -413,7 +399,6 @@ carnelian/
 │   ├── carnelian-magic/          # 🔮 Quantum entropy + mantra system
 │   ├── carnelian-worker-node/    # Node.js worker wrapper crate
 │   ├── carnelian-worker-python/  # Python worker wrapper crate
-│   ├── carnelian-worker-wasm/    # WASM skill runtime (wasmtime + WASI P1)
 │   └── carnelian-worker-native/  # Rust named ops (git, blake3, docker, dir)
 ├── gateway/                      # TypeScript LLM Gateway (:18790)
 │   └── src/
@@ -433,12 +418,11 @@ carnelian/
 │   └── skill-book/               # Curated catalog (7 categories, 30+ skills)
 │       └── quantum/              # quantinuum-h2-rng, qiskit-rng, quantum-optimize
 ├── db/
-│   └── migrations/               # SQL migrations (15 migration files, PostgreSQL 16 + pgvector)
+│   └── migrations/               # SQL migrations (18 migration files, PostgreSQL 16 + pgvector)
 ├── docs/                         # Documentation (development, docker, brand, logging)
 ├── scripts/
 │   ├── setup-hooks.sh            # Development environment setup
-│   ├── ci-local.sh               # Local CI checks before pushing
-│   └── checkpoint1-validation.sh  # Checkpoint 1 automated validation
+│   └── ci-local.sh               # Local CI validation script
 └── .github/workflows/ci.yml      # CI pipeline (lint, build, test, integration, secrets)
 ```
 
@@ -546,6 +530,112 @@ Elixirs are integrated with the XP progression system:
 - **Creation**: Earn XP when creating high-quality elixirs
 - **Usage**: Track effectiveness and award XP for helpful elixirs
 - **Quality Bonuses**: Higher quality scores yield more XP
+
+## XP Progression System
+
+Carnelian includes a comprehensive **XP (Experience Points) and Leveling System** that gamifies agent productivity and tracks skill mastery across all operations.
+
+### Level Curve
+
+**Exponential progression** from Level 1 to Level 99 using a **1.172 exponent**:
+
+```rust
+// XP required for level N
+fn xp_for_level(level: i32) -> i64 {
+    if level <= 1 { return 0; }
+    ((level as f64).powf(1.172) * 100.0).round() as i64
+}
+```
+
+**Sample milestones:**
+- Level 10: ~1,483 XP
+- Level 25: ~5,249 XP
+- Level 50: ~14,142 XP
+- Level 75: ~25,704 XP
+- Level 99: ~40,000 XP
+
+### XP Sources
+
+| Event | Base XP | Multipliers |
+|-------|---------|-------------|
+| **Task Completion** | 10-100 | Priority × complexity × success rate |
+| **Skill Execution** | 5-50 | Skill category × execution time |
+| **Elixir Creation** | 20-200 | Quality score (0-100) |
+| **Elixir Usage** | 5-25 | Effectiveness score × reuse count |
+| **Heartbeat Tick** | 1-5 | Mantra category × context relevance |
+| **Ledger Entry** | 2-10 | Entry type × quantum salt presence |
+
+### Ledger-Backed Event Sourcing
+
+All XP events are stored in the **`xp_ledger`** table for full auditability:
+
+```sql
+CREATE TABLE xp_ledger (
+    event_id       UUID PRIMARY KEY,
+    identity_id    UUID NOT NULL REFERENCES identities(identity_id),
+    event_type     TEXT NOT NULL,  -- 'task_complete', 'skill_exec', 'elixir_create', etc.
+    xp_delta       INTEGER NOT NULL,
+    metadata       JSONB,
+    created_at     TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Event Types:**
+- `task_complete` — Task execution completion
+- `skill_exec` — Individual skill execution
+- `elixir_create` — New elixir creation
+- `elixir_usage` — Elixir retrieval and application
+- `heartbeat_tick` — Agentic heartbeat cycle
+- `ledger_entry` — Privileged ledger action
+
+### Leaderboard
+
+The system maintains a real-time leaderboard ranking identities by total XP and level:
+
+```sql
+SELECT 
+    i.identity_id,
+    i.name,
+    i.xp_total,
+    i.xp_level,
+    RANK() OVER (ORDER BY i.xp_total DESC) as rank
+FROM identities i
+ORDER BY i.xp_total DESC
+LIMIT 100;
+```
+
+### Skill Metrics
+
+Per-skill performance tracking with XP integration:
+
+```sql
+CREATE TABLE skill_metrics (
+    skill_id           UUID REFERENCES skills(skill_id),
+    execution_count    INTEGER DEFAULT 0,
+    total_xp_earned    INTEGER DEFAULT 0,
+    avg_execution_ms   REAL,
+    success_rate       REAL,
+    last_executed_at   TIMESTAMPTZ
+);
+```
+
+### UI Integration
+
+The **XP Progression** page in the Dioxus desktop UI provides:
+- Current level and XP progress bar
+- Recent XP events (last 50)
+- Leaderboard view
+- Per-skill XP breakdown
+- Daily/weekly XP trends
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/xp/leaderboard` | Top 100 identities by XP |
+| `GET` | `/v1/xp/history` | XP event history for identity |
+| `GET` | `/v1/xp/skills` | Per-skill XP breakdown |
+| `POST` | `/v1/xp/award` | Manually award XP (admin only) |
 
 ### API Endpoints (Planned)
 
@@ -749,25 +839,28 @@ The GitHub Actions CI pipeline runs on every push to `main` and on pull requests
 
 ## Database
 
-PostgreSQL 16 with pgvector extension. Schema managed via SQLx migrations in `db/migrations/` (15 migrations):
+PostgreSQL 16 with pgvector extension. Schema managed via SQLx migrations in `db/migrations/` (18 migrations):
 
 | Migration | Description |
 |-----------|-------------|
 | `00000000000000_init.sql` | pgvector extension |
 | `00000000000001_core_schema.sql` | Core tables (identities, skills, tasks, task_runs, run_logs, etc.) |
-| `00000000000002_phase1_delta.sql` | Phase 1 additions (sessions, skill_versions, workflows, sub_agents, XP, elixirs) |
+| `00000000000002_phase1_delta.sql` | Session, skill_versions, workflows, sub_agents, XP, elixirs |
 | `00000000000003_schema_fixes.sql` | Schema refinements (pronouns, subject_id TEXT, LZ4 compression) |
 | `00000000000004_xp_curve_retune.sql` | XP curve rebalancing |
 | `00000000000005_config_store_value_blob.sql` | Config store value column |
 | `00000000000006_memories_created_at_index.sql` | Memory retrieval index |
 | `00000000000007_heartbeat_correlation.sql` | Heartbeat correlation ID tracking |
-| `00000000000008_voice_config.sql` | Voice configuration JSONB on identities |
-| `00000000000009_skill_book.sql` | Skill Book catalog tables and seed data |
-| `00000000000010_elixirs_schema.sql` | Elixir knowledge persistence (elixirs, elixir_versions, elixir_usage) |
-| `00000000000011_xp_ledger.sql` | XP ledger event sourcing table |
-| `00000000000012_magic_schema.sql` | MAGIC tables (entropy_events, mantras, mantra_categories, mantra_usage) |
-| `00000000000013_magic_seed.sql` | Mantra seed data (18 categories, initial mantras) |
-| `00000000000014_magic_audit.sql` | HeartbeatTick ledger entries with quantum_salt |
+| `00000000000008_approval_queue.sql` | Approval queue for high-risk operations |
+| `00000000000009_encryption_at_rest.sql` | Encryption at rest for sensitive data |
+| `00000000000010_worker_attestations.sql` | Worker attestation and verification |
+| `00000000000011_channel_sessions.sql` | Channel adapter session management |
+| `00000000000012_memory_tags.sql` | Memory tagging and categorization |
+| `00000000000013_chain_anchors.sql` | Ledger chain anchoring |
+| `00000000000014_revoked_grants.sql` | Revoked capability grants |
+| `00000000000015_magic_entropy.sql` | MAGIC entropy events and provider tracking |
+| `00000000000016_magic_mantras.sql` | Mantra categories, mantras, and usage tracking |
+| `00000000000017_quantum_integrity.sql` | Quantum salt integration for ledger entries |
 
 ## Configuration
 
@@ -870,7 +963,7 @@ graph TD
     Workers[Worker Pool\nNode / Python / WASM / Native]
     Quantum[Quantum Providers\nQuantum Origin / H2 / Qiskit]
 
-    DB[(PostgreSQL 16\n+ pgvector\n15 migrations)]
+    DB[(PostgreSQL 16\n+ pgvector\n18 migrations)]
     Ollama[Ollama Service :11434]
     Remote[Remote LLM APIs]
 
