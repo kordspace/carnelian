@@ -97,7 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`carnelian-magic` Crate** — Quantum entropy generation and mantra matrix system
 - **`EntropyProvider` Trait** — Waterfall chain: Quantum Origin → Quantinuum H2 → Qiskit → OS CSPRNG
-- **Quantum Origin Provider** — REST API integration with `CARNELIAN_QUANTUM_ORIGIN_KEY`
+- **Quantum Origin Provider** — REST API integration with `CARNELIAN_QUANTUM_ORIGIN_API_KEY`
 - **Quantinuum H2 Provider** — Hadamard circuit entropy via pytket with interactive auth (`carnelian magic auth`)
 - **Qiskit Provider** — IBM Quantum backend integration with `IBM_QUANTUM_TOKEN`
 - **OS Entropy Fallback** — `getrandom` crate CSPRNG as always-available fallback

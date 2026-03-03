@@ -939,8 +939,6 @@ See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 | [documentation/SECURITY_CHECKLIST.md](documentation/SECURITY_CHECKLIST.md) | Security hardening checklist |
 | [documentation/TESTING_GUIDE.md](documentation/TESTING_GUIDE.md) | Comprehensive testing guide |
 | [documentation/MACHINE_PROFILES.md](documentation/MACHINE_PROFILES.md) | Deployment machine profiles |
-| [docs/ENHANCEMENT_SUMMARY.md](docs/ENHANCEMENT_SUMMARY.md) | Project enhancement summary |
-| [docs/FINAL_STATUS_REPORT.md](docs/FINAL_STATUS_REPORT.md) | Final status report |
 
 ### Technical Deep Dives
 

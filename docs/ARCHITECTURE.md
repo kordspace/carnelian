@@ -223,7 +223,7 @@ The `carnelian-magic` crate (`crates/carnelian-magic/`) provides quantum-enhance
 
 The `EntropyProvider` trait defines a waterfall chain for quantum-random byte generation:
 
-1. **Quantum Origin** — REST API integration with `CARNELIAN_QUANTUM_ORIGIN_KEY` environment variable
+1. **Quantum Origin** — REST API integration with `CARNELIAN_QUANTUM_ORIGIN_API_KEY` environment variable
 2. **Quantinuum H2** — Hadamard circuit entropy via pytket; requires interactive auth (`carnelian magic auth`)
 3. **Qiskit RNG** — IBM Quantum backend integration with `IBM_QUANTUM_TOKEN` environment variable
 4. **OS CSPRNG** — `getrandom` crate fallback (always available)

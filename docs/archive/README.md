@@ -7,5 +7,6 @@ official Carnelian Core v1.0.0 documentation.
 | File | Original Purpose |
 |------|-----------------|
 | `ENHANCEMENT_SUMMARY.md` | Session summary from the skill-expansion sprint (Feb 2026) |
+| `FINAL_STATUS_REPORT.md` | Historical placeholder — original file removed in production refactoring (Feb 28, 2026) |
 
 For current documentation, see [../README.md](../README.md).

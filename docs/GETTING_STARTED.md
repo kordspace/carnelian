@@ -53,7 +53,7 @@
    **Quantum Origin (simplest):**
    ```bash
    # Set your Quantum Origin API key
-   export CARNELIAN_QUANTUM_ORIGIN_KEY="your-api-key"
+   export CARNELIAN_QUANTUM_ORIGIN_API_KEY="your-api-key"
    # Or add it to machine.toml — see docs/MAGIC.md
    ```
 
