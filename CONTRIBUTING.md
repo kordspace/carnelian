@@ -218,6 +218,256 @@ If you have questions, feel free to:
 
 By contributing to CARNELIAN, you agree that your contributions will be licensed under the [LICENSE](LICENSE) file in this repository.
 
+## MAGIC Development Guide
+
+This section covers development workflows specific to the MAGIC (Mixed Authenticated Quantum Intelligence Core) subsystem.
+
+### Adding a New Mantra Category
+
+Mantra categories live in the `mantra_categories` table, seeded in `db/migrations/00000000000016_magic_mantras.sql`.
+
+To add a new category:
+
+1. Create a new SQL migration file under `db/migrations/` with the next sequence number (e.g., `00000000000018_add_mantra_category.sql`).
+2. Write an `INSERT` statement into `mantra_categories` supplying:
+   - `name` — Category name (e.g., "Debugging", "Optimization")
+   - `description` — Brief description of the category's purpose
+   - `system_message` — System prompt template for this category
+   - `user_message` — User prompt template for this category
+   - `base_weight` — Initial selection weight (default: 100)
+   - `cooldown_beats` — Number of heartbeat cycles before re-selection is allowed
+   - `suggested_skill_tags` — Array of skill tags to suggest when this category is selected
+   - `elixir_types` — Array of elixir types that boost this category's weight
+
+Example:
+
+```sql
+INSERT INTO mantra_categories (
+    name, description, system_message, user_message,
+    base_weight, cooldown_beats, suggested_skill_tags, elixir_types
+) VALUES (
+    'Debugging',
+    'Analyze errors and identify root causes',
+    'You are a debugging expert analyzing system errors.',
+    'Review recent errors and identify patterns or root causes.',
+    100,
+    3,
+    ARRAY['error-analysis', 'debugging'],
+    ARRAY['domain_knowledge']
+);
+```
+
+3. Run `cargo sqlx migrate run` to apply the migration.
+
+### Adding Mantras to an Existing Category
+
+Mantras are rows in the `mantra_entries` table, keyed by `category_id`.
+
+To add mantras to an existing category:
+
+1. Create a new migration file or run directly against a dev database.
+2. Write an `INSERT INTO mantra_entries` statement using a CTE to resolve `category_id` by name:
+
+```sql
+WITH category AS (
+    SELECT category_id FROM mantra_categories WHERE name = 'Debugging'
+)
+INSERT INTO mantra_entries (category_id, text)
+SELECT category_id, 'What error patterns emerge from the last 10 failures?'
+FROM category;
+```
+
+This pattern follows the seed migration structure and ensures the category exists before inserting entries.
+
+### Writing a Quantum Circuit Skill (Python)
+
+Quantum circuit skills live under `skills/skill-book/quantum/` and integrate with the entropy provider chain.
+
+#### Skill Types
+
+There are two quantum skill types:
+
+1. **pytket** — For Quantinuum H2 devices (emulator or hardware)
+2. **Qiskit** — For IBM Quantum backends
+
+#### pytket Skill (Quantinuum H2)
+
+Implement a `QuantumCircuit` using `pytket.circuit`:
+
+```python
+from pytket.circuit import Circuit
+from pytket.extensions.quantinuum import QuantinuumBackend
+
+def run(params):
+    n_bits = params.get('n_bits', 256)  # Provider passes n_bits parameter
+    n_bytes = n_bits // 8
+    
+    # Build Hadamard circuit
+    circuit = Circuit(n_bits)
+    for i in range(n_bits):
+        circuit.H(i)
+    circuit.measure_all()
+    
+    # Submit to Quantinuum
+    backend = QuantinuumBackend(device_name="H1-1E")
+    compiled = backend.get_compiled_circuit(circuit)
+    handle = backend.process_circuit(compiled, n_shots=1)
+    result = backend.get_result(handle)
+    
+    # Extract bits and encode as hex
+    bits = result.get_counts().most_common(1)[0][0]
+    hex_bytes = hex(int(bits, 2))[2:].zfill(n_bytes * 2)
+    
+    return {"bytes": hex_bytes}
+```
+
+#### Qiskit Skill (IBM Quantum)
+
+Build a `QuantumCircuit` with Hadamard + measure:
+
+```python
+from qiskit import QuantumCircuit
+from qiskit_ibm_runtime import QiskitRuntimeService, Sampler
+
+def run(params):
+    shots = params.get('shots', 256)  # Provider passes shots parameter (bits requested)
+    n_bits = shots
+    n_bytes = n_bits // 8
+    
+    # Build circuit
+    qc = QuantumCircuit(n_bits, n_bits)
+    for i in range(n_bits):
+        qc.h(i)
+    qc.measure(range(n_bits), range(n_bits))
+    
+    # Run on IBM Quantum
+    service = QiskitRuntimeService()
+    backend = service.backend("ibm_brisbane")
+    sampler = Sampler(backend)
+    job = sampler.run(qc, shots=1)
+    result = job.result()
+    
+    # Decode bitstring
+    bitstring = list(result.quasi_dists[0].keys())[0]
+    hex_bytes = hex(bitstring)[2:].zfill(n_bytes * 2)
+    
+    return {"bytes": hex_bytes}
+```
+
+#### Output Contract
+
+The skill's output JSON **must** include a `bytes` field (hex-encoded) matching the requested bit count. This is what `QuantinuumH2Provider` and `QiskitProvider` in `crates/carnelian-magic/src/entropy.rs` parse via `SkillBridge.invoke_skill`.
+
+#### Registration
+
+Register the skill in `skills/registry/` with appropriate metadata:
+
+```json
+{
+  "name": "quantinuum-h2-rng",
+  "runtime": "python",
+  "tags": ["quantum", "entropy", "rng"],
+  "required_config": ["QUANTINUUM_API_KEY"]
+}
+```
+
+### Implementing a New `EntropyProvider`
+
+The `EntropyProvider` trait is defined in `crates/carnelian-magic/src/entropy.rs`.
+
+#### Required Methods
+
+Implement the four required methods:
+
+```rust
+#[async_trait]
+pub trait EntropyProvider: Send + Sync {
+    /// Return a unique slug identifying this provider
+    fn source_name(&self) -> &str;
+    
+    /// Lightweight reachability check (no network calls if possible)
+    async fn is_available(&self) -> bool;
+    
+    /// Return exactly `n` bytes or a `MagicError`
+    async fn get_bytes(&self, n: usize) -> Result<Vec<u8>, MagicError>;
+    
+    /// Call `get_bytes(32)`, measure latency, populate `EntropyHealth`
+    async fn health(&self) -> EntropyHealth {
+        let start = std::time::Instant::now();
+        match self.get_bytes(32).await {
+            Ok(_) => EntropyHealth {
+                available: true,
+                latency_ms: start.elapsed().as_millis() as u64,
+                error: None,
+            },
+            Err(e) => EntropyHealth {
+                available: false,
+                latency_ms: 0,
+                error: Some(e.to_string()),
+            },
+        }
+    }
+}
+```
+
+#### Integration
+
+1. Add the new provider as an `Option<YourProvider>` field on `MixedEntropyProvider`.
+2. Wire it into the priority chain in `get_bytes` (after `QiskitProvider`, before `OsEntropyProvider`).
+3. Expose construction of the new provider in `lib.rs` / config wiring.
+
+Example:
+
+```rust
+pub struct MixedEntropyProvider {
+    quantum_origin: Option<QuantumOriginProvider>,
+    quantinuum: Option<QuantinuumH2Provider>,
+    qiskit: Option<QiskitProvider>,
+    your_provider: Option<YourProvider>,  // Add here
+    os: OsEntropyProvider,
+}
+
+impl MixedEntropyProvider {
+    async fn get_bytes(&self, n: usize) -> Result<Vec<u8>, MagicError> {
+        // Try quantum providers in priority order
+        if let Some(qo) = &self.quantum_origin {
+            if let Ok(bytes) = qo.get_bytes(n).await { return Ok(bytes); }
+        }
+        if let Some(q) = &self.quantinuum {
+            if let Ok(bytes) = q.get_bytes(n).await { return Ok(bytes); }
+        }
+        if let Some(qk) = &self.qiskit {
+            if let Ok(bytes) = qk.get_bytes(n).await { return Ok(bytes); }
+        }
+        if let Some(yp) = &self.your_provider {  // Add to chain
+            if let Ok(bytes) = yp.get_bytes(n).await { return Ok(bytes); }
+        }
+        
+        // Always fall back to OS
+        self.os.get_bytes(n).await
+    }
+}
+```
+
+### Testing MAGIC Without Quantum Credentials
+
+All quantum providers are `Option<_>` in `MixedEntropyProvider` — passing `None` for all three quantum providers causes automatic fallback to `OsEntropyProvider`.
+
+#### Test Strategies
+
+1. **Mock Skill Bridge**: Use `MockSkillBridge { fail: true }` (already exists in `entropy.rs` test module) to simulate unavailable quantum hardware.
+
+2. **Empty Environment Variables**: Set `CARNELIAN_QUANTUM_ORIGIN_API_KEY` to empty string or omit it — `QuantumOriginProvider::new` reads the env var and treats an empty key as unconfigured.
+
+3. **Unit Tests**: Run `cargo test -p carnelian-magic` to exercise the full fallback chain without any network calls.
+
+Example tests demonstrating this:
+
+- `test_mixed_provider_os_fallback` — Verifies OS fallback when all quantum providers are `None`
+- `test_provider_priority_selection` — Verifies priority chain behavior
+
+All tests run offline and never require actual quantum credentials.
+
 ---
 
 Thank you for contributing to CARNELIAN! 🎉
