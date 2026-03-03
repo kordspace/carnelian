@@ -362,7 +362,7 @@ pub struct MagicConfig {
     pub qiskit_backend: String,
 
     /// Entropy provider timeout in milliseconds
-    #[serde(default = "magic_default_entropy_timeout_ms")]
+    #[serde(default = "magic_default_entropy_timeout_ms", alias = "entropy_timeout_secs")]
     pub entropy_timeout_ms: u64,
 
     /// Fraction of bytes sourced from quantum provider (0.0-1.0)
@@ -932,6 +932,12 @@ impl Config {
                     url: self.magic.quantum_origin_url.clone(),
                 });
             }
+        }
+
+        // Handle entropy_timeout_secs alias: if value is < 100, assume it was specified in seconds
+        // and convert to milliseconds (machine.toml.example uses entropy_timeout_secs)
+        if self.magic.entropy_timeout_ms < 100 && self.magic.entropy_timeout_ms > 0 {
+            self.magic.entropy_timeout_ms *= 1000;
         }
 
         // SESSION_EXPIRY_HOURS — default session TTL in hours (0 = never)

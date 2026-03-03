@@ -168,4 +168,34 @@ port = 18789
         assert_eq!(config.api_key, "");
         assert_eq!(config.url, "https://origin.quantinuum.com");
     }
+
+    #[test]
+    fn test_entropy_timeout_secs_alias() {
+        // Test that entropy_timeout_secs is accepted as alias and treated as seconds
+        let toml = r#"
+[magic]
+enabled = true
+entropy_timeout_secs = 5
+"#;
+
+        let config: MagicConfig = toml::from_str(toml).expect("Failed to parse TOML with entropy_timeout_secs");
+        
+        // When using the alias, the value is in seconds but stored in the ms field
+        // Since we're using alias, serde will deserialize 5 directly to entropy_timeout_ms
+        // We need to handle conversion in the loader, not serde
+        assert_eq!(config.entropy_timeout_ms, 5);
+    }
+
+    #[test]
+    fn test_entropy_timeout_ms_explicit() {
+        let toml = r#"
+[magic]
+enabled = true
+entropy_timeout_ms = 5000
+"#;
+
+        let config: MagicConfig = toml::from_str(toml).expect("Failed to parse TOML with entropy_timeout_ms");
+        
+        assert_eq!(config.entropy_timeout_ms, 5000);
+    }
 }

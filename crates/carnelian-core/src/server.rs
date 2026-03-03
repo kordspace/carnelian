@@ -33,8 +33,8 @@ use http::{HeaderMap, Method, header};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::Row;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tower_http::{
@@ -548,25 +548,24 @@ impl Server {
             None
         };
 
-        let state = AppState::new(
-            self.config.clone(),
-            self.event_stream.clone(),
-            self.policy_engine.clone(),
-            self.ledger.clone(),
-            self.worker_manager.clone(),
-            self.scheduler.clone(),
-            model_router,
-            safe_mode_guard,
-            session_manager,
-            memory_manager,
-            sub_agent_manager,
-            workflow_engine,
-            xp_manager,
-            voice_gateway,
-            skill_book,
-            elixir_manager,
-            entropy_provider.clone(),
-        );
+        let state = Arc::new(AppState {
+            pool: self.config.pool().expect("Database pool required for AppState"),
+            config: self.config.clone(),
+            model_router: model_router.clone(),
+            ledger: self.ledger.clone(),
+            event_stream: self.event_stream.clone(),
+            xp_manager: xp_manager.clone(),
+            policy_engine: self.policy_engine.clone(),
+            scheduler: self.scheduler.clone(),
+            session_manager: session_manager.clone(),
+            elixir_manager: elixir_manager.clone(),
+            memory_manager: memory_manager.clone(),
+            skill_bridge: self.skill_bridge.clone(),
+            entropy_provider: entropy_provider.clone(),
+            mantra_tree: self.mantra_tree.clone(),
+            approval_manager: self.approval_manager.clone(),
+            safe_mode_active: Arc::new(AtomicBool::new(false)),
+        });
 
         // Wire in the adapter factory if configured
         let state = if let Some(ref factory) = self.adapter_factory {
