@@ -1,10 +1,4 @@
 //! First-run wizard component for initial setup.
-
-#![allow(clippy::clone_on_copy)]
-#![allow(clippy::redundant_closure_for_method_calls)]
-#![allow(clippy::redundant_closure_call)]
-#![allow(clippy::shadow_unrelated)]
-#![allow(clippy::redundant_locals)]
 //! 4. Workspace & Models configuration
 //! 5. Starter Skills activation
 

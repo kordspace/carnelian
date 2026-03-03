@@ -48,9 +48,10 @@ The following **production-ready** post-quantum cryptographic primitives are ful
 - **Fallback:** Ed25519 (classical elliptic curve, backward compatibility)
 
 **Methods:**
-- `generate_with_entropy(entropy_provider)` — Generate hybrid keypair from quantum entropy
+- `generate_with_entropy(&entropy_provider)` — Generate hybrid keypair from quantum entropy (async)
 - `sign(&self, message)` — Produce `HybridSignature` containing both Dilithium3 and Ed25519 signatures
-- `verify(public_key, message, signature)` — Verify both signatures (fail if either is invalid)
+- `verify(&self, message, signature)` — Verify both signatures on this key (fail if either is invalid)
+- `public_keys(&self)` — Export `HybridPublicKey` containing both public keys for storage
 - `derive_aes_storage_key(&self)` — Derive AES-256 key from Ed25519 component (maintains v1.0.0 compatibility)
 
 **Key Sizes:**
@@ -68,9 +69,10 @@ The following **production-ready** post-quantum cryptographic primitives are ful
 **Algorithm:** CRYSTALS-Kyber1024 (NIST Level 5 security, ~256-bit quantum resistance)
 
 **Methods:**
-- `generate_with_entropy(entropy_provider)` — Generate Kyber1024 keypair from quantum entropy
-- `encapsulate(public_key)` — Encapsulate a shared secret, return `(ciphertext, shared_secret)`
-- `decapsulate(secret_key, ciphertext)` — Decapsulate ciphertext to recover shared secret
+- `generate_with_entropy(&entropy_provider)` — Generate Kyber1024 keypair from quantum entropy (async)
+- `encapsulate(&self)` — Encapsulate a shared secret using this key's public key, return `(ciphertext, shared_secret)`
+- `decapsulate(&self, ciphertext)` — Decapsulate ciphertext using this key's secret key to recover shared secret
+- `public_key_bytes(&self)` — Export public key bytes for storage or transmission
 
 **Key Sizes:**
 - Public Key: 1568 bytes

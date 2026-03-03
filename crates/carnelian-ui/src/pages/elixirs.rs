@@ -1,9 +1,5 @@
 //! Elixirs page — manage skill configurations with filtering, sorting, CRUD, and drafts.
 
-#![allow(clippy::nonminimal_bool)]
-#![allow(clippy::collapsible_else_if)]
-#![allow(clippy::if_not_else)]
-
 use crate::api;
 use crate::components::{Toast, ToastMessage, ToastType};
 use crate::theme::Theme;

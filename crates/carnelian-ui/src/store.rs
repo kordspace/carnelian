@@ -9,9 +9,6 @@
 //! `mpsc` channels, and Dioxus-local `spawn` coroutines drain those
 //! channels on the UI thread where signal writes are safe.
 
-#![allow(clippy::too_many_lines)]
-#![allow(clippy::cast_possible_truncation)]
-
 use std::collections::VecDeque;
 use std::time::Duration;
 
@@ -217,6 +214,8 @@ impl EventStreamStore {
     /// Dioxus-local coroutine that drains the event channel into the
     /// signal-backed ring buffer. Also populates `approval_notifications`
     /// for approval lifecycle events.
+    // Signal bridge handles all event variants; extraction is intentionally monolithic
+    #[allow(clippy::too_many_lines)]
     fn bridge_events(&self, mut rx: mpsc::UnboundedReceiver<EventEnvelope>) {
         let mut events = self.events;
         let mut event_count = self.event_count;
