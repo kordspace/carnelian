@@ -420,6 +420,8 @@ fn MantraLibrary(toasts: Signal<Vec<ToastMessage>>) -> Element {
             match api::magic_mantra_simulate().await {
                 Ok(resp) => {
                     simulate_result.set(Some(resp));
+                    // Refresh context after successful simulation
+                    load_context();
                 }
                 Err(e) => {
                     toasts.write().push(ToastMessage {
@@ -432,6 +434,11 @@ fn MantraLibrary(toasts: Signal<Vec<ToastMessage>>) -> Element {
             }
         });
     };
+
+    // Auto-load context on component mount
+    use_effect(move || {
+        load_context();
+    });
 
     rsx! {
         div { class: "mantra-library",
