@@ -1,6 +1,8 @@
-# Contributing to CARNELIAN
+# Contributing to Carnelian Core
 
-Thank you for your interest in contributing to CARNELIAN! We welcome contributions from the community and are excited to work with you.
+Thank you for your interest in contributing to Carnelian Core! We welcome contributions from the community and are excited to work with you.
+
+**Important:** Carnelian Core is proprietary software owned by Marco Julio Lopes and Kordspace LLC. By contributing, you agree to the Contributor License Agreement (CLA) outlined in [LICENSE.md](LICENSE.md).
 
 ## Table of Contents
 

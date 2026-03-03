@@ -58,7 +58,7 @@
 - **Security**: blake3-based hash-chain ledger, capability grants, deny-by-default policy
 
 **Key Features:**
-- 530+ built-in skills (Node.js, WASM, Native Ops)
+- 50+ curated skills with bulk import tooling (Node.js, WASM, Native Ops)
 - Event-stream architecture with backpressure handling
 - Capability-based security with approval workflows
 - Tamper-resistant audit ledger
