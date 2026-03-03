@@ -39,7 +39,9 @@
 pub mod entropy;
 pub mod entropy_arc_impl;
 mod error;
+pub mod hasher;
 pub mod mantra;
+pub mod verifier;
 
 pub use entropy::{
     EntropyHealth, EntropyProvider, MixedEntropyProvider,
@@ -47,10 +49,17 @@ pub use entropy::{
     QuantinuumH2Provider, QiskitProvider, SkillBridge,
 };
 pub use error::{MagicError, Result};
+pub use hasher::QuantumHasher;
 pub use mantra::{
     MantraCategory,
     MantraContext,
     MantraEntry,
     MantraSelection,
     MantraTree,
+};
+pub use verifier::{
+    QuantumIntegrityVerifier,
+    TamperedRow,
+    VerificationReport,
+    VerificationStatus,
 };
