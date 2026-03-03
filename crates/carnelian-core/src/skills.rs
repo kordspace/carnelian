@@ -35,6 +35,7 @@ use sqlx::PgPool;
 use crate::events::EventStream;
 
 // pub mod native_loader;
+pub mod sandbox;
 pub mod skill_trait;
 pub mod wasm_runtime;
 
