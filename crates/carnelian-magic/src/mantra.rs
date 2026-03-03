@@ -172,7 +172,7 @@ pub struct MantraSelection {
 
 pub struct MantraTree {
     // Preloaded data for no-pool select
-    categories: Option<Vec<(Uuid, String, i32, i32, String, String)>>,
+    categories: Option<Vec<(Uuid, String, i32, i32, String, String, Vec<String>)>>,
     entries_by_category: Option<HashMap<Uuid, Vec<MantraEntry>>>,
     recent_history: Option<Vec<(Uuid, i64)>>,
 }
@@ -189,8 +189,8 @@ impl MantraTree {
     /// Preload all data needed for no-pool select
     pub async fn preload(&mut self, pool: &PgPool) -> Result<()> {
         // Fetch all enabled categories
-        let categories: Vec<(Uuid, String, i32, i32, String, String)> = sqlx::query_as(
-            "SELECT category_id, name, base_weight, cooldown_beats, system_message, user_message 
+        let categories: Vec<(Uuid, String, i32, i32, String, String, Vec<String>)> = sqlx::query_as(
+            "SELECT category_id, name, base_weight, cooldown_beats, system_message, user_message, elixir_types 
              FROM mantra_categories WHERE enabled = true"
         )
         .fetch_all(pool)
@@ -224,7 +224,7 @@ impl MantraTree {
         }
 
         // Fetch recent history up to max cooldown
-        let max_cooldown = categories.iter().map(|(_, _, _, cd, _, _)| *cd).max().unwrap_or(3);
+        let max_cooldown = categories.iter().map(|(_, _, _, cd, _, _, _)| *cd).max().unwrap_or(3);
         let recent_history: Vec<(Uuid, i64)> = sqlx::query_as(
             "SELECT category_id, ROW_NUMBER() OVER (ORDER BY ts DESC) as position 
              FROM mantra_history ORDER BY ts DESC LIMIT $1"
@@ -499,8 +499,8 @@ impl MantraTree {
         }
 
         // Fetch all enabled categories
-        let categories: Vec<(Uuid, String, i32, i32, String, String)> = sqlx::query_as(
-            "SELECT category_id, name, base_weight, cooldown_beats, system_message, user_message 
+        let categories: Vec<(Uuid, String, i32, i32, String, String, Vec<String>)> = sqlx::query_as(
+            "SELECT category_id, name, base_weight, cooldown_beats, system_message, user_message, elixir_types 
              FROM mantra_categories WHERE enabled = true"
         )
         .fetch_all(pool)
@@ -512,7 +512,7 @@ impl MantraTree {
 
         // Fetch recently used category_ids with their usage order
         // We need to check per-category cooldown, so fetch more history
-        let max_cooldown = categories.iter().map(|(_, _, _, cd, _, _)| *cd).max().unwrap_or(3);
+        let max_cooldown = categories.iter().map(|(_, _, _, cd, _, _, _)| *cd).max().unwrap_or(3);
         let recent_history: Vec<(Uuid, i64)> = sqlx::query_as(
             "SELECT category_id, ROW_NUMBER() OVER (ORDER BY ts DESC) as position FROM mantra_history ORDER BY ts DESC LIMIT $1"
         )
@@ -591,12 +591,12 @@ impl MantraTree {
     fn compute_weights(
         &self,
         context: &MantraContext,
-        categories: &[(Uuid, String, i32, i32, String, String)],
+        categories: &[(Uuid, String, i32, i32, String, String, Vec<String>)],
         category_last_used: &HashMap<Uuid, i64>,
     ) -> HashMap<String, i32> {
         let mut weights = HashMap::new();
 
-        for (cat_id, name, base_weight, cooldown_beats, _, _) in categories {
+        for (cat_id, name, base_weight, cooldown_beats, _, _, elixir_types) in categories {
             let mut weight = *base_weight;
 
             // Apply context bonuses based on category
@@ -617,10 +617,23 @@ impl MantraTree {
             // Apply elixir quality boost
             for (elixir_type, avg_quality) in &context.elixir_quality_by_category {
                 if *avg_quality > 80.0 {
-                    let name_lower = name.to_lowercase();
-                    let elixir_type_lower = elixir_type.to_lowercase();
-                    if name_lower.contains(&elixir_type_lower) {
-                        weight += 1;
+                    // First check if elixir_type matches any entry in category's elixir_types
+                    let mut matched = false;
+                    for cat_elixir_type in elixir_types {
+                        if cat_elixir_type.eq_ignore_ascii_case(elixir_type) {
+                            weight += 1;
+                            matched = true;
+                            break;
+                        }
+                    }
+                    
+                    // Fallback to substring matching if no direct match
+                    if !matched {
+                        let name_lower = name.to_lowercase();
+                        let elixir_type_lower = elixir_type.to_lowercase();
+                        if name_lower.contains(&elixir_type_lower) {
+                            weight += 1;
+                        }
                     }
                 }
             }
@@ -637,7 +650,7 @@ impl MantraTree {
 
         // If all weights are zero, reset to base weights
         if weights.values().all(|&w| w == 0) {
-            for (_, name, base_weight, _, _, _) in categories {
+            for (_, name, base_weight, _, _, _, _) in categories {
                 weights.insert(name.clone(), *base_weight);
             }
         }
@@ -648,7 +661,7 @@ impl MantraTree {
     fn weighted_pick(
         &self,
         entropy: &[u8],
-        categories: &[(Uuid, String, i32, i32, String, String)],
+        categories: &[(Uuid, String, i32, i32, String, String, Vec<String>)],
         weights: &HashMap<String, i32>,
     ) -> Result<(Uuid, String, String, String)> {
         let total_weight: i32 = weights.values().sum();
@@ -660,7 +673,7 @@ impl MantraTree {
         let pick = (entropy_val % total_weight as u32) as i32;
 
         let mut cumulative = 0;
-        for (cat_id, name, _, _, sys_msg, user_msg) in categories {
+        for (cat_id, name, _, _, sys_msg, user_msg, _) in categories {
             let weight = weights.get(name).copied().unwrap_or(0);
             cumulative += weight;
             if pick < cumulative {
@@ -669,7 +682,7 @@ impl MantraTree {
         }
 
         // Fallback to first category
-        let (cat_id, name, _, _, sys_msg, user_msg) = &categories[0];
+        let (cat_id, name, _, _, sys_msg, user_msg, _) = &categories[0];
         Ok((*cat_id, name.clone(), sys_msg.clone(), user_msg.clone()))
     }
 
@@ -748,8 +761,8 @@ mod tests {
         context.recent_error_count = 5;
 
         let categories = vec![
-            (Uuid::new_v4(), "System Health".into(), 1, 3, "".into(), "".into()),
-            (Uuid::new_v4(), "Code Development".into(), 1, 3, "".into(), "".into()),
+            (Uuid::new_v4(), "System Health".into(), 1, 3, "".into(), "".into(), vec![]),
+            (Uuid::new_v4(), "Code Development".into(), 1, 3, "".into(), "".into(), vec![]),
         ];
 
         let category_last_used = HashMap::new();
@@ -766,8 +779,8 @@ mod tests {
 
         let cat_id = Uuid::new_v4();
         let categories = vec![
-            (cat_id, "System Health".into(), 5, 3, "".into(), "".into()),
-            (Uuid::new_v4(), "Code Development".into(), 1, 3, "".into(), "".into()),
+            (cat_id, "System Health".into(), 5, 3, "".into(), "".into(), vec![]),
+            (Uuid::new_v4(), "Code Development".into(), 1, 3, "".into(), "".into(), vec![]),
         ];
 
         let mut category_last_used = HashMap::new();
@@ -785,8 +798,8 @@ mod tests {
         let cat2 = Uuid::new_v4();
 
         let categories = vec![
-            (cat1, "High Weight".into(), 10, 3, "sys1".into(), "user1".into()),
-            (cat2, "Low Weight".into(), 1, 3, "sys2".into(), "user2".into()),
+            (cat1, "High Weight".into(), 10, 3, "sys1".into(), "user1".into(), vec![]),
+            (cat2, "Low Weight".into(), 1, 3, "sys2".into(), "user2".into(), vec![]),
         ];
 
         let mut weights = HashMap::new();
@@ -886,8 +899,8 @@ mod tests {
         
         // Mock categories
         tree.categories = Some(vec![
-            (cat_id, "System Health".into(), 5, 3, "System: {recent_error_count} errors".into(), "User: reflect".into()),
-            (Uuid::new_v4(), "Code Development".into(), 1, 3, "".into(), "".into()),
+            (cat_id, "System Health".into(), 5, 3, "System: {recent_error_count} errors".into(), "User: reflect".into(), vec![]),
+            (Uuid::new_v4(), "Code Development".into(), 1, 3, "".into(), "".into(), vec![]),
         ]);
         
         // Mock entries by category
@@ -946,8 +959,8 @@ mod tests {
         context.elixir_quality_by_category.insert("financial".to_string(), 70.0);
         
         let categories = vec![
-            (Uuid::new_v4(), "Code Development".into(), 1, 3, "".into(), "".into()),
-            (Uuid::new_v4(), "Financial Management".into(), 1, 3, "".into(), "".into()),
+            (Uuid::new_v4(), "Code Development".into(), 1, 3, "".into(), "".into(), vec!["code".to_string()]),
+            (Uuid::new_v4(), "Financial Management".into(), 1, 3, "".into(), "".into(), vec!["cost".to_string()]),
         ];
         
         let category_last_used = HashMap::new();
