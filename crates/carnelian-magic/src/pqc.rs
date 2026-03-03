@@ -164,10 +164,10 @@ impl HybridSigningKey {
     /// while we transition to post-quantum key derivation.
     pub fn derive_aes_storage_key(&self) -> [u8; 32] {
         // Use blake3 HKDF with the Ed25519 seed
-        let context = b"carnelian-aes-storage-v1";
+        let context = "carnelian-aes-storage-v1";
         let seed = self.ed25519_sk.to_bytes();
         
-        *blake3::derive_key(context, &seed)
+        blake3::derive_key(context, &seed)
     }
 }
 
