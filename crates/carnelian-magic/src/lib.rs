@@ -59,6 +59,7 @@ pub use mantra::{
 };
 pub use verifier::{
     QuantumIntegrityVerifier,
+    RowIdentifier,
     TamperedRow,
     VerificationReport,
     VerificationStatus,

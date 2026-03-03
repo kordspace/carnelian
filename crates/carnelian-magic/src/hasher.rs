@@ -1,4 +1,4 @@
-use crate::entropy::{EntropyProvider, MixedEntropyProvider, OsEntropyProvider};
+use crate::entropy::MixedEntropyProvider;
 use crate::error::Result;
 use blake3;
 use chrono::{DateTime, Utc};
@@ -19,7 +19,6 @@ impl QuantumHasher {
         row_id: Uuid,
         table: &str,
         creation_timestamp: DateTime<Utc>,
-        entropy_bytes: &[u8],
     ) -> Vec<u8> {
         let mut hasher = blake3::Hasher::new_derive_key("carnelian-quantum-salt-v1");
         hasher.update(row_id.as_bytes());
@@ -28,13 +27,7 @@ impl QuantumHasher {
         let timestamp_nanos = creation_timestamp.timestamp_nanos_opt().unwrap_or(0);
         hasher.update(&timestamp_nanos.to_le_bytes());
         
-        let mut salt = hasher.finalize().as_bytes().to_vec();
-        
-        for (i, &byte) in entropy_bytes.iter().take(16).enumerate() {
-            salt[i] ^= byte;
-        }
-        
-        salt
+        hasher.finalize().as_bytes().to_vec()
     }
 
     fn checksum_bytes(content: &[u8], salt: &[u8], table: &str, row_id: Uuid) -> String {
@@ -55,15 +48,7 @@ impl QuantumHasher {
         content: &[u8],
         created_at: DateTime<Utc>,
     ) -> Result<String> {
-        let entropy_bytes = match self.entropy.get_bytes(16).await {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                tracing::warn!("Quantum entropy unavailable, falling back to OS: {}", e);
-                OsEntropyProvider::new().get_bytes(16).await?
-            }
-        };
-
-        let salt = Self::derive_salt(row_id, table, created_at, &entropy_bytes);
+        let salt = Self::derive_salt(row_id, table, created_at);
         let checksum = Self::checksum_bytes(content, &salt, table, row_id);
         
         Ok(checksum)
@@ -77,16 +62,8 @@ impl QuantumHasher {
         created_at: DateTime<Utc>,
         stored: &str,
     ) -> bool {
-        let mut hasher = blake3::Hasher::new_derive_key("carnelian-quantum-salt-v1");
-        hasher.update(row_id.as_bytes());
-        hasher.update(table.as_bytes());
-        
-        let timestamp_nanos = created_at.timestamp_nanos_opt().unwrap_or(0);
-        hasher.update(&timestamp_nanos.to_le_bytes());
-        
-        let deterministic_salt = hasher.finalize().as_bytes().to_vec();
-        
-        let recomputed = Self::checksum_bytes(content, &deterministic_salt, table, row_id);
+        let salt = Self::derive_salt(row_id, table, created_at);
+        let recomputed = Self::checksum_bytes(content, &salt, table, row_id);
         
         recomputed == stored
     }
@@ -95,12 +72,16 @@ impl QuantumHasher {
         &self,
         rows: Vec<(Uuid, Vec<u8>, DateTime<Utc>)>,
         table: &str,
-    ) -> Vec<(Uuid, Result<String>)> {
+    ) -> Vec<(Uuid, String)> {
         let mut results = Vec::new();
         
         for (row_id, content, created_at) in rows {
-            let result = self.compute(table, row_id, &content, created_at).await;
-            results.push((row_id, result));
+            match self.compute(table, row_id, &content, created_at).await {
+                Ok(checksum) => results.push((row_id, checksum)),
+                Err(e) => {
+                    tracing::warn!("Failed to compute checksum for row {}: {}", row_id, e);
+                }
+            }
         }
         
         results
