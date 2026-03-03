@@ -614,6 +614,17 @@ impl MantraTree {
                 _ => {}
             }
 
+            // Apply elixir quality boost
+            for (elixir_type, avg_quality) in &context.elixir_quality_by_category {
+                if *avg_quality > 80.0 {
+                    let name_lower = name.to_lowercase();
+                    let elixir_type_lower = elixir_type.to_lowercase();
+                    if name_lower.contains(&elixir_type_lower) {
+                        weight += 1;
+                    }
+                }
+            }
+
             // Apply per-category cooldown enforcement
             if let Some(&last_position) = category_last_used.get(cat_id) {
                 if last_position <= *cooldown_beats as i64 {
@@ -923,5 +934,29 @@ mod tests {
         let result = tree.select(&entropy, &context).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not preloaded"));
+    }
+
+    #[test]
+    fn test_elixir_quality_boost_fires() {
+        let tree = MantraTree::new(None);
+        let mut context = MantraContext::default_for_fallback();
+        
+        // Populate elixir_quality_by_category
+        context.elixir_quality_by_category.insert("code".to_string(), 90.0);
+        context.elixir_quality_by_category.insert("financial".to_string(), 70.0);
+        
+        let categories = vec![
+            (Uuid::new_v4(), "Code Development".into(), 1, 3, "".into(), "".into()),
+            (Uuid::new_v4(), "Financial Management".into(), 1, 3, "".into(), "".into()),
+        ];
+        
+        let category_last_used = HashMap::new();
+        let weights = tree.compute_weights(&context, &categories, &category_last_used);
+        
+        // Code Development should get boost (90.0 > 80.0 and "code development" contains "code")
+        assert_eq!(weights.get("Code Development").copied().unwrap_or(0), 2);
+        
+        // Financial Management should NOT get boost (70.0 <= 80.0)
+        assert_eq!(weights.get("Financial Management").copied().unwrap_or(0), 1);
     }
 }
