@@ -213,6 +213,8 @@ pub struct AppState {
     pub elixir_manager: Arc<crate::elixir::ElixirManager>,
     /// MAGIC entropy provider for quantum-enhanced randomness
     pub entropy_provider: Option<Arc<carnelian_magic::MixedEntropyProvider>>,
+    /// Cached results of the last integrity verification run, keyed by table name
+    pub integrity_cache: Arc<RwLock<HashMap<String, carnelian_magic::VerificationReport>>>,
     /// Active channel adapters keyed by session_id
     pub channel_adapters: Arc<RwLock<HashMap<Uuid, Arc<dyn ChannelAdapter>>>>,
     /// Factory for building channel adapters from configuration.
@@ -266,6 +268,7 @@ impl AppState {
             skill_book,
             elixir_manager,
             entropy_provider,
+            integrity_cache: Arc::new(RwLock::new(HashMap::new())),
             channel_adapters: Arc::new(RwLock::new(HashMap::new())),
             channel_adapter_factory: None,
             correlation_counter: Arc::new(AtomicU64::new(0)),
@@ -904,6 +907,10 @@ fn build_router(state: AppState) -> Router {
         .route("/v1/magic/mantras/history", get(magic_mantra_history_handler))
         .route("/v1/magic/mantras/context", get(magic_mantra_context_handler))
         .route("/v1/magic/mantras/simulate", post(magic_mantra_simulate_handler))
+        // MAGIC integrity endpoints
+        .route("/v1/magic/integrity/verify",  post(magic_integrity_verify_handler))
+        .route("/v1/magic/integrity/status",  get(magic_integrity_status_handler))
+        .route("/v1/magic/integrity/backfill", post(magic_integrity_backfill_handler))
         // Apply auth middleware to all protected routes
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
@@ -6288,13 +6295,13 @@ async fn publish_ledger_anchor_handler(
 /// Response for get anchor endpoint
 #[derive(Debug, Serialize)]
 pub struct AnchorProofResponse {
-    pub anchor_id: String,
-    pub hash: String,
-    pub ledger_event_from: i64,
-    pub ledger_event_to: i64,
-    pub published_at: String,
-    pub metadata: serde_json::Value,
-    pub verified: bool,
+        pub anchor_id: String,
+        pub hash: String,
+        pub ledger_event_from: i64,
+        pub ledger_event_to: i64,
+        pub published_at: String,
+        pub metadata: serde_json::Value,
+        pub verified: bool,
 }
 
 /// Get anchor proof by ID
@@ -8497,4 +8504,174 @@ async fn magic_mantra_simulate_handler(State(state): State<AppState>) -> impl In
         )
             .into_response(),
     }
+}
+
+// =============================================================================
+// MAGIC Integrity Endpoints
+// =============================================================================
+
+#[derive(Debug, Deserialize)]
+struct IntegrityVerifyRequest {
+    tables: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct IntegrityBackfillResponse {
+    job_id: Uuid,
+    tables: Vec<String>,
+    status: String,
+}
+
+/// POST /v1/magic/integrity/verify - Verify quantum checksums for specified tables
+async fn magic_integrity_verify_handler(
+    State(state): State<AppState>,
+    Json(body): Json<IntegrityVerifyRequest>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Database unavailable: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    // Validate table names
+    let valid_tables = ["memories", "session_messages", "elixirs", "task_runs"];
+    for table in &body.tables {
+        if !valid_tables.contains(&table.as_str()) {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("Unknown table: {}", table)})),
+            )
+                .into_response();
+        }
+    }
+
+    // Construct verifier
+    let verifier = carnelian_magic::QuantumIntegrityVerifier::new(
+        carnelian_magic::QuantumHasher::new(
+            state.entropy_provider.clone().unwrap_or_else(|| {
+                Arc::new(carnelian_magic::MixedEntropyProvider::new(None, None, None, Uuid::nil()))
+            })
+        )
+    );
+
+    // Verify each table
+    let mut reports = Vec::new();
+    for table in &body.tables {
+        match verifier.verify_table(table, pool).await {
+            Ok(report) => {
+                // Cache the report
+                state.integrity_cache.write().await.insert(table.clone(), report.clone());
+                reports.push(report);
+            }
+            Err(e) => {
+                tracing::warn!(table = %table, error = %e, "Failed to verify table");
+            }
+        }
+    }
+
+    // Compute overall status
+    let overall_status = if reports.iter().any(|r| matches!(r.overall_status, carnelian_magic::VerificationStatus::Tampered)) {
+        "tampered"
+    } else if reports.iter().any(|r| matches!(r.overall_status, carnelian_magic::VerificationStatus::Partial)) {
+        "partial"
+    } else {
+        "ok"
+    };
+
+    let verified_at = chrono::Utc::now().to_rfc3339();
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "reports": serde_json::to_value(&reports).unwrap_or_default(),
+            "overall_status": overall_status,
+            "verified_at": verified_at,
+        })),
+    )
+        .into_response()
+}
+
+/// GET /v1/magic/integrity/status - Get cached integrity verification status
+async fn magic_integrity_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let cache = state.integrity_cache.read().await;
+    
+    if cache.is_empty() {
+        return (
+            StatusCode::NO_CONTENT,
+            Json(json!({"message": "No verification has been run yet"})),
+        )
+            .into_response();
+    }
+
+    let reports: Vec<_> = cache.values().cloned().collect();
+    
+    (
+        StatusCode::OK,
+        Json(json!({
+            "reports": serde_json::to_value(&reports).unwrap_or_default(),
+            "cached": true,
+        })),
+    )
+        .into_response()
+}
+
+/// POST /v1/magic/integrity/backfill - Backfill missing quantum checksums
+async fn magic_integrity_backfill_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Database unavailable: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let job_id = Uuid::now_v7();
+    let tables = vec!["memories".to_string(), "session_messages".to_string(), "elixirs".to_string(), "task_runs".to_string()];
+    
+    // Clone for the spawned task
+    let pool_clone = pool.clone();
+    let job_id_clone = job_id;
+    let entropy_provider = state.entropy_provider.clone();
+    
+    // Spawn background task
+    tokio::spawn(async move {
+        let verifier = carnelian_magic::QuantumIntegrityVerifier::new(
+            carnelian_magic::QuantumHasher::new(
+                entropy_provider.unwrap_or_else(|| {
+                    Arc::new(carnelian_magic::MixedEntropyProvider::new(None, None, None, Uuid::nil()))
+                })
+            )
+        );
+        
+        for table in &["memories", "session_messages", "elixirs", "task_runs"] {
+            match verifier.backfill_missing(table, &pool_clone).await {
+                Ok(count) => {
+                    tracing::info!(job_id = %job_id_clone, table = %table, count = count, "Backfilled missing checksums");
+                }
+                Err(e) => {
+                    tracing::warn!(job_id = %job_id_clone, table = %table, error = %e, "Failed to backfill table");
+                }
+            }
+        }
+        
+        tracing::info!(job_id = %job_id_clone, "Integrity backfill job completed");
+    });
+
+    (
+        StatusCode::ACCEPTED,
+        Json(json!({
+            "job_id": job_id,
+            "tables": tables,
+            "status": "started",
+        })),
+    )
+        .into_response()
 }
