@@ -76,7 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `carnelian ui` - Launch the desktop UI
 - `carnelian keygen` - Generate owner keypair
 - `carnelian key rotate` - Rotate owner keys
-- `carnelian migrate-from-thummim` - Import from Thummim
+- `carnelian migrate` - Run database migrations
 
 ### Security
 - Ed25519 signatures on privileged ledger actions
