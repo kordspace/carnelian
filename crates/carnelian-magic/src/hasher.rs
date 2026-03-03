@@ -1,18 +1,22 @@
+use crate::entropy::MixedEntropyProvider;
 use crate::error::Result;
 use blake3;
 use chrono::{DateTime, Utc};
 use hex;
+use std::sync::Arc;
 use uuid::Uuid;
 
-pub struct QuantumHasher;
+pub struct QuantumHasher {
+    _entropy: Option<Arc<MixedEntropyProvider>>,
+}
 
 impl QuantumHasher {
-    pub fn new() -> Self {
-        Self
+    pub fn new(entropy: Arc<MixedEntropyProvider>) -> Self {
+        Self { _entropy: Some(entropy) }
     }
 
     pub fn with_os_entropy() -> Self {
-        Self
+        Self { _entropy: None }
     }
 
     fn derive_salt(

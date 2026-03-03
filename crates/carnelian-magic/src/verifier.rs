@@ -78,10 +78,10 @@ impl QuantumIntegrityVerifier {
                 "dataset",
             )),
             "task_runs" => Ok((
-                "SELECT run_id, COALESCE(error, ''), quantum_checksum, started_at FROM task_runs",
-                "SELECT run_id, COALESCE(error, ''), started_at FROM task_runs",
+                "SELECT run_id, COALESCE(result::text, '{}'), quantum_checksum, started_at FROM task_runs",
+                "SELECT run_id, COALESCE(result::text, '{}'), started_at FROM task_runs",
                 "run_id",
-                "error",
+                "result",
             )),
             _ => Err(MagicError::ProviderError {
                 provider: "verifier".to_string(),

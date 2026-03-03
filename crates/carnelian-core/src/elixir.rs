@@ -132,8 +132,10 @@ impl ElixirManager {
             .await
             .map_err(Error::Database)?;
         
+        // Hash the canonical DB representation (dataset::text) for alignment with verifier
+        let dataset_text = serde_json::to_string(&req.dataset).unwrap_or_default();
         let hasher = QuantumHasher::with_os_entropy();
-        match hasher.compute_with_ts("elixirs", elixir_id, &dataset_bytes, created_at) {
+        match hasher.compute_with_ts("elixirs", elixir_id, dataset_text.as_bytes(), created_at) {
             Ok(checksum) => {
                 // Always write quantum_checksum; conditionally write security_integrity_hash
                 if let Some(salt) = quantum_salt {
@@ -413,8 +415,10 @@ impl ElixirManager {
             .await
             .map_err(Error::Database)?;
         
+        // Hash the canonical DB representation (dataset::text) for alignment with verifier
+        let dataset_text = serde_json::to_string(&dataset).unwrap_or_default();
         let hasher = QuantumHasher::with_os_entropy();
-        match hasher.compute_with_ts("elixirs", elixir_id, &dataset_bytes, created_at) {
+        match hasher.compute_with_ts("elixirs", elixir_id, dataset_text.as_bytes(), created_at) {
             Ok(checksum) => {
                 // Always write quantum_checksum; conditionally write security_integrity_hash
                 if let Some(salt) = quantum_salt {

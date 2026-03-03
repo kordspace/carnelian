@@ -325,6 +325,7 @@ impl Scheduler {
                         &safe_mode_guard,
                         &workflow_engine,
                         &xp_manager,
+                        &entropy_provider,
                     ).await {
                         tracing::warn!(error = %e, "Task queue polling failed");
                     }
@@ -941,6 +942,7 @@ impl Scheduler {
         safe_mode_guard: &Arc<crate::safe_mode::SafeModeGuard>,
         workflow_engine: &Option<Arc<WorkflowEngine>>,
         xp_manager: &Option<Arc<crate::xp::XpManager>>,
+        entropy_provider: &Option<Arc<carnelian_magic::MixedEntropyProvider>>,
     ) -> Result<()> {
         // If safe mode is active, skip dequeuing entirely — tasks stay pending
         if safe_mode_guard.is_enabled().await.unwrap_or(false) {
@@ -997,6 +999,7 @@ impl Scheduler {
 
             let workflow_engine = workflow_engine.clone();
             let xp_manager = xp_manager.clone();
+            let entropy_provider = entropy_provider.clone();
 
             let handle = tokio::spawn(async move {
                 if let Err(e) = Self::execute_task(
@@ -1011,6 +1014,7 @@ impl Scheduler {
                     &safe_mode_guard,
                     workflow_engine.as_ref(),
                     xp_manager.as_ref(),
+                    entropy_provider.as_ref(),
                 )
                 .await
                 {
@@ -1075,6 +1079,7 @@ impl Scheduler {
         safe_mode_guard: &Arc<crate::safe_mode::SafeModeGuard>,
         workflow_engine: Option<&Arc<WorkflowEngine>>,
         xp_manager: Option<&Arc<crate::xp::XpManager>>,
+        entropy_provider: Option<&Arc<carnelian_magic::MixedEntropyProvider>>,
     ) -> Result<()> {
         // Safe mode is checked in poll_task_queue before dequeuing, but
         // re-check here as a defence-in-depth measure in case the flag was
@@ -1525,7 +1530,11 @@ impl Scheduler {
 
                         if let Some(ts) = started_at {
                             let result_bytes = serde_json::to_vec(&result_json).unwrap_or_default();
-                            let hasher = QuantumHasher::with_os_entropy();
+                            let hasher = if let Some(provider) = entropy_provider {
+                                QuantumHasher::new(provider.clone())
+                            } else {
+                                QuantumHasher::with_os_entropy()
+                            };
                             match hasher.compute_with_ts("task_runs", run_id.0, &result_bytes, ts) {
                                 Ok(checksum) => {
                                     if let Err(e) = sqlx::query("UPDATE task_runs SET quantum_checksum = $1 WHERE run_id = $2")
