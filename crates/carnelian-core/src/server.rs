@@ -8470,22 +8470,21 @@ async fn magic_mantra_simulate_handler(State(state): State<AppState>) -> impl In
         }
     };
 
-    // Get entropy bytes
+    // Get entropy bytes - try primary provider, fall back to OS
     let entropy_bytes = match &state.entropy_provider {
         Some(provider) => match provider.get_bytes(8).await {
-            Ok(bytes) => bytes,
-            Err(_) => {
-                return (
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    Json(json!({"error": "Entropy provider unavailable — cannot simulate"})),
-                )
-                    .into_response();
-            }
+            Ok(bytes) => Ok(bytes),
+            Err(_) => carnelian_magic::entropy::OsEntropyProvider::new().get_bytes(8).await,
         },
-        None => {
+        None => carnelian_magic::entropy::OsEntropyProvider::new().get_bytes(8).await,
+    };
+    
+    let entropy_bytes = match entropy_bytes {
+        Ok(bytes) => bytes,
+        Err(_) => {
             return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({"error": "Entropy provider unavailable — cannot simulate"})),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "All entropy sources failed"})),
             )
                 .into_response();
         }

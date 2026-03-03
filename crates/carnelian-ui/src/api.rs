@@ -1229,6 +1229,18 @@ pub async fn magic_mantra_simulate() -> Result<MantraSimulateResponse, String> {
         .map_err(|e| format!("Parse failed: {e}"))
 }
 
+/// Get current mantra context weights.
+pub async fn magic_mantra_context() -> Result<serde_json::Value, String> {
+    client()
+        .get(format!("{API_BASE_URL}/v1/magic/mantras/context"))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
 // ── Auth & Config functions ──
 
 /// Get MAGIC configuration.

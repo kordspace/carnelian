@@ -269,6 +269,8 @@ fn MantraLibrary(toasts: Signal<Vec<ToastMessage>>) -> Element {
     let mut new_elixir_id = use_signal(String::new);
     let mut history = use_signal(Vec::<MantraHistoryRecord>::new);
     let mut show_history = use_signal(|| false);
+    let mut context_data = use_signal(|| None::<serde_json::Value>);
+    let mut loading_context = use_signal(|| false);
 
     let load_categories = move || {
         spawn(async move {
@@ -393,6 +395,26 @@ fn MantraLibrary(toasts: Signal<Vec<ToastMessage>>) -> Element {
         });
     };
 
+    let load_context = move || {
+        spawn(async move {
+            loading_context.set(true);
+            match api::magic_mantra_context().await {
+                Ok(ctx) => {
+                    context_data.set(Some(ctx));
+                }
+                Err(e) => {
+                    toasts.write().push(ToastMessage {
+                        id: Uuid::new_v4().to_string(),
+                        message: format!("Failed to load context: {e}"),
+                        toast_type: ToastType::Error,
+                        duration_secs: 5,
+                    });
+                }
+            }
+            loading_context.set(false);
+        });
+    };
+
     let simulate_mantra = move || {
         spawn(async move {
             match api::magic_mantra_simulate().await {
@@ -496,6 +518,10 @@ fn MantraLibrary(toasts: Signal<Vec<ToastMessage>>) -> Element {
                     onclick: move |_| simulate_mantra(),
                     "Simulate Selection"
                 }
+                button {
+                    onclick: move |_| load_context(),
+                    "Refresh Context"
+                }
             }
 
             {
@@ -538,6 +564,22 @@ fn MantraLibrary(toasts: Signal<Vec<ToastMessage>>) -> Element {
                             p { strong { "User Message: " } "{sim.user_message}" }
                             p { strong { "Entropy Source: " } "{sim.entropy_source}" }
                             p { strong { "Context Weights: " } code { "{sim.context_weights:?}" } }
+                        }
+                    }
+                } else {
+                    rsx! { div {} }
+                }
+            }
+
+            {
+                if let Some(ctx) = context_data.read().as_ref() {
+                    rsx! {
+                        div { class: "context-weights-panel",
+                            h3 { "Context Weights" }
+                            p { strong { "Pending Tasks: " } "{ctx.get(\"pending_task_count\").and_then(|v| v.as_i64()).unwrap_or(0)}" }
+                            p { strong { "Recent Errors: " } "{ctx.get(\"recent_error_count\").and_then(|v| v.as_i64()).unwrap_or(0)}" }
+                            p { strong { "Idle Beats: " } "{ctx.get(\"idle_beats\").and_then(|v| v.as_i64()).unwrap_or(0)}" }
+                            p { strong { "Active Sessions: " } "{ctx.get(\"active_sessions\").and_then(|v| v.as_i64()).unwrap_or(0)}" }
                         }
                     }
                 } else {
