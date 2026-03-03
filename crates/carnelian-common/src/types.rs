@@ -118,6 +118,7 @@ impl EventLevel {
 pub enum EventType {
     // Task lifecycle
     TaskCreated,
+    TaskQueued,
     TaskStarted,
     TaskCompleted,
     TaskFailed,

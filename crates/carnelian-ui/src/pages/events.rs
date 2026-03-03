@@ -234,6 +234,7 @@ fn EventDetailModal(event: EventEnvelope, on_close: EventHandler) -> Element {
 const fn event_category(et: &EventType) -> &'static str {
     match et {
         EventType::TaskCreated
+        | EventType::TaskQueued
         | EventType::TaskStarted
         | EventType::TaskCompleted
         | EventType::TaskFailed

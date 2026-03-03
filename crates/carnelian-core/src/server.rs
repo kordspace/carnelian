@@ -1142,6 +1142,7 @@ async fn publish_event_handler(
 
     let event_type = match event_type_str {
         "TaskCreated" => EventType::TaskCreated,
+        "TaskQueued" => EventType::TaskQueued,
         "TaskStarted" => EventType::TaskStarted,
         "TaskCompleted" => EventType::TaskCompleted,
         "TaskFailed" => EventType::TaskFailed,

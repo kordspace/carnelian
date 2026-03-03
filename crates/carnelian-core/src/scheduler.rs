@@ -744,7 +744,7 @@ impl Scheduler {
                                 event_stream.publish(
                                     EventEnvelope::new(
                                         EventLevel::Info,
-                                        EventType::TaskCreated,
+                                        EventType::TaskQueued,
                                         json!({
                                             "task_id": task_id,
                                             "title": title,
