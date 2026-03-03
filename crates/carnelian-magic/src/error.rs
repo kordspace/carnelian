@@ -9,6 +9,14 @@ pub enum MagicError {
     #[error("Entropy unavailable: {0}")]
     EntropyUnavailable(String),
 
+    /// Verification failed
+    #[error("Verification failed: {0}")]
+    VerificationFailed(String),
+
+    /// Cryptographic operation failed
+    #[error("Cryptographic operation failed: {0}")]
+    CryptoError(String),
+
     /// A specific provider failed
     #[error("Provider error from {provider}: {message}")]
     ProviderError {

@@ -55,6 +55,10 @@ ed25519-dalek = { version = "2.1", features = ["serde", "rand_core"] }
 blake3 = "1.5"
 hex = "0.4"
 base64 = "0.22"
+# Post-Quantum Cryptography (NIST PQC standards)
+pqcrypto-dilithium = "0.5"  # CRYSTALS-Dilithium (signatures)
+pqcrypto-kyber = "0.8"      # CRYSTALS-Kyber (KEM)
+pqcrypto-traits = "0.3"     # Common traits
 # HTTP client (for remote model providers, ElevenLabs)
 reqwest = { version = "0.13", features = ["json", "stream", "rustls", "multipart"] }
 # WebSocket

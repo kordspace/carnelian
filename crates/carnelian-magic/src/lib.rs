@@ -41,6 +41,7 @@ pub mod entropy_arc_impl;
 mod error;
 pub mod hasher;
 pub mod mantra;
+pub mod pqc;
 pub mod verifier;
 
 pub use entropy::{
@@ -63,4 +64,11 @@ pub use verifier::{
     TamperedRow,
     VerificationReport,
     VerificationStatus,
+};
+pub use pqc::{
+    HybridSigningKey,
+    HybridSignature,
+    HybridPublicKey,
+    KeyAlgorithm,
+    KyberKem,
 };

@@ -20,7 +20,12 @@ tracing = { workspace = true }
 hex = { workspace = true }
 carnelian-common = { path = "../carnelian-common" }
 rand = "0.8"
+rand_chacha = "0.3"
 sqlx = { workspace = true }
+pqcrypto-dilithium = { workspace = true }
+pqcrypto-kyber = { workspace = true }
+pqcrypto-traits = { workspace = true }
+ed25519-dalek = { workspace = true }
 
 [lints]
 workspace = true
