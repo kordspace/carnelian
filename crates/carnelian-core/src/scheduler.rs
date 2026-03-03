@@ -57,6 +57,7 @@
 //! The scheduler responds to shutdown signals and cleanly terminates the heartbeat loop.
 //! Call `shutdown()` before stopping the server to ensure proper cleanup.
 
+use crate::agentic::AgenticEngine;
 use crate::config::Config;
 use crate::context::ContextWindow;
 use crate::events::EventStream;
@@ -640,7 +641,7 @@ impl Scheduler {
                 },
             ],
             temperature: Some(0.7),
-            max_tokens: Some(500),
+            max_tokens: Some(1000),
             stream: None,
             correlation_id: Some(correlation_id),
         };
@@ -651,7 +652,7 @@ impl Scheduler {
         )
         .await;
 
-        let (status, reason) = match model_result {
+        let (status, reason, response_content) = match model_result {
             Ok(Ok(response)) => {
                 let content = response
                     .choices
@@ -676,7 +677,7 @@ impl Scheduler {
                     "Heartbeat model call succeeded"
                 );
 
-                ("ok".to_string(), Some(summary))
+                ("ok".to_string(), Some(summary), Some(content))
             }
             Ok(Err(e)) => {
                 tracing::warn!(
@@ -684,7 +685,7 @@ impl Scheduler {
                     correlation_id = %correlation_id,
                     "Heartbeat model call failed"
                 );
-                ("failed".to_string(), Some(format!("Model call error: {e}")))
+                ("failed".to_string(), Some(format!("Model call error: {e}")), None)
             }
             Err(_) => {
                 tracing::warn!(
@@ -694,12 +695,95 @@ impl Scheduler {
                 (
                     "failed".to_string(),
                     Some("Model call timed out after 30s".to_string()),
+                    None,
                 )
             }
         };
 
         let duration_ms = start.elapsed().as_millis() as i32;
         let is_ok = status == "ok";
+
+        // ── Parse Tool Calls and Queue Tasks ─────────────────────────────
+        if let Some(content) = response_content {
+            match AgenticEngine::parse_tool_calls(&content) {
+                Ok(tool_calls) if !tool_calls.is_empty() => {
+                    tracing::info!(
+                        correlation_id = %correlation_id,
+                        tool_call_count = tool_calls.len(),
+                        "Parsed tool calls from heartbeat response"
+                    );
+
+                    for tool_call in tool_calls {
+                        let title = format!("[tool_call] {}", tool_call.tool_name);
+                        let description = serde_json::to_string(&tool_call.arguments)
+                            .unwrap_or_else(|_| "{}".to_string());
+
+                        match sqlx::query_scalar::<_, Uuid>(
+                            r"
+                            INSERT INTO tasks (title, description, created_by, priority, correlation_id)
+                            VALUES ($1, $2, $3, $4, $5)
+                            RETURNING task_id
+                            "
+                        )
+                        .bind(&title)
+                        .bind(&description)
+                        .bind(identity_id)
+                        .bind(-1_i32)
+                        .bind(correlation_id)
+                        .fetch_one(pool)
+                        .await
+                        {
+                            Ok(task_id) => {
+                                tracing::info!(
+                                    task_id = %task_id,
+                                    tool_name = %tool_call.tool_name,
+                                    correlation_id = %correlation_id,
+                                    "Queued low-priority task from heartbeat tool call"
+                                );
+
+                                event_stream.publish(
+                                    EventEnvelope::new(
+                                        EventLevel::Info,
+                                        EventType::TaskCreated,
+                                        json!({
+                                            "task_id": task_id,
+                                            "title": title,
+                                            "tool_name": tool_call.tool_name,
+                                            "arguments": tool_call.arguments,
+                                            "source": "heartbeat_tool_call",
+                                            "priority": -1,
+                                            "correlation_id": correlation_id,
+                                        }),
+                                    )
+                                    .with_correlation_id(correlation_id),
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    tool_name = %tool_call.tool_name,
+                                    error = %e,
+                                    correlation_id = %correlation_id,
+                                    "Failed to insert task for tool call"
+                                );
+                            }
+                        }
+                    }
+                }
+                Ok(_) => {
+                    tracing::debug!(
+                        correlation_id = %correlation_id,
+                        "No tool calls found in heartbeat response"
+                    );
+                }
+                Err(e) => {
+                    tracing::debug!(
+                        correlation_id = %correlation_id,
+                        error = %e,
+                        "Failed to parse tool calls from heartbeat response (expected for most heartbeats)"
+                    );
+                }
+            }
+        }
 
         // ── Persist to Database ──────────────────────────────────────────
         let heartbeat_id: Uuid = sqlx::query_scalar(
