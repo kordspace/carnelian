@@ -294,6 +294,38 @@ impl Default for MachineConfig {
     }
 }
 
+/// Quantum Origin provider configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct QuantumOriginConfig {
+    #[serde(default)]
+    pub api_key: String,
+    #[serde(default = "magic_default_quantum_origin_url")]
+    pub url: String,
+}
+
+/// Quantinuum H2 provider configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct QuantinuumConfig {
+    #[serde(default = "magic_default_quantinuum_device")]
+    pub device: String,
+}
+
+/// IBM Quantum provider configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct IbmQuantumConfig {
+    #[serde(default)]
+    pub token: String,
+    #[serde(default = "magic_default_qiskit_backend")]
+    pub backend: String,
+}
+
+/// CORS origins configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CorsOriginsConfig {
+    #[serde(default)]
+    pub extra: Vec<String>,
+}
+
 /// MAGIC quantum entropy subsystem configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MagicConfig {
@@ -344,6 +376,20 @@ pub struct MagicConfig {
     /// Mantra cooldown in heartbeat cycles
     #[serde(default = "magic_default_mantra_cooldown_beats")]
     pub mantra_cooldown_beats: u32,
+
+    /// Automatically suggest skills based on mantra context
+    #[serde(default = "default_true")]
+    pub auto_suggest_skills: bool,
+
+    // Nested configuration (preferred)
+    #[serde(default)]
+    pub quantum_origin: Option<QuantumOriginConfig>,
+    #[serde(default)]
+    pub quantinuum: Option<QuantinuumConfig>,
+    #[serde(default)]
+    pub ibm_quantum: Option<IbmQuantumConfig>,
+    #[serde(default)]
+    pub cors_origins: Option<CorsOriginsConfig>,
 }
 
 impl Default for MagicConfig {
@@ -361,6 +407,11 @@ impl Default for MagicConfig {
             entropy_mix_ratio: magic_default_entropy_mix_ratio(),
             log_entropy_events: magic_default_log_entropy_events(),
             mantra_cooldown_beats: magic_default_mantra_cooldown_beats(),
+            auto_suggest_skills: true,
+            quantum_origin: None,
+            quantinuum: None,
+            ibm_quantum: None,
+            cors_origins: None,
         }
     }
 }
@@ -540,6 +591,10 @@ fn magic_default_log_entropy_events() -> bool {
 
 fn magic_default_mantra_cooldown_beats() -> u32 {
     3
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// Machine profile determining resource limits and default model
@@ -867,7 +922,16 @@ impl Config {
 
         // CARNELIAN_QUANTUM_ORIGIN_API_KEY — Quantum Origin API key for MAGIC subsystem
         if let Ok(val) = std::env::var("CARNELIAN_QUANTUM_ORIGIN_API_KEY") {
-            self.magic.quantum_origin_api_key = val;
+            self.magic.quantum_origin_api_key = val.clone();
+            // Also populate nested config if present
+            if let Some(ref mut qo) = self.magic.quantum_origin {
+                qo.api_key = val;
+            } else {
+                self.magic.quantum_origin = Some(QuantumOriginConfig {
+                    api_key: val,
+                    url: self.magic.quantum_origin_url.clone(),
+                });
+            }
         }
 
         // SESSION_EXPIRY_HOURS — default session TTL in hours (0 = never)
@@ -1089,18 +1153,23 @@ impl Config {
                 ));
             }
 
-            // Validate Quantum Origin URL when enabled (non-empty API key implies enabled)
-            if !self.magic.quantum_origin_api_key.is_empty() {
-                if self.magic.quantum_origin_url.is_empty() {
+            // Validate Quantum Origin URL when enabled (check both nested and flat config)
+            let qo_api_key = self.magic.quantum_origin.as_ref()
+                .map(|qo| qo.api_key.as_str())
+                .unwrap_or(&self.magic.quantum_origin_api_key);
+            let qo_url = self.magic.quantum_origin.as_ref()
+                .map(|qo| qo.url.as_str())
+                .unwrap_or(&self.magic.quantum_origin_url);
+            
+            if !qo_api_key.is_empty() {
+                if qo_url.is_empty() {
                     return Err(Error::Config(
-                        "magic.quantum_origin_url cannot be empty when API key is set".to_string(),
+                        "magic.quantum_origin.url cannot be empty when API key is set".to_string(),
                     ));
                 }
-                if !self.magic.quantum_origin_url.starts_with("http://")
-                    && !self.magic.quantum_origin_url.starts_with("https://")
-                {
+                if !qo_url.starts_with("http://") && !qo_url.starts_with("https://") {
                     return Err(Error::Config(
-                        "magic.quantum_origin_url must be a valid HTTP URL".to_string(),
+                        "magic.quantum_origin.url must be a valid HTTP URL".to_string(),
                     ));
                 }
             }

@@ -510,7 +510,17 @@ impl Server {
             let pool = self.config.pool().expect("Database pool required for MixedEntropyProvider");
             
             // Build QuantumOrigin provider if API key is configured
-            let quantum_origin = if !self.config.magic.quantum_origin_api_key.is_empty() {
+            // Prefer nested config, fallback to flat fields for backward compatibility
+            let quantum_origin = if let Some(ref qo_config) = self.config.magic.quantum_origin {
+                if !qo_config.api_key.is_empty() {
+                    Some(carnelian_magic::QuantumOriginProvider::new(
+                        qo_config.url.clone(),
+                        qo_config.api_key.clone(),
+                    ))
+                } else {
+                    None
+                }
+            } else if !self.config.magic.quantum_origin_api_key.is_empty() {
                 Some(carnelian_magic::QuantumOriginProvider::new(
                     self.config.magic.quantum_origin_url.clone(),
                     self.config.magic.quantum_origin_api_key.clone(),

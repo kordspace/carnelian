@@ -17,7 +17,7 @@ This proposal outlines the implementation of a comprehensive local LLM library f
 
 ### Current State
 - Carnelian currently defaults to `deepseek-r1:7b` via Ollama
-- Single model recommendation per machine profile (Thummim/Urim)
+- Single model recommendation per machine profile (Standard/Performance)
 - No automated model selection or download during setup
 - Limited reasoning model options
 
@@ -140,13 +140,13 @@ This proposal outlines the implementation of a comprehensive local LLM library f
 
 ### Machine Profile Definitions
 
-#### **Thummim** (Entry-Level)
+#### **Standard** (Entry-Level)
 - **Hardware:** RTX 2080 Super, 8 GB VRAM, 32 GB RAM
 - **Recommended Model:** `deepseek-r1:7b` (Q4_0, ~6 GB)
 - **Alternative:** `qwen2.5:7b` (Q4_0, ~4 GB)
 - **Performance:** ~20-25 tokens/s
 
-#### **Urim** (High-End)
+#### **Performance** (High-End)
 - **Hardware:** RTX 2080 Ti, 11 GB VRAM, 64 GB RAM
 - **Recommended Model:** `deepseek-r1:7b` (Q8_0, ~10 GB)
 - **Alternative:** `qwq-32b:q4` (Q4_K_M, ~24 GB, requires offloading)
@@ -268,9 +268,9 @@ pub fn recommend_machine_profile(hw: &HardwareProfile) -> MachineProfile {
     if hw.unified_memory && hw.total_ram_gb >= 512 {
         MachineProfile::Ultra
     } else if hw.total_vram_gb >= 11 && hw.total_ram_gb >= 64 {
-        MachineProfile::Urim
+        MachineProfile::Performance
     } else {
-        MachineProfile::Thummim
+        MachineProfile::Standard
     }
 }
 ```
@@ -389,7 +389,7 @@ Carnelian will automatically detect your hardware and recommend an optimal reaso
 **Detected Hardware:**
 - VRAM: 8 GB (RTX 2080 Super)
 - RAM: 32 GB
-- Profile: Thummim
+- Profile: Standard
 
 **Recommended Model:** DeepSeek-R1 7B (Q4_0)
 - VRAM Required: 6 GB
@@ -505,8 +505,8 @@ For a detailed comparison of agent frameworks, see [docs/ARCHITECTURE.md](docs/A
 - ✅ Support tickets related to model setup < 5%
 
 ### Performance Metrics
-- ✅ Thummim: 20-25 tokens/s (DeepSeek-R1 7B Q4_0)
-- ✅ Urim: 30-40 tokens/s (DeepSeek-R1 7B Q8_0)
+- ✅ Standard: 20-25 tokens/s (DeepSeek-R1 7B Q4_0)
+- ✅ Performance: 30-40 tokens/s (DeepSeek-R1 7B Q8_0)
 - ✅ Ultra: 10-40 tokens/s (Kimi K2.5 Q2_K_XL)
 
 ---

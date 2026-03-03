@@ -378,7 +378,7 @@ The skill's output JSON **must** include a `bytes` field (hex-encoded) matching 
 
 #### Registration
 
-Register the skill in `skills/registry/` with appropriate metadata:
+Register the skill in `skills/python-registry/<skill-name>/` with appropriate metadata:
 
 ```json
 {
