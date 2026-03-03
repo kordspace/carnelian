@@ -170,6 +170,7 @@ pub struct MantraSelection {
 // MantraTree struct
 // =============================================================================
 
+#[allow(clippy::type_complexity)]
 pub struct MantraTree {
     // Preloaded data for no-pool select
     categories: Option<Vec<(Uuid, String, i32, i32, String, String, Vec<String>)>>,
@@ -187,6 +188,7 @@ impl MantraTree {
     }
 
     /// Preload all data needed for no-pool select
+    #[allow(clippy::too_many_lines, clippy::type_complexity)]
     pub async fn preload(&mut self, pool: &PgPool) -> Result<()> {
         // Fetch all enabled categories
         let categories: Vec<(Uuid, String, i32, i32, String, String, Vec<String>)> = sqlx::query_as(
@@ -212,7 +214,7 @@ impl MantraTree {
         for (entry_id, category_id, text, use_count, enabled, elixir_id) in all_entries {
             entries_by_category
                 .entry(category_id)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(MantraEntry {
                     entry_id,
                     category_id,
@@ -241,6 +243,7 @@ impl MantraTree {
     }
 
     /// Build MantraContext from database queries
+    #[allow(clippy::too_many_lines)]
     pub async fn build_context(pool: &PgPool) -> Result<MantraContext> {
         let mut tx = pool.begin().await?;
 
@@ -372,12 +375,14 @@ impl MantraTree {
 
         let quantum_providers_available: Vec<String> = quantum_providers_json
             .and_then(|v| v.as_array().cloned())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()
-            })
-            .unwrap_or_else(|| vec![]);
+            .map_or_else(
+                || vec![],
+                |arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                },
+            );
 
         tx.commit().await?;
 
@@ -406,6 +411,7 @@ impl MantraTree {
     }
 
     /// Select a mantra using quantum entropy and context weights (consumer-facing API)
+    #[allow(clippy::unused_async)]
     pub async fn select(
         &self,
         entropy: &[u8],
@@ -437,11 +443,11 @@ impl MantraTree {
         }
 
         // Compute weights
-        let weights = self.compute_weights(context, categories, &category_last_used);
+        let weights = Self::compute_weights(context, categories, &category_last_used);
 
         // Weighted pick for category
         let (selected_cat_id, selected_cat_name, system_msg, user_msg) = 
-            self.weighted_pick(entropy, categories, &weights)?;
+            Self::weighted_pick(entropy, categories, &weights)?;
 
         // Get entries for selected category from preloaded data
         let entries = entries_by_category.get(&selected_cat_id).ok_or_else(|| {
@@ -457,14 +463,14 @@ impl MantraTree {
         }
 
         // Inverse frequency pick for entry
-        let selected_entry = self.inverse_freq_pick(&entropy[4..8], entries)?;
+        let selected_entry = Self::inverse_freq_pick(&entropy[4..8], entries)?;
 
         // Get skill suggestions
-        let suggested_skill_ids = self.get_skill_suggestions(&selected_cat_name);
+        let suggested_skill_ids = Self::get_skill_suggestions(&selected_cat_name);
 
         // Resolve templates
-        let system_message = self.resolve_template(&system_msg, context);
-        let user_message = self.resolve_template(&user_msg, context);
+        let system_message = Self::resolve_template(&system_msg, context);
+        let user_message = Self::resolve_template(&user_msg, context);
 
         // Build category enum
         let category = MantraCategory::from_db_name(&selected_cat_name)
@@ -499,6 +505,7 @@ impl MantraTree {
         }
 
         // Fetch all enabled categories
+        #[allow(clippy::type_complexity)]
         let categories: Vec<(Uuid, String, i32, i32, String, String, Vec<String>)> = sqlx::query_as(
             "SELECT category_id, name, base_weight, cooldown_beats, system_message, user_message, elixir_types 
              FROM mantra_categories WHERE enabled = true"
@@ -527,11 +534,11 @@ impl MantraTree {
         }
 
         // Compute weights
-        let weights = self.compute_weights(context, &categories, &category_last_used);
+        let weights = Self::compute_weights(context, &categories, &category_last_used);
 
         // Weighted pick for category
         let (selected_cat_id, selected_cat_name, system_msg, user_msg) = 
-            self.weighted_pick(entropy, &categories, &weights)?;
+            Self::weighted_pick(entropy, &categories, &weights)?;
 
         // Fetch enabled entries for selected category
         let entry_rows: Vec<(Uuid, Uuid, String, i32, bool, Option<Uuid>)> = sqlx::query_as(
@@ -561,14 +568,14 @@ impl MantraTree {
         }
 
         // Inverse frequency pick for entry
-        let selected_entry = self.inverse_freq_pick(&entropy[4..8], &entries)?;
+        let selected_entry = Self::inverse_freq_pick(&entropy[4..8], &entries)?;
 
         // Get skill suggestions
-        let suggested_skill_ids = self.get_skill_suggestions(&selected_cat_name);
+        let suggested_skill_ids = Self::get_skill_suggestions(&selected_cat_name);
 
         // Resolve templates
-        let system_message = self.resolve_template(&system_msg, context);
-        let user_message = self.resolve_template(&user_msg, context);
+        let system_message = Self::resolve_template(&system_msg, context);
+        let user_message = Self::resolve_template(&user_msg, context);
 
         let category = MantraCategory::from_db_name(&selected_cat_name)
             .ok_or_else(|| MagicError::EntropyUnavailable(format!("Unknown category: {}", selected_cat_name)))?;
@@ -588,8 +595,8 @@ impl MantraTree {
         })
     }
 
+    #[allow(clippy::type_complexity)]
     fn compute_weights(
-        &self,
         context: &MantraContext,
         categories: &[(Uuid, String, i32, i32, String, String, Vec<String>)],
         category_last_used: &HashMap<Uuid, i64>,
@@ -640,7 +647,7 @@ impl MantraTree {
 
             // Apply per-category cooldown enforcement
             if let Some(&last_position) = category_last_used.get(cat_id) {
-                if last_position <= *cooldown_beats as i64 {
+                if last_position <= i64::from(*cooldown_beats) {
                     weight = 0;
                 }
             }
@@ -658,8 +665,8 @@ impl MantraTree {
         weights
     }
 
+    #[allow(clippy::type_complexity)]
     fn weighted_pick(
-        &self,
         entropy: &[u8],
         categories: &[(Uuid, String, i32, i32, String, String, Vec<String>)],
         weights: &HashMap<String, i32>,
@@ -670,6 +677,7 @@ impl MantraTree {
         }
 
         let entropy_val = u32::from_le_bytes([entropy[0], entropy[1], entropy[2], entropy[3]]);
+        #[allow(clippy::cast_possible_wrap)]
         let pick = (entropy_val % total_weight as u32) as i32;
 
         let mut cumulative = 0;
@@ -686,10 +694,10 @@ impl MantraTree {
         Ok((*cat_id, name.clone(), sys_msg.clone(), user_msg.clone()))
     }
 
-    fn inverse_freq_pick(&self, entropy: &[u8], entries: &[MantraEntry]) -> Result<MantraEntry> {
+    fn inverse_freq_pick(entropy: &[u8], entries: &[MantraEntry]) -> Result<MantraEntry> {
         let weights: Vec<f64> = entries
             .iter()
-            .map(|e| 1.0 / (e.use_count as f64 + 1.0))
+            .map(|e| 1.0 / (f64::from(e.use_count) + 1.0))
             .collect();
 
         let total_weight: f64 = weights.iter().sum();
@@ -698,7 +706,7 @@ impl MantraTree {
         }
 
         let entropy_val = u32::from_le_bytes([entropy[0], entropy[1], entropy[2], entropy[3]]);
-        let pick = (entropy_val as f64 / u32::MAX as f64) * total_weight;
+        let pick = (f64::from(entropy_val) / f64::from(u32::MAX)) * total_weight;
 
         let mut cumulative = 0.0;
         for (idx, weight) in weights.iter().enumerate() {
@@ -712,7 +720,7 @@ impl MantraTree {
         Ok(entries[0].clone())
     }
 
-    fn resolve_template(&self, template: &str, context: &MantraContext) -> String {
+    fn resolve_template(template: &str, context: &MantraContext) -> String {
         template
             .replace("{mantra_text}", "")
             .replace("{tasks_queued}", &context.pending_task_count.to_string())
@@ -733,7 +741,7 @@ impl MantraTree {
             .replace("{active_sessions}", &context.active_sessions.to_string())
     }
 
-    fn get_skill_suggestions(&self, _category_name: &str) -> Vec<Uuid> {
+    fn get_skill_suggestions(_category_name: &str) -> Vec<Uuid> {
         // For preloaded mode, skill suggestions would need to be preloaded too
         // For now, return empty vec - this can be enhanced later
         vec![]
@@ -875,7 +883,7 @@ mod tests {
 
         let tree = MantraTree::new(None);
         let template = "Tasks: {tasks_queued}, Errors: {recent_error_count}, Hour: {local_hour}";
-        let result = tree.resolve_template(template, &context);
+        let result = MantraTree::resolve_template(template, &context);
 
         assert_eq!(result, "Tasks: 42, Errors: 7, Hour: 14");
         assert!(!result.contains('{'));

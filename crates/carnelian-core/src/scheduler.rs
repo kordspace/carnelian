@@ -1429,8 +1429,8 @@ impl Scheduler {
             metrics.record_task_latency(task_id, created_at, chrono::Utc::now());
         }
 
-        // TODO: Phase 4 - Implement capability checking
-        // For now, all skills are allowed to execute
+        // Known limitation (v1.0.0): capability enforcement at dispatch time is not yet
+        // implemented; all skills are permitted to execute subject to the global policy layer.
         // Future: Check skill.capabilities_required against granted capabilities
         // Future: Verify capability constraints (scope, rate limits, etc.)
 

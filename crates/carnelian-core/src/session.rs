@@ -1311,8 +1311,8 @@ impl SessionManager {
     /// * `session_id` - Session to flush memories from
     /// * `correlation_id` - Optional correlation ID for tracing
     /// * `task_id` - Optional task context
-    // TODO: Replace heuristic extraction with agentic step integration
-    //       when the agentic loop is available (Phase 4+).
+    // Known limitation (v1.0.0): memory extraction uses keyword heuristics; LLM-based
+    // extraction deferred until the gateway session is available inside the flush path.
     #[allow(clippy::too_many_lines)]
     pub async fn trigger_memory_flush(
         &self,
@@ -1453,8 +1453,8 @@ impl SessionManager {
     ///
     /// Returns `(summary_message_id, token_estimate, messages_summarized)`.
     ///
-    // TODO: Replace extractive summarization with LLM-based summarization
-    //       when the LLM Gateway Service is available.
+    // Known limitation (v1.0.0): extractive (frequency-based) summarization only;
+    // LLM-based summarization deferred.
     pub async fn summarize_conversation_segment(
         &self,
         session_id: Uuid,

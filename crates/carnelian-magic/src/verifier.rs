@@ -15,8 +15,8 @@ pub enum RowIdentifier {
 impl RowIdentifier {
     fn to_uuid(&self) -> Uuid {
         match self {
-            RowIdentifier::Uuid(uuid) => *uuid,
-            RowIdentifier::I64(id) => Uuid::from_u128(*id as u128),
+            Self::Uuid(uuid) => *uuid,
+            Self::I64(id) => Uuid::from_u128(*id as u128),
         }
     }
 }
@@ -90,10 +90,13 @@ impl QuantumIntegrityVerifier {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     pub async fn verify_table(&self, table: &str, pool: &PgPool) -> Result<VerificationReport> {
+        type RowData = (Uuid, Vec<u8>, Option<String>, DateTime<Utc>);
+        
         let (verify_sql, _backfill_sql, _pk_column, _content_column) = Self::table_query(table)?;
 
-        let rows: Vec<(Uuid, Vec<u8>, Option<String>, DateTime<Utc>)> = match table {
+        let rows: Vec<RowData> = match table {
             "memories" => sqlx::query_as::<_, (Uuid, Vec<u8>, Option<String>, DateTime<Utc>)>(
                 verify_sql,
             )
@@ -138,7 +141,7 @@ impl QuantumIntegrityVerifier {
             _ => unreachable!(),
         };
 
-        let total_rows = rows.len() as i64;
+        let total_rows = i64::try_from(rows.len()).unwrap_or(i64::MAX);
         let mut verified_rows = 0i64;
         let mut missing_checksum_rows = 0i64;
         let mut tampered_rows = Vec::new();
@@ -216,10 +219,12 @@ impl QuantumIntegrityVerifier {
         row_id: RowIdentifier,
         pool: &PgPool,
     ) -> Result<Option<TamperedRow>> {
+        type RowData = (Uuid, Vec<u8>, Option<String>, DateTime<Utc>);
+        
         let (verify_sql, _backfill_sql, _pk_column, _content_column) = Self::table_query(table)?;
         let uuid_id = row_id.to_uuid();
 
-        let row: Option<(Uuid, Vec<u8>, Option<String>, DateTime<Utc>)> = match table {
+        let row: Option<RowData> = match table {
             "memories" => sqlx::query_as::<_, (Uuid, Vec<u8>, Option<String>, DateTime<Utc>)>(
                 &format!("{} WHERE memory_id = $1", verify_sql),
             )
@@ -262,50 +267,49 @@ impl QuantumIntegrityVerifier {
             }),
         };
 
-        if let Some((row_id, content, quantum_checksum, created_at)) = row {
-            if let Some(stored_checksum) = quantum_checksum {
-                let is_valid = self.hasher.verify_with_ts(
-                    table,
-                    row_id,
-                    &content,
-                    created_at,
-                    &stored_checksum,
-                );
+        if let Some((row_id, content, Some(stored_checksum), created_at)) = row {
+            let is_valid = self.hasher.verify_with_ts(
+                table,
+                row_id,
+                &content,
+                created_at,
+                &stored_checksum,
+            );
 
-                if !is_valid {
-                    let mut hasher =
-                        blake3::Hasher::new_derive_key("carnelian-quantum-salt-v1");
-                    hasher.update(row_id.as_bytes());
-                    hasher.update(table.as_bytes());
-                    let timestamp_nanos = created_at.timestamp_nanos_opt().unwrap_or(0);
-                    hasher.update(&timestamp_nanos.to_le_bytes());
-                    let deterministic_salt = hasher.finalize().as_bytes().to_vec();
+            if !is_valid {
+                let mut hasher =
+                    blake3::Hasher::new_derive_key("carnelian-quantum-salt-v1");
+                hasher.update(row_id.as_bytes());
+                hasher.update(table.as_bytes());
+                let timestamp_nanos = created_at.timestamp_nanos_opt().unwrap_or(0);
+                hasher.update(&timestamp_nanos.to_le_bytes());
+                let deterministic_salt = hasher.finalize().as_bytes().to_vec();
 
-                    let mut checksum_hasher =
-                        blake3::Hasher::new_derive_key("carnelian-quantum-checksum-v1");
-                    checksum_hasher.update(&content);
-                    checksum_hasher.update(&deterministic_salt);
-                    checksum_hasher.update(table.as_bytes());
-                    checksum_hasher.update(row_id.as_bytes());
-                    let expected_checksum = hex::encode(checksum_hasher.finalize().as_bytes());
+                let mut checksum_hasher =
+                    blake3::Hasher::new_derive_key("carnelian-quantum-checksum-v1");
+                checksum_hasher.update(&content);
+                checksum_hasher.update(&deterministic_salt);
+                checksum_hasher.update(table.as_bytes());
+                checksum_hasher.update(row_id.as_bytes());
+                let expected_checksum = hex::encode(checksum_hasher.finalize().as_bytes());
 
-                    let row_identifier = if table == "session_messages" {
-                        RowIdentifier::I64(row_id.as_u128() as i64)
-                    } else {
-                        RowIdentifier::Uuid(row_id)
-                    };
+                let row_identifier = if table == "session_messages" {
+                    RowIdentifier::I64(row_id.as_u128() as i64)
+                } else {
+                    RowIdentifier::Uuid(row_id)
+                };
 
-                    return Ok(Some(TamperedRow {
-                        row_id: row_identifier,
-                        table: table.to_string(),
-                        expected_checksum,
-                        stored_checksum,
-                        detected_at: Utc::now(),
-                    }));
-                }
+                return Ok(Some(TamperedRow {
+                    row_id: row_identifier,
+                    table: table.to_string(),
+                    expected_checksum,
+                    stored_checksum,
+                    detected_at: Utc::now(),
+                }));
             }
         }
 
+        // Row not found or no checksum stored, cannot verify
         Ok(None)
     }
 

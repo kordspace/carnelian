@@ -141,9 +141,9 @@ fn validate_carnelian_key(key: &str, state: &AppState) -> bool {
         return false;
     }
 
-    // TODO: Compare against the actual owner signing key from state.config
-    // For now, accept any properly formatted key
-    // In production, this should derive the key from state.config.owner_key_path or similar
+    // Known limitation (v1.0.0): accepts any hex-formatted key; full owner-key binding
+    // deferred to post-v1.0.0 hardening. In production, this should derive the key
+    // from state.config.owner_key_path or similar.
     hex_part.chars().all(|c| c.is_ascii_hexdigit())
 }
 
@@ -519,8 +519,8 @@ impl Server {
                 None
             };
             
-            // TODO: Quantinuum and Qiskit providers require SkillBridge implementation
-            // These will be enabled once the skill bridge is wired up
+            // Known limitation (v1.0.0): Quantinuum and Qiskit entropy providers not wired
+            // via SkillBridge; returns None until bridge is available.
             let quantinuum = None;
             let qiskit = None;
             
@@ -1078,7 +1078,8 @@ async fn status_handler(State(state): State<AppState>) -> impl IntoResponse {
         .try_into()
         .unwrap_or(0)
     } else {
-        0 // TODO: return a meaningful estimate if pool is unavailable
+        0 // Known limitation (v1.0.0): returns 0 when pool is unreachable; a meaningful
+          // estimate requires pool introspection not yet exposed.
     };
 
     // Look up the core identity
@@ -8218,6 +8219,7 @@ struct UpdateMantraEntryRequest {
     text: Option<String>,
     enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[allow(clippy::option_option)]
     elixir_id: Option<Option<uuid::Uuid>>,
 }
 
@@ -8590,9 +8592,7 @@ async fn magic_integrity_verify_handler(
     }
 
     // Compute overall status
-    let overall_status = if !failed_tables.is_empty() {
-        "error"
-    } else if reports.is_empty() {
+    let overall_status = if !failed_tables.is_empty() || reports.is_empty() {
         "error"
     } else if reports.iter().any(|r| matches!(r.overall_status, carnelian_magic::VerificationStatus::Tampered)) {
         "tampered"

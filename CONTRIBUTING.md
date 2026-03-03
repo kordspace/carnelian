@@ -2,7 +2,25 @@
 
 Thank you for your interest in contributing to Carnelian Core! We welcome contributions from the community and are excited to work with you.
 
-**Important:** Carnelian Core is proprietary software owned by Marco Julio Lopes and Kordspace LLC. By contributing, you agree to the Contributor License Agreement (CLA) outlined in [LICENSE.md](LICENSE.md).
+## Open Source & Licensing
+
+**Carnelian Core is open source software** authored by **Marco Julio Lopes**.
+
+- **Free for Personal Use**: Anyone can use Carnelian Core for personal, educational, and non-commercial purposes without any license fees.
+- **Commercial Use**: Requires a commercial license from Kordspace LLC. Contact info@kordspace.com with your use case.
+- **Custodianship**: Kordspace LLC serves as the custodian of Carnelian Core assets, providing IP protection, security auditing, commercial licensing, and community stewardship.
+
+### Contributor License Agreement (CLA)
+
+**By contributing to Carnelian Core, you agree to the CLA outlined in [LICENSE.md](LICENSE.md).**
+
+Key points:
+- You grant Marco Julio Lopes and Kordspace LLC a perpetual, worldwide, non-exclusive, royalty-free, irrevocable license to use your contributions.
+- Your contributions are your original work and do not infringe on third-party IP rights.
+- You will be credited as a contributor in project documentation.
+- Contributions are provided "as is" without warranty.
+
+This CLA ensures the project can remain open source while protecting the technology and enabling commercial licensing for enterprise users.
 
 ## Table of Contents
 

@@ -1817,7 +1817,7 @@ pub struct MantraEntryDetail {
     pub elixir_id: Option<Uuid>,
 }
 
-/// Response body for GET /v1/magic/mantras/{category_id}.
+/// Response body for `GET /v1/magic/mantras/{category_id}`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListMantraEntriesResponse {
     pub entries: Vec<MantraEntryDetail>,
@@ -1831,7 +1831,7 @@ pub struct AddMantraEntryRequest {
     pub elixir_id: Option<Uuid>,
 }
 
-/// Request body for PATCH /v1/magic/mantras/{entry_id}.
+/// Request body for `PATCH /v1/magic/mantras/{entry_id}`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateMantraEntryRequest {
     pub text: Option<String>,
@@ -1911,8 +1911,9 @@ pub struct EntropyLogResponse {
     pub limit: i64,
 }
 
-/// Response body for GET /v1/magic/config.
+/// Response body for `GET /v1/magic/config`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct MagicConfigResponse {
     pub enabled: bool,
     pub quantum_origin_url: String,

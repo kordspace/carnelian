@@ -180,7 +180,8 @@ async fn handle_message(
     // 8. Update last_seen_at
     let _ = channel_db::touch_channel_session(&db_pool, session.session_id).await;
 
-    // TODO: Process through agentic loop and send response back
+    // Known limitation (v1.0.0): adapter acknowledges receipt only; full agentic loop
+    // routing from channel messages deferred.
     // For now, acknowledge receipt
     bot.send_message(msg.chat.id, "✅ Message received.")
         .await?;

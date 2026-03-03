@@ -512,7 +512,8 @@ pub struct MemoryStats {
 /// The concrete implementation will call an embedding model (e.g., OpenAI
 /// text-embedding-3-small or a local model via Ollama) to produce 1536-dimension
 /// vectors for semantic similarity search.
-// TODO: Implement concrete EmbeddingService when LLM Gateway Service phase begins
+// Known limitation (v1.0.0): `EmbeddingService` is a trait stub; the concrete
+// implementation (OpenAI / Ollama embeddings) is deferred to a post-v1.0.0 phase.
 #[async_trait]
 pub trait EmbeddingService: Send + Sync {
     /// Generate a 1536-dimension embedding vector from text.
@@ -1340,7 +1341,8 @@ impl MemoryManager {
     /// Generate and add an embedding for a memory (stub).
     ///
     /// This method will be implemented when the embedding service is available.
-    // TODO: Implement when LLM Gateway Service phase begins
+    // Known limitation (v1.0.0): embedding generation deferred until LLM Gateway Service
+    // is available; returns error for now.
     #[allow(clippy::unused_async)]
     pub async fn generate_and_add_embedding(&self, _memory_id: Uuid) -> Result<()> {
         Err(Error::Config(

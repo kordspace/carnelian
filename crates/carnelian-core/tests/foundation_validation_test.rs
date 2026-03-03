@@ -1032,10 +1032,12 @@ async fn test_criterion3_task_creation_and_execution_lifecycle() {
 /// - Task appears in the queue with state "pending"
 /// - Task executes and transitions through running → completed
 /// - CLI prints task ID and final status
+///
+/// Ignored: CLI binary integration test — deferred until the binary is linked into the test harness.
 #[tokio::test]
 #[ignore = "CLI not yet implemented - will be added in a subsequent phase"]
 async fn test_criterion4_cli_task_creation() {
-    // TODO: Implement when CLI binary is available
+    // Known limitation (v1.0.0): CLI binary integration test deferred.
     //
     // Expected test flow:
     // 1. Start server with database

@@ -64,7 +64,7 @@ impl Default for OsEntropyProvider {
 
 #[async_trait]
 impl EntropyProvider for OsEntropyProvider {
-    fn source_name(&self) -> &str {
+    fn source_name(&self) -> &'static str {
         "os"
     }
 
@@ -127,7 +127,7 @@ impl QuantumOriginProvider {
 
 #[async_trait]
 impl EntropyProvider for QuantumOriginProvider {
-    fn source_name(&self) -> &str {
+    fn source_name(&self) -> &'static str {
         "quantum-origin"
     }
 
@@ -250,7 +250,7 @@ impl QuantinuumH2Provider {
 
 #[async_trait]
 impl EntropyProvider for QuantinuumH2Provider {
-    fn source_name(&self) -> &str {
+    fn source_name(&self) -> &'static str {
         "quantinuum-h2"
     }
 
@@ -322,7 +322,7 @@ impl QiskitProvider {
 
 #[async_trait]
 impl EntropyProvider for QiskitProvider {
-    fn source_name(&self) -> &str {
+    fn source_name(&self) -> &'static str {
         "qiskit-rng"
     }
 
@@ -464,7 +464,7 @@ impl MixedEntropyProvider {
 
 #[async_trait]
 impl EntropyProvider for MixedEntropyProvider {
-    fn source_name(&self) -> &str {
+    fn source_name(&self) -> &'static str {
         "mixed"
     }
 

@@ -488,7 +488,8 @@ impl PolicyEngine {
     /// 1. The identity has `task.create` capability
     /// 2. The skill has all its required capabilities granted
     ///
-    /// TODO: Full integration with task execution in Phase 2
+    /// Known limitation (v1.0.0): checks `task.create` capability and required-capability
+    /// list; deeper execution-path integration deferred.
     pub async fn check_task_execution(
         &self,
         identity_id: Uuid,

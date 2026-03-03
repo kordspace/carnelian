@@ -90,6 +90,24 @@ By contributing code, documentation, or other materials to Carnelian Core, you a
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
 
+### Major Contributor Co-Authorship
+
+**Major contributors** who make substantial, sustained contributions to Carnelian Core may be granted **co-authorship status** and added to the copyright and licensing documentation.
+
+Co-authorship is awarded based on:
+- Significant code contributions (features, architecture, core systems)
+- Sustained engagement and maintenance over multiple release cycles
+- Demonstrated expertise and leadership in project areas
+- Alignment with project vision and quality standards
+
+Co-authors receive:
+- Recognition in copyright notices and LICENSE.md
+- Credit in project documentation and release notes
+- Participation in technical decision-making processes
+- Shared stewardship of the project's direction
+
+Co-authorship decisions are made by Marco Julio Lopes and Kordspace LLC after thorough review of contribution history and impact.
+
 ---
 
 ## Disclaimer of Warranty
@@ -159,6 +177,24 @@ All third-party dependencies retain their original licenses and copyrights. Carn
 ## Governing Law
 
 This License shall be governed by and construed in accordance with the laws of the jurisdiction in which Kordspace LLC is registered, without regard to its conflict of law provisions.
+
+---
+
+## Acknowledgments
+
+Carnelian Core has been inspired by and built upon the work of many talented individuals and projects in the AI agent and software development communities.
+
+### Special Recognition
+
+- **Peter Steinberger** — Creator of [OpenClaw](https://github.com/openclaw), whose pioneering work on AI agent frameworks and tool orchestration provided foundational inspiration for Carnelian's architecture.
+
+- **Jonathan Essex** — Founder of [Software Plumbers](https://softwareplumbers.com), whose insights on modular software design and API architecture influenced Carnelian's capability-based security model.
+
+- **Marcelino Class** — Whose contributions to distributed systems thinking and event-driven architectures informed Carnelian's event-stream design.
+
+- **Vincent Haliburton** — Creator of [Knowit Owlz](https://knowitowlz.com), whose work on knowledge management and AI-assisted learning shaped Carnelian's Elixir knowledge persistence system.
+
+These individuals and their projects represent the collaborative spirit of the open source and AI communities. While Carnelian Core is an independent work, it stands on the shoulders of these innovators.
 
 ---
 

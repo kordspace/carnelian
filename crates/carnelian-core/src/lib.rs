@@ -210,10 +210,10 @@ pub fn init_tracing(log_level: &str) -> Result<()> {
         .unwrap_or(5);
 
     // Rotation frequency: "hourly" (default, bounds per-file size for long runs) or "daily"
-    // TODO: tracing-appender does not support native size-based rotation; hourly rotation
-    // is used as a size guard to prevent unbounded file growth during 24-hour validation.
-    // Consider switching to `rolling-file` or `tracing-rolling-file` crate for true
-    // size-based rotation if per-file size limits are required.
+    // Known limitation (v1.0.0): hourly rotation used as a file-size guard; true size-based
+    // rotation requires switching to `rolling-file` crate, deferred. tracing-appender does
+    // not support native size-based rotation; hourly rotation prevents unbounded file growth
+    // during long validation runs.
     let rotation = match env::var("CARNELIAN_LOG_ROTATION")
         .unwrap_or_else(|_| "hourly".to_string())
         .to_lowercase()
