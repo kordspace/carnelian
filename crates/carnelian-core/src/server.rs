@@ -8561,21 +8561,40 @@ async fn magic_integrity_verify_handler(
 
     // Verify each table
     let mut reports = Vec::new();
+    let mut failed_tables = Vec::new();
+    
     for table in &body.tables {
         match verifier.verify_table(table, pool).await {
             Ok(report) => {
-                // Cache the report
-                state.integrity_cache.write().await.insert(table.clone(), report.clone());
                 reports.push(report);
             }
             Err(e) => {
                 tracing::warn!(table = %table, error = %e, "Failed to verify table");
+                failed_tables.push(json!({
+                    "table": table,
+                    "error": e.to_string(),
+                }));
             }
         }
     }
 
+    // Atomic cache refresh: remove old entries for requested tables, insert new successful reports
+    {
+        let mut cache = state.integrity_cache.write().await;
+        for table in &body.tables {
+            cache.remove(table);
+        }
+        for report in &reports {
+            cache.insert(report.table.clone(), report.clone());
+        }
+    }
+
     // Compute overall status
-    let overall_status = if reports.iter().any(|r| matches!(r.overall_status, carnelian_magic::VerificationStatus::Tampered)) {
+    let overall_status = if !failed_tables.is_empty() {
+        "error"
+    } else if reports.is_empty() {
+        "error"
+    } else if reports.iter().any(|r| matches!(r.overall_status, carnelian_magic::VerificationStatus::Tampered)) {
         "tampered"
     } else if reports.iter().any(|r| matches!(r.overall_status, carnelian_magic::VerificationStatus::Partial)) {
         "partial"
@@ -8589,6 +8608,7 @@ async fn magic_integrity_verify_handler(
         StatusCode::OK,
         Json(json!({
             "reports": serde_json::to_value(&reports).unwrap_or_default(),
+            "failed_tables": failed_tables,
             "overall_status": overall_status,
             "verified_at": verified_at,
         })),
