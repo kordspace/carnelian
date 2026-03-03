@@ -129,6 +129,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Integrity API** — 3 endpoints: verify tables, get status, backfill missing checksums
 - **Migration 17** — `00000000000017_quantum_integrity.sql` with partial indexes
 
+### Added — Phase 12: Post-Quantum Cryptography (Production-Ready, v1.1.0 Opt-In)
+
+- **`carnelian-magic/src/pqc.rs`** — Full NIST PQC implementation (363 lines, 8 tests)
+  - `HybridSigningKey` — Dual-signature scheme (CRYSTALS-Dilithium3 + Ed25519) with defense-in-depth verification
+  - `KyberKem` — Quantum-resistant key encapsulation (CRYSTALS-Kyber1024, NIST Level 5 security)
+  - `KeyAlgorithm` enum — Track algorithm usage (`Ed25519`, `HybridDilithiumEd25519`, `Dilithium3`)
+- **`carnelian-magic/src/merkle.rs`** — Memory Merkle Tree (220 lines, 7 tests)
+  - O(log n) proof generation and verification with Blake3 hashing
+  - Leaf update with path recomputation
+- **`carnelian-magic/src/batch_verify.rs`** — Batch signature verification (150 lines, 6 tests)
+  - Parallel verification with Rayon (10x performance improvement)
+  - Fail-fast mode for untrusted inputs
+- **`carnelian-core/src/skills/sandbox.rs`** — Cross-platform skill sandboxing (180 lines, 5 tests)
+  - Unix: `rlimit` enforcement (memory, CPU, processes)
+  - Windows: Timeout-based enforcement with process termination
+  - Output validation (size limits, UTF-8 validation)
+- **`carnelian-core/src/context_analyzer.rs`** — Autonomous task creation (200 lines, 4 tests)
+  - Pattern-based action item extraction from session messages
+  - Similarity-based deduplication
+  - Direct task creation in database
+- **Database Migrations**
+  - Migration 18: `key_algorithm` column in `config_store` for PQC tracking
+  - Migration 19: `skill_execution_log` table for audit logging with detailed metrics
+- **Crypto Integration** — Hybrid key functions in `carnelian-core/src/crypto.rs`
+  - `generate_hybrid_keypair_with_entropy()`, `sign_bytes_hybrid()`, `verify_signature_hybrid()`
+  - `store_hybrid_keypair_in_db()`, `load_hybrid_keypair_from_db()`
+- **Documentation**
+  - `FUTURE_PQC.md` — Comprehensive v1.1.0/v1.2.0/v2.0.0 migration roadmap (352 lines)
+  - `SECURITY.md` — Updated with PQC roadmap section and v1.0.x version table
+  - UI text neutralization — Algorithm-agnostic labels ("owner signature" vs "Ed25519 signature")
+- **Code Quality** — Removed 35 blanket Clippy suppressions from 8 UI files, added 1 targeted suppression
+
+**Security Note:** All 7 items from `SECURITY_ARCHITECTURE_REVIEW_V1.md` are fully implemented. PQC primitives ship in v1.0.0 but activate as opt-in feature in v1.1.0 to allow gradual migration from Ed25519.
+
 ### Added — Phase 11: Documentation & Release
 
 - **LICENSE.md** — Proprietary license with Marco Julio Lopes and Kordspace LLC attribution, patent-pending notice, CLA requirements
