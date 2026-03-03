@@ -104,6 +104,7 @@ use uuid::Uuid;
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
 use carnelian_common::{Error, Result};
+use carnelian_magic::QuantumHasher;
 
 use crate::config::Config;
 use crate::context::{ContextWindow, estimate_tokens};
@@ -797,6 +798,31 @@ impl SessionManager {
                 .bind(session_id)
                 .execute(&mut *tx)
                 .await?;
+        }
+
+        // 4. Compute quantum checksum for integrity verification
+        // Note: message_id is i64 (BIGSERIAL), convert to Uuid for hasher interface
+        let message_uuid = Uuid::from_u128(message_id as u128);
+        let ts: DateTime<Utc> = sqlx::query_scalar("SELECT ts FROM session_messages WHERE message_id = $1")
+            .bind(message_id)
+            .fetch_one(&mut *tx)
+            .await?;
+        
+        let hasher = QuantumHasher::with_os_entropy();
+        match hasher.compute("session_messages", message_uuid, content.as_bytes(), ts).await {
+            Ok(checksum) => {
+                if let Err(e) = sqlx::query("UPDATE session_messages SET quantum_checksum = $1 WHERE message_id = $2")
+                    .bind(&checksum)
+                    .bind(message_id)
+                    .execute(&mut *tx)
+                    .await
+                {
+                    tracing::warn!(message_id = message_id, error = %e, "Failed to store quantum checksum");
+                }
+            }
+            Err(e) => {
+                tracing::warn!(message_id = message_id, error = %e, "Failed to compute quantum checksum");
+            }
         }
 
         tx.commit().await.map_err(Error::Database)?;

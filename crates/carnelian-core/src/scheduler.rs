@@ -69,13 +69,13 @@ use carnelian_common::types::{
     EventEnvelope, EventLevel, EventType, InvokeRequest, InvokeStatus, RunId,
 };
 use carnelian_common::{Error, Result};
+use carnelian_magic::{EntropyProvider, QuantumHasher, entropy_arc_impl as _};
+use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-// Import Arc impl to enable EntropyProvider methods on Arc<MixedEntropyProvider>
-use carnelian_magic::{EntropyProvider, entropy_arc_impl as _};
 use tokio::sync::watch;
 use uuid::Uuid;
 
@@ -1512,6 +1512,36 @@ impl Scheduler {
                             duration_ms = duration_ms,
                             "Task completed successfully"
                         );
+
+                        // Compute quantum checksum for successful task result
+                        let started_at: Option<DateTime<Utc>> = sqlx::query_scalar(
+                            "SELECT started_at FROM task_runs WHERE run_id = $1"
+                        )
+                        .bind(run_id.0)
+                        .fetch_optional(pool)
+                        .await
+                        .ok()
+                        .flatten();
+
+                        if let Some(ts) = started_at {
+                            let result_bytes = serde_json::to_vec(&result_json).unwrap_or_default();
+                            let hasher = QuantumHasher::with_os_entropy();
+                            match hasher.compute("task_runs", run_id.0, &result_bytes, ts).await {
+                                Ok(checksum) => {
+                                    if let Err(e) = sqlx::query("UPDATE task_runs SET quantum_checksum = $1 WHERE run_id = $2")
+                                        .bind(&checksum)
+                                        .bind(run_id.0)
+                                        .execute(pool)
+                                        .await
+                                    {
+                                        tracing::warn!(run_id = %run_id.0, error = %e, "Failed to store quantum checksum");
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::warn!(run_id = %run_id.0, error = %e, "Failed to compute quantum checksum");
+                                }
+                            }
+                        }
 
                         // Award task completion XP
                         if let Some(xp_mgr) = xp_manager {

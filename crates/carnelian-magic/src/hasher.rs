@@ -15,6 +15,14 @@ impl QuantumHasher {
         Self { entropy }
     }
 
+    pub fn with_os_entropy() -> Self {
+        let node_id = uuid::Uuid::new_v4();
+        let mixed_provider = MixedEntropyProvider::new(None, None, None, node_id);
+        Self {
+            entropy: Arc::new(mixed_provider),
+        }
+    }
+
     fn derive_salt(
         row_id: Uuid,
         table: &str,

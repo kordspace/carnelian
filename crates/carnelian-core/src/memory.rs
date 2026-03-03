@@ -91,6 +91,7 @@ use uuid::Uuid;
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
 use carnelian_common::{Error, Result};
+use carnelian_magic::QuantumHasher;
 
 use crate::encryption::EncryptionHelper;
 use crate::events::EventStream;
@@ -696,6 +697,25 @@ impl MemoryManager {
             access_count: row.get("access_count"),
             tags: returned_tags,
         };
+
+        // Compute quantum checksum for integrity verification
+        let created_at: DateTime<Utc> = row.get("created_at");
+        let hasher = QuantumHasher::with_os_entropy();
+        match hasher.compute("memories", memory_id, &content_bytes, created_at).await {
+            Ok(checksum) => {
+                if let Err(e) = sqlx::query("UPDATE memories SET quantum_checksum = $1 WHERE memory_id = $2")
+                    .bind(&checksum)
+                    .bind(memory_id)
+                    .execute(&self.pool)
+                    .await
+                {
+                    tracing::warn!(memory_id = %memory_id, error = %e, "Failed to store quantum checksum");
+                }
+            }
+            Err(e) => {
+                tracing::warn!(memory_id = %memory_id, error = %e, "Failed to compute quantum checksum");
+            }
+        }
 
         tracing::info!(
             memory_id = %memory_id,
