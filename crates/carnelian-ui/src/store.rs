@@ -257,6 +257,8 @@ impl EventStreamStore {
                 // Track XP events from SSE
                 if let EventType::Custom(ref name) = envelope.event_type {
                     if name == "XpAwarded" {
+                        // XP amounts bounded < i32::MAX in practice
+                        #[allow(clippy::cast_possible_truncation)]
                         let amount = envelope
                             .payload
                             .get("xp_amount")
@@ -280,6 +282,8 @@ impl EventStreamStore {
                             toasts.drain(..excess);
                         }
                     } else if name == "XpLevelUp" {
+                        // XP levels bounded < i32::MAX (max level 99)
+                        #[allow(clippy::cast_possible_truncation)]
                         let new_level = envelope
                             .payload
                             .get("new_level")

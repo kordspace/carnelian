@@ -602,12 +602,18 @@ fn ChannelWizardModal(on_close: EventHandler, on_created: EventHandler) -> Eleme
                                     }
                                 }
                                 p { style: "color: #8E8E93; font-size: 13px; margin-top: 8px;",
-                                    match channel_type.read().as_str() {
-                                        "telegram" => "Send /pair {token} to your Telegram bot to complete pairing.",
-                                        "discord" => "Send !pair {token} in your Discord channel to complete pairing.",
-                                        "whatsapp" => "Send /pair {token} to your WhatsApp bot to complete pairing.",
-                                        "slack" => "Run /carnelian pair {token} in your Slack workspace to complete pairing.",
-                                        _ => "Use the pairing token in your channel to complete pairing.",
+                                    {
+                                        if let Some(ref token) = *pairing_token.read() {
+                                            match channel_type.read().as_str() {
+                                                "telegram" => format!("Send /pair {} to your Telegram bot to complete pairing.", token),
+                                                "discord" => format!("Send !pair {} in your Discord channel to complete pairing.", token),
+                                                "whatsapp" => format!("Send /pair {} to your WhatsApp bot to complete pairing.", token),
+                                                "slack" => format!("Run /carnelian pair {} in your Slack workspace to complete pairing.", token),
+                                                _ => format!("Use the pairing token {} in your channel to complete pairing.", token),
+                                            }
+                                        } else {
+                                            "Use the pairing token in your channel to complete pairing.".to_string()
+                                        }
                                     }
                                 }
                             }

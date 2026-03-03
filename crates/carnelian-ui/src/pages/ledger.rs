@@ -96,6 +96,8 @@ pub fn Ledger() -> Element {
 
     // Initial load
     use_hook({
+        // Dioxus Signal<T> requires .clone() for multi-closure capture
+        #[allow(clippy::clone_on_copy)]
         let mut load_events = load_events.clone();
         move || {
             load_events();
@@ -106,6 +108,8 @@ pub fn Ledger() -> Element {
     use_effect({
         let mut last_check = use_signal(|| 0u64);
         let event_store = event_store;
+        // Dioxus Signal<T> requires .clone() for multi-closure capture
+        #[allow(clippy::clone_on_copy)]
         let mut load_events = load_events.clone();
 
         move || {
@@ -119,7 +123,10 @@ pub fn Ledger() -> Element {
 
     // Verify chain handler
     let verify_chain = {
+        // Dioxus Signal<T> requires .clone() for multi-closure capture
+        #[allow(clippy::clone_on_copy)]
         let mut verify_result = verify_result.clone();
+        #[allow(clippy::clone_on_copy)]
         let mut toasts = toasts.clone();
 
         move || {

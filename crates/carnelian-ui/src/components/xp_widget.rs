@@ -83,14 +83,14 @@ pub fn XpWidget() -> Element {
                         if *frac > 0.0 {
                             let sweep = frac * 360.0;
                             let end_angle = start_angle + sweep;
-                            let large_arc = if sweep > 180.0 { 1 } else { 0 };
+                            let large_arc = u8::from(sweep > 180.0);
                             let r = 40.0_f64;
                             let cx = 50.0_f64;
                             let cy = 50.0_f64;
-                            let x1 = cx + r * start_angle.to_radians().cos();
-                            let y1 = cy + r * start_angle.to_radians().sin();
-                            let x2 = cx + r * end_angle.to_radians().cos();
-                            let y2 = cy + r * end_angle.to_radians().sin();
+                            let x1 = r.mul_add(start_angle.to_radians().cos(), cx);
+                            let y1 = r.mul_add(start_angle.to_radians().sin(), cy);
+                            let x2 = r.mul_add(end_angle.to_radians().cos(), cx);
+                            let y2 = r.mul_add(end_angle.to_radians().sin(), cy);
                             let d = format!(
                                 "M {cx} {cy} L {x1:.2} {y1:.2} A {r} {r} 0 {large_arc} 1 {x2:.2} {y2:.2} Z"
                             );

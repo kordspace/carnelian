@@ -33,7 +33,10 @@ pub fn SkillBook() -> Element {
 
     // Load catalog on mount
     let load_catalog = {
+        // Dioxus Signal<T> requires .clone() for multi-closure capture
+        #[allow(clippy::clone_on_copy)]
         let mut catalog = catalog.clone();
+        #[allow(clippy::clone_on_copy)]
         let mut loading = loading.clone();
         move || {
             loading.set(true);
@@ -50,6 +53,8 @@ pub fn SkillBook() -> Element {
     };
 
     use_hook({
+        // Dioxus Signal<T> requires .clone() for multi-closure capture
+        #[allow(clippy::clone_on_copy)]
         let mut load_catalog = load_catalog.clone();
         move || {
             load_catalog();
@@ -96,6 +101,8 @@ pub fn SkillBook() -> Element {
 
     // Activation handler
     let activate_skill = {
+        // Dioxus Signal<T> requires .clone() for multi-closure capture
+        #[allow(clippy::clone_on_copy)]
         let mut toasts = toasts.clone();
         let mut show_modal = show_activation_modal.clone();
         let mut load_catalog = load_catalog.clone();
