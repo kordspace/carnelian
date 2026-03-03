@@ -105,6 +105,7 @@ pub mod attestation;
 pub mod chain_anchor;
 pub mod config;
 pub mod context;
+pub mod context_analyzer;
 pub mod crypto;
 pub mod db;
 pub mod elixir;

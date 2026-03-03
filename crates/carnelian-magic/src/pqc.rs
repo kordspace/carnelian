@@ -167,7 +167,7 @@ impl HybridSigningKey {
         let context = b"carnelian-aes-storage-v1";
         let seed = self.ed25519_sk.to_bytes();
         
-        blake3::derive_key(context, &seed).clone()
+        *blake3::derive_key(context, &seed)
     }
 }
 

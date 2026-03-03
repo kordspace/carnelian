@@ -72,11 +72,11 @@ pub use pqc::{
     KeyAlgorithm,
     KyberKem,
 };
-pub use crate::merkle::{
+pub use self::merkle::{
     MemoryMerkleTree,
     MerkleProof,
 };
-pub use batch_verify::{
+pub use self::batch_verify::{
     BatchVerificationResult,
     batch_verify_hybrid,
     sequential_verify_hybrid,
