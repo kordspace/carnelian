@@ -38,5 +38,5 @@ ALTER TABLE ledger_events ADD COLUMN quantum_salt BYTEA;
 -- =============================================================================
 
 -- Seed default Quantinuum configuration keys into config_store (no-op if already present)
-INSERT INTO config_store (key, value_text, encrypted) VALUES ('quantinuum_token_expiry', 'null', false) ON CONFLICT (key) DO NOTHING;
-INSERT INTO config_store (key, value_text, encrypted) VALUES ('quantinuum_device', '"H2-1"', false) ON CONFLICT (key) DO NOTHING;
+INSERT INTO config_store (key, value, encrypted) VALUES ('quantinuum_token_expiry', 'null'::jsonb, false) ON CONFLICT (key) DO NOTHING;
+INSERT INTO config_store (key, value, encrypted) VALUES ('quantinuum_device', '"H2-1"'::jsonb, false) ON CONFLICT (key) DO NOTHING;
