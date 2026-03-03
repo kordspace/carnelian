@@ -43,6 +43,8 @@ pub mod hasher;
 pub mod mantra;
 pub mod pqc;
 pub mod verifier;
+mod merkle;
+mod batch_verify;
 
 pub use entropy::{
     EntropyHealth, EntropyProvider, MixedEntropyProvider,
