@@ -565,6 +565,16 @@ fn xp_for_level(level: i32) -> i64 {
 | **Heartbeat Tick** | 1-5 | Mantra category × context relevance |
 | **Ledger Entry** | 2-10 | Entry type × quantum salt presence |
 
+### Automatic Award System
+
+**XP is awarded automatically** by the system based on verified events. There is no manual XP award capability to prevent gaming the leveling system. All XP grants are:
+- Triggered by actual task completions, skill executions, and ledger events
+- Verified against PostgreSQL event records
+- Immutably logged in the `xp_ledger` table
+- Tied to real worker execution and context validation
+
+This ensures agent levels accurately reflect actual work performed, not artificially inflated scores.
+
 ### Ledger-Backed Event Sourcing
 
 All XP events are stored in the **`xp_ledger`** table for full auditability:
@@ -635,7 +645,6 @@ The **XP Progression** page in the Dioxus desktop UI provides:
 | `GET` | `/v1/xp/leaderboard` | Top 100 identities by XP |
 | `GET` | `/v1/xp/history` | XP event history for identity |
 | `GET` | `/v1/xp/skills` | Per-skill XP breakdown |
-| `POST` | `/v1/xp/award` | Manually award XP (admin only) |
 
 ### API Endpoints (Planned)
 
@@ -745,7 +754,6 @@ See [skills/registry/README.md](skills/registry/README.md) for the full manifest
 | `GET` | `/v1/xp/leaderboard` | All agents ranked by total XP |
 | `GET` | `/v1/xp/skills/{id}` | Skill metrics and level |
 | `GET` | `/v1/xp/skills/top` | Top skills by usage/XP |
-| `POST` | `/v1/xp/award` | Manual XP award (admin capability) |
 
 ### Voice
 

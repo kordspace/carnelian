@@ -18,8 +18,8 @@ exclude = [
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-authors = ["Marco <info@kordspace.com>"]
-license = "MIT"
+authors = ["Marco Julio Lopes <info@kordspace.com>"]
+license = "SEE LICENSE.md"
 repository = "https://github.com/kordspace/carnelian"
 rust-version = "1.85"
 
