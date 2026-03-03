@@ -557,6 +557,51 @@ Elixirs are integrated with the XP progression system:
 
 See [docs/SKILLS_MIGRATION_STATUS.md](docs/SKILLS_MIGRATION_STATUS.md) for implementation roadmap.
 
+## ✨ MAGIC — Quantum Intelligence Core
+
+MAGIC (Mixed Authenticated Quantum Intelligence Core) provides quantum entropy generation and mantra-based context injection for enhanced agent reasoning.
+
+### Provider Priority
+
+| Priority | Provider | Requirement |
+|----------|----------|-------------|
+| 1 | `quantum-origin` | `CARNELIAN_QUANTUM_ORIGIN_API_KEY` |
+| 2 | `quantinuum-h2` | `carnelian magic auth` (pytket) |
+| 3 | `qiskit-rng` | `IBM_QUANTUM_TOKEN` (Qiskit) |
+| 4 | `os` | None — always available fallback |
+
+### Mantra System
+
+The Mantra Library provides weighted, category-grouped prompt fragments injected into the agent's heartbeat context. Mantras are scheduled via `MantraTree::select_with_pool` with quantum entropy seeding, ensuring non-deterministic selection patterns. The `mantra_cooldown_beats` configuration parameter controls how many heartbeat cycles must pass before the same category can fire again, preventing repetitive context pollution.
+
+### Quantum Circuit Skills
+
+Three Python skills leverage quantum circuits for entropy generation and optimization:
+
+- **`quantinuum-h2-rng`** — H-series Hadamard circuit entropy via pytket (`runtime: python`)
+- **`qiskit-rng`** — IBM Quantum Hadamard circuit entropy via Qiskit (`runtime: python`)
+- **`quantum-optimize`** — Quantum-seeded simulated annealing for query/data-loading plans (`runtime: python`)
+
+### Quick Setup
+
+```bash
+# Enable MAGIC and set Quantum Origin key
+export CARNELIAN_QUANTUM_ORIGIN_API_KEY="<key>"
+
+# Authenticate Quantinuum H2 interactively
+carnelian magic auth
+
+# Check live provider health
+carnelian magic status
+
+# Refresh token
+carnelian magic auth --refresh
+```
+
+### UI Access
+
+The MAGIC panel is accessible via the **✨ MAGIC** tab in the Carnelian desktop UI, providing sub-tabs for Entropy Dashboard, Mantra Library, Quantum Jobs, Elixir & Skill Integration, and Auth Settings.
+
 ## Skill Discovery
 
 Skills are defined by `skill.json` manifest files in the `skills/registry/` directory. Discovery runs automatically on server startup and via a file watcher (2-second debounce), or can be triggered manually.
