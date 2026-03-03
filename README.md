@@ -84,10 +84,27 @@ CARNELIAN is a production-ready AI workspace harness with comprehensive capabili
 - ✅ 🧪 Elixir system for knowledge persistence
 - ✅ Skill Book catalog with activation flow
 
-**Desktop UI** (In Development)
-- 🚧 Dioxus desktop UI — 17 pages, 6 components
-- 🚧 WebSocket event streaming
-- � Real-time metrics and monitoring
+**Desktop UI** (Complete)
+- ✅ Dioxus desktop UI — 17 pages, 6 components
+- ✅ WebSocket event streaming with bounded ring buffer
+- ✅ Real-time metrics and monitoring
+
+## Phase Status
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1 | Core Foundation (Axum, scheduler, policy, ledger) | ✅ Done |
+| 2 | Worker System (Node, Python, WASM, Native) | ✅ Done |
+| 3 | Agentic Loop & Session Management | ✅ Done |
+| 4 | Memory & pgvector Retrieval | ✅ Done |
+| 5 | Elixir Knowledge Persistence | ✅ Done |
+| 6 | XP Progression & Leaderboard | ✅ Done |
+| 7 | MAGIC Quantum Entropy Core | ✅ Done |
+| 8 | Channel Adapters (Telegram, Discord) | ✅ Done |
+| 9 | Voice Gateway (ElevenLabs STT/TTS) | ✅ Done |
+| 10 | Desktop UI — Dioxus (17 pages, 6 components) | ✅ Done |
+| 11 | PQC & Security Architecture (`carnelian-magic`) | ✅ Done |
+| 12 | README Truth Alignment & Clippy Clean (`-D warnings`) | 🔄 In Progress |
 
 ## Why Carnelian Core?
 
@@ -167,8 +184,8 @@ graph TD
 | **LLM Gateway** | TypeScript (`:18790`) | Unified gateway — Ollama, OpenAI, Anthropic, Fireworks |
 | **Approval Queue** | Rust (`approvals.rs`) | Human-in-the-loop approval workflow |
 | **Safe Mode** | Rust (`safe_mode.rs`) | Emergency lockdown, capability suspension |
-| **Attestation** | Rust (`attestation.rs`) | Worker identity verification, Ed25519 signatures |
-| **Encryption** | Rust (`encryption.rs`, `crypto.rs`) | Encryption at rest, key management |
+| **Attestation** | Rust (`attestation.rs`) | Owner keypair signatures for worker identity verification |
+| **Encryption** | Rust (`encryption.rs`, `crypto.rs`) | Encryption at rest, AES-256-GCM via blake3-derived keys, key management |
 | **Chain Anchor** | Rust (`chain_anchor.rs`) | Ledger chain integrity anchoring |
 | **Channel Adapters** | Rust (`carnelian-adapters/`) | Telegram + Discord bots with pairing, rate limiting |
 | **Voice Gateway** | Rust (`voice.rs`) | ElevenLabs STT/TTS integration |
@@ -330,8 +347,11 @@ See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for detailed setup and developmen
 
 | Profile | GPU | VRAM | RAM | Recommended Model | Notes |
 |---------|-----|------|-----|-------------------|-------|
-| **Standard** | RTX 2080 Super (8GB VRAM) | 32GB | `deepseek-r1:7b` |
-| **Performance** | RTX 3090 (24GB VRAM) | 64GB+ | `deepseek-r1:32b` or `deepseek-r1:70b` | High-end profile for production workloads |
+| **Urim** | RTX 2080 Ti | 11 GB | 64 GB | `deepseek-r1:14b` | High-end workstation — local LLMs + heavy workloads |
+| **Thummim** | RTX 2080 Super | 8 GB | 32 GB | `deepseek-r1:7b` | Standard desktop — balanced local + API usage |
+| **Custom** | User-defined | — | — | User-defined | Expert mode — manual resource limits |
+
+> **Important**: Do **not** expose Urim and Thummim as system-internal identifiers or cross-reference them to any distributed product persona. The table is purely hardware specification documentation for the first-run setup wizard selection.
 
 Profiles affect Docker resource limits and worker concurrency settings. See [docker-compose.yml](docker-compose.yml) and [machine.toml.example](machine.toml.example) for configuration.
 
@@ -651,18 +671,17 @@ The **XP Progression** page in the Dioxus desktop UI provides:
 | `GET` | `/v1/xp/history` | XP event history for identity |
 | `GET` | `/v1/xp/skills` | Per-skill XP breakdown |
 
-### API Endpoints (Planned)
+### API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/v1/elixirs` | Create a new elixir |
-| `GET` | `/v1/elixirs` | List elixirs with filtering |
+| `GET` | `/v1/elixirs` | List elixirs with filtering and pagination |
 | `GET` | `/v1/elixirs/{id}` | Get elixir details |
-| `POST` | `/v1/elixirs/{id}/activate` | Activate an elixir for use |
-| `GET` | `/v1/elixirs/search` | Semantic search via embeddings |
-| `POST` | `/v1/elixirs/drafts` | Review auto-generated proposals |
-
-See [docs/SKILLS_MIGRATION_STATUS.md](docs/SKILLS_MIGRATION_STATUS.md) for implementation roadmap.
+| `GET` | `/v1/elixirs/search` | Semantic search via pgvector embeddings |
+| `GET` | `/v1/elixirs/drafts` | List auto-generated draft proposals |
+| `POST` | `/v1/elixirs/drafts/{id}/approve` | Approve a draft and promote to elixir |
+| `POST` | `/v1/elixirs/drafts/{id}/reject` | Reject a draft proposal |
 
 ## ✨ MAGIC — Quantum Intelligence Core
 
