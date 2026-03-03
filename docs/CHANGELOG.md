@@ -5,6 +5,23 @@ All notable changes to Carnelian OS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Phase 10D: Quantum Integrity
+
+### Added
+
+- `quantum_checksum TEXT` column on `memories`, `session_messages`, `elixirs`, and `task_runs` tables (migration `00000000000017_quantum_integrity.sql`), with partial indexes `WHERE quantum_checksum IS NOT NULL`.
+- `QuantumHasher` in `carnelian-magic` — `compute`, `verify`, and `batch_compute` using BLAKE3 with MAGIC-mixed entropy salt.
+- `QuantumIntegrityVerifier` in `carnelian-magic` — `verify_table`, `verify_row`, and `backfill_missing` returning `VerificationReport` and `TamperedRow`.
+- Three new REST API endpoints (all behind `X-Carnelian-Key` auth):
+  - `POST /v1/magic/integrity/verify` — Verify quantum checksums for specified tables
+  - `GET /v1/magic/integrity/status` — Get cached integrity verification status
+  - `POST /v1/magic/integrity/backfill` — Backfill missing quantum checksums in background
+- Quantum checksum population wired into all four core write paths: `MemoryManager::create_memory`, `SessionManager::append_message`, `ElixirManager::create_elixir` / `approve_draft`, and task run completion in `scheduler.rs`.
+
+### Known Limitations
+
+- **Ed25519 → ML-DSA migration is post-v1.** Ed25519 signatures (owner keypair, privileged ledger actions) are not quantum-resistant. Migration to ML-DSA (CRYSTALS-Dilithium, NIST FIPS 204) is targeted for a post-v1 release. All other cryptographic primitives (BLAKE3, AES-256-GCM) are already post-quantum safe.
+
 ## [0.1.0] - 2026-02-24
 
 ### Added

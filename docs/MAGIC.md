@@ -510,3 +510,24 @@ The **Elixir & Skill Integration** sub-tab in the MAGIC UI panel currently provi
 - **Token Expiry** — Quantinuum tokens expire after 1 hour and must be refreshed via `carnelian magic auth --refresh`
 - **Entropy Logging** — All entropy requests are logged with timestamps, sources, and byte counts for audit purposes
 - **Fallback Safety** — If all quantum providers fail, the system falls back to OS random to prevent service disruption
+
+## Quantum Security Posture
+
+### Cryptographic Algorithm Status
+
+| Algorithm | Usage in Carnelian | Post-Quantum Resistant |
+|---|---|---|
+| BLAKE3 | Hash chaining, quantum checksum, entropy salting | ✅ Yes |
+| AES-256-GCM | Credential encryption at rest | ✅ Yes |
+| Ed25519 | Ledger action signatures, owner keypair | ⚠️ No |
+| SHA-256 | Package checksum verification | ✅ Yes |
+
+### Ed25519 Quantum Vulnerability
+
+Ed25519, used for privileged ledger signatures and owner keypairs, is based on elliptic curve discrete logarithm hardness. This problem is efficiently solvable by Shor's algorithm on sufficiently large quantum computers. Current quantum hardware cannot execute Shor's algorithm at the scale required to threaten 256-bit elliptic curve keys, so the practical risk remains low today. However, the threat is non-zero on a 5–10 year horizon as quantum computing capabilities advance.
+
+### Post-v1 Migration Plan
+
+The planned migration path is from **Ed25519** to **ML-DSA (CRYSTALS-Dilithium, NIST FIPS 204)** after v1. ML-DSA is a lattice-based signature scheme standardized by NIST as part of the post-quantum cryptography suite and provides strong security guarantees against both classical and quantum adversaries.
+
+Note that `carnelian-magic`'s `QuantumHasher` and all symmetric cryptographic primitives (BLAKE3, AES-256-GCM) are already post-quantum safe, as symmetric algorithms require only doubled key sizes to maintain security against Grover's algorithm.
