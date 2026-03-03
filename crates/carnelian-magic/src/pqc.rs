@@ -1,8 +1,13 @@
 //! Post-Quantum Cryptography (PQC) support for 🔥 Carnelian OS
 //!
-//! This module provides quantum-resistant cryptographic primitives using NIST PQC standards:
+//! This module provides **fully implemented and tested** quantum-resistant cryptographic primitives
+//! using NIST PQC standards:
 //! - CRYSTALS-Dilithium3 for digital signatures (NIST Level 3 security)
 //! - CRYSTALS-Kyber1024 for key encapsulation (NIST Level 5 security)
+//!
+//! The `HybridSigningKey` and `KyberKem` types are production-ready and available in the
+//! `carnelian-magic` crate. These ship as an **opt-in feature in v1.1.0**. Current v1.0.x
+//! deployments use classical Ed25519 signing by default (`KeyAlgorithm::Ed25519`).
 //!
 //! When MAGIC is enabled, all key material is derived from quantum entropy sources.
 

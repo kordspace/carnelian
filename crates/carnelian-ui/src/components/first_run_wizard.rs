@@ -336,7 +336,7 @@ fn Step3Identity(identity: Option<IdentityResponse>) -> Element {
     rsx! {
         div { class: "wizard-step",
             h3 { "Step 3: Owner Keypair" }
-            p { "Your Ed25519 keypair for signing and authentication" }
+            p { "Your signing keypair for authentication" }
 
             div { class: "identity-display",
                 div { class: "key-field",
