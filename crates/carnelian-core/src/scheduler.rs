@@ -310,8 +310,8 @@ impl Scheduler {
                         &config,
                         &model_router,
                         &ledger,
-                        &entropy_provider,
-                        &mantra_tree,
+                        entropy_provider.as_ref(),
+                        mantra_tree.as_ref(),
                     ).await {
                         tracing::warn!(error = %e, "Heartbeat execution failed");
                     }
@@ -376,8 +376,8 @@ impl Scheduler {
         config: &Config,
         model_router: &ModelRouter,
         ledger: &Ledger,
-        entropy_provider: &Option<Arc<carnelian_magic::MixedEntropyProvider>>,
-        mantra_tree: &Option<Arc<carnelian_magic::MantraTree>>,
+        entropy_provider: Option<&Arc<carnelian_magic::MixedEntropyProvider>>,
+        mantra_tree: Option<&Arc<carnelian_magic::MantraTree>>,
     ) -> Result<()> {
         let start = std::time::Instant::now();
         
@@ -388,14 +388,15 @@ impl Scheduler {
                 provider.as_ref().get_bytes(16)
             ).await {
                 Ok(Ok(entropy_bytes)) => {
-                    if let Ok(bytes_array) = <[u8; 16]>::try_from(entropy_bytes.as_slice()) {
-                        let uuid = Uuid::from_bytes(bytes_array);
-                        tracing::debug!("Generated quantum-salted correlation ID");
-                        uuid
-                    } else {
-                        tracing::warn!("Failed to convert entropy bytes to UUID, falling back to rand");
-                        Uuid::from_bytes(rand::random())
-                    }
+                    <[u8; 16]>::try_from(entropy_bytes.as_slice())
+                        .map(|bytes_array| {
+                            tracing::debug!("Generated quantum-salted correlation ID");
+                            Uuid::from_bytes(bytes_array)
+                        })
+                        .unwrap_or_else(|_| {
+                            tracing::warn!("Failed to convert entropy bytes to UUID, falling back to rand");
+                            Uuid::from_bytes(rand::random())
+                        })
                 }
                 Ok(Err(e)) => {
                     tracing::warn!(error = %e, "Entropy provider failed, falling back to rand");
@@ -618,11 +619,12 @@ impl Scheduler {
             context_text
         };
 
-        let user_content = if let Some(ref selection) = mantra_selection {
-            selection.user_message.clone()
-        } else {
-            "Reflect briefly on the current state. Note any observations or planning thoughts. Keep it concise (2-3 sentences).".to_string()
-        };
+        let user_content = mantra_selection
+            .as_ref()
+            .map_or_else(
+                || "Reflect briefly on the current state. Note any observations or planning thoughts. Keep it concise (2-3 sentences).".to_string(),
+                |selection| selection.user_message.clone(),
+            );
 
         let request = CompletionRequest {
             model: "deepseek-r1:7b".to_string(),
@@ -847,7 +849,7 @@ impl Scheduler {
             .bind(fallback_entry_id.unwrap())
             .bind(None::<serde_json::Value>)  // No context snapshot for fallback
             .bind(None::<serde_json::Value>)  // No context weights for fallback
-            .bind(&Vec::<Uuid>::new())        // Empty suggested_skill_ids
+            .bind(Vec::<Uuid>::new())        // Empty suggested_skill_ids
             .bind(actual_entropy_source)
             .execute(pool)
             .await
@@ -1614,11 +1616,12 @@ impl Scheduler {
 
                         if let Some(ts) = started_at {
                             let result_text = serde_json::to_string(&result_json).unwrap_or_else(|_| "{}".to_string());
-                            let hasher = if let Some(provider) = entropy_provider {
-                                QuantumHasher::new(provider.clone())
-                            } else {
-                                QuantumHasher::with_os_entropy()
-                            };
+                            let hasher = entropy_provider
+                                .as_ref()
+                                .map_or_else(
+                                    QuantumHasher::with_os_entropy,
+                                    |provider| QuantumHasher::new(Arc::clone(provider)),
+                                );
                             match hasher.compute_with_ts("task_runs", run_id.0, result_text.as_bytes(), ts) {
                                 Ok(checksum) => {
                                     if let Err(e) = sqlx::query("UPDATE task_runs SET quantum_checksum = $1 WHERE run_id = $2")

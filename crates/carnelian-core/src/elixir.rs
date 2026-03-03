@@ -149,15 +149,13 @@ impl ElixirManager {
                     {
                         tracing::warn!(elixir_id = %elixir_id, error = %e, "Failed to store security hash and quantum checksum");
                     }
-                } else {
-                    if let Err(e) = sqlx::query("UPDATE elixirs SET quantum_checksum = $1 WHERE elixir_id = $2")
-                        .bind(&checksum)
-                        .bind(elixir_id)
-                        .execute(&mut *tx)
-                        .await
-                    {
-                        tracing::warn!(elixir_id = %elixir_id, error = %e, "Failed to store quantum checksum");
-                    }
+                } else if let Err(e) = sqlx::query("UPDATE elixirs SET quantum_checksum = $1 WHERE elixir_id = $2")
+                    .bind(&checksum)
+                    .bind(elixir_id)
+                    .execute(&mut *tx)
+                    .await
+                {
+                    tracing::warn!(elixir_id = %elixir_id, error = %e, "Failed to store quantum checksum");
                 }
             }
             Err(e) => {
@@ -432,15 +430,13 @@ impl ElixirManager {
                     {
                         tracing::warn!(elixir_id = %elixir_id, error = %e, "Failed to store security hash and quantum checksum");
                     }
-                } else {
-                    if let Err(e) = sqlx::query("UPDATE elixirs SET quantum_checksum = $1 WHERE elixir_id = $2")
-                        .bind(&checksum)
-                        .bind(elixir_id)
-                        .execute(&mut *tx)
-                        .await
-                    {
-                        tracing::warn!(elixir_id = %elixir_id, error = %e, "Failed to store quantum checksum");
-                    }
+                } else if let Err(e) = sqlx::query("UPDATE elixirs SET quantum_checksum = $1 WHERE elixir_id = $2")
+                    .bind(&checksum)
+                    .bind(elixir_id)
+                    .execute(&mut *tx)
+                    .await
+                {
+                    tracing::warn!(elixir_id = %elixir_id, error = %e, "Failed to store quantum checksum");
                 }
             }
             Err(e) => {

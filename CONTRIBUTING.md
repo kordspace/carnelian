@@ -299,7 +299,7 @@ This pattern follows the seed migration structure and ensures the category exist
 
 ### Writing a Quantum Circuit Skill (Python)
 
-Quantum circuit skills live under `skills/skill-book/quantum/` and integrate with the entropy provider chain.
+Quantum circuit skills live under `skills/python-registry/` and integrate with the entropy provider chain.
 
 #### Skill Types
 

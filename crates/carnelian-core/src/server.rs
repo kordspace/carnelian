@@ -7246,11 +7246,15 @@ async fn magic_entropy_log_handler(
         "#
     )
     .bind(limit)
-    .fetch_all(&*pool)
+    .fetch_all(pool)
     .await;
 
-    match result {
-        Ok(rows) => {
+    result.map_or_else(
+        |_| {
+            // Table doesn't exist yet, return empty array
+            (StatusCode::OK, Json(json!({"entries": []}))).into_response()
+        },
+        |rows| {
             let entries: Vec<serde_json::Value> = rows
                 .iter()
                 .map(|row| {
@@ -7264,12 +7268,8 @@ async fn magic_entropy_log_handler(
                 })
                 .collect();
             (StatusCode::OK, Json(json!({"entries": entries}))).into_response()
-        }
-        Err(_) => {
-            // Table doesn't exist yet, return empty array
-            (StatusCode::OK, Json(json!({"entries": []}))).into_response()
-        }
-    }
+        },
+    )
 }
 
 /// POST /v1/magic/elixirs/rehash - Rehash all elixirs with fresh entropy
@@ -7305,7 +7305,7 @@ async fn magic_elixirs_rehash_handler(State(state): State<AppState>) -> impl Int
         WHERE active = true
         "#
     )
-    .fetch_all(&*pool)
+    .fetch_all(pool)
     .await
     {
         Ok(rows) => rows,
@@ -7333,9 +7333,9 @@ async fn magic_elixirs_rehash_handler(State(state): State<AppState>) -> impl Int
                     WHERE elixir_id = $2
                     "#
                 )
-                .bind(&hex_hash)
-                .bind(&elixir_id)
-                .execute(&*pool)
+                .bind(hex_hash)
+                .bind(elixir_id)
+                .execute(pool)
                 .await
                 .is_ok()
                 {
@@ -7988,15 +7988,10 @@ async fn magic_auth_status_handler(State(state): State<AppState>) -> impl IntoRe
     .unwrap_or(None);
 
     let quantinuum_expiry_clone = quantinuum_expiry.clone();
-    let quantinuum_authenticated = if let Some((Some(expiry_str),)) = quantinuum_expiry_clone {
-        if let Ok(expiry) = chrono::DateTime::parse_from_rfc3339(&expiry_str) {
-            expiry.with_timezone(&chrono::Utc) > chrono::Utc::now()
-        } else {
-            false
-        }
-    } else {
-        false
-    };
+    let quantinuum_authenticated = quantinuum_expiry_clone
+        .and_then(|(expiry_str,)| expiry_str)
+        .and_then(|expiry_str| chrono::DateTime::parse_from_rfc3339(&expiry_str).ok())
+        .map_or(false, |expiry| expiry.with_timezone(&chrono::Utc) > chrono::Utc::now());
 
     let quantum_origin_configured: Option<(i64,)> = sqlx::query_as(
         "SELECT COUNT(*) FROM config_store WHERE key = $1",

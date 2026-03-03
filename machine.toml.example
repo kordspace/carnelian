@@ -232,6 +232,6 @@ device = "H1-1E"   # H1-1E (emulator, free), H1-1 (hardware), H2-1 (hardware)
 token = ""   # set via IBM_QUANTUM_TOKEN env var
 backend = "ibm_brisbane"
 
-# [magic.cors_origins]
+[magic.cors_origins]
 # Add extra CORS origins beyond localhost defaults
 # extra = ["https://your-domain.com"]
