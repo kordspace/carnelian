@@ -6,8 +6,8 @@ The following versions of CARNELIAN are currently supported with security update
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
-| < 0.1   | :x:                |
+| 1.0.x   | :white_check_mark: |
+| < 1.0   | :x:                |
 
 ## Reporting Security Vulnerabilities
 
@@ -101,6 +101,30 @@ CARNELIAN includes the following security features:
 - Read-only root filesystem support
 - Secret management
 
+## Post-Quantum Roadmap
+
+Carnelian OS v1.0.0 ships with classical **Ed25519** cryptography as the default signing algorithm. When MAGIC quantum entropy is enabled, Ed25519 keys are seeded from quantum sources, providing high-quality randomness but not quantum resistance against future attacks.
+
+The `carnelian-magic` crate contains **production-ready** post-quantum cryptographic primitives based on NIST-standardized algorithms:
+
+- **HybridSigningKey**: Combines CRYSTALS-Dilithium3 (quantum-resistant) with Ed25519 (classical) for dual-signature defense-in-depth
+- **KyberKem**: CRYSTALS-Kyber1024 key encapsulation mechanism for quantum-resistant key exchange
+
+These primitives are **fully implemented and tested** but ship as an opt-in feature targeted for activation in **v1.1.0**.
+
+### Migration Timeline
+
+- **v1.0.0** (Current): Ed25519 + MAGIC quantum seeding
+- **v1.1.0** (Q2 2026): Hybrid Dilithium3 + Ed25519 signatures (opt-in)
+- **v1.2.0** (Q3 2026): Kyber1024 KEM for encryption-at-rest
+- **v2.0.0** (Q4 2026): Pure post-quantum stack (Dilithium3 + Kyber1024)
+
+### Documentation
+
+- **Full Roadmap**: See `FUTURE_PQC.md` for detailed migration plan, CLI commands, and security considerations
+- **Architecture Review**: See `docs/SECURITY_ARCHITECTURE_REVIEW_V1.md` for comprehensive PQC analysis
+- **MAGIC Subsystem**: See `docs/MAGIC.md` for quantum entropy provider setup
+
 ## Known Security Considerations
 
 ### Current Limitations
@@ -140,5 +164,5 @@ For security issues only:
 
 ---
 
-**Last Updated**: 2026-02-26  
+**Last Updated**: 2026-03-03  
 **Version**: 1.0
