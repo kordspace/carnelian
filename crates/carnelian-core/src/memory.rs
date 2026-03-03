@@ -701,7 +701,7 @@ impl MemoryManager {
         // Compute quantum checksum for integrity verification
         let created_at: DateTime<Utc> = row.get("created_at");
         let hasher = QuantumHasher::with_os_entropy();
-        match hasher.compute("memories", memory_id, &content_bytes, created_at).await {
+        match hasher.compute_with_ts("memories", memory_id, &content_bytes, created_at) {
             Ok(checksum) => {
                 if let Err(e) = sqlx::query("UPDATE memories SET quantum_checksum = $1 WHERE memory_id = $2")
                     .bind(&checksum)

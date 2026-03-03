@@ -809,7 +809,7 @@ impl SessionManager {
             .await?;
         
         let hasher = QuantumHasher::with_os_entropy();
-        match hasher.compute("session_messages", message_uuid, content.as_bytes(), ts).await {
+        match hasher.compute_with_ts("session_messages", message_uuid, content.as_bytes(), ts) {
             Ok(checksum) => {
                 if let Err(e) = sqlx::query("UPDATE session_messages SET quantum_checksum = $1 WHERE message_id = $2")
                     .bind(&checksum)

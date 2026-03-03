@@ -1,26 +1,18 @@
-use crate::entropy::MixedEntropyProvider;
 use crate::error::Result;
 use blake3;
 use chrono::{DateTime, Utc};
 use hex;
-use std::sync::Arc;
 use uuid::Uuid;
 
-pub struct QuantumHasher {
-    entropy: Arc<MixedEntropyProvider>,
-}
+pub struct QuantumHasher;
 
 impl QuantumHasher {
-    pub fn new(entropy: Arc<MixedEntropyProvider>) -> Self {
-        Self { entropy }
+    pub fn new() -> Self {
+        Self
     }
 
     pub fn with_os_entropy() -> Self {
-        let node_id = uuid::Uuid::new_v4();
-        let mixed_provider = MixedEntropyProvider::new(None, None, None, node_id);
-        Self {
-            entropy: Arc::new(mixed_provider),
-        }
+        Self
     }
 
     fn derive_salt(
@@ -49,7 +41,8 @@ impl QuantumHasher {
         hex::encode(hash.as_bytes())
     }
 
-    pub async fn compute(
+    /// Compute checksum with explicit timestamp (for DB verification with fetched timestamps)
+    pub fn compute_with_ts(
         &self,
         table: &str,
         row_id: Uuid,
@@ -62,7 +55,8 @@ impl QuantumHasher {
         Ok(checksum)
     }
 
-    pub fn verify(
+    /// Verify checksum with explicit timestamp (for DB verification with fetched timestamps)
+    pub fn verify_with_ts(
         &self,
         table: &str,
         row_id: Uuid,
@@ -76,15 +70,50 @@ impl QuantumHasher {
         recomputed == stored
     }
 
-    pub async fn batch_compute(
+    /// Compute checksum using current timestamp (contract-compliant API)
+    /// 
+    /// **Note:** This uses `Utc::now()` for the timestamp. Only suitable for immediate
+    /// post-compute verification checks. For DB-backed verification, use `compute_with_ts`
+    /// with the row's actual creation timestamp.
+    pub fn compute(
         &self,
-        rows: Vec<(Uuid, Vec<u8>, DateTime<Utc>)>,
+        table: &str,
+        row_id: Uuid,
+        content: &[u8],
+    ) -> Result<String> {
+        self.compute_with_ts(table, row_id, content, Utc::now())
+    }
+
+    /// Verify checksum using current timestamp (contract-compliant API)
+    /// 
+    /// **Note:** This uses `Utc::now()` for the timestamp. Only suitable for immediate
+    /// post-compute verification checks. For DB-backed verification, use `verify_with_ts`
+    /// with the row's actual creation timestamp.
+    pub fn verify(
+        &self,
+        table: &str,
+        row_id: Uuid,
+        content: &[u8],
+        stored: &str,
+    ) -> bool {
+        self.verify_with_ts(table, row_id, content, Utc::now(), stored)
+    }
+
+    /// Batch compute checksums using current timestamp (contract-compliant API)
+    /// 
+    /// **Note:** This uses `Utc::now()` for all rows. Only suitable for immediate
+    /// batch operations. For DB-backed verification, use `compute_with_ts` per row
+    /// with actual creation timestamps.
+    pub fn batch_compute(
+        &self,
+        rows: Vec<(Uuid, Vec<u8>)>,
         table: &str,
     ) -> Vec<(Uuid, String)> {
         let mut results = Vec::new();
+        let now = Utc::now();
         
-        for (row_id, content, created_at) in rows {
-            match self.compute(table, row_id, &content, created_at).await {
+        for (row_id, content) in rows {
+            match self.compute_with_ts(table, row_id, &content, now) {
                 Ok(checksum) => results.push((row_id, checksum)),
                 Err(e) => {
                     tracing::warn!("Failed to compute checksum for row {}: {}", row_id, e);

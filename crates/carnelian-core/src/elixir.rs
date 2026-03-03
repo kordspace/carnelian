@@ -133,7 +133,7 @@ impl ElixirManager {
             .map_err(Error::Database)?;
         
         let hasher = QuantumHasher::with_os_entropy();
-        match hasher.compute("elixirs", elixir_id, &dataset_bytes, created_at).await {
+        match hasher.compute_with_ts("elixirs", elixir_id, &dataset_bytes, created_at) {
             Ok(checksum) => {
                 // Always write quantum_checksum; conditionally write security_integrity_hash
                 if let Some(salt) = quantum_salt {
@@ -414,7 +414,7 @@ impl ElixirManager {
             .map_err(Error::Database)?;
         
         let hasher = QuantumHasher::with_os_entropy();
-        match hasher.compute("elixirs", elixir_id, &dataset_bytes, created_at).await {
+        match hasher.compute_with_ts("elixirs", elixir_id, &dataset_bytes, created_at) {
             Ok(checksum) => {
                 // Always write quantum_checksum; conditionally write security_integrity_hash
                 if let Some(salt) = quantum_salt {

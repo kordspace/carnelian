@@ -1526,7 +1526,7 @@ impl Scheduler {
                         if let Some(ts) = started_at {
                             let result_bytes = serde_json::to_vec(&result_json).unwrap_or_default();
                             let hasher = QuantumHasher::with_os_entropy();
-                            match hasher.compute("task_runs", run_id.0, &result_bytes, ts).await {
+                            match hasher.compute_with_ts("task_runs", run_id.0, &result_bytes, ts) {
                                 Ok(checksum) => {
                                     if let Err(e) = sqlx::query("UPDATE task_runs SET quantum_checksum = $1 WHERE run_id = $2")
                                         .bind(&checksum)

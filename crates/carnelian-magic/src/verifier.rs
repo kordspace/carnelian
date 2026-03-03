@@ -57,25 +57,29 @@ impl QuantumIntegrityVerifier {
         Self { hasher }
     }
 
-    fn table_query(table: &str) -> Result<(&'static str, &'static str, &'static str)> {
+    fn table_query(table: &str) -> Result<(&'static str, &'static str, &'static str, &'static str)> {
         match table {
             "memories" => Ok((
                 "SELECT memory_id, content, quantum_checksum, created_at FROM memories",
+                "SELECT memory_id, content, created_at FROM memories",
                 "memory_id",
                 "content",
             )),
             "session_messages" => Ok((
                 "SELECT message_id, content, quantum_checksum, ts FROM session_messages",
+                "SELECT message_id, content, ts FROM session_messages",
                 "message_id",
                 "content",
             )),
             "elixirs" => Ok((
                 "SELECT elixir_id, dataset::text, quantum_checksum, created_at FROM elixirs",
+                "SELECT elixir_id, dataset::text, created_at FROM elixirs",
                 "elixir_id",
                 "dataset",
             )),
             "task_runs" => Ok((
                 "SELECT run_id, COALESCE(error, ''), quantum_checksum, started_at FROM task_runs",
+                "SELECT run_id, COALESCE(error, ''), started_at FROM task_runs",
                 "run_id",
                 "error",
             )),
@@ -87,17 +91,17 @@ impl QuantumIntegrityVerifier {
     }
 
     pub async fn verify_table(&self, table: &str, pool: &PgPool) -> Result<VerificationReport> {
-        let (select_sql, _pk_column, _content_column) = Self::table_query(table)?;
+        let (verify_sql, _backfill_sql, _pk_column, _content_column) = Self::table_query(table)?;
 
         let rows: Vec<(Uuid, Vec<u8>, Option<String>, DateTime<Utc>)> = match table {
             "memories" => sqlx::query_as::<_, (Uuid, Vec<u8>, Option<String>, DateTime<Utc>)>(
-                select_sql,
+                verify_sql,
             )
             .fetch_all(pool)
             .await?,
             "session_messages" => {
                 let rows_i64: Vec<(i64, String, Option<String>, DateTime<Utc>)> =
-                    sqlx::query_as::<_, (i64, String, Option<String>, DateTime<Utc>)>(select_sql)
+                    sqlx::query_as::<_, (i64, String, Option<String>, DateTime<Utc>)>(verify_sql)
                         .fetch_all(pool)
                         .await?;
                 rows_i64
@@ -109,7 +113,7 @@ impl QuantumIntegrityVerifier {
             }
             "elixirs" => {
                 let rows_str: Vec<(Uuid, String, Option<String>, DateTime<Utc>)> =
-                    sqlx::query_as::<_, (Uuid, String, Option<String>, DateTime<Utc>)>(select_sql)
+                    sqlx::query_as::<_, (Uuid, String, Option<String>, DateTime<Utc>)>(verify_sql)
                         .fetch_all(pool)
                         .await?;
                 rows_str
@@ -121,7 +125,7 @@ impl QuantumIntegrityVerifier {
             }
             "task_runs" => {
                 let rows_str: Vec<(Uuid, String, Option<String>, DateTime<Utc>)> =
-                    sqlx::query_as::<_, (Uuid, String, Option<String>, DateTime<Utc>)>(select_sql)
+                    sqlx::query_as::<_, (Uuid, String, Option<String>, DateTime<Utc>)>(verify_sql)
                         .fetch_all(pool)
                         .await?;
                 rows_str
@@ -141,7 +145,7 @@ impl QuantumIntegrityVerifier {
 
         for (row_id, content, quantum_checksum, created_at) in rows {
             if let Some(stored_checksum) = quantum_checksum {
-                let is_valid = self.hasher.verify(
+                let is_valid = self.hasher.verify_with_ts(
                     table,
                     row_id,
                     &content,
@@ -212,19 +216,19 @@ impl QuantumIntegrityVerifier {
         row_id: RowIdentifier,
         pool: &PgPool,
     ) -> Result<Option<TamperedRow>> {
-        let (select_sql, _pk_column, _content_column) = Self::table_query(table)?;
+        let (verify_sql, _backfill_sql, _pk_column, _content_column) = Self::table_query(table)?;
         let uuid_id = row_id.to_uuid();
 
         let row: Option<(Uuid, Vec<u8>, Option<String>, DateTime<Utc>)> = match table {
             "memories" => sqlx::query_as::<_, (Uuid, Vec<u8>, Option<String>, DateTime<Utc>)>(
-                &format!("{} WHERE memory_id = $1", select_sql),
+                &format!("{} WHERE memory_id = $1", verify_sql),
             )
             .bind(uuid_id)
             .fetch_optional(pool)
             .await?,
             "session_messages" => {
                 let row_i64: Option<(i64, String, Option<String>, DateTime<Utc>)> =
-                    sqlx::query_as(&format!("{} WHERE message_id = $1", select_sql))
+                    sqlx::query_as(&format!("{} WHERE message_id = $1", verify_sql))
                         .bind(uuid_id.as_u128() as i64)
                         .fetch_optional(pool)
                         .await?;
@@ -234,7 +238,7 @@ impl QuantumIntegrityVerifier {
             }
             "elixirs" => {
                 let row_str: Option<(Uuid, String, Option<String>, DateTime<Utc>)> =
-                    sqlx::query_as(&format!("{} WHERE elixir_id = $1", select_sql))
+                    sqlx::query_as(&format!("{} WHERE elixir_id = $1", verify_sql))
                         .bind(uuid_id)
                         .fetch_optional(pool)
                         .await?;
@@ -244,7 +248,7 @@ impl QuantumIntegrityVerifier {
             }
             "task_runs" => {
                 let row_str: Option<(Uuid, String, Option<String>, DateTime<Utc>)> =
-                    sqlx::query_as(&format!("{} WHERE run_id = $1", select_sql))
+                    sqlx::query_as(&format!("{} WHERE run_id = $1", verify_sql))
                         .bind(uuid_id)
                         .fetch_optional(pool)
                         .await?;
@@ -260,7 +264,7 @@ impl QuantumIntegrityVerifier {
 
         if let Some((row_id, content, quantum_checksum, created_at)) = row {
             if let Some(stored_checksum) = quantum_checksum {
-                let is_valid = self.hasher.verify(
+                let is_valid = self.hasher.verify_with_ts(
                     table,
                     row_id,
                     &content,
@@ -306,9 +310,9 @@ impl QuantumIntegrityVerifier {
     }
 
     pub async fn backfill_missing(&self, table: &str, pool: &PgPool) -> Result<u64> {
-        let (select_sql, pk_column, _content_column) = Self::table_query(table)?;
+        let (_verify_sql, backfill_sql, pk_column, _content_column) = Self::table_query(table)?;
 
-        let query = format!("{} WHERE quantum_checksum IS NULL", select_sql);
+        let query = format!("{} WHERE quantum_checksum IS NULL", backfill_sql);
 
         let rows: Vec<(Uuid, Vec<u8>, DateTime<Utc>)> = match table {
             "memories" => sqlx::query_as::<_, (Uuid, Vec<u8>, DateTime<Utc>)>(&query)
@@ -353,8 +357,7 @@ impl QuantumIntegrityVerifier {
         for (row_id, content, created_at) in rows {
             match self
                 .hasher
-                .compute(table, row_id, &content, created_at)
-                .await
+                .compute_with_ts(table, row_id, &content, created_at)
             {
                 Ok(checksum) => {
                     let update_query = format!(
