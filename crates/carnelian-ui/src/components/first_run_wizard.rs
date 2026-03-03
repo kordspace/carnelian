@@ -460,7 +460,6 @@ fn Step6MagicSetup() -> Element {
     let mut quantum_origin_key = use_signal(String::new);
     let mut quantinuum_email = use_signal(String::new);
     let mut quantinuum_password = use_signal(String::new);
-    let mut ibm_token = use_signal(String::new);
     let mut auth_status = use_signal(|| None::<carnelian_common::types::MagicAuthStatusResponse>);
     let mut loading = use_signal(|| false);
     let mut feedback = use_signal(String::new);
@@ -519,10 +518,28 @@ fn Step6MagicSetup() -> Element {
             match api::magic_update_config(None, None, Some(true)).await {
                 Ok(_) => {
                     match api::magic_entropy_health().await {
-                        Ok(_) => {
-                            feedback.set("IBM Quantum connection verified ✓".to_string());
+                        Ok(health) => {
+                            // Validate provider-specific readiness from health payload
+                            let qiskit_available = health.get("qiskit-rng")
+                                .and_then(|v| v.get("available"))
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false);
+                            
+                            if qiskit_available {
+                                feedback.set("IBM Quantum (Qiskit) provider verified ✓".to_string());
+                            } else {
+                                // Provider not ready - revert qiskit_enabled
+                                let _ = api::magic_update_config(None, None, Some(false)).await;
+                                let error_msg = health.get("qiskit-rng")
+                                    .and_then(|v| v.get("error"))
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("Provider not available");
+                                feedback.set(format!("IBM Quantum provider not ready: {}", error_msg));
+                            }
                         }
                         Err(e) => {
+                            // Revert qiskit_enabled on health check failure
+                            let _ = api::magic_update_config(None, None, Some(false)).await;
                             feedback.set(format!("Connection test failed: {}", e));
                         }
                     }
@@ -632,23 +649,17 @@ fn Step6MagicSetup() -> Element {
 
             // IBM Quantum Section
             div { class: "provider-section",
-                h4 { "IBM Quantum" }
-                input {
-                    r#type: "password",
-                    value: "{ibm_token}",
-                    oninput: move |e| ibm_token.set(e.value().clone()),
-                    placeholder: "IBM Quantum Token",
-                    disabled: *loading.read()
-                }
+                h4 { "IBM Quantum (Qiskit)" }
+                p { class: "provider-note", "Enable Qiskit RNG provider (requires qiskit installation)" }
                 div { class: "button-group",
                     button {
                         onclick: move |_| test_ibm_connection(),
-                        disabled: *loading.read() || ibm_token.read().is_empty(),
-                        "Test Connection"
+                        disabled: *loading.read(),
+                        "Enable & Test Provider"
                     }
                     button {
                         class: "btn-secondary",
-                        onclick: move |_| ibm_token.set(String::new()),
+                        onclick: move |_| feedback.set(String::new()),
                         "Skip"
                     }
                 }
