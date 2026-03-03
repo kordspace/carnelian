@@ -3,5 +3,7 @@
   "description": "Quantum entropy generation via Quantinuum H-series pytket circuits",
   "runtime": "python",
   "version": "1.0.0",
-  "capabilities_required": []
+  "capabilities_required": [],
+  "category": "quantum",
+  "required_config": ["QUANTINUUM_DEVICE"]
 }
