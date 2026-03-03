@@ -343,9 +343,9 @@ The `MantraTree` maintains a cooldown map to prevent the same category from firi
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/v1/magic/mantras` | List all categories with entry counts and weights |
-| `GET` | `/v1/magic/mantras/{category_id}` | List entries for a specific category |
-| `POST` | `/v1/magic/mantras` | Add a new entry (`text`, optional `elixir_id`) |
-| `PATCH` | `/v1/magic/mantras/{entry_id}` | Edit text, weight, or disable an entry |
+| `GET` | `/v1/magic/mantras/categories/{category_id}` | List entries for a specific category |
+| `POST` | `/v1/magic/mantras/categories/{category_id}/entries` | Add a new entry (`text`, optional `elixir_id`) |
+| `PATCH` | `/v1/magic/mantras/entries/{entry_id}` | Edit entry (`text`, `enabled`, `elixir_id`) |
 | `GET` | `/v1/magic/mantras/history` | Last 10 rows from `mantra_history` |
 | `POST` | `/v1/magic/mantras/simulate` | Dry-run `MantraTree::select_with_pool` with current context |
 
@@ -378,12 +378,11 @@ curl http://localhost:8080/v1/magic/mantras
 
 **Add new mantra:**
 ```bash
-curl -X POST http://localhost:8080/v1/magic/mantras \
+curl -X POST http://localhost:8080/v1/magic/mantras/categories/focus/entries \
   -H "Content-Type: application/json" \
   -d '{
-    "category": "focus",
     "text": "Prioritize clarity and precision in your reasoning",
-    "weight": 10
+    "elixir_id": null
   }'
 ```
 
@@ -475,7 +474,7 @@ curl http://localhost:8080/v1/magic/config
 
 **Update configuration:**
 ```bash
-curl -X PATCH http://localhost:8080/v1/magic/config \
+curl -X POST http://localhost:8080/v1/magic/config \
   -H "Content-Type: application/json" \
   -d '{
     "quantum_origin_api_key": "your-key-here",
@@ -486,12 +485,15 @@ curl -X PATCH http://localhost:8080/v1/magic/config \
 
 **UI Access:**
 
-The **Elixir & Skill Integration** sub-tab in the MAGIC UI panel provides:
-- Toggle switches for per-elixir entropy
-- Rehash button for existing elixirs
-- List of skills that support entropy seeding
-- Per-skill entropy toggle (future feature)
+The **Elixir & Skill Integration** sub-tab in the MAGIC UI panel currently provides:
+- Rehash button for existing elixirs with fresh quantum entropy
+- Mantra category browser with entry counts and weights
 - Real-time integration status
+
+**Future Features (Roadmap):**
+- Toggle switches for per-elixir entropy
+- List of skills that support entropy seeding
+- Per-skill entropy toggle controls
 
 ### Configuration Parameters
 
@@ -505,6 +507,6 @@ The **Elixir & Skill Integration** sub-tab in the MAGIC UI panel provides:
 ### Security Considerations
 
 - **API Key Storage** — Quantum Origin API keys are stored in `machine.toml` or environment variables, never in the database
-- **Token Expiry** — Quantinuum tokens expire after 24 hours and must be refreshed via `carnelian magic auth --refresh`
+- **Token Expiry** — Quantinuum tokens expire after 1 hour and must be refreshed via `carnelian magic auth --refresh`
 - **Entropy Logging** — All entropy requests are logged with timestamps, sources, and byte counts for audit purposes
 - **Fallback Safety** — If all quantum providers fail, the system falls back to OS random to prevent service disruption
