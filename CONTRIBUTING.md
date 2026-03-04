@@ -4,11 +4,11 @@ Thank you for your interest in contributing to Carnelian Core! We welcome contri
 
 ## Open Source & Licensing
 
-**Carnelian Core is open source software** authored by **Marco Julio Lopes**.
+**Carnelian is open source software** authored by **Marco Lopes**.
 
 - **Free for Personal Use**: Anyone can use Carnelian Core for personal, educational, and non-commercial purposes without any license fees.
 - **Commercial Use**: Requires a commercial license from Kordspace LLC. Contact info@kordspace.com with your use case.
-- **Custodianship**: Kordspace LLC serves as the custodian of Carnelian Core assets, providing IP protection, security auditing, commercial licensing, and community stewardship.
+- **Custodianship**: Kordspace LLC serves as the custodian of all Carnelian assets, providing IP protection, security auditing, commercial licensing, and community stewardship.
 
 ### Contributor License Agreement (CLA)
 

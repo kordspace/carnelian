@@ -1,12 +1,12 @@
-# Carnelian Core License
+# Carnelian License
 
-**Copyright © 2026 Marco Julio Lopes. All Rights Reserved.**
+**Copyright © 2026 Kordspace LLC. All Rights Reserved.**
 
 ---
 
 ## Open Source Software — Free for Personal Use
 
-Carnelian Core is **open source software** authored by **Marco Julio Lopes**. The source code is publicly available for transparency, learning, and community collaboration.
+Carnelian is **open source software** authored by **Marco Lopes**. The source code is publicly available for transparency, learning, and community collaboration.
 
 ### Free Personal Use
 
@@ -72,7 +72,7 @@ are the subject of pending patent applications and/or trade secret protection.
 
 By contributing code, documentation, or other materials to Carnelian Core, you agree that:
 
-1. **Grant of Rights**: You grant Marco Julio Lopes and Kordspace LLC a perpetual, worldwide, non-exclusive, royalty-free, irrevocable license to use, reproduce, modify, display, perform, sublicense, and distribute your contributions.
+1. **Grant of Rights**: You grant Kordspace LLC a perpetual, worldwide, non-exclusive, royalty-free, irrevocable license to use, reproduce, modify, display, perform, sublicense, and distribute your contributions.
 
 2. **Original Work**: Your contributions are your original work and do not infringe on any third-party intellectual property rights.
 
@@ -106,7 +106,7 @@ Co-authors receive:
 - Participation in technical decision-making processes
 - Shared stewardship of the project's direction
 
-Co-authorship decisions are made by Marco Julio Lopes and Kordspace LLC after thorough review of contribution history and impact.
+Co-authorship decisions are made by Marco Lopes and Kordspace LLC after thorough review of contribution history and impact.
 
 ---
 
@@ -202,8 +202,8 @@ These individuals represent the collaborative spirit of innovation and mentorshi
 
 ## Contact Information
 
-- **Author**: Marco Julio Lopes
-- **Commercial Licensing**: info@kordspace.com
+- **Author**: Marco Lopes
+- **Commercial Licensing**: marco@kordspace.com
 - **Project Repository**: https://github.com/kordspace/carnelian
 - **Website**: https://kordspace.com
 

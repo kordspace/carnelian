@@ -172,7 +172,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added — Documentation & Release
 
-- **LICENSE.md** — Proprietary license with Marco Julio Lopes and Kordspace LLC attribution, patent-pending notice, CLA requirements
+- **LICENSE.md** — Proprietary license with Kordspace LLC attribution, patent-pending notice, CLA requirements
 - **CHANGELOG.md** — Full v1.0.0 release notes (this file)
 - **ARCHITECTURE.md** — Updated with `carnelian-magic` component, quantum providers section, accurate counts
 - **API.md** — Complete endpoint inventory (65+ endpoints) with phase annotations, MAGIC and Elixir sections

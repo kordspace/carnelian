@@ -12,7 +12,7 @@
 <p align="center">An AI workspace harness built in Rust — orchestrating autonomous agents with capability-based security, event-stream architecture, and local-first execution.</p>
 
 <p align="center">
-  <strong>Copyright © 2026 Marco Julio Lopes and Kordspace LLC</strong><br>
+  <strong>Copyright © 2026 Marco Lopes and Kordspace LLC</strong><br>
   <a href="LICENSE.md">Proprietary License</a> | Patent Pending
 </p>
 
@@ -1144,7 +1144,7 @@ Carnelian was inspired by OpenClaw, an AI agent framework created by Peter Stein
 
 ## 📜 License
 
-**Copyright © 2026 Marco Julio Lopes and Kordspace LLC**
+**Copyright © 2026 Kordspace LLC**
 
 Carnelian is open source software with commercial licensing options available.
 
