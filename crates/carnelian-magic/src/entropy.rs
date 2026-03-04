@@ -443,16 +443,11 @@ impl MixedEntropyProvider {
         );
 
         // Collect results in order: OS first, then quantum providers
+        // Use into_iter() to flatten Option<EntropyHealth> into the Vec
         let mut health = vec![os_health];
-        if let Some(h) = qo_health {
-            health.push(h);
-        }
-        if let Some(h) = qh_health {
-            health.push(h);
-        }
-        if let Some(h) = qk_health {
-            health.push(h);
-        }
+        health.extend(qo_health.into_iter());
+        health.extend(qh_health.into_iter());
+        health.extend(qk_health.into_iter());
 
         health
     }
