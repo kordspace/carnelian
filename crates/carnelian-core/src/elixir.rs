@@ -126,12 +126,13 @@ impl ElixirManager {
 
         // Compute quantum checksum and optionally security_integrity_hash
         let dataset_bytes = serde_json::to_vec(&req.dataset).unwrap_or_default();
-        let created_at: DateTime<Utc> = sqlx::query_scalar("SELECT created_at FROM elixirs WHERE elixir_id = $1")
-            .bind(elixir_id)
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(Error::Database)?;
-        
+        let created_at: DateTime<Utc> =
+            sqlx::query_scalar("SELECT created_at FROM elixirs WHERE elixir_id = $1")
+                .bind(elixir_id)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(Error::Database)?;
+
         // Hash the canonical DB representation (dataset::text) for alignment with verifier
         let dataset_text = serde_json::to_string(&req.dataset).unwrap_or_default();
         let hasher = QuantumHasher::with_os_entropy();
@@ -149,11 +150,12 @@ impl ElixirManager {
                     {
                         tracing::warn!(elixir_id = %elixir_id, error = %e, "Failed to store security hash and quantum checksum");
                     }
-                } else if let Err(e) = sqlx::query("UPDATE elixirs SET quantum_checksum = $1 WHERE elixir_id = $2")
-                    .bind(&checksum)
-                    .bind(elixir_id)
-                    .execute(&mut *tx)
-                    .await
+                } else if let Err(e) =
+                    sqlx::query("UPDATE elixirs SET quantum_checksum = $1 WHERE elixir_id = $2")
+                        .bind(&checksum)
+                        .bind(elixir_id)
+                        .execute(&mut *tx)
+                        .await
                 {
                     tracing::warn!(elixir_id = %elixir_id, error = %e, "Failed to store quantum checksum");
                 }
@@ -163,11 +165,13 @@ impl ElixirManager {
                 // Still write security_integrity_hash if salt is provided
                 if let Some(salt) = quantum_salt {
                     let hash = compute_integrity_index(&dataset_bytes, Some(&salt));
-                    if let Err(e) = sqlx::query("UPDATE elixirs SET security_integrity_hash = $1 WHERE elixir_id = $2")
-                        .bind(&hash)
-                        .bind(elixir_id)
-                        .execute(&mut *tx)
-                        .await
+                    if let Err(e) = sqlx::query(
+                        "UPDATE elixirs SET security_integrity_hash = $1 WHERE elixir_id = $2",
+                    )
+                    .bind(&hash)
+                    .bind(elixir_id)
+                    .execute(&mut *tx)
+                    .await
                     {
                         tracing::warn!(elixir_id = %elixir_id, error = %e, "Failed to store security hash");
                     }
@@ -407,12 +411,13 @@ impl ElixirManager {
         .map_err(Error::Database)?;
 
         // Compute quantum checksum and optionally security_integrity_hash
-        let created_at: DateTime<Utc> = sqlx::query_scalar("SELECT created_at FROM elixirs WHERE elixir_id = $1")
-            .bind(elixir_id)
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(Error::Database)?;
-        
+        let created_at: DateTime<Utc> =
+            sqlx::query_scalar("SELECT created_at FROM elixirs WHERE elixir_id = $1")
+                .bind(elixir_id)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(Error::Database)?;
+
         // Hash the canonical DB representation (dataset::text) for alignment with verifier
         let dataset_text = serde_json::to_string(&dataset).unwrap_or_default();
         let hasher = QuantumHasher::with_os_entropy();
@@ -430,11 +435,12 @@ impl ElixirManager {
                     {
                         tracing::warn!(elixir_id = %elixir_id, error = %e, "Failed to store security hash and quantum checksum");
                     }
-                } else if let Err(e) = sqlx::query("UPDATE elixirs SET quantum_checksum = $1 WHERE elixir_id = $2")
-                    .bind(&checksum)
-                    .bind(elixir_id)
-                    .execute(&mut *tx)
-                    .await
+                } else if let Err(e) =
+                    sqlx::query("UPDATE elixirs SET quantum_checksum = $1 WHERE elixir_id = $2")
+                        .bind(&checksum)
+                        .bind(elixir_id)
+                        .execute(&mut *tx)
+                        .await
                 {
                     tracing::warn!(elixir_id = %elixir_id, error = %e, "Failed to store quantum checksum");
                 }
@@ -444,11 +450,13 @@ impl ElixirManager {
                 // Still write security_integrity_hash if salt is provided
                 if let Some(salt) = quantum_salt {
                     let hash = compute_integrity_index(&dataset_bytes, Some(&salt));
-                    if let Err(e) = sqlx::query("UPDATE elixirs SET security_integrity_hash = $1 WHERE elixir_id = $2")
-                        .bind(&hash)
-                        .bind(elixir_id)
-                        .execute(&mut *tx)
-                        .await
+                    if let Err(e) = sqlx::query(
+                        "UPDATE elixirs SET security_integrity_hash = $1 WHERE elixir_id = $2",
+                    )
+                    .bind(&hash)
+                    .bind(elixir_id)
+                    .execute(&mut *tx)
+                    .await
                     {
                         tracing::warn!(elixir_id = %elixir_id, error = %e, "Failed to store security hash");
                     }

@@ -54,24 +54,22 @@ impl ContextAnalyzer {
         message_limit: i64,
     ) -> Result<Vec<ActionItem>> {
         // Fetch recent messages from session
-        let messages = self.fetch_recent_messages(session_id, message_limit).await?;
-        
+        let messages = self
+            .fetch_recent_messages(session_id, message_limit)
+            .await?;
+
         if messages.is_empty() {
             return Ok(Vec::new());
         }
 
         // Extract action items using pattern matching
         let action_items = self.extract_action_items(&messages).await?;
-        
+
         Ok(action_items)
     }
 
     /// Fetch recent messages from a session
-    async fn fetch_recent_messages(
-        &self,
-        session_id: Uuid,
-        limit: i64,
-    ) -> Result<Vec<String>> {
+    async fn fetch_recent_messages(&self, session_id: Uuid, limit: i64) -> Result<Vec<String>> {
         let rows = sqlx::query!(
             r#"
             SELECT content
@@ -93,10 +91,10 @@ impl ContextAnalyzer {
     /// Extract action items from messages using pattern matching
     async fn extract_action_items(&self, messages: &[String]) -> Result<Vec<ActionItem>> {
         let mut action_items = Vec::new();
-        
+
         // Combine messages into context
         let context = messages.join("\n\n");
-        
+
         // Pattern matching for common action item indicators
         let patterns = [
             ("TODO:", 3),
@@ -124,7 +122,7 @@ impl ContextAnalyzer {
 
         // Deduplicate similar items
         self.deduplicate_items(&mut action_items);
-        
+
         Ok(action_items)
     }
 
@@ -138,13 +136,13 @@ impl ContextAnalyzer {
         // Find the pattern in context
         let lower_context = context.to_lowercase();
         let pattern_lower = pattern.to_lowercase();
-        
+
         if let Some(pos) = lower_context.find(&pattern_lower) {
             // Extract surrounding context (up to 200 chars after pattern)
             let start = pos;
             let end = (pos + 200).min(context.len());
             let excerpt = &context[start..end];
-            
+
             // Extract first sentence as title
             let title = excerpt
                 .lines()
@@ -154,7 +152,7 @@ impl ContextAnalyzer {
                 .chars()
                 .take(100)
                 .collect::<String>();
-            
+
             if title.len() < 10 {
                 return None; // Too short to be meaningful
             }
@@ -246,12 +244,13 @@ impl ContextAnalyzer {
     /// Number of tasks created
     pub async fn analyze_and_create_tasks(&self, session_id: Uuid) -> Result<usize> {
         let action_items = self.analyze_session(session_id, 10).await?;
-        
+
         if action_items.is_empty() {
             return Ok(0);
         }
 
-        self.create_tasks_from_items(session_id, &action_items).await
+        self.create_tasks_from_items(session_id, &action_items)
+            .await
     }
 }
 
@@ -274,7 +273,7 @@ mod tests {
 
         let context = "We need to implement the new authentication system with OAuth2 support";
         let item = analyzer.extract_item_from_pattern(context, "implement", 3);
-        
+
         assert!(item.is_some());
         let item = item.unwrap();
         assert!(item.title.contains("implement"));

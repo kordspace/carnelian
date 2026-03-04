@@ -845,7 +845,13 @@ fn AuthSettings(toasts: Signal<Vec<ToastMessage>>) -> Element {
             } else {
                 Some(origin_key.read().clone())
             };
-            match api::magic_update_config(key, Some(*quantinuum_on.read()), Some(*qiskit_on.read())).await {
+            match api::magic_update_config(
+                key,
+                Some(*quantinuum_on.read()),
+                Some(*qiskit_on.read()),
+            )
+            .await
+            {
                 Ok(_) => {
                     toasts.write().push(ToastMessage {
                         id: Uuid::new_v4().to_string(),

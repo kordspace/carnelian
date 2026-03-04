@@ -57,7 +57,9 @@ impl QuantumIntegrityVerifier {
         Self { hasher }
     }
 
-    fn table_query(table: &str) -> Result<(&'static str, &'static str, &'static str, &'static str)> {
+    fn table_query(
+        table: &str,
+    ) -> Result<(&'static str, &'static str, &'static str, &'static str)> {
         match table {
             "memories" => Ok((
                 "SELECT memory_id, content, quantum_checksum, created_at FROM memories",
@@ -93,15 +95,15 @@ impl QuantumIntegrityVerifier {
     #[allow(clippy::too_many_lines)]
     pub async fn verify_table(&self, table: &str, pool: &PgPool) -> Result<VerificationReport> {
         type RowData = (Uuid, Vec<u8>, Option<String>, DateTime<Utc>);
-        
+
         let (verify_sql, _backfill_sql, _pk_column, _content_column) = Self::table_query(table)?;
 
         let rows: Vec<RowData> = match table {
-            "memories" => sqlx::query_as::<_, (Uuid, Vec<u8>, Option<String>, DateTime<Utc>)>(
-                verify_sql,
-            )
-            .fetch_all(pool)
-            .await?,
+            "memories" => {
+                sqlx::query_as::<_, (Uuid, Vec<u8>, Option<String>, DateTime<Utc>)>(verify_sql)
+                    .fetch_all(pool)
+                    .await?
+            }
             "session_messages" => {
                 let rows_i64: Vec<(i64, String, Option<String>, DateTime<Utc>)> =
                     sqlx::query_as::<_, (i64, String, Option<String>, DateTime<Utc>)>(verify_sql)
@@ -110,7 +112,12 @@ impl QuantumIntegrityVerifier {
                 rows_i64
                     .into_iter()
                     .map(|(id, content, checksum, created_at)| {
-                        (Uuid::from_u128(id as u128), content.into_bytes(), checksum, created_at)
+                        (
+                            Uuid::from_u128(id as u128),
+                            content.into_bytes(),
+                            checksum,
+                            created_at,
+                        )
                     })
                     .collect()
             }
@@ -159,8 +166,7 @@ impl QuantumIntegrityVerifier {
                 if is_valid {
                     verified_rows += 1;
                 } else {
-                    let mut hasher =
-                        blake3::Hasher::new_derive_key("carnelian-quantum-salt-v1");
+                    let mut hasher = blake3::Hasher::new_derive_key("carnelian-quantum-salt-v1");
                     hasher.update(row_id.as_bytes());
                     hasher.update(table.as_bytes());
                     let timestamp_nanos = created_at.timestamp_nanos_opt().unwrap_or(0);
@@ -180,7 +186,7 @@ impl QuantumIntegrityVerifier {
                     } else {
                         RowIdentifier::Uuid(row_id)
                     };
-                    
+
                     tampered_rows.push(TamperedRow {
                         row_id: row_identifier,
                         table: table.to_string(),
@@ -220,17 +226,20 @@ impl QuantumIntegrityVerifier {
         pool: &PgPool,
     ) -> Result<Option<TamperedRow>> {
         type RowData = (Uuid, Vec<u8>, Option<String>, DateTime<Utc>);
-        
+
         let (verify_sql, _backfill_sql, _pk_column, _content_column) = Self::table_query(table)?;
         let uuid_id = row_id.to_uuid();
 
         let row: Option<RowData> = match table {
-            "memories" => sqlx::query_as::<_, (Uuid, Vec<u8>, Option<String>, DateTime<Utc>)>(
-                &format!("{} WHERE memory_id = $1", verify_sql),
-            )
-            .bind(uuid_id)
-            .fetch_optional(pool)
-            .await?,
+            "memories" => {
+                sqlx::query_as::<_, (Uuid, Vec<u8>, Option<String>, DateTime<Utc>)>(&format!(
+                    "{} WHERE memory_id = $1",
+                    verify_sql
+                ))
+                .bind(uuid_id)
+                .fetch_optional(pool)
+                .await?
+            }
             "session_messages" => {
                 let row_i64: Option<(i64, String, Option<String>, DateTime<Utc>)> =
                     sqlx::query_as(&format!("{} WHERE message_id = $1", verify_sql))
@@ -238,7 +247,12 @@ impl QuantumIntegrityVerifier {
                         .fetch_optional(pool)
                         .await?;
                 row_i64.map(|(id, content, checksum, created_at)| {
-                    (Uuid::from_u128(id as u128), content.into_bytes(), checksum, created_at)
+                    (
+                        Uuid::from_u128(id as u128),
+                        content.into_bytes(),
+                        checksum,
+                        created_at,
+                    )
                 })
             }
             "elixirs" => {
@@ -261,24 +275,21 @@ impl QuantumIntegrityVerifier {
                     (id, content.into_bytes(), checksum, created_at)
                 })
             }
-            _ => return Err(MagicError::ProviderError {
-                provider: "verifier".to_string(),
-                message: format!("Unknown table: {}", table),
-            }),
+            _ => {
+                return Err(MagicError::ProviderError {
+                    provider: "verifier".to_string(),
+                    message: format!("Unknown table: {}", table),
+                });
+            }
         };
 
         if let Some((row_id, content, Some(stored_checksum), created_at)) = row {
-            let is_valid = self.hasher.verify_with_ts(
-                table,
-                row_id,
-                &content,
-                created_at,
-                &stored_checksum,
-            );
+            let is_valid =
+                self.hasher
+                    .verify_with_ts(table, row_id, &content, created_at, &stored_checksum);
 
             if !is_valid {
-                let mut hasher =
-                    blake3::Hasher::new_derive_key("carnelian-quantum-salt-v1");
+                let mut hasher = blake3::Hasher::new_derive_key("carnelian-quantum-salt-v1");
                 hasher.update(row_id.as_bytes());
                 hasher.update(table.as_bytes());
                 let timestamp_nanos = created_at.timestamp_nanos_opt().unwrap_or(0);
@@ -319,16 +330,22 @@ impl QuantumIntegrityVerifier {
         let query = format!("{} WHERE quantum_checksum IS NULL", backfill_sql);
 
         let rows: Vec<(Uuid, Vec<u8>, DateTime<Utc>)> = match table {
-            "memories" => sqlx::query_as::<_, (Uuid, Vec<u8>, DateTime<Utc>)>(&query)
-                .fetch_all(pool)
-                .await?,
+            "memories" => {
+                sqlx::query_as::<_, (Uuid, Vec<u8>, DateTime<Utc>)>(&query)
+                    .fetch_all(pool)
+                    .await?
+            }
             "session_messages" => {
                 let rows_i64: Vec<(i64, String, DateTime<Utc>)> =
                     sqlx::query_as(&query).fetch_all(pool).await?;
                 rows_i64
                     .into_iter()
                     .map(|(id, content, created_at)| {
-                        (Uuid::from_u128(id as u128), content.into_bytes(), created_at)
+                        (
+                            Uuid::from_u128(id as u128),
+                            content.into_bytes(),
+                            created_at,
+                        )
                     })
                     .collect()
             }
@@ -352,7 +369,7 @@ impl QuantumIntegrityVerifier {
                 return Err(MagicError::ProviderError {
                     provider: "verifier".to_string(),
                     message: format!("Unknown table: {}", table),
-                })
+                });
             }
         };
 

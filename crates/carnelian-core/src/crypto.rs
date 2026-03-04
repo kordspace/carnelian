@@ -35,7 +35,7 @@
 //! - Hybrid keys provide quantum resistance when MAGIC entropy is available
 
 use carnelian_common::{Error, Result};
-use carnelian_magic::{EntropyProvider, HybridSigningKey, HybridSignature, KeyAlgorithm};
+use carnelian_magic::{EntropyProvider, HybridSignature, HybridSigningKey, KeyAlgorithm};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::rngs::OsRng;
 use sqlx::PgPool;
@@ -71,9 +71,9 @@ pub async fn generate_ed25519_keypair_with_entropy(
         .await
         .map_err(|e| Error::Crypto(format!("Entropy provider failed: {}", e)))?;
 
-    let seed: [u8; 32] = entropy_bytes
-        .try_into()
-        .map_err(|_| Error::Crypto("Failed to convert entropy bytes to 32-byte seed".to_string()))?;
+    let seed: [u8; 32] = entropy_bytes.try_into().map_err(|_| {
+        Error::Crypto("Failed to convert entropy bytes to 32-byte seed".to_string())
+    })?;
 
     let signing_key = SigningKey::from_bytes(&seed);
     let verifying_key = signing_key.verifying_key();
@@ -311,7 +311,7 @@ pub async fn store_hybrid_keypair_in_db(
     // Serialize hybrid key (store Ed25519 seed + Dilithium keys)
     let public_keys = key.public_keys();
     let ed25519_seed = key.ed25519_sk.to_bytes();
-    
+
     // Store in config_store with key_algorithm
     sqlx::query(
         r"INSERT INTO config_store (key, value, value_blob, encrypted, key_algorithm, updated_at)

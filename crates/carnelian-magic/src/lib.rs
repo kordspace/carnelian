@@ -36,51 +36,28 @@
 //! - Mixed entropy with quantum-first fallback
 //! - MantraTree placeholder for future integration
 
+mod batch_verify;
 pub mod entropy;
 pub mod entropy_arc_impl;
 mod error;
 pub mod hasher;
 pub mod mantra;
+mod merkle;
 pub mod pqc;
 pub mod verifier;
-mod merkle;
-mod batch_verify;
 
+pub use self::batch_verify::{
+    BatchVerificationResult, batch_verify_hybrid, sequential_verify_hybrid, verify_batch_fail_fast,
+};
+pub use self::merkle::{MemoryMerkleTree, MerkleProof};
 pub use entropy::{
-    EntropyHealth, EntropyProvider, MixedEntropyProvider,
-    OsEntropyProvider, QuantumOriginProvider,
-    QuantinuumH2Provider, QiskitProvider, SkillBridge,
+    EntropyHealth, EntropyProvider, MixedEntropyProvider, OsEntropyProvider, QiskitProvider,
+    QuantinuumH2Provider, QuantumOriginProvider, SkillBridge,
 };
 pub use error::{MagicError, Result};
 pub use hasher::QuantumHasher;
-pub use mantra::{
-    MantraCategory,
-    MantraContext,
-    MantraEntry,
-    MantraSelection,
-    MantraTree,
-};
+pub use mantra::{MantraCategory, MantraContext, MantraEntry, MantraSelection, MantraTree};
+pub use pqc::{HybridPublicKey, HybridSignature, HybridSigningKey, KeyAlgorithm, KyberKem};
 pub use verifier::{
-    QuantumIntegrityVerifier,
-    RowIdentifier,
-    TamperedRow,
-    VerificationReport,
-    VerificationStatus,
-};
-pub use pqc::{
-    HybridSigningKey,
-    HybridSignature,
-    HybridPublicKey,
-    KeyAlgorithm,
-    KyberKem,
-};
-pub use self::merkle::{
-    MemoryMerkleTree,
-    MerkleProof,
-};
-pub use self::batch_verify::{
-    BatchVerificationResult,
-    batch_verify_hybrid,
-    sequential_verify_hybrid,
-    verify_batch_fail_fast,
+    QuantumIntegrityVerifier, RowIdentifier, TamperedRow, VerificationReport, VerificationStatus,
 };

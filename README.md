@@ -286,7 +286,7 @@ All endpoints are prefixed with `/v1`.
 - **NVIDIA Container Toolkit** - For GPU passthrough to Docker (NVIDIA only)
 
 ### For Workers
-- **Node.js 18+** - For Node.js worker (600+ skills)
+- **Node.js 22+** - For Node.js worker and Gateway service
 - **Python 3.10+** - For Python worker
 
 ### For Development
@@ -322,7 +322,7 @@ carnelian start
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for detailed setup and development workflow.
 
-## Machine Profiles
+## 💻 Machine Profiles
 
 | Profile | GPU | VRAM | RAM | Recommended Model | Notes |
 |---------|-----|------|-----|-------------------|-------|
@@ -366,7 +366,7 @@ carnelian/
 │   │   │   ├── sub_agent.rs      # Sub-agent delegation
 │   │   │   ├── workflow.rs       # Workflow orchestration
 │   │   │   ├── xp.rs             # XP manager, level curve, skill metrics
-│   │   │   ├── voice.rs          # Voice gateway, ElevenLabs STT/TTS
+│   │   │   ├── voice.rs          # 🎤 Voice Gateway, ElevenLabs STT/TTS
 │   │   │   ├── db.rs             # Database connection and migrations
 │   │   │   └── providers/        # Rust provider modules (ollama, openai, anthropic, fireworks)
 │   │   └── tests/                # 10+ test suites, 120+ tests
@@ -477,7 +477,7 @@ Rust, Python, TypeScript, JavaScript, Go, Java, C/C++, Ruby, Shell, TOML, YAML, 
 **Excluded Directories:**
 `target`, `node_modules`, `.git`, `__pycache__`, `dist`, `build`, `vendor`
 
-## Elixir System
+## 🧪 Elixir System
 
 Carnelian includes an **Elixir System** — a RAG-based knowledge persistence layer that captures skill expertise, domain knowledge, and context for reuse across sessions and agents.
 
@@ -535,7 +535,7 @@ Elixirs are integrated with the XP progression system:
 
 **See Also:** [docs/ELIXIR_SYSTEM.md](docs/ELIXIR_SYSTEM.md) — Full technical deep-dive covering versioning internals, embedding pipeline, draft promotion flow, and complete API reference.
 
-## XP Progression System
+## ⭐ XP Progression System
 
 Carnelian includes a comprehensive **XP (Experience Points) and Leveling System** that gamifies agent productivity and tracks skill mastery across all operations.
 
@@ -772,7 +772,7 @@ Carnelian's security model is built on **capability-based access control** with 
 
 The policy engine and ledger manager are shipped and active.
 
-## Development
+## 🔧 Development
 
 - **Setup Guide:** [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 - **Docker Guide:** [docs/DOCKER.md](docs/DOCKER.md)
@@ -807,7 +807,7 @@ Run the local CI script before pushing to catch issues early:
 ./scripts/ci-local.sh --full
 ```
 
-### Testing
+### 🧪 Testing
 
 The project has **120+ tests** across 10 test suites:
 
@@ -896,7 +896,7 @@ See [.env.example](.env.example) for environment variables and [machine.toml.exa
 
 See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 
-## Documentation
+## 📚 Documentation
 
 ### User & Developer Guides
 
@@ -955,14 +955,14 @@ See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 | [docs/XP_SYSTEM.md](docs/XP_SYSTEM.md) | XP level curve, earning sources, elixir boost, skill metrics board, ledger integration |
 | [docs/SESSION_MANAGEMENT.md](docs/SESSION_MANAGEMENT.md) | Soul files, session lifecycle, DB-backed transcripts, compaction protocol |
 | [docs/WORKER_SYSTEM.md](docs/WORKER_SYSTEM.md) | JSONL protocol, four runtimes (Node/Python/WASM/Native), attestation, capability enforcement |
-| [docs/FUTURE_PQC.md](docs/FUTURE_PQC.md) | Post-quantum cryptography roadmap, hybrid signatures, v1.1.0/v1.2.0/v2.0.0 migration plan |
+| [DOCUMENTATION/FUTURE_PQC.md](DOCUMENTATION/FUTURE_PQC.md) | Post-quantum cryptography roadmap, hybrid signatures, v1.1.0/v1.2.0/v2.0.0 migration plan |
 
 ### Project Planning
 
 - **Epic Brief:** [`spec:5e7be550-aec5-4ebb-b0e3-3ce021e3f9ab/7c191398-0049-4dc4-8378-585569a1a4e4`](spec:5e7be550-aec5-4ebb-b0e3-3ce021e3f9ab/7c191398-0049-4dc4-8378-585569a1a4e4) - Design goals, machine profiles, success criteria.
 - **Technical Plan:** [`spec:5e7be550-aec5-4ebb-b0e3-3ce021e3f9ab/3ccb59e1-e29e-4f62-883e-e5d97a90d157`](spec:5e7be550-aec5-4ebb-b0e3-3ce021e3f9ab/3ccb59e1-e29e-4f62-883e-e5d97a90d157) - Architecture, data model, components (includes Mermaid system diagram).
 
-## Architecture Diagrams
+## 📊 Architecture Diagrams
 
 ### Full System Architecture
 
@@ -1137,13 +1137,13 @@ All contributors who submit accepted pull requests are recognized in [CONTRIBUTO
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the Contributor License Agreement and detailed guidelines.
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
 Carnelian was inspired by OpenClaw, an AI agent framework created by Peter Steinberger. For a detailed architectural comparison, see [docs/OPENCLAW_COMPARISON.md](docs/OPENCLAW_COMPARISON.md).
 
 ---
 
-## License
+## 📜 License
 
 **Copyright © 2024-2026 Marco Julio Lopes and Kordspace LLC**
 

@@ -51,13 +51,20 @@ async fn test_analyze_and_create_tasks_integration(pool: PgPool) -> sqlx::Result
     .await?;
 
     // Analyze session
-    let action_items = analyzer.analyze_session(session_id, 10).await
+    let action_items = analyzer
+        .analyze_session(session_id, 10)
+        .await
         .expect("Failed to analyze session");
 
-    assert!(!action_items.is_empty(), "Should extract action items from messages");
+    assert!(
+        !action_items.is_empty(),
+        "Should extract action items from messages"
+    );
 
     // Create tasks from action items
-    let created_count = analyzer.create_tasks_from_items(session_id, &action_items).await
+    let created_count = analyzer
+        .create_tasks_from_items(session_id, &action_items)
+        .await
         .expect("Failed to create tasks");
 
     assert!(created_count > 0, "Should create at least one task");
@@ -71,8 +78,14 @@ async fn test_analyze_and_create_tasks_integration(pool: PgPool) -> sqlx::Result
     .await?;
 
     assert_eq!(tasks.len(), created_count, "Task count mismatch");
-    assert!(tasks.iter().all(|t| t.state == "pending"), "All tasks should be pending");
-    assert!(tasks.iter().all(|t| t.correlation_id == Some(session_id)), "All tasks should have correct correlation_id");
+    assert!(
+        tasks.iter().all(|t| t.state == "pending"),
+        "All tasks should be pending"
+    );
+    assert!(
+        tasks.iter().all(|t| t.correlation_id == Some(session_id)),
+        "All tasks should have correct correlation_id"
+    );
 
     Ok(())
 }
@@ -87,7 +100,10 @@ async fn test_migration_18_19_smoke_check(pool: PgPool) -> sqlx::Result<()> {
     .fetch_optional(&pool)
     .await?;
 
-    assert!(key_algo_check.is_some(), "Migration 18: key_algorithm column should exist");
+    assert!(
+        key_algo_check.is_some(),
+        "Migration 18: key_algorithm column should exist"
+    );
 
     // Verify migration 19 (skill_execution_log table) exists
     let exec_log_check = sqlx::query!(
@@ -97,7 +113,10 @@ async fn test_migration_18_19_smoke_check(pool: PgPool) -> sqlx::Result<()> {
     .fetch_optional(&pool)
     .await?;
 
-    assert!(exec_log_check.is_some(), "Migration 19: skill_execution_log table should exist");
+    assert!(
+        exec_log_check.is_some(),
+        "Migration 19: skill_execution_log table should exist"
+    );
 
     Ok(())
 }

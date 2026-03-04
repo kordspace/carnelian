@@ -33,8 +33,8 @@ use http::{HeaderMap, Method, header};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::Row;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tower_http::{
@@ -507,8 +507,11 @@ impl Server {
 
         // Initialize MAGIC entropy provider if enabled
         let entropy_provider = if self.config.magic.enabled {
-            let pool = self.config.pool().expect("Database pool required for MixedEntropyProvider");
-            
+            let pool = self
+                .config
+                .pool()
+                .expect("Database pool required for MixedEntropyProvider");
+
             // Build QuantumOrigin provider if API key is configured
             // Prefer nested config, fallback to flat fields for backward compatibility
             let quantum_origin = if let Some(ref qo_config) = self.config.magic.quantum_origin {
@@ -528,12 +531,12 @@ impl Server {
             } else {
                 None
             };
-            
+
             // Known limitation (v1.0.0): Quantinuum and Qiskit entropy providers not wired
             // via SkillBridge; returns None until bridge is available.
             let quantinuum = None;
             let qiskit = None;
-            
+
             let node_id = uuid::Uuid::now_v7();
             let provider = carnelian_magic::MixedEntropyProvider::new(
                 quantum_origin,
@@ -893,30 +896,84 @@ fn build_router(state: Arc<AppState>) -> Router {
             get(list_revoked_grants_handler),
         )
         // MAGIC entropy endpoints
-        .route("/v1/magic/entropy/health", get(magic_entropy_health_handler))
-        .route("/v1/magic/entropy/sample", post(magic_entropy_sample_handler))
+        .route(
+            "/v1/magic/entropy/health",
+            get(magic_entropy_health_handler),
+        )
+        .route(
+            "/v1/magic/entropy/sample",
+            post(magic_entropy_sample_handler),
+        )
         .route("/v1/magic/entropy/log", get(magic_entropy_log_handler))
-        .route("/v1/magic/elixirs/rehash", post(magic_elixirs_rehash_handler))
+        .route(
+            "/v1/magic/elixirs/rehash",
+            post(magic_elixirs_rehash_handler),
+        )
         .route("/v1/magic/config", get(magic_get_config_handler))
         .route("/v1/magic/config", post(magic_update_config_handler))
-        .route("/v1/magic/auth/quantinuum/login", post(magic_quantinuum_login_handler))
-        .route("/v1/magic/auth/quantinuum", put(magic_quantinuum_persist_handler))
-        .route("/v1/magic/auth/quantinuum/refresh", post(magic_quantinuum_refresh_handler))
+        .route(
+            "/v1/magic/auth/quantinuum/login",
+            post(magic_quantinuum_login_handler),
+        )
+        .route(
+            "/v1/magic/auth/quantinuum",
+            put(magic_quantinuum_persist_handler),
+        )
+        .route(
+            "/v1/magic/auth/quantinuum/refresh",
+            post(magic_quantinuum_refresh_handler),
+        )
         .route("/v1/magic/auth/status", get(magic_auth_status_handler))
         // MAGIC mantra endpoints
-        .route("/v1/magic/mantras", get(magic_list_mantras_handler).post(magic_add_mantra_entry_handler))
-        .route("/v1/magic/mantras/{category_id}", get(magic_list_category_entries_handler))
-        .route("/v1/magic/mantras/{entry_id}", patch(magic_update_mantra_entry_handler).delete(magic_delete_mantra_entry_handler))
-        .route("/v1/magic/mantras/categories/{id}", get(magic_list_category_entries_handler))
-        .route("/v1/magic/mantras/categories/{id}/entries", post(magic_add_mantra_entry_handler))
-        .route("/v1/magic/mantras/entries/{id}", put(magic_update_mantra_entry_handler).delete(magic_delete_mantra_entry_handler))
-        .route("/v1/magic/mantras/history", get(magic_mantra_history_handler))
-        .route("/v1/magic/mantras/context", get(magic_mantra_context_handler))
-        .route("/v1/magic/mantras/simulate", post(magic_mantra_simulate_handler))
+        .route(
+            "/v1/magic/mantras",
+            get(magic_list_mantras_handler).post(magic_add_mantra_entry_handler),
+        )
+        .route(
+            "/v1/magic/mantras/{category_id}",
+            get(magic_list_category_entries_handler),
+        )
+        .route(
+            "/v1/magic/mantras/{entry_id}",
+            patch(magic_update_mantra_entry_handler).delete(magic_delete_mantra_entry_handler),
+        )
+        .route(
+            "/v1/magic/mantras/categories/{id}",
+            get(magic_list_category_entries_handler),
+        )
+        .route(
+            "/v1/magic/mantras/categories/{id}/entries",
+            post(magic_add_mantra_entry_handler),
+        )
+        .route(
+            "/v1/magic/mantras/entries/{id}",
+            put(magic_update_mantra_entry_handler).delete(magic_delete_mantra_entry_handler),
+        )
+        .route(
+            "/v1/magic/mantras/history",
+            get(magic_mantra_history_handler),
+        )
+        .route(
+            "/v1/magic/mantras/context",
+            get(magic_mantra_context_handler),
+        )
+        .route(
+            "/v1/magic/mantras/simulate",
+            post(magic_mantra_simulate_handler),
+        )
         // MAGIC integrity endpoints
-        .route("/v1/magic/integrity/verify",  post(magic_integrity_verify_handler))
-        .route("/v1/magic/integrity/status",  get(magic_integrity_status_handler))
-        .route("/v1/magic/integrity/backfill", post(magic_integrity_backfill_handler))
+        .route(
+            "/v1/magic/integrity/verify",
+            post(magic_integrity_verify_handler),
+        )
+        .route(
+            "/v1/magic/integrity/status",
+            get(magic_integrity_status_handler),
+        )
+        .route(
+            "/v1/magic/integrity/backfill",
+            post(magic_integrity_backfill_handler),
+        )
         // Apply auth middleware to all protected routes
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
@@ -1085,7 +1142,7 @@ async fn status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse
         .unwrap_or(0)
     } else {
         0 // Known limitation (v1.0.0): returns 0 when pool is unreachable; a meaningful
-          // estimate requires pool introspection not yet exposed.
+        // estimate requires pool introspection not yet exposed.
     };
 
     // Look up the core identity
@@ -1831,7 +1888,11 @@ async fn disable_skill_handler(
 }
 
 /// Shared logic for enable/disable skill.
-async fn toggle_skill(state: Arc<AppState>, skill_id: Uuid, enabled: bool) -> axum::response::Response {
+async fn toggle_skill(
+    state: Arc<AppState>,
+    skill_id: Uuid,
+    enabled: bool,
+) -> axum::response::Response {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(_) => {
@@ -6303,13 +6364,13 @@ async fn publish_ledger_anchor_handler(
 /// Response for get anchor endpoint
 #[derive(Debug, Serialize)]
 pub struct AnchorProofResponse {
-        pub anchor_id: String,
-        pub hash: String,
-        pub ledger_event_from: i64,
-        pub ledger_event_to: i64,
-        pub published_at: String,
-        pub metadata: serde_json::Value,
-        pub verified: bool,
+    pub anchor_id: String,
+    pub hash: String,
+    pub ledger_event_from: i64,
+    pub ledger_event_to: i64,
+    pub published_at: String,
+    pub metadata: serde_json::Value,
+    pub verified: bool,
 }
 
 /// Get anchor proof by ID
@@ -6965,7 +7026,11 @@ async fn create_elixir_handler(
 ) -> impl IntoResponse {
     let created_by = body.created_by;
 
-    match state.elixir_manager.create_elixir(body, created_by, None).await {
+    match state
+        .elixir_manager
+        .create_elixir(body, created_by, None)
+        .await
+    {
         Ok(elixir) => (
             StatusCode::CREATED,
             Json(serde_json::to_value(elixir).unwrap_or_default()),
@@ -7149,16 +7214,21 @@ async fn magic_entropy_health_handler(State(state): State<Arc<AppState>>) -> imp
         Some(provider) => {
             // Try to downcast to MixedEntropyProvider to get all provider health
             let provider_arc = provider.as_ref();
-            if let Some(mixed) = (provider_arc as &dyn std::any::Any).downcast_ref::<carnelian_magic::entropy::MixedEntropyProvider>() {
+            if let Some(mixed) = (provider_arc as &dyn std::any::Any)
+                .downcast_ref::<carnelian_magic::entropy::MixedEntropyProvider>()
+            {
                 let all_health = mixed.all_health().await;
                 let mut health_map = serde_json::Map::new();
                 for h in all_health {
-                    health_map.insert(h.source.clone(), json!({
-                        "available": h.available,
-                        "latency_ms": h.latency_ms,
-                        "error": h.error,
-                        "checked_at": h.checked_at,
-                    }));
+                    health_map.insert(
+                        h.source.clone(),
+                        json!({
+                            "available": h.available,
+                            "latency_ms": h.latency_ms,
+                            "error": h.error,
+                            "checked_at": h.checked_at,
+                        }),
+                    );
                 }
                 (StatusCode::OK, Json(json!(health_map))).into_response()
             } else {
@@ -7249,7 +7319,7 @@ async fn magic_entropy_log_handler(
         FROM entropy_log
         ORDER BY ts DESC
         LIMIT $1
-        "#
+        "#,
     )
     .bind(limit)
     .fetch_all(pool)
@@ -7309,7 +7379,7 @@ async fn magic_elixirs_rehash_handler(State(state): State<Arc<AppState>>) -> imp
         SELECT elixir_id, name
         FROM elixirs
         WHERE active = true
-        "#
+        "#,
     )
     .fetch_all(pool)
     .await
@@ -7337,7 +7407,7 @@ async fn magic_elixirs_rehash_handler(State(state): State<Arc<AppState>>) -> imp
                     UPDATE elixirs
                     SET quantum_hash = $1, updated_at = NOW()
                     WHERE elixir_id = $2
-                    "#
+                    "#,
                 )
                 .bind(hex_hash)
                 .bind(elixir_id)
@@ -7364,7 +7434,7 @@ async fn magic_elixirs_rehash_handler(State(state): State<Arc<AppState>>) -> imp
 /// GET /v1/magic/config - Get MAGIC configuration (with masked API keys)
 async fn magic_get_config_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let config = &state.config.magic;
-    
+
     let masked_config = json!({
         "enabled": config.enabled,
         "quantum_origin_url": config.quantum_origin_url,
@@ -7406,7 +7476,10 @@ async fn magic_update_config_handler(
         }
     };
 
-    let encryption = state.config.owner_signing_key().map(|sk| crate::encryption::EncryptionHelper::new(pool, sk));
+    let encryption = state
+        .config
+        .owner_signing_key()
+        .map(|sk| crate::encryption::EncryptionHelper::new(pool, sk));
 
     if let Some(api_key) = body.quantum_origin_api_key {
         let enc = match encryption {
@@ -7414,7 +7487,9 @@ async fn magic_update_config_handler(
             None => {
                 return (
                     StatusCode::BAD_REQUEST,
-                    Json(json!({"error": "Encryption not available - owner signing key not loaded"})),
+                    Json(
+                        json!({"error": "Encryption not available - owner signing key not loaded"}),
+                    ),
                 )
                     .into_response();
             }
@@ -7519,7 +7594,11 @@ async fn magic_quantinuum_login_handler(
         }
     };
 
-    let encryption = match state.config.owner_signing_key().map(|sk| crate::encryption::EncryptionHelper::new(pool, sk)) {
+    let encryption = match state
+        .config
+        .owner_signing_key()
+        .map(|sk| crate::encryption::EncryptionHelper::new(pool, sk))
+    {
         Some(e) => e,
         None => {
             return (
@@ -7703,7 +7782,11 @@ async fn magic_quantinuum_persist_handler(
         }
     };
 
-    let encryption = match state.config.owner_signing_key().map(|sk| crate::encryption::EncryptionHelper::new(pool, sk)) {
+    let encryption = match state
+        .config
+        .owner_signing_key()
+        .map(|sk| crate::encryption::EncryptionHelper::new(pool, sk))
+    {
         Some(e) => e,
         None => {
             return (
@@ -7813,7 +7896,11 @@ async fn magic_quantinuum_refresh_handler(State(state): State<Arc<AppState>>) ->
         }
     };
 
-    let encryption = match state.config.owner_signing_key().map(|sk| crate::encryption::EncryptionHelper::new(pool, sk)) {
+    let encryption = match state
+        .config
+        .owner_signing_key()
+        .map(|sk| crate::encryption::EncryptionHelper::new(pool, sk))
+    {
         Some(e) => e,
         None => {
             return (
@@ -7887,7 +7974,9 @@ async fn magic_quantinuum_refresh_handler(State(state): State<Arc<AppState>>) ->
         let error_text = refresh_response.text().await.unwrap_or_default();
         return (
             StatusCode::UNAUTHORIZED,
-            Json(json!({"error": format!("Quantinuum refresh failed ({}): {}", status, error_text)})),
+            Json(
+                json!({"error": format!("Quantinuum refresh failed ({}): {}", status, error_text)}),
+            ),
         )
             .into_response();
     }
@@ -7985,27 +8074,27 @@ async fn magic_auth_status_handler(State(state): State<Arc<AppState>>) -> impl I
         }
     };
 
-    let quantinuum_expiry: Option<(Option<String>,)> = sqlx::query_as(
-        "SELECT value_text FROM config_store WHERE key = $1",
-    )
-    .bind("magic.quantinuum_token_expiry")
-    .fetch_optional(pool)
-    .await
-    .unwrap_or(None);
+    let quantinuum_expiry: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT value_text FROM config_store WHERE key = $1")
+            .bind("magic.quantinuum_token_expiry")
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None);
 
     let quantinuum_expiry_clone = quantinuum_expiry.clone();
     let quantinuum_authenticated = quantinuum_expiry_clone
         .and_then(|(expiry_str,)| expiry_str)
         .and_then(|expiry_str| chrono::DateTime::parse_from_rfc3339(&expiry_str).ok())
-        .map_or(false, |expiry| expiry.with_timezone(&chrono::Utc) > chrono::Utc::now());
+        .map_or(false, |expiry| {
+            expiry.with_timezone(&chrono::Utc) > chrono::Utc::now()
+        });
 
-    let quantum_origin_configured: Option<(i64,)> = sqlx::query_as(
-        "SELECT COUNT(*) FROM config_store WHERE key = $1",
-    )
-    .bind("magic.quantum_origin_api_key")
-    .fetch_optional(pool)
-    .await
-    .unwrap_or(None);
+    let quantum_origin_configured: Option<(i64,)> =
+        sqlx::query_as("SELECT COUNT(*) FROM config_store WHERE key = $1")
+            .bind("magic.quantum_origin_api_key")
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None);
 
     let quantum_origin_authenticated = quantum_origin_configured
         .map(|(count,)| count > 0)
@@ -8068,17 +8157,27 @@ async fn magic_list_mantras_handler(State(state): State<Arc<AppState>>) -> impl 
 
     let categories: Vec<serde_json::Value> = rows
         .into_iter()
-        .map(|(category_id, name, description, base_weight, cooldown_beats, enabled, entry_count)| {
-            json!({
-                "category_id": category_id,
-                "name": name,
-                "description": description,
-                "base_weight": base_weight,
-                "cooldown_beats": cooldown_beats,
-                "enabled": enabled,
-                "entry_count": entry_count,
-            })
-        })
+        .map(
+            |(
+                category_id,
+                name,
+                description,
+                base_weight,
+                cooldown_beats,
+                enabled,
+                entry_count,
+            )| {
+                json!({
+                    "category_id": category_id,
+                    "name": name,
+                    "description": description,
+                    "base_weight": base_weight,
+                    "cooldown_beats": cooldown_beats,
+                    "enabled": enabled,
+                    "entry_count": entry_count,
+                })
+            },
+        )
         .collect();
 
     (StatusCode::OK, Json(json!({"categories": categories}))).into_response()
@@ -8106,7 +8205,7 @@ async fn magic_list_category_entries_handler(
         FROM mantra_entries
         WHERE category_id = $1
         ORDER BY use_count ASC
-        "#
+        "#,
     )
     .bind(category_id)
     .fetch_all(pool)
@@ -8185,7 +8284,7 @@ async fn magic_add_mantra_entry_handler(
         INSERT INTO mantra_entries (category_id, text, elixir_id)
         VALUES ($1, $2, $3)
         RETURNING entry_id, category_id, text, use_count, enabled, elixir_id
-        "#
+        "#,
     )
     .bind(category_id)
     .bind(&body.text)
@@ -8212,7 +8311,11 @@ async fn magic_add_mantra_entry_handler(
         }
     };
 
-    (StatusCode::CREATED, Json(serde_json::to_value(entry).unwrap())).into_response()
+    (
+        StatusCode::CREATED,
+        Json(serde_json::to_value(entry).unwrap()),
+    )
+        .into_response()
 }
 
 #[derive(Debug, Deserialize)]
@@ -8329,7 +8432,7 @@ async fn magic_delete_mantra_entry_handler(
         SET enabled = false
         WHERE entry_id = $1
         RETURNING entry_id
-        "#
+        "#,
     )
     .bind(entry_id)
     .fetch_optional(pool)
@@ -8369,24 +8472,27 @@ async fn magic_mantra_history_handler(State(state): State<Arc<AppState>>) -> imp
         }
     };
 
-    let rows = match sqlx::query_as::<_, (
-        uuid::Uuid,
-        chrono::DateTime<chrono::Utc>,
-        uuid::Uuid,
-        uuid::Uuid,
-        String,
-        Option<serde_json::Value>,
-        Option<serde_json::Value>,
-        Vec<uuid::Uuid>,
-        Option<uuid::Uuid>,
-    )>(
+    let rows = match sqlx::query_as::<
+        _,
+        (
+            uuid::Uuid,
+            chrono::DateTime<chrono::Utc>,
+            uuid::Uuid,
+            uuid::Uuid,
+            String,
+            Option<serde_json::Value>,
+            Option<serde_json::Value>,
+            Vec<uuid::Uuid>,
+            Option<uuid::Uuid>,
+        ),
+    >(
         r#"
         SELECT history_id, ts, category_id, entry_id, entropy_source,
                context_snapshot, context_weights, suggested_skill_ids, elixir_reference
         FROM mantra_history
         ORDER BY ts DESC
         LIMIT 10
-        "#
+        "#,
     )
     .fetch_all(pool)
     .await
@@ -8403,19 +8509,31 @@ async fn magic_mantra_history_handler(State(state): State<Arc<AppState>>) -> imp
 
     let history: Vec<serde_json::Value> = rows
         .into_iter()
-        .map(|(history_id, ts, category_id, entry_id, entropy_source, context_snapshot, context_weights, suggested_skill_ids, elixir_reference)| {
-            json!({
-                "history_id": history_id,
-                "ts": ts,
-                "category_id": category_id,
-                "entry_id": entry_id,
-                "entropy_source": entropy_source,
-                "context_snapshot": context_snapshot,
-                "context_weights": context_weights,
-                "suggested_skill_ids": suggested_skill_ids,
-                "elixir_reference": elixir_reference,
-            })
-        })
+        .map(
+            |(
+                history_id,
+                ts,
+                category_id,
+                entry_id,
+                entropy_source,
+                context_snapshot,
+                context_weights,
+                suggested_skill_ids,
+                elixir_reference,
+            )| {
+                json!({
+                    "history_id": history_id,
+                    "ts": ts,
+                    "category_id": category_id,
+                    "entry_id": entry_id,
+                    "entropy_source": entropy_source,
+                    "context_snapshot": context_snapshot,
+                    "context_weights": context_weights,
+                    "suggested_skill_ids": suggested_skill_ids,
+                    "elixir_reference": elixir_reference,
+                })
+            },
+        )
         .collect();
 
     (StatusCode::OK, Json(json!({"history": history}))).into_response()
@@ -8477,11 +8595,19 @@ async fn magic_mantra_simulate_handler(State(state): State<Arc<AppState>>) -> im
     let entropy_bytes = match &state.entropy_provider {
         Some(provider) => match provider.get_bytes(8).await {
             Ok(bytes) => Ok(bytes),
-            Err(_) => carnelian_magic::entropy::OsEntropyProvider::new().get_bytes(8).await,
+            Err(_) => {
+                carnelian_magic::entropy::OsEntropyProvider::new()
+                    .get_bytes(8)
+                    .await
+            }
         },
-        None => carnelian_magic::entropy::OsEntropyProvider::new().get_bytes(8).await,
+        None => {
+            carnelian_magic::entropy::OsEntropyProvider::new()
+                .get_bytes(8)
+                .await
+        }
     };
-    
+
     let entropy_bytes = match entropy_bytes {
         Ok(bytes) => bytes,
         Err(_) => {
@@ -8555,17 +8681,20 @@ async fn magic_integrity_verify_handler(
 
     // Construct verifier
     let verifier = carnelian_magic::QuantumIntegrityVerifier::new(
-        carnelian_magic::QuantumHasher::new(
-            state.entropy_provider.clone().unwrap_or_else(|| {
-                Arc::new(carnelian_magic::MixedEntropyProvider::new(None, None, None, Uuid::nil()))
-            })
-        )
+        carnelian_magic::QuantumHasher::new(state.entropy_provider.clone().unwrap_or_else(|| {
+            Arc::new(carnelian_magic::MixedEntropyProvider::new(
+                None,
+                None,
+                None,
+                Uuid::nil(),
+            ))
+        })),
     );
 
     // Verify each table
     let mut reports = Vec::new();
     let mut failed_tables = Vec::new();
-    
+
     for table in &body.tables {
         match verifier.verify_table(table, pool).await {
             Ok(report) => {
@@ -8595,9 +8724,19 @@ async fn magic_integrity_verify_handler(
     // Compute overall status
     let overall_status = if !failed_tables.is_empty() || reports.is_empty() {
         "error"
-    } else if reports.iter().any(|r| matches!(r.overall_status, carnelian_magic::VerificationStatus::Tampered)) {
+    } else if reports.iter().any(|r| {
+        matches!(
+            r.overall_status,
+            carnelian_magic::VerificationStatus::Tampered
+        )
+    }) {
         "tampered"
-    } else if reports.iter().any(|r| matches!(r.overall_status, carnelian_magic::VerificationStatus::Partial)) {
+    } else if reports.iter().any(|r| {
+        matches!(
+            r.overall_status,
+            carnelian_magic::VerificationStatus::Partial
+        )
+    }) {
         "partial"
     } else {
         "ok"
@@ -8620,7 +8759,7 @@ async fn magic_integrity_verify_handler(
 /// GET /v1/magic/integrity/status - Get cached integrity verification status
 async fn magic_integrity_status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let cache = state.integrity_cache.read().await;
-    
+
     if cache.is_empty() {
         return (
             StatusCode::NO_CONTENT,
@@ -8630,7 +8769,7 @@ async fn magic_integrity_status_handler(State(state): State<Arc<AppState>>) -> i
     }
 
     let reports: Vec<_> = cache.values().cloned().collect();
-    
+
     (
         StatusCode::OK,
         Json(json!({
@@ -8655,23 +8794,31 @@ async fn magic_integrity_backfill_handler(State(state): State<Arc<AppState>>) ->
     };
 
     let job_id = Uuid::now_v7();
-    let tables = vec!["memories".to_string(), "session_messages".to_string(), "elixirs".to_string(), "task_runs".to_string()];
-    
+    let tables = vec![
+        "memories".to_string(),
+        "session_messages".to_string(),
+        "elixirs".to_string(),
+        "task_runs".to_string(),
+    ];
+
     // Clone for the spawned task
     let pool_clone = pool.clone();
     let job_id_clone = job_id;
     let entropy_provider = state.entropy_provider.clone();
-    
+
     // Spawn background task
     tokio::spawn(async move {
         let verifier = carnelian_magic::QuantumIntegrityVerifier::new(
-            carnelian_magic::QuantumHasher::new(
-                entropy_provider.unwrap_or_else(|| {
-                    Arc::new(carnelian_magic::MixedEntropyProvider::new(None, None, None, Uuid::nil()))
-                })
-            )
+            carnelian_magic::QuantumHasher::new(entropy_provider.unwrap_or_else(|| {
+                Arc::new(carnelian_magic::MixedEntropyProvider::new(
+                    None,
+                    None,
+                    None,
+                    Uuid::nil(),
+                ))
+            })),
         );
-        
+
         for table in &["memories", "session_messages", "elixirs", "task_runs"] {
             match verifier.backfill_missing(table, &pool_clone).await {
                 Ok(count) => {
@@ -8682,7 +8829,7 @@ async fn magic_integrity_backfill_handler(State(state): State<Arc<AppState>>) ->
                 }
             }
         }
-        
+
         tracing::info!(job_id = %job_id_clone, "Integrity backfill job completed");
     });
 

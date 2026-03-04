@@ -293,9 +293,7 @@ async fn main() {
         Commands::MigrateFromThummim { path } => {
             handle_migrate_from_thummim(path, cli.config, cli.log_level, cli.database_url).await
         }
-        Commands::Magic { command, url } => {
-            handle_magic(command, &resolve_url(url)).await
-        }
+        Commands::Magic { command, url } => handle_magic(command, &resolve_url(url)).await,
     };
 
     if let Err(e) = result {
@@ -2448,7 +2446,10 @@ async fn handle_magic_auth(url: &str, refresh: bool) -> carnelian_common::Result
 
     if refresh {
         let resp = client
-            .post(format!("{}/v1/magic/auth/quantinuum/refresh", url.trim_end_matches('/')))
+            .post(format!(
+                "{}/v1/magic/auth/quantinuum/refresh",
+                url.trim_end_matches('/')
+            ))
             .json(&serde_json::json!({}))
             .send()
             .await
@@ -2467,7 +2468,7 @@ async fn handle_magic_auth(url: &str, refresh: bool) -> carnelian_common::Result
             let body: serde_json::Value = resp.json().await.map_err(|e| {
                 carnelian_common::Error::Config(format!("Failed to parse response: {}", e))
             })?;
-            
+
             let expires_at = body["token_expiry"].as_str().unwrap_or("unknown");
             println!("✓ Token refreshed");
             println!("   Expires at: {}", expires_at);
@@ -2480,16 +2481,16 @@ async fn handle_magic_auth(url: &str, refresh: bool) -> carnelian_common::Result
             )));
         }
     } else {
-        use std::io::{stdout, Write};
-        
+        use std::io::{Write, stdout};
+
         print!("Email: ");
         stdout().flush().map_err(|e| {
             carnelian_common::Error::Config(format!("Failed to flush stdout: {}", e))
         })?;
         let mut email = String::new();
-        std::io::stdin().read_line(&mut email).map_err(|e| {
-            carnelian_common::Error::Config(format!("Failed to read email: {}", e))
-        })?;
+        std::io::stdin()
+            .read_line(&mut email)
+            .map_err(|e| carnelian_common::Error::Config(format!("Failed to read email: {}", e)))?;
 
         let password = rpassword::prompt_password("Password: ").map_err(|e| {
             carnelian_common::Error::Config(format!("Failed to read password: {}", e))
@@ -2505,7 +2506,10 @@ async fn handle_magic_auth(url: &str, refresh: bool) -> carnelian_common::Result
             .send()
             .await
             .map_err(|e| {
-                carnelian_common::Error::Connection(format!("Quantinuum login request failed: {}", e))
+                carnelian_common::Error::Connection(format!(
+                    "Quantinuum login request failed: {}",
+                    e
+                ))
             })?;
 
         if !qapi_resp.status().is_success() {
@@ -2534,7 +2538,10 @@ async fn handle_magic_auth(url: &str, refresh: bool) -> carnelian_common::Result
 
         // Persist tokens via PUT to Carnelian server
         let persist_resp = client
-            .put(format!("{}/v1/magic/auth/quantinuum", url.trim_end_matches('/')))
+            .put(format!(
+                "{}/v1/magic/auth/quantinuum",
+                url.trim_end_matches('/')
+            ))
             .json(&serde_json::json!({
                 "id_token": id_token,
                 "refresh_token": refresh_token,
@@ -2557,7 +2564,7 @@ async fn handle_magic_auth(url: &str, refresh: bool) -> carnelian_common::Result
             let body: serde_json::Value = persist_resp.json().await.map_err(|e| {
                 carnelian_common::Error::Config(format!("Failed to parse response: {}", e))
             })?;
-            
+
             let stored_expiry = body["expires_at"].as_str().unwrap_or(&expires_at);
             println!("✓ Authenticated");
             println!("   Expires at: {}", stored_expiry);
@@ -2584,7 +2591,10 @@ async fn handle_magic_status(url: &str) -> carnelian_common::Result<()> {
         })?;
 
     let auth_resp = client
-        .get(format!("{}/v1/magic/auth/status", url.trim_end_matches('/')))
+        .get(format!(
+            "{}/v1/magic/auth/status",
+            url.trim_end_matches('/')
+        ))
         .send()
         .await
         .map_err(|e| {
@@ -2605,7 +2615,10 @@ async fn handle_magic_status(url: &str) -> carnelian_common::Result<()> {
     };
 
     let health_resp = client
-        .get(format!("{}/v1/magic/entropy/health", url.trim_end_matches('/')))
+        .get(format!(
+            "{}/v1/magic/entropy/health",
+            url.trim_end_matches('/')
+        ))
         .send()
         .await
         .map_err(|e| {
@@ -2619,25 +2632,38 @@ async fn handle_magic_status(url: &str) -> carnelian_common::Result<()> {
     };
 
     println!("🔥 MAGIC Status");
-    
+
     // Parse auth status from nested structure: quantinuum.authenticated, quantinuum.expiry, quantum_origin.configured
-    let quantum_origin_configured = auth_status["quantum_origin"]["configured"].as_bool().unwrap_or(false);
-    println!("   Quantum Origin:  {}", if quantum_origin_configured { "configured" } else { "not configured" });
-    
-    let quantinuum_authenticated = auth_status["quantinuum"]["authenticated"].as_bool().unwrap_or(false);
+    let quantum_origin_configured = auth_status["quantum_origin"]["configured"]
+        .as_bool()
+        .unwrap_or(false);
+    println!(
+        "   Quantum Origin:  {}",
+        if quantum_origin_configured {
+            "configured"
+        } else {
+            "not configured"
+        }
+    );
+
+    let quantinuum_authenticated = auth_status["quantinuum"]["authenticated"]
+        .as_bool()
+        .unwrap_or(false);
     if quantinuum_authenticated {
-        let expiry = auth_status["quantinuum"]["expiry"].as_str().unwrap_or("unknown");
+        let expiry = auth_status["quantinuum"]["expiry"]
+            .as_str()
+            .unwrap_or("unknown");
         println!("   Quantinuum H2:   authenticated (expires {})", expiry);
     } else {
         println!("   Quantinuum H2:   not authenticated");
     }
-    
+
     // Qiskit not yet in server response, default to not configured
     println!("   Qiskit:          not configured");
 
     println!();
     println!("   Entropy Providers:");
-    
+
     // Normalize health_status to array (handle both object and array responses)
     let providers_array = if health_status.is_array() {
         health_status.as_array().cloned().unwrap_or_default()
@@ -2646,7 +2672,7 @@ async fn handle_magic_status(url: &str) -> carnelian_common::Result<()> {
     } else {
         vec![]
     };
-    
+
     for provider in providers_array {
         let source = provider["source"].as_str().unwrap_or("unknown");
         let available = provider["available"].as_bool().unwrap_or(false);
@@ -2654,14 +2680,21 @@ async fn handle_magic_status(url: &str) -> carnelian_common::Result<()> {
         let error = provider["error"].as_str();
 
         let status_char = if available { "✓" } else { "✗" };
-        let status_text = if available { "available" } else { "unavailable" };
-        
+        let status_text = if available {
+            "available"
+        } else {
+            "unavailable"
+        };
+
         if let Some(latency) = latency_ms {
-            print!("     • {:<18} {} {:<12} ({} ms)", source, status_char, status_text, latency);
+            print!(
+                "     • {:<18} {} {:<12} ({} ms)",
+                source, status_char, status_text, latency
+            );
         } else {
             print!("     • {:<18} {} {:<12}", source, status_char, status_text);
         }
-        
+
         if let Some(err) = error {
             print!("  error: {}", err);
         }
@@ -2675,7 +2708,7 @@ async fn handle_magic_status(url: &str) -> carnelian_common::Result<()> {
 async fn handle_magic_sample(url: &str, bytes: usize) -> carnelian_common::Result<()> {
     if bytes < 1 || bytes > 1024 {
         return Err(carnelian_common::Error::Config(
-            "Bytes must be between 1 and 1024".to_string()
+            "Bytes must be between 1 and 1024".to_string(),
         ));
     }
 
@@ -2687,7 +2720,10 @@ async fn handle_magic_sample(url: &str, bytes: usize) -> carnelian_common::Resul
         })?;
 
     let resp = client
-        .post(format!("{}/v1/magic/entropy/sample", url.trim_end_matches('/')))
+        .post(format!(
+            "{}/v1/magic/entropy/sample",
+            url.trim_end_matches('/')
+        ))
         .json(&serde_json::json!({
             "bytes": bytes
         }))
@@ -2708,10 +2744,10 @@ async fn handle_magic_sample(url: &str, bytes: usize) -> carnelian_common::Resul
         let body: serde_json::Value = resp.json().await.map_err(|e| {
             carnelian_common::Error::Config(format!("Failed to parse response: {}", e))
         })?;
-        
+
         let hex = body["hex"].as_str().unwrap_or("");
         let source = body["source"].as_str().unwrap_or("unknown");
-        
+
         println!("🔥 Entropy sample ({} bytes, source: {})", bytes, source);
         println!("   {}", hex);
     } else {
@@ -2736,7 +2772,10 @@ async fn handle_magic_providers(url: &str) -> carnelian_common::Result<()> {
         })?;
 
     let resp = client
-        .get(format!("{}/v1/magic/entropy/health", url.trim_end_matches('/')))
+        .get(format!(
+            "{}/v1/magic/entropy/health",
+            url.trim_end_matches('/')
+        ))
         .send()
         .await
         .map_err(|e| {
@@ -2754,10 +2793,13 @@ async fn handle_magic_providers(url: &str) -> carnelian_common::Result<()> {
         let body: serde_json::Value = resp.json().await.map_err(|e| {
             carnelian_common::Error::Config(format!("Failed to parse response: {}", e))
         })?;
-        
+
         println!("🔥 Entropy Providers");
-        println!("   {:<18} {:<12} {:<10} {}", "SOURCE", "AVAILABLE", "LATENCY", "ERROR");
-        
+        println!(
+            "   {:<18} {:<12} {:<10} {}",
+            "SOURCE", "AVAILABLE", "LATENCY", "ERROR"
+        );
+
         // Normalize body to array (handle both object and array responses)
         let providers_array = if body.is_array() {
             body.as_array().cloned().unwrap_or_default()
@@ -2766,7 +2808,7 @@ async fn handle_magic_providers(url: &str) -> carnelian_common::Result<()> {
         } else {
             vec![]
         };
-        
+
         for provider in providers_array {
             let source = provider["source"].as_str().unwrap_or("unknown");
             let available = provider["available"].as_bool().unwrap_or(false);
@@ -2781,7 +2823,10 @@ async fn handle_magic_providers(url: &str) -> carnelian_common::Result<()> {
             };
             let error_text = error.unwrap_or("—");
 
-            println!("   {:<18} {:<12} {:<10} {}", source, available_text, latency_text, error_text);
+            println!(
+                "   {:<18} {:<12} {:<10} {}",
+                source, available_text, latency_text, error_text
+            );
         }
     } else {
         let body: serde_json::Value = resp.json().await.unwrap_or_default();

@@ -14,7 +14,9 @@
 use crate::{EntropyProvider, MagicError};
 use pqcrypto_dilithium::dilithium3;
 use pqcrypto_kyber::kyber1024;
-use pqcrypto_traits::kem::{Ciphertext as KemCiphertext, PublicKey as KemPublicKey, SharedSecret as KemSharedSecret};
+use pqcrypto_traits::kem::{
+    Ciphertext as KemCiphertext, PublicKey as KemPublicKey, SharedSecret as KemSharedSecret,
+};
 use pqcrypto_traits::sign::{DetachedSignature, PublicKey as SigPublicKey};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -108,10 +110,10 @@ impl HybridSigningKey {
     /// A `HybridSignature` containing both Dilithium3 and Ed25519 signatures
     pub fn sign(&self, message: &[u8]) -> HybridSignature {
         use ed25519_dalek::Signer;
-        
+
         // Dilithium3 detached signature
         let dilithium_sig = dilithium3::detached_sign(message, &self.dilithium_sk);
-        
+
         // Ed25519 signature
         let ed25519_sig = self.ed25519_sk.sign(message);
 
@@ -135,19 +137,25 @@ impl HybridSigningKey {
     /// `Ok(())` if both signatures are valid, `Err` otherwise
     pub fn verify(&self, message: &[u8], signature: &HybridSignature) -> Result<(), MagicError> {
         use ed25519_dalek::Verifier;
-        
+
         // Verify Dilithium3 signature
         let dilithium_sig = dilithium3::DetachedSignature::from_bytes(&signature.dilithium_sig)
             .map_err(|_| MagicError::CryptoError("Invalid Dilithium signature format".into()))?;
         dilithium3::verify_detached_signature(&dilithium_sig, message, &self.dilithium_pk)
-            .map_err(|_| MagicError::CryptoError("Dilithium signature verification failed".into()))?;
-        
+            .map_err(|_| {
+                MagicError::CryptoError("Dilithium signature verification failed".into())
+            })?;
+
         // Verify Ed25519 signature
-        let sig_bytes: [u8; 64] = signature.ed25519_sig.clone().try_into()
+        let sig_bytes: [u8; 64] = signature
+            .ed25519_sig
+            .clone()
+            .try_into()
             .map_err(|_| MagicError::CryptoError("Invalid Ed25519 signature format".into()))?;
         let ed25519_sig = ed25519_dalek::Signature::from_bytes(&sig_bytes);
-        
-        self.ed25519_pk.verify(message, &ed25519_sig)
+
+        self.ed25519_pk
+            .verify(message, &ed25519_sig)
             .map_err(|_| MagicError::CryptoError("Ed25519 signature verification failed".into()))?;
 
         Ok(())
@@ -172,7 +180,7 @@ impl HybridSigningKey {
         // Use blake3 HKDF with the Ed25519 seed
         let context = "carnelian-aes-storage-v1";
         let seed = self.ed25519_sk.to_bytes();
-        
+
         blake3::derive_key(context, &seed)
     }
 }
@@ -229,12 +237,12 @@ impl KyberKem {
     /// - `shared_secret`: 32-byte shared secret for key derivation
     pub fn encapsulate(&self) -> (Vec<u8>, [u8; 32]) {
         let (shared_secret, ciphertext) = kyber1024::encapsulate(&self.public_key);
-        
+
         // Convert shared secret to 32-byte array
         let mut ss_array = [0u8; 32];
         let ss_bytes = shared_secret.as_bytes();
         ss_array.copy_from_slice(&ss_bytes[..32.min(ss_bytes.len())]);
-        
+
         (ciphertext.as_bytes().to_vec(), ss_array)
     }
 
@@ -251,13 +259,13 @@ impl KyberKem {
     pub fn decapsulate(&self, ciphertext: &[u8]) -> Result<[u8; 32], MagicError> {
         let ct = kyber1024::Ciphertext::from_bytes(ciphertext)
             .map_err(|_| MagicError::CryptoError("Invalid Kyber ciphertext".into()))?;
-        
+
         let shared_secret = kyber1024::decapsulate(&ct, &self.secret_key);
-        
+
         let mut ss_array = [0u8; 32];
         let ss_bytes = shared_secret.as_bytes();
         ss_array.copy_from_slice(&ss_bytes[..32.min(ss_bytes.len())]);
-        
+
         Ok(ss_array)
     }
 
@@ -275,26 +283,33 @@ mod tests {
     #[tokio::test]
     async fn test_hybrid_signing_key_generation() {
         let provider: Arc<dyn EntropyProvider> = Arc::new(MixedEntropyProvider::new_os_only());
-        let key = HybridSigningKey::generate_with_entropy(&provider).await.unwrap();
-        
+        let key = HybridSigningKey::generate_with_entropy(&provider)
+            .await
+            .unwrap();
+
         // Verify both key types exist
         assert_eq!(key.ed25519_pk.as_bytes().len(), 32);
-        assert_eq!(key.dilithium_pk.as_bytes().len(), dilithium3::public_key_bytes());
+        assert_eq!(
+            key.dilithium_pk.as_bytes().len(),
+            dilithium3::public_key_bytes()
+        );
     }
 
     #[tokio::test]
     async fn test_hybrid_signature_roundtrip() {
         let provider: Arc<dyn EntropyProvider> = Arc::new(MixedEntropyProvider::new_os_only());
-        let key = HybridSigningKey::generate_with_entropy(&provider).await.unwrap();
-        
+        let key = HybridSigningKey::generate_with_entropy(&provider)
+            .await
+            .unwrap();
+
         let message = b"Quantum-resistant test message";
         let signature = key.sign(message);
-        
+
         // Verify both signatures exist
         assert!(!signature.ed25519_sig.is_empty());
         assert!(!signature.dilithium_sig.is_empty());
         assert_eq!(signature.dilithium_sig.len(), dilithium3::signature_bytes());
-        
+
         // Verify hybrid signature
         key.verify(message, &signature).unwrap();
     }
@@ -302,11 +317,13 @@ mod tests {
     #[tokio::test]
     async fn test_hybrid_signature_fails_on_wrong_message() {
         let provider: Arc<dyn EntropyProvider> = Arc::new(MixedEntropyProvider::new_os_only());
-        let key = HybridSigningKey::generate_with_entropy(&provider).await.unwrap();
-        
+        let key = HybridSigningKey::generate_with_entropy(&provider)
+            .await
+            .unwrap();
+
         let message = b"Original message";
         let signature = key.sign(message);
-        
+
         let wrong_message = b"Tampered message";
         assert!(key.verify(wrong_message, &signature).is_err());
     }
@@ -315,15 +332,15 @@ mod tests {
     async fn test_kyber_kem_roundtrip() {
         let provider: Arc<dyn EntropyProvider> = Arc::new(MixedEntropyProvider::new_os_only());
         let kem = KyberKem::generate_with_entropy(&provider).await.unwrap();
-        
+
         // Encapsulate
         let (ciphertext, shared_secret_1) = kem.encapsulate();
         assert!(!ciphertext.is_empty());
         assert_eq!(ciphertext.len(), kyber1024::ciphertext_bytes());
-        
+
         // Decapsulate
         let shared_secret_2 = kem.decapsulate(&ciphertext).unwrap();
-        
+
         // Shared secrets should match
         assert_eq!(shared_secret_1, shared_secret_2);
     }
@@ -332,7 +349,7 @@ mod tests {
     async fn test_kyber_kem_fails_on_wrong_ciphertext() {
         let provider: Arc<dyn EntropyProvider> = Arc::new(MixedEntropyProvider::new_os_only());
         let kem = KyberKem::generate_with_entropy(&provider).await.unwrap();
-        
+
         // Try to decapsulate invalid ciphertext
         let invalid_ct = vec![0u8; 10];
         assert!(kem.decapsulate(&invalid_ct).is_err());
@@ -341,21 +358,28 @@ mod tests {
     #[tokio::test]
     async fn test_public_key_export() {
         let provider: Arc<dyn EntropyProvider> = Arc::new(MixedEntropyProvider::new_os_only());
-        let key = HybridSigningKey::generate_with_entropy(&provider).await.unwrap();
-        
+        let key = HybridSigningKey::generate_with_entropy(&provider)
+            .await
+            .unwrap();
+
         let public_keys = key.public_keys();
         assert_eq!(public_keys.ed25519_pk.len(), 32);
-        assert_eq!(public_keys.dilithium_pk.len(), dilithium3::public_key_bytes());
+        assert_eq!(
+            public_keys.dilithium_pk.len(),
+            dilithium3::public_key_bytes()
+        );
     }
 
     #[tokio::test]
     async fn test_aes_key_derivation() {
         let provider: Arc<dyn EntropyProvider> = Arc::new(MixedEntropyProvider::new_os_only());
-        let key = HybridSigningKey::generate_with_entropy(&provider).await.unwrap();
-        
+        let key = HybridSigningKey::generate_with_entropy(&provider)
+            .await
+            .unwrap();
+
         let aes_key = key.derive_aes_storage_key();
         assert_eq!(aes_key.len(), 32);
-        
+
         // Derive again - should be deterministic
         let aes_key_2 = key.derive_aes_storage_key();
         assert_eq!(aes_key, aes_key_2);

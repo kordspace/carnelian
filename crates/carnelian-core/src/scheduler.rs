@@ -77,9 +77,8 @@ use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{watch, Semaphore};
+use tokio::sync::{Semaphore, watch};
 use uuid::Uuid;
-
 
 /// Background task scheduler managing heartbeats, task queue polling, and task execution.
 ///
@@ -342,7 +341,7 @@ impl Scheduler {
                         .expect("Heartbeat lane semaphore must exist");
                     let _permit = heartbeat_semaphore.acquire().await
                         .expect("Heartbeat semaphore should never be closed");
-                    
+
                     if let Err(e) = Self::run_heartbeat(
                         &pool,
                         &event_stream,
@@ -354,7 +353,7 @@ impl Scheduler {
                     ).await {
                         tracing::warn!(error = %e, "Heartbeat execution failed");
                     }
-                    
+
                     // Permit is automatically released when _permit is dropped
                     // Poll task queue after heartbeat
                     if let Err(e) = Self::poll_task_queue(
@@ -423,24 +422,26 @@ impl Scheduler {
         mantra_tree: Option<&Arc<carnelian_magic::MantraTree>>,
     ) -> Result<()> {
         let start = std::time::Instant::now();
-        
+
         // Generate quantum-salted correlation ID if entropy provider is available
         let correlation_id = if let Some(provider) = entropy_provider {
             match tokio::time::timeout(
                 std::time::Duration::from_millis(config.magic.entropy_timeout_ms),
-                provider.as_ref().get_bytes(16)
-            ).await {
-                Ok(Ok(entropy_bytes)) => {
-                    <[u8; 16]>::try_from(entropy_bytes.as_slice())
-                        .map(|bytes_array| {
-                            tracing::debug!("Generated quantum-salted correlation ID");
-                            Uuid::from_bytes(bytes_array)
-                        })
-                        .unwrap_or_else(|_| {
-                            tracing::warn!("Failed to convert entropy bytes to UUID, falling back to rand");
-                            Uuid::from_bytes(rand::random())
-                        })
-                }
+                provider.as_ref().get_bytes(16),
+            )
+            .await
+            {
+                Ok(Ok(entropy_bytes)) => <[u8; 16]>::try_from(entropy_bytes.as_slice())
+                    .map(|bytes_array| {
+                        tracing::debug!("Generated quantum-salted correlation ID");
+                        Uuid::from_bytes(bytes_array)
+                    })
+                    .unwrap_or_else(|_| {
+                        tracing::warn!(
+                            "Failed to convert entropy bytes to UUID, falling back to rand"
+                        );
+                        Uuid::from_bytes(rand::random())
+                    }),
                 Ok(Err(e)) => {
                     tracing::warn!(error = %e, "Entropy provider failed, falling back to rand");
                     Uuid::from_bytes(rand::random())
@@ -473,11 +474,15 @@ impl Scheduler {
 
         // ── Mantra Selection (MAGIC subsystem) ──────────────────────────
         // Obtain 8 bytes of entropy for mantra selection and track actual source
-        let (entropy_bytes, actual_entropy_source): (Vec<u8>, &str) = if let Some(provider) = entropy_provider {
+        let (entropy_bytes, actual_entropy_source): (Vec<u8>, &str) = if let Some(provider) =
+            entropy_provider
+        {
             match tokio::time::timeout(
                 std::time::Duration::from_millis(config.magic.entropy_timeout_ms),
-                provider.as_ref().get_bytes(8)
-            ).await {
+                provider.as_ref().get_bytes(8),
+            )
+            .await
+            {
                 Ok(Ok(bytes)) => {
                     tracing::debug!("Generated quantum entropy for mantra selection");
                     (bytes, "quantum")
@@ -524,7 +529,7 @@ impl Scheduler {
                             .fetch_all(pool)
                             .await
                             .map_err(Error::Database)?;
-                            
+
                             if !entries.is_empty() {
                                 let idx = rand::random::<usize>() % entries.len();
                                 let (entry_id, category_id, text) = &entries[idx];
@@ -546,7 +551,7 @@ impl Scheduler {
                     .fetch_all(pool)
                     .await
                     .map_err(Error::Database)?;
-                    
+
                     if !entries.is_empty() {
                         let idx = rand::random::<usize>() % entries.len();
                         let (entry_id, category_id, text) = &entries[idx];
@@ -561,12 +566,12 @@ impl Scheduler {
         } else {
             // MAGIC disabled: fetch all eligible entries and select with OS-random
             let entries: Vec<(Uuid, Uuid, String)> = sqlx::query_as(
-                "SELECT entry_id, category_id, text FROM mantra_entries WHERE enabled = true"
+                "SELECT entry_id, category_id, text FROM mantra_entries WHERE enabled = true",
             )
             .fetch_all(pool)
             .await
             .map_err(Error::Database)?;
-            
+
             if !entries.is_empty() {
                 let idx = rand::random::<usize>() % entries.len();
                 let (entry_id, category_id, text) = &entries[idx];
@@ -730,7 +735,11 @@ impl Scheduler {
                     correlation_id = %correlation_id,
                     "Heartbeat model call failed"
                 );
-                ("failed".to_string(), Some(format!("Model call error: {e}")), None)
+                (
+                    "failed".to_string(),
+                    Some(format!("Model call error: {e}")),
+                    None,
+                )
             }
             Err(_) => {
                 tracing::warn!(
@@ -837,10 +846,12 @@ impl Scheduler {
             }
 
             // Increment use_count on selected entry
-            if let Err(e) = sqlx::query("UPDATE mantra_entries SET use_count = use_count + 1 WHERE entry_id = $1")
-                .bind(selection.entry_id)
-                .execute(pool)
-                .await
+            if let Err(e) = sqlx::query(
+                "UPDATE mantra_entries SET use_count = use_count + 1 WHERE entry_id = $1",
+            )
+            .bind(selection.entry_id)
+            .execute(pool)
+            .await
             {
                 tracing::warn!(error = %e, "Failed to increment mantra entry use_count");
             }
@@ -866,10 +877,12 @@ impl Scheduler {
             }
 
             // Increment use_count on selected entry
-            if let Err(e) = sqlx::query("UPDATE mantra_entries SET use_count = use_count + 1 WHERE entry_id = $1")
-                .bind(fallback_entry_id.unwrap())
-                .execute(pool)
-                .await
+            if let Err(e) = sqlx::query(
+                "UPDATE mantra_entries SET use_count = use_count + 1 WHERE entry_id = $1",
+            )
+            .bind(fallback_entry_id.unwrap())
+            .execute(pool)
+            .await
             {
                 tracing::warn!(error = %e, "Failed to increment fallback mantra entry use_count");
             }
@@ -1016,7 +1029,6 @@ impl Scheduler {
         Ok(())
     }
 
-
     /// Poll the task queue for pending work and dispatch tasks to workers.
     ///
     /// Queries pending tasks ordered by priority (DESC) and created_at (ASC),
@@ -1056,7 +1068,7 @@ impl Scheduler {
             + config.worker_lanes.io_task
             + config.worker_lanes.chat_task;
         let fetch_limit = total_lane_permits as usize;
-        
+
         let pending_tasks: Vec<(Uuid, Option<Uuid>, i32, String, Option<String>)> = sqlx::query_as(
             r"SELECT task_id, skill_id, priority, title, description FROM tasks WHERE state = 'pending' ORDER BY priority DESC, created_at ASC LIMIT $1",
         )
@@ -1065,20 +1077,17 @@ impl Scheduler {
         .await
         .map_err(Error::Database)?;
 
-        tracing::debug!(
-            pending_count = pending_tasks.len(),
-            "Polled task queue"
-        );
+        tracing::debug!(pending_count = pending_tasks.len(), "Polled task queue");
 
         for (task_id, skill_id, priority, title, description) in pending_tasks {
             // Classify task into lane
             let lane = crate::config::classify_task_lane(&title, &description.unwrap_or_default());
-            
+
             // Try to acquire a permit for this lane (non-blocking)
-            let semaphore = lane_semaphores.get(&lane).ok_or_else(|| {
-                Error::Config(format!("Missing semaphore for lane {:?}", lane))
-            })?;
-            
+            let semaphore = lane_semaphores
+                .get(&lane)
+                .ok_or_else(|| Error::Config(format!("Missing semaphore for lane {:?}", lane)))?;
+
             let permit = match semaphore.clone().try_acquire_owned() {
                 Ok(p) => p,
                 Err(_) => {
@@ -1153,7 +1162,7 @@ impl Scheduler {
 
                 // Remove from active_tasks on completion
                 active_tasks_clone.lock().await.remove(&task_id);
-                
+
                 // Drop permit to release semaphore slot
                 drop(permit);
             });
@@ -1509,9 +1518,9 @@ impl Scheduler {
         let input = task_description.map_or_else(|| json!({}), |desc| json!({"description": desc}));
 
         // Parse runtime and get transport for that runtime
-        let parsed_runtime = runtime.parse::<crate::worker::WorkerRuntime>().map_err(|e| {
-            Error::Config(format!("Invalid worker runtime '{}': {}", runtime, e))
-        })?;
+        let parsed_runtime = runtime
+            .parse::<crate::worker::WorkerRuntime>()
+            .map_err(|e| Error::Config(format!("Invalid worker runtime '{}': {}", runtime, e)))?;
 
         let transport = {
             let wm = worker_manager.lock().await;
@@ -1614,7 +1623,7 @@ impl Scheduler {
 
                         // Compute quantum checksum for successful task result
                         let started_at: Option<DateTime<Utc>> = sqlx::query_scalar(
-                            "SELECT started_at FROM task_runs WHERE run_id = $1"
+                            "SELECT started_at FROM task_runs WHERE run_id = $1",
                         )
                         .bind(run_id.0)
                         .fetch_optional(pool)
@@ -1623,14 +1632,19 @@ impl Scheduler {
                         .flatten();
 
                         if let Some(ts) = started_at {
-                            let result_text = serde_json::to_string(&result_json).unwrap_or_else(|_| "{}".to_string());
+                            let result_text = serde_json::to_string(&result_json)
+                                .unwrap_or_else(|_| "{}".to_string());
                             let hasher = entropy_provider
                                 .as_ref()
-                                .map_or_else(
-                                    QuantumHasher::with_os_entropy,
-                                    |provider| QuantumHasher::new(Arc::clone(provider)),
-                                );
-                            match hasher.compute_with_ts("task_runs", run_id.0, result_text.as_bytes(), ts) {
+                                .map_or_else(QuantumHasher::with_os_entropy, |provider| {
+                                    QuantumHasher::new(Arc::clone(provider))
+                                });
+                            match hasher.compute_with_ts(
+                                "task_runs",
+                                run_id.0,
+                                result_text.as_bytes(),
+                                ts,
+                            ) {
                                 Ok(checksum) => {
                                     if let Err(e) = sqlx::query("UPDATE task_runs SET quantum_checksum = $1 WHERE run_id = $2")
                                         .bind(&checksum)
@@ -2322,12 +2336,8 @@ async fn insert_auto_queued_task(
 
     // Emit TaskAutoQueued event
     event_stream.publish(
-        EventEnvelope::new(
-            EventLevel::Info,
-            EventType::TaskAutoQueued,
-            event_metadata,
-        )
-        .with_correlation_id(correlation_id),
+        EventEnvelope::new(EventLevel::Info, EventType::TaskAutoQueued, event_metadata)
+            .with_correlation_id(correlation_id),
     );
 
     Ok(Some(task_id))
@@ -2432,8 +2442,8 @@ pub async fn auto_queue_llm_tasks(
         }
 
         // Build combined description from tool_name and arguments for safety classification
-        let arguments_json = serde_json::to_string(&tool_call.arguments)
-            .unwrap_or_else(|_| "{}".to_string());
+        let arguments_json =
+            serde_json::to_string(&tool_call.arguments).unwrap_or_else(|_| "{}".to_string());
         let combined_description = format!("{} {}", tool_call.tool_name, arguments_json);
 
         // Safety gate: skip privileged tool calls (checks both tool_name and arguments)
@@ -2530,7 +2540,6 @@ mod tests {
             safe_mode_guard,
         )
     }
-
 
     #[tokio::test]
     async fn test_scheduler_creation() {

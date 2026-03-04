@@ -3366,13 +3366,16 @@ impl WorkerManager {
     /// Get a transport for a specific runtime by finding a running, non-quarantined worker.
     ///
     /// Returns the first matching worker's transport, or an error if no suitable worker is found.
-    pub async fn get_transport_for_runtime(&self, runtime: WorkerRuntime) -> Result<Arc<dyn WorkerTransport>> {
+    pub async fn get_transport_for_runtime(
+        &self,
+        runtime: WorkerRuntime,
+    ) -> Result<Arc<dyn WorkerTransport>> {
         let workers = self.workers.read().await;
-        
+
         for worker in workers.values() {
-            if worker.runtime == runtime 
-                && worker.status == WorkerStatus::Running 
-                && !worker.quarantined 
+            if worker.runtime == runtime
+                && worker.status == WorkerStatus::Running
+                && !worker.quarantined
             {
                 // Continue scanning if this worker lacks transport
                 if let Some(transport) = worker.transport.clone() {
@@ -3380,7 +3383,7 @@ impl WorkerManager {
                 }
             }
         }
-        
+
         Err(Error::Config(format!(
             "No running {} worker available",
             runtime

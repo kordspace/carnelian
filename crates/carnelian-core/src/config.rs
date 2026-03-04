@@ -366,7 +366,10 @@ pub struct MagicConfig {
     pub qiskit_backend: String,
 
     /// Entropy provider timeout in milliseconds
-    #[serde(default = "magic_default_entropy_timeout_ms", alias = "entropy_timeout_secs")]
+    #[serde(
+        default = "magic_default_entropy_timeout_ms",
+        alias = "entropy_timeout_secs"
+    )]
     pub entropy_timeout_ms: u64,
 
     /// Fraction of bytes sourced from quantum provider (0.0-1.0)
@@ -656,19 +659,19 @@ pub struct WorkerLaneConfig {
     /// Heartbeat lane concurrency (always 1)
     #[serde(default = "default_worker_lane_heartbeat")]
     pub heartbeat: usize,
-    
+
     /// Code task lane concurrency
     #[serde(default = "default_worker_lane_code_task")]
     pub code_task: usize,
-    
+
     /// Data task lane concurrency
     #[serde(default = "default_worker_lane_data_task")]
     pub data_task: usize,
-    
+
     /// I/O task lane concurrency
     #[serde(default = "default_worker_lane_io_task")]
     pub io_task: usize,
-    
+
     /// Chat task lane concurrency
     #[serde(default = "default_worker_lane_chat_task")]
     pub chat_task: usize,
@@ -769,11 +772,7 @@ impl Default for Config {
 /// 5. **IoTask**: Default fallback for I/O and other tasks
 pub fn classify_task_lane(title: &str, description: &str) -> WorkerLane {
     // Combine title and description into lowercase string for matching
-    let combined = format!(
-        "{} {}",
-        title.to_lowercase(),
-        description.to_lowercase()
-    );
+    let combined = format!("{} {}", title.to_lowercase(), description.to_lowercase());
 
     // Match in priority order (first match wins)
     if combined.contains("heartbeat") {
@@ -1300,13 +1299,19 @@ impl Config {
             }
 
             // Validate Quantum Origin URL when enabled (check both nested and flat config)
-            let qo_api_key = self.magic.quantum_origin.as_ref()
+            let qo_api_key = self
+                .magic
+                .quantum_origin
+                .as_ref()
                 .map(|qo| qo.api_key.as_str())
                 .unwrap_or(&self.magic.quantum_origin_api_key);
-            let qo_url = self.magic.quantum_origin.as_ref()
+            let qo_url = self
+                .magic
+                .quantum_origin
+                .as_ref()
                 .map(|qo| qo.url.as_str())
                 .unwrap_or(&self.magic.quantum_origin_url);
-            
+
             if !qo_api_key.is_empty() {
                 if qo_url.is_empty() {
                     return Err(Error::Config(
@@ -1354,25 +1359,25 @@ impl Config {
 
         if self.worker_lanes.code_task == 0 {
             return Err(Error::Config(
-                "worker_lanes.code_task must be at least 1, got 0".to_string()
+                "worker_lanes.code_task must be at least 1, got 0".to_string(),
             ));
         }
 
         if self.worker_lanes.data_task == 0 {
             return Err(Error::Config(
-                "worker_lanes.data_task must be at least 1, got 0".to_string()
+                "worker_lanes.data_task must be at least 1, got 0".to_string(),
             ));
         }
 
         if self.worker_lanes.io_task == 0 {
             return Err(Error::Config(
-                "worker_lanes.io_task must be at least 1, got 0".to_string()
+                "worker_lanes.io_task must be at least 1, got 0".to_string(),
             ));
         }
 
         if self.worker_lanes.chat_task == 0 {
             return Err(Error::Config(
-                "worker_lanes.chat_task must be at least 1, got 0".to_string()
+                "worker_lanes.chat_task must be at least 1, got 0".to_string(),
             ));
         }
 

@@ -47,13 +47,13 @@ impl MemoryMerkleTree {
 
         let leaves = leaf_hashes;
         let mut nodes = Vec::new();
-        
+
         // Build tree bottom-up
         let mut current_level = leaves.clone();
-        
+
         while current_level.len() > 1 {
             let mut next_level = Vec::new();
-            
+
             for chunk in current_level.chunks(2) {
                 let hash = if chunk.len() == 2 {
                     // Hash pair of nodes
@@ -65,12 +65,12 @@ impl MemoryMerkleTree {
                 next_level.push(hash);
                 nodes.push(hash);
             }
-            
+
             current_level = next_level;
         }
-        
+
         let root_hash = current_level[0];
-        
+
         Self {
             root_hash,
             leaves,
@@ -185,7 +185,7 @@ impl MemoryMerkleTree {
 
         // Recompute tree
         *self = Self::new(self.leaves.clone());
-        
+
         true
     }
 
@@ -219,7 +219,7 @@ mod tests {
     fn test_single_leaf() {
         let leaf = hash_data(b"memory1");
         let tree = MemoryMerkleTree::new(vec![leaf]);
-        
+
         assert_eq!(tree.leaf_count(), 1);
         assert_eq!(tree.root(), leaf);
     }
@@ -232,7 +232,7 @@ mod tests {
             hash_data(b"memory3"),
             hash_data(b"memory4"),
         ];
-        
+
         let tree = MemoryMerkleTree::new(leaves.clone());
         assert_eq!(tree.leaf_count(), 4);
         assert_ne!(tree.root(), [0u8; 32]);
@@ -246,9 +246,9 @@ mod tests {
             hash_data(b"memory3"),
             hash_data(b"memory4"),
         ];
-        
+
         let tree = MemoryMerkleTree::new(leaves.clone());
-        
+
         // Generate and verify proof for each leaf
         for (i, leaf) in leaves.iter().enumerate() {
             let proof = tree.generate_proof(i).unwrap();
@@ -264,12 +264,12 @@ mod tests {
             hash_data(b"memory2"),
             hash_data(b"memory3"),
         ];
-        
+
         let tree = MemoryMerkleTree::new(leaves);
-        
+
         let proof = tree.generate_proof(0).unwrap();
         let wrong_leaf = hash_data(b"wrong_memory");
-        
+
         assert!(!tree.verify_proof(&wrong_leaf, &proof));
     }
 
@@ -280,17 +280,17 @@ mod tests {
             hash_data(b"memory2"),
             hash_data(b"memory3"),
         ];
-        
+
         let mut tree = MemoryMerkleTree::new(leaves.clone());
         let original_root = tree.root();
-        
+
         // Update leaf
         let new_hash = hash_data(b"updated_memory1");
         assert!(tree.update_leaf(0, new_hash));
-        
+
         // Root should change
         assert_ne!(tree.root(), original_root);
-        
+
         // New proof should verify
         let proof = tree.generate_proof(0).unwrap();
         assert!(tree.verify_proof(&new_hash, &proof));
@@ -305,9 +305,9 @@ mod tests {
             hash_data(b"memory4"),
             hash_data(b"memory5"),
         ];
-        
+
         let tree = MemoryMerkleTree::new(leaves.clone());
-        
+
         // All proofs should verify
         for (i, leaf) in leaves.iter().enumerate() {
             let proof = tree.generate_proof(i).unwrap();

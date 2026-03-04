@@ -19,10 +19,7 @@ pub enum MagicError {
 
     /// A specific provider failed
     #[error("Provider error from {provider}: {message}")]
-    ProviderError {
-        provider: String,
-        message: String,
-    },
+    ProviderError { provider: String, message: String },
 
     /// Network failure
     #[error("HTTP error: {0}")]

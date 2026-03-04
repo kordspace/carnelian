@@ -524,21 +524,25 @@ fn Step6MagicSetup() -> Element {
                     match api::magic_entropy_health().await {
                         Ok(health) => {
                             // Validate provider-specific readiness from health payload
-                            let qiskit_available = health.get("qiskit-rng")
+                            let qiskit_available = health
+                                .get("qiskit-rng")
                                 .and_then(|v| v.get("available"))
                                 .and_then(|v| v.as_bool())
                                 .unwrap_or(false);
-                            
+
                             if qiskit_available {
-                                feedback.set("IBM Quantum (Qiskit) provider verified ✓".to_string());
+                                feedback
+                                    .set("IBM Quantum (Qiskit) provider verified ✓".to_string());
                             } else {
                                 // Provider not ready - revert qiskit_enabled
                                 let _ = api::magic_update_config(None, None, Some(false)).await;
-                                let error_msg = health.get("qiskit-rng")
+                                let error_msg = health
+                                    .get("qiskit-rng")
                                     .and_then(|v| v.get("error"))
                                     .and_then(|v| v.as_str())
                                     .unwrap_or("Provider not available");
-                                feedback.set(format!("IBM Quantum provider not ready: {}", error_msg));
+                                feedback
+                                    .set(format!("IBM Quantum provider not ready: {}", error_msg));
                             }
                         }
                         Err(e) => {

@@ -60,7 +60,7 @@ pub fn batch_verify_hybrid(
     messages_and_signatures: &[(&[u8], &HybridSignature)],
 ) -> BatchVerificationResult {
     let total = messages_and_signatures.len();
-    
+
     // Parallel verification using Rayon
     let results: Vec<(usize, bool)> = messages_and_signatures
         .par_iter()
@@ -152,31 +152,31 @@ mod tests {
     use std::sync::Arc;
 
     async fn create_test_key() -> HybridSigningKey {
-        let provider: Arc<dyn crate::EntropyProvider> = Arc::new(MixedEntropyProvider::new_os_only());
-        HybridSigningKey::generate_with_entropy(&provider).await.unwrap()
+        let provider: Arc<dyn crate::EntropyProvider> =
+            Arc::new(MixedEntropyProvider::new_os_only());
+        HybridSigningKey::generate_with_entropy(&provider)
+            .await
+            .unwrap()
     }
 
     #[tokio::test]
     async fn test_batch_verify_all_valid() {
         let key = create_test_key().await;
-        
+
         let messages: Vec<Vec<u8>> = (0..10)
             .map(|i| format!("message{}", i).into_bytes())
             .collect();
-        
-        let signatures: Vec<HybridSignature> = messages
-            .iter()
-            .map(|msg| key.sign(msg))
-            .collect();
-        
+
+        let signatures: Vec<HybridSignature> = messages.iter().map(|msg| key.sign(msg)).collect();
+
         let pairs: Vec<(&[u8], &HybridSignature)> = messages
             .iter()
             .zip(signatures.iter())
             .map(|(m, s)| (m.as_slice(), s))
             .collect();
-        
+
         let result = batch_verify_hybrid(&key, &pairs);
-        
+
         assert_eq!(result.total, 10);
         assert_eq!(result.valid, 10);
         assert_eq!(result.invalid, 0);
@@ -187,27 +187,25 @@ mod tests {
     #[tokio::test]
     async fn test_batch_verify_with_invalid() {
         let key = create_test_key().await;
-        
+
         let messages: Vec<Vec<u8>> = (0..5)
             .map(|i| format!("message{}", i).into_bytes())
             .collect();
-        
-        let mut signatures: Vec<HybridSignature> = messages
-            .iter()
-            .map(|msg| key.sign(msg))
-            .collect();
-        
+
+        let mut signatures: Vec<HybridSignature> =
+            messages.iter().map(|msg| key.sign(msg)).collect();
+
         // Corrupt signature at index 2
         signatures[2].ed25519_sig[0] ^= 0xFF;
-        
+
         let pairs: Vec<(&[u8], &HybridSignature)> = messages
             .iter()
             .zip(signatures.iter())
             .map(|(m, s)| (m.as_slice(), s))
             .collect();
-        
+
         let result = batch_verify_hybrid(&key, &pairs);
-        
+
         assert_eq!(result.total, 5);
         assert_eq!(result.valid, 4);
         assert_eq!(result.invalid, 1);
@@ -219,25 +217,22 @@ mod tests {
     #[tokio::test]
     async fn test_sequential_vs_parallel() {
         let key = create_test_key().await;
-        
+
         let messages: Vec<Vec<u8>> = (0..20)
             .map(|i| format!("message{}", i).into_bytes())
             .collect();
-        
-        let signatures: Vec<HybridSignature> = messages
-            .iter()
-            .map(|msg| key.sign(msg))
-            .collect();
-        
+
+        let signatures: Vec<HybridSignature> = messages.iter().map(|msg| key.sign(msg)).collect();
+
         let pairs: Vec<(&[u8], &HybridSignature)> = messages
             .iter()
             .zip(signatures.iter())
             .map(|(m, s)| (m.as_slice(), s))
             .collect();
-        
+
         let parallel_result = batch_verify_hybrid(&key, &pairs);
         let sequential_result = sequential_verify_hybrid(&key, &pairs);
-        
+
         // Results should be identical
         assert_eq!(parallel_result.total, sequential_result.total);
         assert_eq!(parallel_result.valid, sequential_result.valid);
@@ -247,27 +242,25 @@ mod tests {
     #[tokio::test]
     async fn test_fail_fast() {
         let key = create_test_key().await;
-        
+
         let messages: Vec<Vec<u8>> = (0..5)
             .map(|i| format!("message{}", i).into_bytes())
             .collect();
-        
-        let mut signatures: Vec<HybridSignature> = messages
-            .iter()
-            .map(|msg| key.sign(msg))
-            .collect();
-        
+
+        let mut signatures: Vec<HybridSignature> =
+            messages.iter().map(|msg| key.sign(msg)).collect();
+
         // Corrupt signature at index 1
         signatures[1].dilithium_sig[0] ^= 0xFF;
-        
+
         let pairs: Vec<(&[u8], &HybridSignature)> = messages
             .iter()
             .zip(signatures.iter())
             .map(|(m, s)| (m.as_slice(), s))
             .collect();
-        
+
         let result = verify_batch_fail_fast(&key, &pairs);
-        
+
         assert!(result.is_err());
         let (idx, _) = result.unwrap_err();
         assert_eq!(idx, 1);
@@ -277,9 +270,9 @@ mod tests {
     async fn test_empty_batch() {
         let key = create_test_key().await;
         let pairs: Vec<(&[u8], &HybridSignature)> = Vec::new();
-        
+
         let result = batch_verify_hybrid(&key, &pairs);
-        
+
         assert_eq!(result.total, 0);
         assert_eq!(result.valid, 0);
         assert_eq!(result.invalid, 0);

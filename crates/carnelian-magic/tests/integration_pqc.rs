@@ -1,8 +1,6 @@
 //! Integration tests for PQC hybrid sign/verify flow
 
-use carnelian_magic::{
-    EntropyProvider, HybridSigningKey, KyberKem, MixedEntropyProvider,
-};
+use carnelian_magic::{EntropyProvider, HybridSigningKey, KyberKem, MixedEntropyProvider};
 use std::sync::Arc;
 
 #[tokio::test]
@@ -32,8 +30,15 @@ async fn test_pqc_hybrid_sign_verify_e2e() {
 
     // Verify public key export
     let public_keys = key.public_keys();
-    assert_eq!(public_keys.ed25519_pk.len(), 32, "Ed25519 public key should be 32 bytes");
-    assert!(public_keys.dilithium_pk.len() > 0, "Dilithium public key should exist");
+    assert_eq!(
+        public_keys.ed25519_pk.len(),
+        32,
+        "Ed25519 public key should be 32 bytes"
+    );
+    assert!(
+        public_keys.dilithium_pk.len() > 0,
+        "Dilithium public key should exist"
+    );
 }
 
 #[tokio::test]

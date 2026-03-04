@@ -176,13 +176,12 @@ impl EntropyProvider for QuantumOriginProvider {
         }
 
         let json: serde_json::Value = response.json().await?;
-        let bytes_hex = json
-            .get("bytes")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| MagicError::ProviderError {
+        let bytes_hex = json.get("bytes").and_then(|v| v.as_str()).ok_or_else(|| {
+            MagicError::ProviderError {
                 provider: self.source_name().to_string(),
                 message: "Missing 'bytes' field in response".to_string(),
-            })?;
+            }
+        })?;
 
         let decoded = hex::decode(bytes_hex).map_err(|e| MagicError::ProviderError {
             provider: self.source_name().to_string(),
@@ -264,10 +263,7 @@ impl EntropyProvider for QuantinuumH2Provider {
     async fn get_bytes(&self, n: usize) -> Result<Vec<u8>> {
         let result = self
             .bridge
-            .invoke_skill(
-                "quantinuum-h2-rng",
-                serde_json::json!({"n_bits": n * 8}),
-            )
+            .invoke_skill("quantinuum-h2-rng", serde_json::json!({"n_bits": n * 8}))
             .await?;
 
         let bytes_hex = result
@@ -643,7 +639,10 @@ mod tests {
         // checked_at should be within 5 seconds of now
         let now = chrono::Utc::now();
         let diff = (now - health.checked_at).num_seconds().abs();
-        assert!(diff < 5, "checked_at timestamp is too far from current time");
+        assert!(
+            diff < 5,
+            "checked_at timestamp is too far from current time"
+        );
     }
 
     #[tokio::test]
@@ -653,12 +652,8 @@ mod tests {
         let qiskit = QiskitProvider::new(Arc::new(MockSkillBridge { fail: true }));
 
         // Create mixed provider with no Quantum Origin, only failing quantum providers
-        let provider = MixedEntropyProvider::new(
-            None,
-            Some(quantinuum),
-            Some(qiskit),
-            uuid::Uuid::new_v4(),
-        );
+        let provider =
+            MixedEntropyProvider::new(None, Some(quantinuum), Some(qiskit), uuid::Uuid::new_v4());
 
         // Should fall back to OS and succeed
         let result = provider.get_bytes(32).await;
@@ -672,12 +667,8 @@ mod tests {
         let quantinuum = QuantinuumH2Provider::new(Arc::new(MockSkillBridge { fail: false }));
 
         // Create mixed provider with working quantum source
-        let provider = MixedEntropyProvider::new(
-            None,
-            Some(quantinuum),
-            None,
-            uuid::Uuid::new_v4(),
-        );
+        let provider =
+            MixedEntropyProvider::new(None, Some(quantinuum), None, uuid::Uuid::new_v4());
 
         // Get mixed entropy
         let mixed_result = provider.get_bytes(32).await;
@@ -706,12 +697,8 @@ mod tests {
         let qiskit = QiskitProvider::new(Arc::new(MockSkillBridge { fail: true }));
 
         // Create mixed provider
-        let provider = MixedEntropyProvider::new(
-            None,
-            Some(quantinuum),
-            Some(qiskit),
-            uuid::Uuid::new_v4(),
-        );
+        let provider =
+            MixedEntropyProvider::new(None, Some(quantinuum), Some(qiskit), uuid::Uuid::new_v4());
 
         // Get health for all providers
         let health_vec = provider.all_health().await;
@@ -731,7 +718,8 @@ mod tests {
     #[tokio::test]
     async fn test_provider_priority_selection() {
         // Test 1: Higher-priority provider succeeds, lower-priority not used
-        let quantinuum_success = QuantinuumH2Provider::new(Arc::new(MockSkillBridge { fail: false }));
+        let quantinuum_success =
+            QuantinuumH2Provider::new(Arc::new(MockSkillBridge { fail: false }));
         let qiskit_fail = QiskitProvider::new(Arc::new(MockSkillBridge { fail: true }));
 
         let provider = MixedEntropyProvider::new(

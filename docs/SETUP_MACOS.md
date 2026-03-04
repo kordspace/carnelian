@@ -12,7 +12,7 @@ Carnelian runs natively on macOS. GPU passthrough is not supported — Ollama ru
 | Homebrew | Latest | Package manager |
 | Docker Desktop | Latest | For PostgreSQL and Ollama |
 | Rust | 1.85+ | Native toolchain |
-| Node.js | 18+ | For Node.js worker |
+| Node.js | 22+ | For Gateway service and Node.js workers |
 | Python | 3.10+ | For Python worker |
 
 ---

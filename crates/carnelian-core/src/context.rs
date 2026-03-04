@@ -456,7 +456,8 @@ impl ContextWindow {
     /// Queries the `identities.directives` JSONB column, deserializes into
     /// `Vec<SoulDirective>`, sorts by priority, and adds each as a P0 segment.
     pub async fn load_soul_directives(&mut self, identity_id: Uuid) -> Result<()> {
-        let segments = Self::load_soul_directives_inner(&self.pool, Some(identity_id), &self.model).await?;
+        let segments =
+            Self::load_soul_directives_inner(&self.pool, Some(identity_id), &self.model).await?;
         for seg in segments {
             self.add_segment(seg);
         }
@@ -543,7 +544,9 @@ impl ContextWindow {
     /// memories (importance > 0.8), deduplicates by memory_id, and takes
     /// the top `limit` results sorted by importance then access time.
     pub async fn load_recent_memories(&mut self, identity_id: Uuid, limit: usize) -> Result<()> {
-        let segments = Self::load_recent_memories_inner(&self.pool, Some(identity_id), limit, &self.model).await?;
+        let segments =
+            Self::load_recent_memories_inner(&self.pool, Some(identity_id), limit, &self.model)
+                .await?;
         for seg in segments {
             self.add_segment(seg);
         }
@@ -641,7 +644,8 @@ impl ContextWindow {
     /// Queries the `tasks` table for task details and `task_runs` for the
     /// most recent run, formatting them as structured context.
     pub async fn load_task_context(&mut self, task_id: Uuid) -> Result<()> {
-        let segments = Self::load_task_context_inner(&self.pool, Some(task_id), &self.model).await?;
+        let segments =
+            Self::load_task_context_inner(&self.pool, Some(task_id), &self.model).await?;
         for seg in segments {
             self.add_segment(seg);
         }
@@ -714,7 +718,9 @@ impl ContextWindow {
         session_id: Uuid,
         limit: usize,
     ) -> Result<()> {
-        let segments = Self::load_conversation_history_inner(&self.pool, Some(session_id), limit, &self.model).await?;
+        let segments =
+            Self::load_conversation_history_inner(&self.pool, Some(session_id), limit, &self.model)
+                .await?;
         for seg in segments {
             self.add_segment(seg);
         }

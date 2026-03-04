@@ -1085,9 +1085,9 @@ pub async fn elixirs_draft_reject(draft_id: Uuid) -> Result<RejectDraftResponse,
 use carnelian_common::types::{
     AddMantraEntryRequest, EntropyLogResponse, EntropySampleRequest, EntropySampleResponse,
     ListMantraCategoriesResponse, ListMantraEntriesResponse, MagicAuthStatusResponse,
-    MagicConfigResponse, MagicConfigUpdateRequest, MagicElixirsRehashResponse,
-    MantraEntryDetail, MantraHistoryResponse, MantraSimulateResponse, QuantinuumLoginRequest,
-    QuantinuumLoginResponse, QuantinuumRefreshResponse, UpdateMantraEntryRequest,
+    MagicConfigResponse, MagicConfigUpdateRequest, MagicElixirsRehashResponse, MantraEntryDetail,
+    MantraHistoryResponse, MantraSimulateResponse, QuantinuumLoginRequest, QuantinuumLoginResponse,
+    QuantinuumRefreshResponse, UpdateMantraEntryRequest,
 };
 
 // ── Entropy functions ──
@@ -1282,9 +1282,7 @@ pub async fn magic_quantinuum_login(
     password: String,
 ) -> Result<QuantinuumLoginResponse, String> {
     client()
-        .post(format!(
-            "{API_BASE_URL}/v1/magic/auth/quantinuum/login"
-        ))
+        .post(format!("{API_BASE_URL}/v1/magic/auth/quantinuum/login"))
         .json(&QuantinuumLoginRequest { email, password })
         .send()
         .await
@@ -1297,9 +1295,7 @@ pub async fn magic_quantinuum_login(
 /// Refresh Quantinuum token.
 pub async fn magic_quantinuum_refresh() -> Result<QuantinuumRefreshResponse, String> {
     client()
-        .post(format!(
-            "{API_BASE_URL}/v1/magic/auth/quantinuum/refresh"
-        ))
+        .post(format!("{API_BASE_URL}/v1/magic/auth/quantinuum/refresh"))
         .json(&serde_json::json!({}))
         .send()
         .await

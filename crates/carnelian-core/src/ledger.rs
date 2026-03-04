@@ -340,7 +340,7 @@ impl Ledger {
             let bytes_requested = 16i32;
             let quantum_available = resolved_salt.is_some();
             let latency_ms = entropy_latency_ms;
-            
+
             let pool = self.pool.clone();
             let source_owned = source.to_string();
             let correlation_id_owned = correlation_id;
@@ -889,15 +889,22 @@ mod tests {
         let payload_hash = "abc123";
         let prev_hash = Some("def456");
 
-        let base_hash = Ledger::compute_event_hash(&ts, actor, action, payload_hash, prev_hash, None);
+        let base_hash =
+            Ledger::compute_event_hash(&ts, actor, action, payload_hash, prev_hash, None);
 
         // Changing any field should produce a different hash
         let different_action =
             Ledger::compute_event_hash(&ts, actor, "other.action", payload_hash, prev_hash, None);
         assert_ne!(base_hash, different_action);
 
-        let different_actor =
-            Ledger::compute_event_hash(&ts, Some(Uuid::new_v4()), action, payload_hash, prev_hash, None);
+        let different_actor = Ledger::compute_event_hash(
+            &ts,
+            Some(Uuid::new_v4()),
+            action,
+            payload_hash,
+            prev_hash,
+            None,
+        );
         assert_ne!(base_hash, different_actor);
 
         let different_prev =
@@ -1123,7 +1130,16 @@ mod tests {
 
         // Mix of signed privileged and unsigned non-privileged events
         ledger
-            .append_event(None, "test.action", serde_json::json!({}), None, None, None, None, None)
+            .append_event(
+                None,
+                "test.action",
+                serde_json::json!({}),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .expect("append failed");
         ledger
@@ -1153,7 +1169,16 @@ mod tests {
             .await
             .expect("append failed");
         ledger
-            .append_event(None, "test.other", serde_json::json!({}), None, None, None, None, None)
+            .append_event(
+                None,
+                "test.other",
+                serde_json::json!({}),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .expect("append failed");
 

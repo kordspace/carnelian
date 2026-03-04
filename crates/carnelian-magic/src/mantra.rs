@@ -199,13 +199,15 @@ impl MantraTree {
         .await?;
 
         if categories.is_empty() {
-            return Err(MagicError::EntropyUnavailable("No enabled mantra categories".into()));
+            return Err(MagicError::EntropyUnavailable(
+                "No enabled mantra categories".into(),
+            ));
         }
 
         // Fetch all enabled entries grouped by category
         let all_entries: Vec<(Uuid, Uuid, String, i32, bool, Option<Uuid>)> = sqlx::query_as(
             "SELECT entry_id, category_id, text, use_count, enabled, elixir_id 
-             FROM mantra_entries WHERE enabled = true"
+             FROM mantra_entries WHERE enabled = true",
         )
         .fetch_all(pool)
         .await?;
@@ -226,10 +228,14 @@ impl MantraTree {
         }
 
         // Fetch recent history up to max cooldown
-        let max_cooldown = categories.iter().map(|(_, _, _, cd, _, _, _)| *cd).max().unwrap_or(3);
+        let max_cooldown = categories
+            .iter()
+            .map(|(_, _, _, cd, _, _, _)| *cd)
+            .max()
+            .unwrap_or(3);
         let recent_history: Vec<(Uuid, i64)> = sqlx::query_as(
             "SELECT category_id, ROW_NUMBER() OVER (ORDER BY ts DESC) as position 
-             FROM mantra_history ORDER BY ts DESC LIMIT $1"
+             FROM mantra_history ORDER BY ts DESC LIMIT $1",
         )
         .bind(max_cooldown)
         .fetch_all(pool)
@@ -254,12 +260,11 @@ impl MantraTree {
         .await?
         .unwrap_or(0);
 
-        let pending_task_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM tasks WHERE state = 'pending'"
-        )
-        .fetch_optional(&mut *tx)
-        .await?
-        .unwrap_or(0);
+        let pending_task_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE state = 'pending'")
+                .fetch_optional(&mut *tx)
+                .await?
+                .unwrap_or(0);
 
         let idle_beats: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM heartbeat_history WHERE status = 'ok' AND ts > NOW() - INTERVAL '30 minutes'"
@@ -268,26 +273,24 @@ impl MantraTree {
         .await?
         .unwrap_or(0);
 
-        let elixir_drafts_pending: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM elixir_drafts WHERE status = 'pending'"
-        )
-        .fetch_optional(&mut *tx)
-        .await?
-        .unwrap_or(0);
+        let elixir_drafts_pending: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM elixir_drafts WHERE status = 'pending'")
+                .fetch_optional(&mut *tx)
+                .await?
+                .unwrap_or(0);
 
         let capability_changes_last_hour: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM capability_grants WHERE created_at > NOW() - INTERVAL '1 hour'"
+            "SELECT COUNT(*) FROM capability_grants WHERE created_at > NOW() - INTERVAL '1 hour'",
         )
         .fetch_optional(&mut *tx)
         .await?
         .unwrap_or(0);
 
-        let sub_agents_active: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM sub_agents WHERE terminated_at IS NULL"
-        )
-        .fetch_optional(&mut *tx)
-        .await?
-        .unwrap_or(0);
+        let sub_agents_active: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM sub_agents WHERE terminated_at IS NULL")
+                .fetch_optional(&mut *tx)
+                .await?
+                .unwrap_or(0);
 
         let soul_file_age_days: i64 = sqlx::query_scalar(
             "SELECT COALESCE(EXTRACT(EPOCH FROM (NOW() - updated_at)) / 86400, 9999)::bigint FROM identities WHERE name = 'Lian' AND identity_type = 'core' LIMIT 1"
@@ -297,7 +300,7 @@ impl MantraTree {
         .unwrap_or(9999);
 
         let new_skills_last_24h: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM skills WHERE discovered_at > NOW() - INTERVAL '24 hours'"
+            "SELECT COUNT(*) FROM skills WHERE discovered_at > NOW() - INTERVAL '24 hours'",
         )
         .fetch_optional(&mut *tx)
         .await?
@@ -323,14 +326,14 @@ impl MantraTree {
         .fetch_all(&mut *tx)
         .await?;
 
-        let elixir_quality_by_category: HashMap<String, f32> = elixir_quality_rows.into_iter().collect();
+        let elixir_quality_by_category: HashMap<String, f32> =
+            elixir_quality_rows.into_iter().collect();
 
-        let active_sessions: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM sessions WHERE expires_at > NOW()"
-        )
-        .fetch_optional(&mut *tx)
-        .await?
-        .unwrap_or(0);
+        let active_sessions: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE expires_at > NOW()")
+                .fetch_optional(&mut *tx)
+                .await?
+                .unwrap_or(0);
 
         // Compute uptime from first heartbeat
         let uptime_hours: f64 = sqlx::query_scalar(
@@ -359,7 +362,7 @@ impl MantraTree {
 
         // Query magic_enabled from config_store
         let magic_enabled: bool = sqlx::query_scalar(
-            "SELECT (value->>'enabled')::boolean FROM config_store WHERE key = 'magic' LIMIT 1"
+            "SELECT (value->>'enabled')::boolean FROM config_store WHERE key = 'magic' LIMIT 1",
         )
         .fetch_optional(&mut *tx)
         .await?
@@ -367,7 +370,7 @@ impl MantraTree {
 
         // Query active quantum providers from config_store
         let quantum_providers_json: Option<serde_json::Value> = sqlx::query_scalar(
-            "SELECT value->'quantum_providers' FROM config_store WHERE key = 'magic' LIMIT 1"
+            "SELECT value->'quantum_providers' FROM config_store WHERE key = 'magic' LIMIT 1",
         )
         .fetch_optional(&mut *tx)
         .await?
@@ -412,11 +415,7 @@ impl MantraTree {
 
     /// Select a mantra using quantum entropy and context weights (consumer-facing API)
     #[allow(clippy::unused_async)]
-    pub async fn select(
-        &self,
-        entropy: &[u8],
-        context: &MantraContext,
-    ) -> Result<MantraSelection> {
+    pub async fn select(&self, entropy: &[u8], context: &MantraContext) -> Result<MantraSelection> {
         if entropy.len() < 8 {
             return Err(MagicError::EntropyUnavailable(
                 "Need at least 8 bytes of entropy".into(),
@@ -446,20 +445,19 @@ impl MantraTree {
         let weights = Self::compute_weights(context, categories, &category_last_used);
 
         // Weighted pick for category
-        let (selected_cat_id, selected_cat_name, system_msg, user_msg) = 
+        let (selected_cat_id, selected_cat_name, system_msg, user_msg) =
             Self::weighted_pick(entropy, categories, &weights)?;
 
         // Get entries for selected category from preloaded data
         let entries = entries_by_category.get(&selected_cat_id).ok_or_else(|| {
-            MagicError::EntropyUnavailable(
-                format!("No entries for category {}", selected_cat_name)
-            )
+            MagicError::EntropyUnavailable(format!("No entries for category {}", selected_cat_name))
         })?;
 
         if entries.is_empty() {
-            return Err(MagicError::EntropyUnavailable(
-                format!("No enabled entries for category {}", selected_cat_name)
-            ));
+            return Err(MagicError::EntropyUnavailable(format!(
+                "No enabled entries for category {}",
+                selected_cat_name
+            )));
         }
 
         // Inverse frequency pick for entry
@@ -514,12 +512,18 @@ impl MantraTree {
         .await?;
 
         if categories.is_empty() {
-            return Err(MagicError::EntropyUnavailable("No enabled mantra categories".into()));
+            return Err(MagicError::EntropyUnavailable(
+                "No enabled mantra categories".into(),
+            ));
         }
 
         // Fetch recently used category_ids with their usage order
         // We need to check per-category cooldown, so fetch more history
-        let max_cooldown = categories.iter().map(|(_, _, _, cd, _, _, _)| *cd).max().unwrap_or(3);
+        let max_cooldown = categories
+            .iter()
+            .map(|(_, _, _, cd, _, _, _)| *cd)
+            .max()
+            .unwrap_or(3);
         let recent_history: Vec<(Uuid, i64)> = sqlx::query_as(
             "SELECT category_id, ROW_NUMBER() OVER (ORDER BY ts DESC) as position FROM mantra_history ORDER BY ts DESC LIMIT $1"
         )
@@ -537,13 +541,13 @@ impl MantraTree {
         let weights = Self::compute_weights(context, &categories, &category_last_used);
 
         // Weighted pick for category
-        let (selected_cat_id, selected_cat_name, system_msg, user_msg) = 
+        let (selected_cat_id, selected_cat_name, system_msg, user_msg) =
             Self::weighted_pick(entropy, &categories, &weights)?;
 
         // Fetch enabled entries for selected category
         let entry_rows: Vec<(Uuid, Uuid, String, i32, bool, Option<Uuid>)> = sqlx::query_as(
             "SELECT entry_id, category_id, text, use_count, enabled, elixir_id 
-             FROM mantra_entries WHERE category_id = $1 AND enabled = true"
+             FROM mantra_entries WHERE category_id = $1 AND enabled = true",
         )
         .bind(selected_cat_id)
         .fetch_all(pool)
@@ -551,20 +555,23 @@ impl MantraTree {
 
         let entries: Vec<MantraEntry> = entry_rows
             .into_iter()
-            .map(|(entry_id, category_id, text, use_count, enabled, elixir_id)| MantraEntry {
-                entry_id,
-                category_id,
-                text,
-                use_count,
-                enabled,
-                elixir_id,
-            })
+            .map(
+                |(entry_id, category_id, text, use_count, enabled, elixir_id)| MantraEntry {
+                    entry_id,
+                    category_id,
+                    text,
+                    use_count,
+                    enabled,
+                    elixir_id,
+                },
+            )
             .collect();
 
         if entries.is_empty() {
-            return Err(MagicError::EntropyUnavailable(
-                format!("No enabled entries for category {}", selected_cat_name)
-            ));
+            return Err(MagicError::EntropyUnavailable(format!(
+                "No enabled entries for category {}",
+                selected_cat_name
+            )));
         }
 
         // Inverse frequency pick for entry
@@ -577,8 +584,9 @@ impl MantraTree {
         let system_message = Self::resolve_template(&system_msg, context);
         let user_message = Self::resolve_template(&user_msg, context);
 
-        let category = MantraCategory::from_db_name(&selected_cat_name)
-            .ok_or_else(|| MagicError::EntropyUnavailable(format!("Unknown category: {}", selected_cat_name)))?;
+        let category = MantraCategory::from_db_name(&selected_cat_name).ok_or_else(|| {
+            MagicError::EntropyUnavailable(format!("Unknown category: {}", selected_cat_name))
+        })?;
 
         Ok(MantraSelection {
             category,
@@ -616,7 +624,11 @@ impl MantraTree {
                 "Code Development" if context.new_skills_last_24h > 0 => weight += 1,
                 "Security & Audit" if context.capability_changes_last_hour > 0 => weight += 2,
                 "Performance Optimization" if context.high_latency => weight += 3,
-                "Reflection & Introspection" if context.local_hour >= 22 || context.local_hour <= 6 => weight += 2,
+                "Reflection & Introspection"
+                    if context.local_hour >= 22 || context.local_hour <= 6 =>
+                {
+                    weight += 2
+                }
                 "Innovation & Experimentation" if context.magic_enabled => weight += 1,
                 _ => {}
             }
@@ -633,7 +645,7 @@ impl MantraTree {
                             break;
                         }
                     }
-                    
+
                     // Fallback to substring matching if no direct match
                     if !matched {
                         let name_lower = name.to_lowercase();
@@ -673,7 +685,9 @@ impl MantraTree {
     ) -> Result<(Uuid, String, String, String)> {
         let total_weight: i32 = weights.values().sum();
         if total_weight == 0 {
-            return Err(MagicError::EntropyUnavailable("All weights are zero".into()));
+            return Err(MagicError::EntropyUnavailable(
+                "All weights are zero".into(),
+            ));
         }
 
         let entropy_val = u32::from_le_bytes([entropy[0], entropy[1], entropy[2], entropy[3]]);
@@ -702,7 +716,9 @@ impl MantraTree {
 
         let total_weight: f64 = weights.iter().sum();
         if total_weight == 0.0 {
-            return Err(MagicError::EntropyUnavailable("All entry weights are zero".into()));
+            return Err(MagicError::EntropyUnavailable(
+                "All entry weights are zero".into(),
+            ));
         }
 
         let entropy_val = u32::from_le_bytes([entropy[0], entropy[1], entropy[2], entropy[3]]);
@@ -724,20 +740,47 @@ impl MantraTree {
         template
             .replace("{mantra_text}", "")
             .replace("{tasks_queued}", &context.pending_task_count.to_string())
-            .replace("{recent_error_count}", &context.recent_error_count.to_string())
+            .replace(
+                "{recent_error_count}",
+                &context.recent_error_count.to_string(),
+            )
             .replace("{idle_beats}", &context.idle_beats.to_string())
-            .replace("{elixir_drafts_pending}", &context.elixir_drafts_pending.to_string())
-            .replace("{capability_changes_last_hour}", &context.capability_changes_last_hour.to_string())
-            .replace("{model_cost_pct}", &format!("{:.1}", context.model_cost_pct))
-            .replace("{sub_agents_active}", &context.sub_agents_active.to_string())
-            .replace("{soul_file_age_days}", &context.soul_file_age_days.to_string())
-            .replace("{new_skills_last_24h}", &context.new_skills_last_24h.to_string())
+            .replace(
+                "{elixir_drafts_pending}",
+                &context.elixir_drafts_pending.to_string(),
+            )
+            .replace(
+                "{capability_changes_last_hour}",
+                &context.capability_changes_last_hour.to_string(),
+            )
+            .replace(
+                "{model_cost_pct}",
+                &format!("{:.1}", context.model_cost_pct),
+            )
+            .replace(
+                "{sub_agents_active}",
+                &context.sub_agents_active.to_string(),
+            )
+            .replace(
+                "{soul_file_age_days}",
+                &context.soul_file_age_days.to_string(),
+            )
+            .replace(
+                "{new_skills_last_24h}",
+                &context.new_skills_last_24h.to_string(),
+            )
             .replace("{magic_enabled}", &context.magic_enabled.to_string())
             .replace("{high_latency}", &context.high_latency.to_string())
-            .replace("{unread_channel_messages}", &context.unread_channel_messages.to_string())
+            .replace(
+                "{unread_channel_messages}",
+                &context.unread_channel_messages.to_string(),
+            )
             .replace("{local_hour}", &context.local_hour.to_string())
             .replace("{uptime_hours}", &format!("{:.1}", context.uptime_hours))
-            .replace("{workflow_executions_last_hour}", &context.workflow_executions_last_hour.to_string())
+            .replace(
+                "{workflow_executions_last_hour}",
+                &context.workflow_executions_last_hour.to_string(),
+            )
             .replace("{active_sessions}", &context.active_sessions.to_string())
     }
 
@@ -769,8 +812,24 @@ mod tests {
         context.recent_error_count = 5;
 
         let categories = vec![
-            (Uuid::new_v4(), "System Health".into(), 1, 3, "".into(), "".into(), vec![]),
-            (Uuid::new_v4(), "Code Development".into(), 1, 3, "".into(), "".into(), vec![]),
+            (
+                Uuid::new_v4(),
+                "System Health".into(),
+                1,
+                3,
+                "".into(),
+                "".into(),
+                vec![],
+            ),
+            (
+                Uuid::new_v4(),
+                "Code Development".into(),
+                1,
+                3,
+                "".into(),
+                "".into(),
+                vec![],
+            ),
         ];
 
         let category_last_used = HashMap::new();
@@ -787,8 +846,24 @@ mod tests {
 
         let cat_id = Uuid::new_v4();
         let categories = vec![
-            (cat_id, "System Health".into(), 5, 3, "".into(), "".into(), vec![]),
-            (Uuid::new_v4(), "Code Development".into(), 1, 3, "".into(), "".into(), vec![]),
+            (
+                cat_id,
+                "System Health".into(),
+                5,
+                3,
+                "".into(),
+                "".into(),
+                vec![],
+            ),
+            (
+                Uuid::new_v4(),
+                "Code Development".into(),
+                1,
+                3,
+                "".into(),
+                "".into(),
+                vec![],
+            ),
         ];
 
         let mut category_last_used = HashMap::new();
@@ -806,8 +881,24 @@ mod tests {
         let cat2 = Uuid::new_v4();
 
         let categories = vec![
-            (cat1, "High Weight".into(), 10, 3, "sys1".into(), "user1".into(), vec![]),
-            (cat2, "Low Weight".into(), 1, 3, "sys2".into(), "user2".into(), vec![]),
+            (
+                cat1,
+                "High Weight".into(),
+                10,
+                3,
+                "sys1".into(),
+                "user1".into(),
+                vec![],
+            ),
+            (
+                cat2,
+                "Low Weight".into(),
+                1,
+                3,
+                "sys2".into(),
+                "user2".into(),
+                vec![],
+            ),
         ];
 
         let mut weights = HashMap::new();
@@ -819,7 +910,9 @@ mod tests {
 
         for i in 0..1000 {
             let entropy = [(i % 256) as u8, ((i / 256) % 256) as u8, 0, 0];
-            if let Ok((picked_id, _, _, _)) = MantraTree::weighted_pick(&entropy, &categories, &weights) {
+            if let Ok((picked_id, _, _, _)) =
+                MantraTree::weighted_pick(&entropy, &categories, &weights)
+            {
                 if picked_id == cat1 {
                     high_count += 1;
                 } else {
@@ -901,44 +994,61 @@ mod tests {
     async fn test_preload_and_select_without_pool() {
         // Create a tree and manually preload mock data
         let mut tree = MantraTree::new(None);
-        
+
         let cat_id = Uuid::new_v4();
         let entry_id = Uuid::new_v4();
-        
+
         // Mock categories
         tree.categories = Some(vec![
-            (cat_id, "System Health".into(), 5, 3, "System: {recent_error_count} errors".into(), "User: reflect".into(), vec![]),
-            (Uuid::new_v4(), "Code Development".into(), 1, 3, "".into(), "".into(), vec![]),
+            (
+                cat_id,
+                "System Health".into(),
+                5,
+                3,
+                "System: {recent_error_count} errors".into(),
+                "User: reflect".into(),
+                vec![],
+            ),
+            (
+                Uuid::new_v4(),
+                "Code Development".into(),
+                1,
+                3,
+                "".into(),
+                "".into(),
+                vec![],
+            ),
         ]);
-        
+
         // Mock entries by category
         let mut entries_map = HashMap::new();
-        entries_map.insert(cat_id, vec![
-            MantraEntry {
+        entries_map.insert(
+            cat_id,
+            vec![MantraEntry {
                 entry_id,
                 category_id: cat_id,
                 text: "Test mantra text".into(),
                 use_count: 0,
                 enabled: true,
                 elixir_id: None,
-            }
-        ]);
+            }],
+        );
         tree.entries_by_category = Some(entries_map);
-        
+
         // Mock recent history (empty)
         tree.recent_history = Some(vec![]);
-        
+
         // Create context
         let mut context = MantraContext::default_for_fallback();
         context.recent_error_count = 5;
-        
+
         // Create entropy
         let entropy = vec![0xAB, 0xCD, 0xEF, 0x12, 0x34, 0x56, 0x78, 0x90];
-        
+
         // Select without pool - should work with preloaded data
         let result = tree.select(&entropy, &context).await;
         assert!(result.is_ok());
-        
+
         let selection = result.unwrap();
         assert_eq!(selection.mantra_text, "Test mantra text");
         assert_eq!(selection.entry_id, entry_id);
@@ -950,7 +1060,7 @@ mod tests {
         let tree = MantraTree::new(None);
         let context = MantraContext::default_for_fallback();
         let entropy = vec![0xAB, 0xCD, 0xEF, 0x12, 0x34, 0x56, 0x78, 0x90];
-        
+
         // Should error because not preloaded
         let result = tree.select(&entropy, &context).await;
         assert!(result.is_err());
@@ -961,22 +1071,42 @@ mod tests {
     fn test_elixir_quality_boost_fires() {
         let tree = MantraTree::new(None);
         let mut context = MantraContext::default_for_fallback();
-        
+
         // Populate elixir_quality_by_category
-        context.elixir_quality_by_category.insert("code".to_string(), 90.0);
-        context.elixir_quality_by_category.insert("financial".to_string(), 70.0);
-        
+        context
+            .elixir_quality_by_category
+            .insert("code".to_string(), 90.0);
+        context
+            .elixir_quality_by_category
+            .insert("financial".to_string(), 70.0);
+
         let categories = vec![
-            (Uuid::new_v4(), "Code Development".into(), 1, 3, "".into(), "".into(), vec!["code".to_string()]),
-            (Uuid::new_v4(), "Financial Management".into(), 1, 3, "".into(), "".into(), vec!["cost".to_string()]),
+            (
+                Uuid::new_v4(),
+                "Code Development".into(),
+                1,
+                3,
+                "".into(),
+                "".into(),
+                vec!["code".to_string()],
+            ),
+            (
+                Uuid::new_v4(),
+                "Financial Management".into(),
+                1,
+                3,
+                "".into(),
+                "".into(),
+                vec!["cost".to_string()],
+            ),
         ];
-        
+
         let category_last_used = HashMap::new();
         let weights = MantraTree::compute_weights(&context, &categories, &category_last_used);
-        
+
         // Code Development should get boost (90.0 > 80.0 and "code development" contains "code")
         assert_eq!(weights.get("Code Development").copied().unwrap_or(0), 2);
-        
+
         // Financial Management should NOT get boost (70.0 <= 80.0)
         assert_eq!(weights.get("Financial Management").copied().unwrap_or(0), 1);
     }
