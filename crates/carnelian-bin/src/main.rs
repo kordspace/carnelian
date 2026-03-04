@@ -2829,4 +2829,7 @@ async fn handle_magic_providers(url: &str) -> carnelian_common::Result<()> {
             "Failed to get provider health: {}",
             error_msg
         )));
-    
+    }
+
+    Ok(())
+}

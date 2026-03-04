@@ -78,30 +78,25 @@ pub fn SkillBook() -> Element {
     };
 
     // Categories for tabs - compute owned strings to avoid lifetime issues
-    let categories: Vec<(String, String)> = catalog
-        .read()
-        .as_ref()
-        .map_or_else(
-            || vec![("all".to_string(), "All".to_string())],
-            |c| {
-                let mut cats = vec![("all".to_string(), "All".to_string())];
-                cats.extend(c.categories.iter().map(|id| {
-                    let name = match id.as_str() {
-                        "code" => "Code",
-                        "research" => "Research",
-                        "communication" => "Communication",
-                        "creative" => "Creative",
-                        "data" => "Data",
-                        "automation" => "Automation",
-                        _ => id.as_str(),
-                    };
-                    (id.clone(), name.to_string())
-                }));
-                cats
-            },
-        );
-        })
-        .unwrap_or_else(|| vec![("all".to_string(), "All".to_string())]);
+    let categories: Vec<(String, String)> = catalog.read().as_ref().map_or_else(
+        || vec![("all".to_string(), "All".to_string())],
+        |c| {
+            let mut cats = vec![("all".to_string(), "All".to_string())];
+            cats.extend(c.categories.iter().map(|id| {
+                let name = match id.as_str() {
+                    "code" => "Code",
+                    "research" => "Research",
+                    "communication" => "Communication",
+                    "creative" => "Creative",
+                    "data" => "Data",
+                    "automation" => "Automation",
+                    _ => id.as_str(),
+                };
+                (id.clone(), name.to_string())
+            }));
+            cats
+        },
+    );
 
     // Activation handler
     let activate_skill = {
