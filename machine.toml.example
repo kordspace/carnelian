@@ -235,3 +235,23 @@ backend = "ibm_brisbane"
 [magic.cors_origins]
 # Add extra CORS origins beyond localhost defaults
 # extra = ["https://your-domain.com"]
+
+# =============================================================================
+# Worker Lane Concurrency Configuration
+# =============================================================================
+# Controls the maximum number of concurrently running tasks per lane.
+# The scheduler assigns each task to a lane based on its title/description.
+#
+# Lane descriptions:
+# - heartbeat : Reserved for the internal heartbeat pulse (always 1)
+# - code_task : Code generation, refactor, build, compile, test, lint
+# - data_task : Data analysis, database queries, migrations, ETL
+# - io_task   : File I/O, network, workspace scanning (default lane)
+# - chat_task : Conversational / reply tasks
+
+[worker_lanes]
+heartbeat  = 1
+code_task  = 2
+data_task  = 4
+io_task    = 8
+chat_task  = 2

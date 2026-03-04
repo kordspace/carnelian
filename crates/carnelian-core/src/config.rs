@@ -250,6 +250,10 @@ pub struct Config {
     #[serde(default)]
     pub magic: MagicConfig,
 
+    /// Per-lane worker concurrency limits
+    #[serde(default)]
+    pub worker_lanes: WorkerLaneConfig,
+
     /// Database pool (not serialized, initialized separately)
     #[serde(skip)]
     db_pool: Option<Arc<PgPool>>,
@@ -597,6 +601,27 @@ fn default_true() -> bool {
     true
 }
 
+// Worker lane concurrency defaults
+fn default_worker_lane_heartbeat() -> usize {
+    1
+}
+
+fn default_worker_lane_code_task() -> usize {
+    2
+}
+
+fn default_worker_lane_data_task() -> usize {
+    4
+}
+
+fn default_worker_lane_io_task() -> usize {
+    8
+}
+
+fn default_worker_lane_chat_task() -> usize {
+    2
+}
+
 /// Machine profile determining resource limits and default model
 ///
 /// # Variants
@@ -611,6 +636,54 @@ pub enum MachineProfile {
     Standard,
     Performance,
     Custom,
+}
+
+/// Worker lane for task classification and concurrency control
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkerLane {
+    Heartbeat,
+    CodeTask,
+    DataTask,
+    IoTask,
+    ChatTask,
+}
+
+/// Per-lane worker concurrency limits
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WorkerLaneConfig {
+    /// Heartbeat lane concurrency (always 1)
+    #[serde(default = "default_worker_lane_heartbeat")]
+    pub heartbeat: usize,
+    
+    /// Code task lane concurrency
+    #[serde(default = "default_worker_lane_code_task")]
+    pub code_task: usize,
+    
+    /// Data task lane concurrency
+    #[serde(default = "default_worker_lane_data_task")]
+    pub data_task: usize,
+    
+    /// I/O task lane concurrency
+    #[serde(default = "default_worker_lane_io_task")]
+    pub io_task: usize,
+    
+    /// Chat task lane concurrency
+    #[serde(default = "default_worker_lane_chat_task")]
+    pub chat_task: usize,
+}
+
+impl Default for WorkerLaneConfig {
+    fn default() -> Self {
+        Self {
+            heartbeat: default_worker_lane_heartbeat(),
+            code_task: default_worker_lane_code_task(),
+            data_task: default_worker_lane_data_task(),
+            io_task: default_worker_lane_io_task(),
+            chat_task: default_worker_lane_chat_task(),
+        }
+    }
 }
 
 impl FromStr for MachineProfile {
@@ -672,10 +745,77 @@ impl Default for Config {
             adapter_spam_threshold: default_adapter_spam_threshold(),
             cors_origins: default_cors_origins(),
             magic: MagicConfig::default(),
+            worker_lanes: WorkerLaneConfig::default(),
             db_pool: None,
             owner_signing_key: None,
         }
     }
+}
+
+/// Classify a task into a worker lane based on title and description keywords
+///
+/// # Arguments
+/// * `title` - Task title
+/// * `description` - Task description (optional)
+///
+/// # Returns
+/// The appropriate `WorkerLane` for the task
+///
+/// # Lane Classification Logic
+/// 1. **Heartbeat**: Contains "heartbeat" keyword
+/// 2. **CodeTask**: Code-related keywords (code, refactor, build, compile, test, lint, format)
+/// 3. **DataTask**: Data-related keywords (data, analyse, analyze, query, database, migrate, etl)
+/// 4. **ChatTask**: Conversation keywords (chat, message, respond, reply, conversation)
+/// 5. **IoTask**: Default fallback for I/O and other tasks
+pub fn classify_task_lane(title: &str, description: Option<&str>) -> WorkerLane {
+    // Combine title and description into lowercase string for matching
+    let combined = format!(
+        "{} {}",
+        title.to_lowercase(),
+        description.unwrap_or("").to_lowercase()
+    );
+
+    // Match in priority order (first match wins)
+    if combined.contains("heartbeat") {
+        return WorkerLane::Heartbeat;
+    }
+
+    // Code-related keywords
+    if combined.contains("code")
+        || combined.contains("refactor")
+        || combined.contains("build")
+        || combined.contains("compile")
+        || combined.contains("test")
+        || combined.contains("lint")
+        || combined.contains("format")
+    {
+        return WorkerLane::CodeTask;
+    }
+
+    // Data-related keywords
+    if combined.contains("data")
+        || combined.contains("analyse")
+        || combined.contains("analyze")
+        || combined.contains("query")
+        || combined.contains("database")
+        || combined.contains("migrate")
+        || combined.contains("etl")
+    {
+        return WorkerLane::DataTask;
+    }
+
+    // Chat-related keywords
+    if combined.contains("chat")
+        || combined.contains("message")
+        || combined.contains("respond")
+        || combined.contains("reply")
+        || combined.contains("conversation")
+    {
+        return WorkerLane::ChatTask;
+    }
+
+    // Default to I/O task lane
+    WorkerLane::IoTask
 }
 
 impl Config {
