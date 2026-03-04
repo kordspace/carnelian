@@ -902,7 +902,7 @@ See [.env.example](.env.example) for environment variables and [machine.toml.exa
 
 See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 
-## 📚 Documentation
+## Documentation
 
 ### User & Developer Guides
 
