@@ -748,6 +748,9 @@ impl Scheduler {
         let duration_ms = start.elapsed().as_millis() as i32;
         let is_ok = status == "ok";
 
+        // Track LLM auto-queued tasks for observability
+        let mut llm_auto_queued: usize = 0;
+
         // ── Parse Tool Calls and Queue Tasks ─────────────────────────────
         if let Some(content) = response_content {
             match AgenticEngine::parse_tool_calls(&content) {
@@ -758,62 +761,23 @@ impl Scheduler {
                         "Parsed tool calls from heartbeat response"
                     );
 
-                    for tool_call in tool_calls {
-                        let title = format!("[tool_call] {}", tool_call.tool_name);
-                        let description = serde_json::to_string(&tool_call.arguments)
-                            .unwrap_or_else(|_| "{}".to_string());
-
-                        match sqlx::query_scalar::<_, Uuid>(
-                            r"
-                            INSERT INTO tasks (title, description, created_by, priority, correlation_id, origin)
-                            VALUES ($1, $2, $3, $4, $5, $6)
-                            RETURNING task_id
-                            "
-                        )
-                        .bind(&title)
-                        .bind(&description)
-                        .bind(identity_id)
-                        .bind(-1_i32)
-                        .bind(correlation_id)
-                        .bind("llm_suggested")
-                        .fetch_one(pool)
-                        .await
-                        {
-                            Ok(task_id) => {
-                                tracing::info!(
-                                    task_id = %task_id,
-                                    tool_name = %tool_call.tool_name,
-                                    correlation_id = %correlation_id,
-                                    "Queued low-priority task from heartbeat tool call"
-                                );
-
-                                event_stream.publish(
-                                    EventEnvelope::new(
-                                        EventLevel::Info,
-                                        EventType::TaskQueued,
-                                        json!({
-                                            "task_id": task_id,
-                                            "title": title,
-                                            "tool_name": tool_call.tool_name,
-                                            "arguments": tool_call.arguments,
-                                            "source": "heartbeat_tool_call",
-                                            "priority": -1,
-                                            "correlation_id": correlation_id,
-                                        }),
-                                    )
-                                    .with_correlation_id(correlation_id),
-                                );
-                            }
-                            Err(e) => {
-                                tracing::warn!(
-                                    tool_name = %tool_call.tool_name,
-                                    error = %e,
-                                    correlation_id = %correlation_id,
-                                    "Failed to insert task for tool call"
-                                );
-                            }
-                        }
-                    }
+                    llm_auto_queued = auto_queue_llm_tasks(
+                        pool,
+                        event_stream,
+                        &tool_calls,
+                        identity_id,
+                        correlation_id,
+                        config.max_tasks_per_heartbeat,
+                    )
+                    .await
+                    .unwrap_or_else(|e| {
+                        tracing::warn!(
+                            error = %e,
+                            correlation_id = %correlation_id,
+                            "Failed to auto-queue LLM-suggested tasks"
+                        );
+                        0
+                    });
                 }
                 Ok(_) => {
                     tracing::debug!(
@@ -1042,6 +1006,7 @@ impl Scheduler {
             workspace_safe = ws_safe,
             workspace_privileged = ws_privileged,
             workspace_auto_queued = ws_auto_queued,
+            llm_auto_queued = llm_auto_queued,
             duration_ms = duration_ms,
             status = %status,
             correlation_id = %correlation_id,
@@ -2290,7 +2255,7 @@ impl WorkspaceScanner {
     ///
     /// A task is **privileged** (not safe) if its description contains any of
     /// the [`PRIVILEGED_KEYWORDS`]. Everything else is considered safe.
-    fn classify_safe(description: &str) -> bool {
+    pub(crate) fn classify_safe(description: &str) -> bool {
         let lower = description.to_lowercase();
         !PRIVILEGED_KEYWORDS.iter().any(|kw| lower.contains(kw))
     }
@@ -2384,6 +2349,106 @@ pub async fn auto_queue_scanned_tasks(
             task_id = %task_id,
             title = %title,
             "Auto-queued task from workspace scan"
+        );
+
+        queued += 1;
+    }
+
+    Ok(queued)
+}
+
+/// Auto-queue LLM-suggested tasks from heartbeat tool calls, skipping duplicates
+/// and privileged tasks. Returns the number of tasks actually inserted.
+///
+/// The `limit` controls how many **safe** tasks are queued. Privileged tool calls
+/// are always skipped and do not count toward the limit.
+///
+/// Deduplication: a tool call is considered a duplicate if a pending or running
+/// task already exists with the same title (which encodes the tool name).
+pub async fn auto_queue_llm_tasks(
+    pool: &PgPool,
+    event_stream: &EventStream,
+    tool_calls: &[crate::agentic::ToolCall],
+    identity_id: Uuid,
+    correlation_id: Uuid,
+    limit: usize,
+) -> Result<usize> {
+    let mut queued = 0usize;
+
+    for tool_call in tool_calls {
+        if queued >= limit {
+            break;
+        }
+
+        // Build description from arguments
+        let description = serde_json::to_string(&tool_call.arguments)
+            .unwrap_or_else(|_| "{}".to_string());
+
+        // Safety gate: skip privileged tool calls
+        if !WorkspaceScanner::classify_safe(&description) {
+            tracing::debug!(
+                tool_name = %tool_call.tool_name,
+                description = %description,
+                "Skipping privileged LLM tool call"
+            );
+            continue;
+        }
+
+        let title = format!("[tool_call] {}", tool_call.tool_name);
+
+        // Dedup: skip if a non-terminal task with the same title already exists
+        let existing: Option<i64> = sqlx::query_scalar(
+            r"SELECT COUNT(*) FROM tasks WHERE title = $1 AND state IN ('pending', 'running')",
+        )
+        .bind(&title)
+        .fetch_one(pool)
+        .await
+        .map_err(Error::Database)?;
+
+        if existing.unwrap_or(0) > 0 {
+            tracing::debug!(title = %title, "LLM task already exists, skipping");
+            continue;
+        }
+
+        // Insert new task with origin='llm_suggested'
+        let task_id: Uuid = sqlx::query_scalar(
+            r"INSERT INTO tasks (title, description, created_by, priority, correlation_id, origin)
+              VALUES ($1, $2, $3, $4, $5, $6)
+              RETURNING task_id",
+        )
+        .bind(&title)
+        .bind(&description)
+        .bind(identity_id)
+        .bind(-1_i32) // low priority for LLM-suggested tasks
+        .bind(correlation_id)
+        .bind("llm_suggested")
+        .fetch_one(pool)
+        .await
+        .map_err(Error::Database)?;
+
+        event_stream.publish(
+            EventEnvelope::new(
+                EventLevel::Info,
+                EventType::TaskAutoQueued,
+                json!({
+                    "task_id": task_id,
+                    "title": title,
+                    "tool_name": tool_call.tool_name,
+                    "arguments": tool_call.arguments,
+                    "source": "heartbeat_tool_call",
+                    "priority": -1,
+                    "correlation_id": correlation_id,
+                    "origin": "llm_suggested",
+                }),
+            )
+            .with_correlation_id(correlation_id),
+        );
+
+        tracing::info!(
+            task_id = %task_id,
+            tool_name = %tool_call.tool_name,
+            correlation_id = %correlation_id,
+            "Auto-queued LLM-suggested task from heartbeat"
         );
 
         queued += 1;
