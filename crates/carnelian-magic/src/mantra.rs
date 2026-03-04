@@ -627,7 +627,7 @@ impl MantraTree {
                 "Reflection & Introspection"
                     if context.local_hour >= 22 || context.local_hour <= 6 =>
                 {
-                    weight += 2
+                    weight += 2;
                 }
                 "Innovation & Experimentation" if context.magic_enabled => weight += 1,
                 _ => {}
