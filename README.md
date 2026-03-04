@@ -1,12 +1,12 @@
-<p align="center">
-  <img src="assets/logos/carnelian-logo.svg" alt="Carnelian Core" width="400">
-</p>
+<h1 align="center">🔥 Carnelian</h1>
 
 <p align="center">
   <a href="https://github.com/kordspace/carnelian/actions/workflows/ci.yml"><img src="https://github.com/kordspace/carnelian/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/kordspace/carnelian"><img src="https://img.shields.io/badge/🔥-Carnelian%20Core-D24B2A" alt="Carnelian Core"></a>
-  <a href="https://github.com/kordspace/carnelian"><img src="https://img.shields.io/badge/🦎-Lian-7C4DFF" alt="Lian"></a>
-  <a href="https://github.com/kordspace/carnelian"><img src="https://img.shields.io/badge/🔮-MAGIC-9C27B0" alt="MAGIC"></a>
+  <a href="https://github.com/kordspace/carnelian"><img src="https://img.shields.io/badge/Rust-Core-D24B2A?logo=rust" alt="Rust Core"></a>
+  <a href="https://github.com/kordspace/carnelian"><img src="https://img.shields.io/badge/Multi--Runtime-Workers-7C4DFF" alt="Multi-Runtime Workers"></a>
+  <a href="https://github.com/kordspace/carnelian"><img src="https://img.shields.io/badge/Quantum-Entropy-9C27B0" alt="Quantum Entropy"></a>
+  <a href="https://github.com/kordspace/carnelian"><img src="https://img.shields.io/badge/Capability--Based-Security-FF6B35" alt="Capability Security"></a>
+  <a href="https://github.com/kordspace/carnelian"><img src="https://img.shields.io/badge/Local--First-LLMs-4CAF50" alt="Local-First LLMs"></a>
 </p>
 
 <p align="center">An AI workspace harness built in Rust — orchestrating autonomous agents with capability-based security, event-stream architecture, and local-first execution.</p>
