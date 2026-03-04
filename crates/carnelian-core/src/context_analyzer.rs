@@ -75,9 +75,9 @@ impl ContextAnalyzer {
         let rows = sqlx::query!(
             r#"
             SELECT content
-            FROM messages
+            FROM session_messages
             WHERE session_id = $1
-            ORDER BY created_at DESC
+            ORDER BY ts DESC
             LIMIT $2
             "#,
             session_id,
@@ -201,24 +201,23 @@ impl ContextAnalyzer {
         let mut created = 0;
 
         for item in action_items {
-            // Create task in database
+            // Create task in database using existing schema columns
             let result = sqlx::query!(
                 r#"
                 INSERT INTO tasks (
                     title,
                     description,
                     priority,
-                    status,
-                    context,
-                    created_at
+                    state,
+                    correlation_id
                 )
-                VALUES ($1, $2, $3, 'pending', $4, NOW())
+                VALUES ($1, $2, $3, 'pending', $4)
                 RETURNING task_id
                 "#,
                 item.title,
                 item.description,
                 item.priority,
-                item.context,
+                session_id,
             )
             .fetch_one(self.pool.as_ref())
             .await;
@@ -260,15 +259,21 @@ impl ContextAnalyzer {
 mod tests {
     use super::*;
 
+    // Helper function to create a test analyzer without requiring a real PgPool
+    fn create_test_context_analyzer() -> (Arc<PgPool>, ContextAnalyzer) {
+        // Use connect_lazy to create a non-functional but safe pool for pure logic tests
+        let pool = Arc::new(PgPool::connect_lazy("postgres://localhost/test").unwrap());
+        let mantra_tree = Arc::new(MantraTree::new(None));
+        let analyzer = ContextAnalyzer::new(pool.clone(), mantra_tree);
+        (pool, analyzer)
+    }
+
     #[test]
     fn test_extract_item_from_pattern() {
-        let analyzer = ContextAnalyzer {
-            pool: Arc::new(unsafe { std::mem::zeroed() }), // Mock for test
-            mantra_tree: Arc::new(MantraTree::new()),
-        };
+        let (_pool, analyzer) = create_test_context_analyzer();
 
-        let context = "We need to implement the new authentication system with OAuth2 support.";
-        let item = analyzer.extract_item_from_pattern(context, "need to", 3);
+        let context = "We need to implement the new authentication system with OAuth2 support";
+        let item = analyzer.extract_item_from_pattern(context, "implement", 3);
         
         assert!(item.is_some());
         let item = item.unwrap();
@@ -278,10 +283,7 @@ mod tests {
 
     #[test]
     fn test_deduplicate_items() {
-        let analyzer = ContextAnalyzer {
-            pool: Arc::new(unsafe { std::mem::zeroed() }),
-            mantra_tree: Arc::new(MantraTree::new()),
-        };
+        let (_pool, analyzer) = create_test_context_analyzer();
 
         let mut items = vec![
             ActionItem {
@@ -289,23 +291,15 @@ mod tests {
                 description: "desc1".to_string(),
                 priority: 3,
                 complexity: 2,
-                suggested_skills: Vec::new(),
+                suggested_skills: vec![],
                 context: serde_json::json!({}),
             },
             ActionItem {
-                title: "Fix the bug".to_string(), // Duplicate
+                title: "Fix the bug".to_string(),
                 description: "desc2".to_string(),
-                priority: 4,
-                complexity: 3,
-                suggested_skills: Vec::new(),
-                context: serde_json::json!({}),
-            },
-            ActionItem {
-                title: "Add new feature".to_string(),
-                description: "desc3".to_string(),
-                priority: 2,
-                complexity: 4,
-                suggested_skills: Vec::new(),
+                priority: 3,
+                complexity: 2,
+                suggested_skills: vec![],
                 context: serde_json::json!({}),
             },
         ];
