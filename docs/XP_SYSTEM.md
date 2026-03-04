@@ -370,7 +370,7 @@ WHERE xe.identity_id = $1
 ORDER BY xe.created_at DESC;
 ```
 
-**Cross-reference:** See [LEDGER_SYSTEM.md — XP Events](LEDGER_SYSTEM.md#event-types) for the `XpAwarded` and `LevelUp` ledger event type definitions.
+**Cross-reference:** See [LEDGER_SYSTEM.md](LEDGER_SYSTEM.md) for the `XpAwarded` and `LevelUp` ledger event type definitions.
 
 ---
 
