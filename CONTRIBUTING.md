@@ -488,4 +488,60 @@ All tests run offline and never require actual quantum credentials.
 
 ---
 
+## Post-Quantum Cryptography Development
+
+### Current Status (v1.0.0)
+
+The `crates/carnelian-magic/src/pqc.rs` module ships fully implemented in v1.0.0 with 8 comprehensive tests, but is **not activated by default**. The three key types are:
+
+- **`HybridSigningKey`** — Dual-signature scheme combining CRYSTALS-Dilithium3 and Ed25519; both signatures must pass verification for trust
+- **`KyberKem`** — CRYSTALS-Kyber1024 key encapsulation mechanism for quantum-resistant shared-secret exchange
+- **`KeyAlgorithm` enum** — Variants: `Ed25519` (current v1.0.0 default), `HybridDilithiumEd25519` (v1.1.0 opt-in), `Dilithium3` (v2.0.0+)
+
+v1.0.0 deployments use `KeyAlgorithm::Ed25519` via the owner keypair in `carnelian-core`. The full migration path is documented in `FUTURE_PQC.md`.
+
+### Running the PQC Tests
+
+Run the full PQC test suite:
+
+```bash
+cargo test -p carnelian-magic
+```
+
+The 8 test cases cover:
+
+- `test_hybrid_signing_key_generation` — Async quantum entropy keypair generation
+- `test_hybrid_signature_roundtrip` — Sign/verify with dual signatures
+- `test_hybrid_signature_fails_on_wrong_message` — Signature validation
+- `test_kyber_kem_roundtrip` — Encapsulate/decapsulate shared secret
+- `test_kyber_kem_fails_on_wrong_ciphertext` — KEM error handling
+- `test_public_key_export` — Public key serialization
+- `test_aes_key_derivation` — AES-256 key derivation from Ed25519 seed
+
+All tests run offline using `MixedEntropyProvider::new_os_only()` — no quantum credentials required.
+
+### Activating PQC (v1.1.0 Opt-In)
+
+PQC primitives are activated by enabling MAGIC quantum entropy and calling `generate_hybrid_keypair_with_entropy()` from `carnelian-core/src/crypto.rs`. The `key_algorithm` column in `config_store` (Migration 18) tracks which algorithm is active.
+
+The planned CLI migration command for v1.1.0:
+
+```bash
+carnelian crypto migrate --to hybrid
+```
+
+This command will handle key rotation from Ed25519 to HybridDilithiumEd25519. Direct readers to `FUTURE_PQC.md` for the complete v1.1.0/v1.2.0/v2.0.0 roadmap.
+
+### Extending `HybridSigningKey`
+
+To add a new signing algorithm:
+
+1. Implement the same `sign()` / `verify()` interface as `HybridSigningKey` in `crates/carnelian-magic/src/pqc.rs`
+2. Add a new `KeyAlgorithm` variant to the enum
+3. Wire the new algorithm into `carnelian-core/src/crypto.rs` hybrid helper functions
+4. Add comprehensive tests following the existing 8-test pattern
+5. Update `FUTURE_PQC.md` with migration documentation
+
+---
+
 Thank you for contributing to CARNELIAN! 🎉

@@ -163,6 +163,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Security Note:** All 7 items from `SECURITY_ARCHITECTURE_REVIEW_V1.md` are fully implemented. PQC primitives ship in v1.0.0 but activate as opt-in feature in v1.1.0 to allow gradual migration from Ed25519.
 
+### Added — Phase 12: Code Quality & Release Hardening
+
+- **Clippy Clean (`-D warnings`)** — Resolved 2,510-line warning backlog across `carnelian-ui`; removed 35 blanket `#![allow(...)]` suppressions from `elixirs.rs`, `ledger.rs`, `skill_book.rs`, `channels.rs`, `xp_widget.rs`, `store.rs`, `system_tray.rs`, `first_run_wizard.rs`; replaced with 20 targeted `#[allow(clippy::clone_on_copy)]` with explanatory comments for Dioxus `Signal` clones; fixed cast warnings, suboptimal flops, bool-to-int patterns
+- **README Truth Alignment** — Desktop UI status updated to Complete (✅), Phase Status table added (12 phases), Key Components table updated to algorithm-agnostic language, Machine Profiles table updated to Urim/Thummim hardware specs, Elixir API section promoted from "Planned" to live with 7 endpoints
+- **PQC Opt-In Deferral** — Ed25519 remains the v1.0.0 default; `HybridSigningKey` and `KyberKem` ship in `carnelian-magic` but activate as opt-in in v1.1.0; UI text neutralized to algorithm-agnostic labels ("Owner signature" vs "Ed25519 signature") across `first_run_wizard.rs`, `approvals.rs`, `attestation.rs`; migration path documented in `FUTURE_PQC.md`
+- **UI Bug Fixes** — Fixed ledger pagination bug (signal handles vs snapshotted values), fixed channels token placeholder interpolation, added targeted cast suppressions with rationale in `system_tray.rs`, `xp_widget.rs`, `store.rs`
+
 ### Added — Phase 11: Documentation & Release
 
 - **LICENSE.md** — Proprietary license with Marco Julio Lopes and Kordspace LLC attribution, patent-pending notice, CLA requirements
