@@ -756,7 +756,7 @@ impl Default for Config {
 ///
 /// # Arguments
 /// * `title` - Task title
-/// * `description` - Task description (optional)
+/// * `description` - Task description
 ///
 /// # Returns
 /// The appropriate `WorkerLane` for the task
@@ -767,12 +767,12 @@ impl Default for Config {
 /// 3. **DataTask**: Data-related keywords (data, analyse, analyze, query, database, migrate, etl)
 /// 4. **ChatTask**: Conversation keywords (chat, message, respond, reply, conversation)
 /// 5. **IoTask**: Default fallback for I/O and other tasks
-pub fn classify_task_lane(title: &str, description: Option<&str>) -> WorkerLane {
+pub fn classify_task_lane(title: &str, description: &str) -> WorkerLane {
     // Combine title and description into lowercase string for matching
     let combined = format!(
         "{} {}",
         title.to_lowercase(),
-        description.unwrap_or("").to_lowercase()
+        description.to_lowercase()
     );
 
     // Match in priority order (first match wins)
