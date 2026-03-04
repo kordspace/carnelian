@@ -23,7 +23,7 @@ async fn test_analyze_and_create_tasks_integration(pool: PgPool) -> sqlx::Result
         "INSERT INTO identities (identity_id, name, identity_type) VALUES ($1, 'Test Agent', 'core')",
     )
     .bind(agent_id)
-    .execute(&pool)
+    .execute(pool.as_ref())
     .await
     .expect("Failed to insert agent");
 
@@ -33,7 +33,7 @@ async fn test_analyze_and_create_tasks_integration(pool: PgPool) -> sqlx::Result
     )
     .bind(session_id)
     .bind(agent_id)
-    .execute(&pool)
+    .execute(pool.as_ref())
     .await
     .expect("Failed to insert session");
 
@@ -42,7 +42,7 @@ async fn test_analyze_and_create_tasks_integration(pool: PgPool) -> sqlx::Result
         "INSERT INTO session_messages (session_id, role, content) VALUES ($1, 'user', 'We need to implement OAuth2 authentication')",
     )
     .bind(session_id)
-    .execute(&pool)
+    .execute(pool.as_ref())
     .await
     .expect("Failed to insert message 1");
 
@@ -50,7 +50,7 @@ async fn test_analyze_and_create_tasks_integration(pool: PgPool) -> sqlx::Result
         "INSERT INTO session_messages (session_id, role, content) VALUES ($1, 'user', 'TODO: Fix the login bug in production')",
     )
     .bind(session_id)
-    .execute(&pool)
+    .execute(pool.as_ref())
     .await
     .expect("Failed to insert message 2");
 
@@ -78,7 +78,7 @@ async fn test_analyze_and_create_tasks_integration(pool: PgPool) -> sqlx::Result
         "SELECT task_id, title, state, correlation_id FROM tasks WHERE correlation_id = $1",
     )
     .bind(session_id)
-    .fetch_all(&pool)
+    .fetch_all(pool.as_ref())
     .await
     .expect("Failed to fetch tasks");
 

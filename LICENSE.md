@@ -1,6 +1,6 @@
 # Carnelian Core License
 
-**Copyright © 2024-2026 Marco Julio Lopes. All Rights Reserved.**
+**Copyright © 2026 Marco Julio Lopes. All Rights Reserved.**
 
 ---
 

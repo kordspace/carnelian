@@ -15,7 +15,7 @@ Thank you for your interest in contributing to Carnelian Core! We welcome contri
 **By contributing to Carnelian Core, you agree to the CLA outlined in [LICENSE.md](LICENSE.md).**
 
 Key points:
-- You grant Marco Julio Lopes and Kordspace LLC a perpetual, worldwide, non-exclusive, royalty-free, irrevocable license to use your contributions.
+- You grant Marco Lopes and Kordspace LLC a perpetual, worldwide, non-exclusive, royalty-free, irrevocable license to use your contributions.
 - Your contributions are your original work and do not infringe on third-party IP rights.
 - You will be credited as a contributor in project documentation.
 - Contributions are provided "as is" without warranty.
