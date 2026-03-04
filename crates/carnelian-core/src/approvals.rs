@@ -488,7 +488,7 @@ mod tests {
         )
         .bind(approver_id)
         .bind("test_approver")
-        .bind("owner")
+        .bind("core")
         .execute(&pool)
         .await
         .expect("Failed to create test identity");
@@ -536,7 +536,7 @@ mod tests {
         )
         .bind(denier_id)
         .bind("test_denier")
-        .bind("owner")
+        .bind("core")
         .execute(&pool)
         .await
         .expect("Failed to create test identity");
@@ -583,7 +583,7 @@ mod tests {
         )
         .bind(approver_id)
         .bind("test_batch_approver")
-        .bind("owner")
+        .bind("core")
         .execute(&pool)
         .await
         .expect("Failed to create test identity");
@@ -635,7 +635,7 @@ mod tests {
         )
         .bind(approver_id)
         .bind("test_verifier")
-        .bind("owner")
+        .bind("core")
         .execute(&pool)
         .await
         .expect("Failed to create test identity");
@@ -689,7 +689,7 @@ mod tests {
         )
         .bind(actor)
         .bind("test_actor")
-        .bind("owner")
+        .bind("core")
         .execute(&pool)
         .await
         .expect("Failed to create test identity");
