@@ -17,7 +17,7 @@ exclude = [
 
 [workspace.package]
 version = "1.0.0"
-edition = "2026"
+edition = "2021"
 authors = ["Marco Lopes <marco@kordspace.com>"]
 license = "SEE LICENSE.md"
 repository = "https://github.com/kordspace/carnelian"
