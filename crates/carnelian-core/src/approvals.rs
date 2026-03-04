@@ -483,12 +483,12 @@ mod tests {
         let approver_id = Uuid::now_v7();
 
         // Create identity record for approver to satisfy foreign key constraint
-        sqlx::query!(
+        sqlx::query(
             "INSERT INTO identities (identity_id, name, identity_type) VALUES ($1, $2, $3)",
-            approver_id,
-            "test_approver",
-            "owner"
         )
+        .bind(approver_id)
+        .bind("test_approver")
+        .bind("owner")
         .execute(&pool)
         .await
         .expect("Failed to create test identity");
@@ -531,12 +531,12 @@ mod tests {
         let denier_id = Uuid::now_v7();
 
         // Create identity record for denier to satisfy foreign key constraint
-        sqlx::query!(
+        sqlx::query(
             "INSERT INTO identities (identity_id, name, identity_type) VALUES ($1, $2, $3)",
-            denier_id,
-            "test_denier",
-            "owner"
         )
+        .bind(denier_id)
+        .bind("test_denier")
+        .bind("owner")
         .execute(&pool)
         .await
         .expect("Failed to create test identity");
@@ -578,12 +578,12 @@ mod tests {
         let approver_id = Uuid::now_v7();
 
         // Create identity record for approver to satisfy foreign key constraint
-        sqlx::query!(
+        sqlx::query(
             "INSERT INTO identities (identity_id, name, identity_type) VALUES ($1, $2, $3)",
-            approver_id,
-            "test_batch_approver",
-            "owner"
         )
+        .bind(approver_id)
+        .bind("test_batch_approver")
+        .bind("owner")
         .execute(&pool)
         .await
         .expect("Failed to create test identity");
@@ -630,12 +630,12 @@ mod tests {
         let approver_id = Uuid::now_v7();
 
         // Create identity record for approver to satisfy foreign key constraint
-        sqlx::query!(
+        sqlx::query(
             "INSERT INTO identities (identity_id, name, identity_type) VALUES ($1, $2, $3)",
-            approver_id,
-            "test_verifier",
-            "owner"
         )
+        .bind(approver_id)
+        .bind("test_verifier")
+        .bind("owner")
         .execute(&pool)
         .await
         .expect("Failed to create test identity");
@@ -684,12 +684,12 @@ mod tests {
         let actor = Uuid::now_v7();
 
         // Create identity record for actor to satisfy foreign key constraint
-        sqlx::query!(
+        sqlx::query(
             "INSERT INTO identities (identity_id, name, identity_type) VALUES ($1, $2, $3)",
-            actor,
-            "test_actor",
-            "owner"
         )
+        .bind(actor)
+        .bind("test_actor")
+        .bind("owner")
         .execute(&pool)
         .await
         .expect("Failed to create test identity");
