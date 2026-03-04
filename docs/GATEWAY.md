@@ -292,7 +292,7 @@ The `UsageTracker` (implemented in `gateway/src/usage.ts`) maintains an in-memor
 
 1. **Track completion** — `trackCompletion()` calls `estimateCost()` (0 for Ollama; per-million pricing for remote models) then pushes a `UsageRecord`
 2. **Buffer** — Records accumulate in `buffer: UsageRecord[]`
-3. **Flush** — Every 10 seconds: POSTs `{ records: [...] }` to `{coreApiUrl}/api/usage`
+3. **Flush** — Every 10 seconds: POSTs `{ records: [...] }` to `{coreApiUrl}/api/usage` (compatibility endpoint) and `POST /v1/models/usage` (canonical endpoint)
 4. **Retry** — On failure, re-queues records at buffer head
 5. **Final flush** — `stop()` flushes before shutdown
 
@@ -462,29 +462,39 @@ curl http://localhost:18790/health
 
 ```json
 {
-  "status": "healthy",
-  "providers": {
-    "ollama": {
-      "enabled": true,
-      "healthy": true,
+  "status": "ok",
+  "version": "0.1.0",
+  "uptime_s": 123,
+  "providers": [
+    {
+      "name": "ollama",
+      "type": "local",
+      "available": true,
       "models": ["llama3.2", "mistral"]
     },
-    "openai": {
-      "enabled": false,
-      "healthy": false
+    {
+      "name": "anthropic",
+      "type": "remote",
+      "available": true
     },
-    "anthropic": {
-      "enabled": true,
-      "healthy": true
+    {
+      "name": "openai",
+      "type": "remote",
+      "available": false
     },
-    "fireworks": {
-      "enabled": false,
-      "healthy": false
+    {
+      "name": "fireworks",
+      "type": "remote",
+      "available": false
     }
-  },
-  "uptime_ms": 123456
+  ]
 }
 ```
+
+**Status values:**
+- `"ok"` — All providers available
+- `"degraded"` — Some providers available
+- `"unavailable"` — No providers available
 
 ### Requirements
 
@@ -495,19 +505,26 @@ curl http://localhost:18790/health
 
 ## API Reference
 
-### Endpoints
+### Implemented Endpoints
+
+The following endpoints are currently available:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/v1/complete` | POST | Non-streaming chat completion |
 | `/v1/complete/stream` | POST | Streaming chat completion (SSE) |
-| `/v1/providers` | GET | List configured providers and their status |
-| `/v1/usage` | GET | Query buffered / recent usage records |
-| `/v1/voice/transcribe` | POST | Speech-to-text via ElevenLabs |
-| `/v1/voice/synthesize` | POST | Text-to-speech via ElevenLabs |
-| `/v1/health` | GET | Provider health check |
+| `/health` | GET | Provider health check |
 
-**Note:** `/v1/health` is currently served at `/health` in the implementation; the canonical public path is `/v1/health` as per the spec.
+### Planned Endpoints
+
+The following endpoints are planned for future implementation:
+
+| Endpoint | Method | Description | Status |
+|----------|--------|-------------|--------|
+| `/v1/providers` | GET | List configured providers and their status | Planned |
+| `/v1/usage` | GET | Query buffered / recent usage records | Planned |
+| `/v1/voice/transcribe` | POST | Speech-to-text via ElevenLabs | Planned |
+| `/v1/voice/synthesize` | POST | Text-to-speech via ElevenLabs | Planned |
 
 ### POST /v1/complete
 
@@ -553,61 +570,35 @@ curl http://localhost:18790/health
 
 **Response (200 OK):** SSE stream (see [Streaming SSE](#streaming-sse))
 
-### GET /v1/providers
+### GET /health
 
 **Response (200 OK):**
 
 ```json
 {
+  "status": "ok",
+  "version": "0.1.0",
+  "uptime_s": 123,
   "providers": [
     {
       "name": "ollama",
-      "enabled": true,
-      "healthy": true,
-      "models": ["llama3.2", "mistral"],
-      "circuit": {
-        "open": false,
-        "failures": 0
-      }
+      "type": "local",
+      "available": true,
+      "models": ["llama3.2", "mistral"]
     },
     {
       "name": "anthropic",
-      "enabled": true,
-      "healthy": true,
-      "circuit": {
-        "open": false,
-        "failures": 0
-      }
+      "type": "remote",
+      "available": true
     }
   ]
 }
 ```
 
-### GET /v1/usage
+**Status codes:**
+- `200 OK` — At least one provider available
+- `503 Service Unavailable` — No providers available
 
-**Query Parameters:**
-- `since` — Unix timestamp (optional)
-- `limit` — Max records (default: 100)
-
-**Response (200 OK):**
-
-```json
-{
-  "records": [
-    {
-      "timestamp": 1709539200000,
-      "model": "gpt-4o",
-      "provider": "openai",
-      "inputTokens": 150,
-      "outputTokens": 75,
-      "totalTokens": 225,
-      "estimatedCost": 0.00225,
-      "correlationId": "01936a1b-..."
-    }
-  ],
-  "total": 1
-}
-```
 
 ---
 

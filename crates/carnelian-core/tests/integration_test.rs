@@ -1816,7 +1816,7 @@ async fn test_migration_seed_data() {
     assert_eq!(lian.0, "Lian");
     // Pronouns are customizable - no assertion on specific value
     assert_eq!(lian.2, "core");
-    assert_eq!(lian.3, Some("souls/lian.md".to_string()));
+    assert_eq!(lian.3, Some("souls/soul.md".to_string()));
 
     // Verify capabilities exist
     let capability_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM capabilities")

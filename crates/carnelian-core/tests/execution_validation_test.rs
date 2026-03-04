@@ -559,7 +559,7 @@ async fn test_criterion_1_identity_sync() {
 
     // Create temporary souls directory and SOUL.md
     let souls_dir = tempfile::tempdir().expect("Failed to create souls temp dir");
-    let soul_file = souls_dir.path().join("lian.md");
+    let soul_file = souls_dir.path().join("soul.md");
     create_test_soul_file(
         &soul_file,
         "Lian",
@@ -568,7 +568,7 @@ async fn test_criterion_1_identity_sync() {
     );
 
     // Insert identity with soul_file_path pointing to our file
-    let identity_id = insert_test_identity(&pool, Some("lian.md")).await;
+    let identity_id = insert_test_identity(&pool, Some("soul.md")).await;
 
     // Create event stream and subscribe before sync
     let event_stream = Arc::new(EventStream::new(1000, 100));

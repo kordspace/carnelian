@@ -169,7 +169,7 @@ The core schema migration creates the following seed data:
 | `name` | `Lian` |
 | `pronouns` | `null` (customizable) |
 | `identity_type` | `core` |
-| `soul_file_path` | `souls/lian.md` |
+| `soul_file_path` | `souls/soul.md` |
 | `directives` | Loaded from soul file |
 
 ### Default Capabilities
