@@ -16,79 +16,75 @@
   <a href="LICENSE.md">Proprietary License</a> | Patent Pending
 </p>
 
-> 💎 *Carnelian Core provides the foundational infrastructure for AI agent orchestration, task execution, and workspace automation. Think of it as the runtime and security layer that makes autonomous AI agents safe, auditable, and productive.*
+> 💎 *Carnelian provides the foundational infrastructure for AI agent orchestration, task execution, and workspace automation. Think of it as the runtime and security layer that makes autonomous AI agents safe, auditable, and productive.*
 
-## Brand Identity
+## System Components
 
-| Symbol | Name | Role |
-|--------|------|------|
-| 🔥 | **Carnelian** | AI workspace harness with capability-based security, ledger-backed auditability, and local-first execution |
+| Symbol | Component | Description |
+|--------|-----------|-------------|
+| 🔥 | **Carnelian** | AI workspace harness with capability-based security and local-first execution |
 | 🦎 | **Lian** | Default agent identity — the reasoning personality that executes tasks |
-| 🔮 | **MAGIC** | Quantum intelligence subsystem — entropy providers, mantra matrix, integrity verification |
-
-### Brand Assets
-
-- **Logo**: [`assets/logos/carnelian-logo.svg`](assets/logos/carnelian-logo.svg) — Full logo with wordmark
-- **Icon**: [`assets/logos/carnelian-icon.svg`](assets/logos/carnelian-icon.svg) — Icon only (16×16 to 256×256)
-- **Wordmark**: [`assets/logos/carnelian-wordmark.svg`](assets/logos/carnelian-wordmark.svg) — Text only
-- **Color Palette**: [`assets/branding/color-palette.md`](assets/branding/color-palette.md) — Brand colors and usage guidelines
-
-See [docs/BRAND.md](docs/BRAND.md) for the complete dual-theme brand kit (Forge/Night Lab).
+| 🔮 | **Magic** | Quantum intelligence — entropy providers, mantra matrix, integrity verification |
+| 🧪 | **Elixirs** | Knowledge persistence — RAG-based learning with approval workflow |
+| 📒 | **Ledger** | Audit trail — BLAKE3 hash-chain for tamper-resistant accountability |
+| 🎯 | **Skills** | Multi-runtime execution — 50+ skills across Node.js, Python, WASM, Rust |
+| 💬 | **Channels** | Communication adapters — Telegram, Discord, voice gateway |
+| 🖥️ | **Desktop UI** | Native interface — Dioxus with real-time event streaming |
 
 ## Overview
 
-🔥 **Carnelian Core** is an AI workspace harness built in Rust that provides the foundational infrastructure for autonomous agent orchestration. It combines capability-based security, event-stream architecture, and local-first LLM execution to create a safe, auditable environment for AI-driven task automation.
+🔥 **Carnelian** is an AI workspace harness built in Rust that provides the foundational infrastructure for autonomous agent orchestration. It combines capability-based security, event-stream architecture, and local-first LLM execution to create a safe, auditable environment for AI-driven task automation.
 
 **Core Value Proposition:**
-- **Workspace Automation** — Autonomous task discovery, scheduling, and execution
-- **Security First** — Capability-based deny-by-default security with tamper-resistant audit trails
-- **Local-First AI** — Ollama integration for on-device inference with cloud fallback
-- **Production Ready** — Event-stream architecture, worker sandboxing, and resource controls
-- **Extensible** — 50+ skills with bulk import tooling via multi-runtime worker system (Node.js, Python, WASM, native Rust)
+- 🤖 **Workspace Automation** — Autonomous task discovery, scheduling, and execution
+- 🔒 **Security First** — Capability-based deny-by-default security with tamper-resistant audit trails
+- 💻 **Local-First AI** — Ollama integration for on-device inference with cloud fallback
+- ⚡ **Production Ready** — Event-stream architecture, worker sandboxing, and resource controls
+- 🔧 **Extensible** — 50+ skills with bulk import tooling via multi-runtime worker system
 
 ## Features
 
-CARNELIAN is a production-ready AI workspace harness with comprehensive capabilities:
+**🏗️ Core Infrastructure**
+- Core orchestrator (Axum/Tokio), CLI, HTTP API, event stream
+- Policy engine, BLAKE3 ledger, scheduler, worker transport
+- PostgreSQL 16 with pgvector, SQLx migrations
+- 262+ passing tests with 120+ integration tests
 
-**Core Infrastructure**
-- ✅ Core orchestrator (Axum/Tokio), CLI, HTTP API, event stream
-- ✅ Policy engine, blake3 ledger, scheduler, worker transport
-- ✅ PostgreSQL 16 with pgvector, SQLx migrations
-- ✅ 262+ passing tests with 120+ integration tests
+**🎯 Task Execution & Skills**
+- Multi-runtime worker system (Node.js, Python, WASM, native Rust)
+- 50+ skills with bulk import tooling
+- Skill discovery with BLAKE3 checksums and file watching
+- XP progression system with 1.172-exponent level curve
 
-**Task Execution & Skills**
-- ✅ Multi-runtime worker system (Node.js, Python, WASM, native Rust)
-- ✅ 50+ skills with bulk import tooling — full compatibility via Node worker, with WASM/native targets for new skills
-- ✅ Skill discovery with blake3 checksums and file watching
-- ✅ XP progression system with 1.172-exponent level curve
+**🧠 Intelligence & Context**
+- Soul management and session lifecycle
+- Memory retrieval with pgvector similarity search
+- Context assembly and compaction pipeline
+- Model routing with TypeScript LLM Gateway
+- Agentic execution with heartbeat system (555,555ms)
 
-**Intelligence & Context**
-- ✅ Soul management and session lifecycle
-- ✅ Memory retrieval with pgvector similarity search
-- ✅ Context assembly and compaction pipeline
-- ✅ Model routing with TypeScript LLM Gateway
-- ✅ Agentic execution with heartbeat system (555,555ms)
+**🔒 Security & Compliance**
+- Capability-based security (deny-by-default)
+- Approval queue for human-in-the-loop workflows
+- Safe mode emergency lockdown
+- Ed25519 attestations and encryption at rest
+- Ledger signatures and chain anchoring
 
-**Security & Compliance**
-- ✅ Capability-based security (deny-by-default)
-- ✅ Approval queue for human-in-the-loop workflows
-- ✅ Safe mode emergency lockdown
-- ✅ Ed25519 attestations and encryption at rest
-- ✅ Ledger signatures and chain anchoring
+**✨ Advanced Features**
+- 🧪 **Elixirs** — Knowledge persistence with approval workflow ([docs](docs/ELIXIR_SYSTEM.md))
+- 🔮 **Magic** — Quantum entropy providers, mantra matrix, integrity verification
+- 📒 **Ledger** — BLAKE3 hash-chain audit trail ([docs](docs/LEDGER_SYSTEM.md))
+- Sub-agents and workflow orchestration
+- 💬 Telegram + Discord adapters with pairing
+- 🎤 Voice gateway (ElevenLabs STT/TTS)
+- Skill Book catalog with activation flow
 
-**Advanced Features**
-- ✅ Sub-agents and workflow orchestration
-- ✅ Telegram + Discord adapters with pairing
-- ✅ Voice gateway (ElevenLabs STT/TTS)
-- ✅ 🧪 Elixir system for knowledge persistence — [Learn more](docs/ELIXIR_SYSTEM.md)
-- ✅ Skill Book catalog with activation flow
+**🖥️ Desktop UI**
+- Dioxus native desktop — 17 pages, 6 components
+- WebSocket event streaming with priority-based ring buffer
+- Real-time metrics and monitoring
 
-**Desktop UI**
-- ✅ Dioxus desktop UI — 17 pages, 6 components
-- ✅ WebSocket event streaming with priority-based ring buffer
-- ✅ Real-time metrics and monitoring
-
-## Why Carnelian Core?
+## Why Carnelian?
 
 **Built for Production AI Workflows:**
 - **Rust Foundation** — Performance, memory safety, and reliability
