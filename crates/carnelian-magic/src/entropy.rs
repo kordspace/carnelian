@@ -403,6 +403,17 @@ impl MixedEntropyProvider {
         }
     }
 
+    /// Create a provider with only OS entropy (for offline testing)
+    pub fn new_os_only() -> Self {
+        Self {
+            os: OsEntropyProvider::new(),
+            quantum_origin: None,
+            quantinuum: None,
+            qiskit: None,
+            node_id: uuid::Uuid::new_v4(),
+        }
+    }
+
     /// Get health status from all configured providers
     pub async fn all_health(&self) -> Vec<EntropyHealth> {
         let mut health = vec![self.os.health().await];

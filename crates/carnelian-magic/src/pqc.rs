@@ -273,7 +273,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_hybrid_signing_key_generation() {
-        let provider = Arc::new(MixedEntropyProvider::new_os_only());
+        let provider: Arc<dyn EntropyProvider> = Arc::new(MixedEntropyProvider::new_os_only());
         let key = HybridSigningKey::generate_with_entropy(&provider).await.unwrap();
         
         // Verify both key types exist
@@ -283,7 +283,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_hybrid_signature_roundtrip() {
-        let provider = Arc::new(MixedEntropyProvider::new_os_only());
+        let provider: Arc<dyn EntropyProvider> = Arc::new(MixedEntropyProvider::new_os_only());
         let key = HybridSigningKey::generate_with_entropy(&provider).await.unwrap();
         
         let message = b"Quantum-resistant test message";
@@ -300,7 +300,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_hybrid_signature_fails_on_wrong_message() {
-        let provider = Arc::new(MixedEntropyProvider::new_os_only());
+        let provider: Arc<dyn EntropyProvider> = Arc::new(MixedEntropyProvider::new_os_only());
         let key = HybridSigningKey::generate_with_entropy(&provider).await.unwrap();
         
         let message = b"Original message";
@@ -312,7 +312,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_kyber_kem_roundtrip() {
-        let provider = Arc::new(MixedEntropyProvider::new_os_only());
+        let provider: Arc<dyn EntropyProvider> = Arc::new(MixedEntropyProvider::new_os_only());
         let kem = KyberKem::generate_with_entropy(&provider).await.unwrap();
         
         // Encapsulate
@@ -329,7 +329,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_kyber_kem_fails_on_wrong_ciphertext() {
-        let provider = Arc::new(MixedEntropyProvider::new_os_only());
+        let provider: Arc<dyn EntropyProvider> = Arc::new(MixedEntropyProvider::new_os_only());
         let kem = KyberKem::generate_with_entropy(&provider).await.unwrap();
         
         // Try to decapsulate invalid ciphertext
@@ -339,7 +339,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_public_key_export() {
-        let provider = Arc::new(MixedEntropyProvider::new_os_only());
+        let provider: Arc<dyn EntropyProvider> = Arc::new(MixedEntropyProvider::new_os_only());
         let key = HybridSigningKey::generate_with_entropy(&provider).await.unwrap();
         
         let public_keys = key.public_keys();
@@ -349,7 +349,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_aes_key_derivation() {
-        let provider = Arc::new(MixedEntropyProvider::new_os_only());
+        let provider: Arc<dyn EntropyProvider> = Arc::new(MixedEntropyProvider::new_os_only());
         let key = HybridSigningKey::generate_with_entropy(&provider).await.unwrap();
         
         let aes_key = key.derive_aes_storage_key();

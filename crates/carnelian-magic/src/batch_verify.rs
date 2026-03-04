@@ -148,11 +148,11 @@ pub fn verify_batch_fail_fast(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{EntropyProvider, MixedEntropyProvider};
+    use crate::MixedEntropyProvider;
     use std::sync::Arc;
 
     async fn create_test_key() -> HybridSigningKey {
-        let provider = Arc::new(MixedEntropyProvider::new_os_only());
+        let provider: Arc<dyn crate::EntropyProvider> = Arc::new(MixedEntropyProvider::new_os_only());
         HybridSigningKey::generate_with_entropy(&provider).await.unwrap()
     }
 

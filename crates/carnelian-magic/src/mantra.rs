@@ -774,7 +774,7 @@ mod tests {
         ];
 
         let category_last_used = HashMap::new();
-        let weights = tree.compute_weights(&context, &categories, &category_last_used);
+        let weights = MantraTree::compute_weights(&context, &categories, &category_last_used);
 
         assert!(weights.get("System Health").copied().unwrap_or(0) >= 4);
         assert_eq!(weights.get("Code Development").copied().unwrap_or(0), 1);
@@ -793,7 +793,7 @@ mod tests {
 
         let mut category_last_used = HashMap::new();
         category_last_used.insert(cat_id, 1); // Used in position 1 (most recent)
-        let weights = tree.compute_weights(&context, &categories, &category_last_used);
+        let weights = MantraTree::compute_weights(&context, &categories, &category_last_used);
 
         assert_eq!(weights.get("System Health").copied().unwrap_or(0), 0);
         assert_eq!(weights.get("Code Development").copied().unwrap_or(0), 1);
@@ -819,7 +819,7 @@ mod tests {
 
         for i in 0..1000 {
             let entropy = [(i % 256) as u8, ((i / 256) % 256) as u8, 0, 0];
-            if let Ok((picked_id, _, _, _)) = tree.weighted_pick(&entropy, &categories, &weights) {
+            if let Ok((picked_id, _, _, _)) = MantraTree::weighted_pick(&entropy, &categories, &weights) {
                 if picked_id == cat1 {
                     high_count += 1;
                 } else {
@@ -864,7 +864,7 @@ mod tests {
         let mut low_count = 0;
         for i in 0..1000 {
             let entropy = [(i % 256) as u8, ((i / 256) % 256) as u8, 0, 0];
-            if let Ok(entry) = tree.inverse_freq_pick(&entropy, &entries) {
+            if let Ok(entry) = MantraTree::inverse_freq_pick(&entropy, &entries) {
                 if entry.use_count == 0 {
                     low_count += 1;
                 }
@@ -972,7 +972,7 @@ mod tests {
         ];
         
         let category_last_used = HashMap::new();
-        let weights = tree.compute_weights(&context, &categories, &category_last_used);
+        let weights = MantraTree::compute_weights(&context, &categories, &category_last_used);
         
         // Code Development should get boost (90.0 > 80.0 and "code development" contains "code")
         assert_eq!(weights.get("Code Development").copied().unwrap_or(0), 2);

@@ -23,8 +23,8 @@ pub struct MemoryMerkleTree {
 pub struct MerkleProof {
     /// Index of the leaf in the tree
     pub leaf_index: usize,
-    /// Sibling hashes along the path to root
-    pub siblings: Vec<[u8; 32]>,
+    /// Sibling hashes along the path to root (None if no sibling exists)
+    pub siblings: Vec<Option<[u8; 32]>>,
 }
 
 impl MemoryMerkleTree {
@@ -109,9 +109,11 @@ impl MemoryMerkleTree {
                 current_index - 1
             };
 
-            // Add sibling hash if it exists
+            // Add sibling hash if it exists, otherwise add a marker for "no sibling"
             if sibling_index < current_level.len() {
-                siblings.push(current_level[sibling_index]);
+                siblings.push(Some(current_level[sibling_index]));
+            } else {
+                siblings.push(None);
             }
 
             // Move to parent level
@@ -147,14 +149,17 @@ impl MemoryMerkleTree {
         let mut current_hash = *leaf_hash;
         let mut current_index = proof.leaf_index;
 
-        for sibling in &proof.siblings {
-            current_hash = if current_index % 2 == 0 {
-                // Current is left child
-                Self::hash_pair(&current_hash, sibling)
-            } else {
-                // Current is right child
-                Self::hash_pair(sibling, &current_hash)
-            };
+        for sibling_opt in &proof.siblings {
+            if let Some(sibling) = sibling_opt {
+                current_hash = if current_index % 2 == 0 {
+                    // Current is left child
+                    Self::hash_pair(&current_hash, sibling)
+                } else {
+                    // Current is right child
+                    Self::hash_pair(sibling, &current_hash)
+                };
+            }
+            // If no sibling, current_hash just propagates up unchanged
             current_index /= 2;
         }
 
