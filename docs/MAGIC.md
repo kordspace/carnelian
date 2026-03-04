@@ -442,10 +442,13 @@ This prevents high-repetition mantras from dominating without requiring per-entr
 #### 5. Template Resolution
 
 The `resolve_template()` function substitutes placeholders in `system_message` and `user_message`:
-- `{mantra_text}` → selected entry's text
+- `{mantra_text}` → removed (stripped from template; actual mantra text is in separate field)
 - `{tasks_queued}` → `MantraContext.pending_task_count`
 - `{recent_error_count}` → `MantraContext.recent_error_count`
+- `{local_hour}` → `MantraContext.local_hour`
 - Other context fields as needed
+
+**Note:** The mantra text itself is returned in the `mantra_text` field of `MantraSelection`, not injected into the template messages.
 
 #### Selection Flow Diagram
 
@@ -475,10 +478,11 @@ sequenceDiagram
 The `compute_weights()` function applies the following conditional weight shifts based on `MantraContext` fields:
 
 | Condition | Affected Category | Weight Shift |
-|-----------|-------------------|--------------|
+|-----------|-------------------|--------------||
 | `recent_error_count > 3` | System Health | +3 |
 | `model_cost_pct > 80.0` | Financial Management | +3 |
 | `pending_task_count > 10` | Task Building | +2 |
+| `pending_task_count > 10 && recent_error_count > 0` | System Health | +2 (additional) |
 | `unread_channel_messages > 5` | Communications | +2 |
 | `soul_file_age_days > 7` | Soul Refinement | +3 |
 | `new_skills_last_24h > 0` | Code Development | +1 |
@@ -486,6 +490,12 @@ The `compute_weights()` function applies the following conditional weight shifts
 | `high_latency == true` | Performance Optimization | +3 |
 | `local_hour ≥ 22 or ≤ 6` | Reflection & Introspection | +2 |
 | `magic_enabled == true` | Innovation & Experimentation | +1 |
+| `elixir_drafts_pending > 0` | Memory & Knowledge | +1 |
+| `sub_agents_active > 0` | Collaboration & Delegation | +2 |
+| `workflow_executions_last_hour > 5` | Scheduled Jobs | +2 |
+| `idle_beats > 10` | Creative Exploration | +1 |
+| `active_sessions > 3` | Communications | +1 |
+| `uptime_hours < 1.0` | System Health | +1 |
 | Elixir avg quality > 80 matching category's `elixir_types` array | That category | +1 per matching type |
 | Category used within `cooldown_beats` recent selections | Any | weight → 0 |
 | All categories zeroed (safety reset) | All | reset to base_weight |
@@ -556,7 +566,8 @@ elixir_reference UUID REFERENCES elixirs(elixir_id) ON DELETE SET NULL
 
 4. **Linking Methods:**
    - **UI:** MAGIC panel → Mantra Library → Edit entry → set Elixir ID
-   - **API:** `PATCH /v1/magic/mantras/entries/{id}` with `{ "elixir_id": "uuid" }`
+   - **API:** `PUT /v1/magic/mantras/entries/{id}` with `{ "elixir_id": "uuid" }`
+   - **Legacy:** `PATCH /v1/magic/mantras/{entry_id}` also supported for backward compatibility
 
 ---
 
@@ -591,7 +602,7 @@ curl -X POST http://localhost:18789/v1/magic/mantras/simulate \
   "user_message": "The mantra for this moment is: \"Check the logs before assuming everything is fine.\". Reflect on your system's current state and operational priorities. What does this mantra reveal about infrastructure health?",
   "entropy_source": "quantum_origin",
   "selection_ts": "2026-03-04T05:55:00Z",
-  "suggested_skill_ids": ["docker-ps", "file-hash", "git-status"],
+  "suggested_skill_ids": [],
   "elixir_reference": null,
   "context_weights": {
     "Code Development": 1,
