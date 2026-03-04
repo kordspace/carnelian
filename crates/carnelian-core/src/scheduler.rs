@@ -337,6 +337,12 @@ impl Scheduler {
         loop {
             tokio::select! {
                 _ = ticker.tick() => {
+                    // Acquire heartbeat lane permit to enforce concurrency guarantee
+                    let heartbeat_semaphore = lane_semaphores.get(&WorkerLane::Heartbeat)
+                        .expect("Heartbeat lane semaphore must exist");
+                    let _permit = heartbeat_semaphore.acquire().await
+                        .expect("Heartbeat semaphore should never be closed");
+                    
                     if let Err(e) = Self::run_heartbeat(
                         &pool,
                         &event_stream,
@@ -348,6 +354,8 @@ impl Scheduler {
                     ).await {
                         tracing::warn!(error = %e, "Heartbeat execution failed");
                     }
+                    
+                    // Permit is automatically released when _permit is dropped
                     // Poll task queue after heartbeat
                     if let Err(e) = Self::poll_task_queue(
                         &pool,
@@ -356,11 +364,12 @@ impl Scheduler {
                         &config,
                         &active_tasks,
                         &metrics,
+                        &ledger,
                         &safe_mode_guard,
                         &workflow_engine,
                         &xp_manager,
-                        &entropy_provider,
                         &lane_semaphores,
+                        &entropy_provider,
                     ).await {
                         tracing::warn!(error = %e, "Task queue polling failed");
                     }
@@ -1074,11 +1083,18 @@ impl Scheduler {
 
         // Query pending tasks ordered by priority DESC, created_at ASC
         // Fetch title and description for lane classification
-        let max_workers = config.machine_config().max_workers as usize;
+        // Use sum of all lane permits as LIMIT to support lane skipping
+        let total_lane_permits = config.worker_lanes.heartbeat
+            + config.worker_lanes.code_task
+            + config.worker_lanes.data_task
+            + config.worker_lanes.io_task
+            + config.worker_lanes.chat_task;
+        let fetch_limit = total_lane_permits as usize;
+        
         let pending_tasks: Vec<(Uuid, Option<Uuid>, i32, String, Option<String>)> = sqlx::query_as(
             r"SELECT task_id, skill_id, priority, title, description FROM tasks WHERE state = 'pending' ORDER BY priority DESC, created_at ASC LIMIT $1",
         )
-        .bind(i64::try_from(max_workers).unwrap_or(i64::MAX))
+        .bind(i64::try_from(fetch_limit).unwrap_or(i64::MAX))
         .fetch_all(pool)
         .await
         .map_err(Error::Database)?;

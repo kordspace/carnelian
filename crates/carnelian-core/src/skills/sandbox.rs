@@ -80,12 +80,18 @@ pub async fn execute_sandboxed(
     apply_windows_limits(&mut cmd, limits)?;
 
     // Spawn process
-    let mut child = cmd.spawn()
+    let child = cmd.spawn()
         .map_err(|e| Error::SkillExecution(format!("Failed to spawn process: {}", e)))?;
+
+    // Store child ID for timeout handling
+    let child_id = child.id();
 
     // Wait with timeout
     let timeout_duration = Duration::from_secs(limits.timeout_seconds);
-    let result = timeout(timeout_duration, child.wait_with_output()).await;
+    let result = timeout(timeout_duration, async {
+        tokio::task::spawn_blocking(move || child.wait_with_output()).await
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?
+    }).await;
 
     let duration_ms = start.elapsed().as_millis() as u64;
 
@@ -103,9 +109,20 @@ pub async fn execute_sandboxed(
             Err(Error::SkillExecution(format!("Process execution failed: {}", e)))
         }
         Err(_) => {
-            // Timeout - kill the process
-            let _ = child.kill();
-            let _ = child.wait();
+            // Timeout - attempt to kill the process by PID
+            #[cfg(windows)]
+            {
+                let _ = std::process::Command::new("taskkill")
+                    .args(["/F", "/PID", &child_id.to_string()])
+                    .output();
+            }
+            #[cfg(not(windows))]
+            {
+                use std::os::unix::process::CommandExt;
+                let _ = std::process::Command::new("kill")
+                    .args(["-9", &child_id.to_string()])
+                    .output();
+            }
             
             Ok(SandboxedResult {
                 exit_code: -1,

@@ -3374,12 +3374,10 @@ impl WorkerManager {
                 && worker.status == WorkerStatus::Running 
                 && !worker.quarantined 
             {
-                return worker.transport.clone().ok_or_else(|| {
-                    Error::Config(format!(
-                        "Worker '{}' has no transport configured",
-                        worker.id
-                    ))
-                });
+                // Continue scanning if this worker lacks transport
+                if let Some(transport) = worker.transport.clone() {
+                    return Ok(transport);
+                }
             }
         }
         
