@@ -70,7 +70,7 @@ impl ContextAnalyzer {
 
     /// Fetch recent messages from a session
     async fn fetch_recent_messages(&self, session_id: Uuid, limit: i64) -> Result<Vec<String>> {
-        let rows = sqlx::query!(
+        let rows: Vec<(String,)> = sqlx::query_as(
             r#"
             SELECT content
             FROM session_messages
@@ -78,14 +78,14 @@ impl ContextAnalyzer {
             ORDER BY ts DESC
             LIMIT $2
             "#,
-            session_id,
-            limit
         )
+        .bind(session_id)
+        .bind(limit)
         .fetch_all(self.pool.as_ref())
         .await
         .map_err(|e| Error::Database(e.to_string()))?;
 
-        Ok(rows.into_iter().map(|r| r.content).collect())
+        Ok(rows.into_iter().map(|r| r.0).collect())
     }
 
     /// Extract action items from messages using pattern matching
@@ -200,34 +200,30 @@ impl ContextAnalyzer {
 
         for item in action_items {
             // Create task in database using existing schema columns
-            let result = sqlx::query!(
+            let result: (Uuid,) = sqlx::query_as(
                 r#"
                 INSERT INTO tasks (
                     title,
                     description,
-                    priority,
                     state,
-                    correlation_id
-                )
-                VALUES ($1, $2, $3, 'pending', $4)
+                    priority,
+                    correlation_id,
+                    created_at
+                ) VALUES ($1, $2, $3, $4, $5, NOW())
                 RETURNING task_id
                 "#,
-                item.title,
-                item.description,
-                item.priority,
-                session_id,
             )
-            .fetch_one(self.pool.as_ref())
-            .await;
+            .bind(&item.title)
+            .bind(&item.description)
+            .bind("pending")
+            .bind(item.priority)
+            .bind(session_id)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(Error::Database)?;
 
-            if result.is_ok() {
-                created += 1;
-                tracing::info!(
-                    "Created autonomous task from session {}: {}",
-                    session_id,
-                    item.title
-                );
-            }
+            created += 1;
+            tracing::info!(task_id = %result.0, title = %item.title, "Created task from action item");
         }
 
         Ok(created)
