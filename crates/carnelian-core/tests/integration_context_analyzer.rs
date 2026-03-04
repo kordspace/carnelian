@@ -9,6 +9,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 #[sqlx::test]
+#[ignore = "Requires DATABASE_URL - run with: cargo test -- --ignored"]
 async fn test_analyze_and_create_tasks_integration(pool: PgPool) -> sqlx::Result<()> {
     let pool = Arc::new(pool);
     let mantra_tree = Arc::new(MantraTree::new(None));
@@ -96,6 +97,7 @@ async fn test_analyze_and_create_tasks_integration(pool: PgPool) -> sqlx::Result
 }
 
 #[sqlx::test]
+#[ignore = "Requires DATABASE_URL - run with: cargo test -- --ignored"]
 async fn test_migration_18_19_smoke_check(pool: PgPool) -> sqlx::Result<()> {
     // Verify migration 18 (key_algorithm column) exists
     let key_algo_check: Option<(String,)> = sqlx::query_as(
