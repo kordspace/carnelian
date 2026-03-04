@@ -1,8 +1,8 @@
-<p align="center">
-  <img src="assets/logos/carnelian-logo.png" alt="Carnelian Logo" width="200">
-</p>
-
 <h1 align="center">CARNELIAN</h1>
+
+<p align="center">
+  <img src="assets/logos/banners/carnelian-v1-banner-animated.gif" alt="Carnelian Banner" width="100%">
+</p>
 
 <p align="center">
   <a href="https://github.com/kordspace/carnelian/actions/workflows/ci.yml"><img src="https://github.com/kordspace/carnelian/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
