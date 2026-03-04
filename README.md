@@ -10,7 +10,7 @@
 
 <p align="center">An AI workspace harness built in Rust — orchestrating autonomous agents with capability-based security, event-stream architecture, and local-first execution.</p>
 
-> 💎 *Carnelian Core provides the foundational infrastructure for AI agent orchestration, task execution, and workspace automation. Think of it as the runtime and security layer that makes autonomous AI agents safe, auditable, and productive.*
+> 💎 *Carnelian Core provides the foundational infrastructure for AI agent orchestration. Copyright © 2026 Marco Julio Lopes and Kordspace LLC. Think of it as the runtime and security layer that makes autonomous AI agents safe, auditable, and productive.*
 
 ## Brand Identity
 
