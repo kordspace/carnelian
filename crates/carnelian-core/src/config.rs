@@ -181,7 +181,7 @@ pub struct Config {
     #[serde(default = "default_skills_registry_path")]
     pub skills_registry_path: PathBuf,
 
-    /// Path to soul files directory (default: ./souls)
+    /// Path to soul files directory (default: . for root SOUL.md)
     #[serde(default = "default_souls_path")]
     pub souls_path: PathBuf,
 
@@ -522,7 +522,7 @@ fn default_skills_registry_path() -> PathBuf {
 }
 
 fn default_souls_path() -> PathBuf {
-    PathBuf::from("./souls")
+    PathBuf::from(".")
 }
 
 fn default_agent_name() -> String {

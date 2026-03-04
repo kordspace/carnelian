@@ -74,7 +74,7 @@ File transcripts (`transcript_path`) remain available as optional JSONL export v
 
 ### Soul File Markdown Structure
 
-Soul files use a hierarchical Markdown format with priority-based section ordering:
+The soul file (`SOUL.md` in project root) uses a hierarchical Markdown format with priority-based section ordering:
 
 ```markdown
 # Lian
@@ -106,17 +106,17 @@ Soul files populate the following columns in the `identities` table:
 
 - `name` — Agent name (extracted from H1 heading)
 - `pronouns` — Optional pronouns metadata
-- `soul_file_path` — Absolute path to `.md` file
+- `soul_file_path` — Relative path to soul file (default: `SOUL.md` in project root)
 - `directives` — JSONB array of `SoulDirective` structs
 - `soul_file_hash` — BLAKE3 hash for change detection
 - `voice_config` — JSONB voice configuration
 
 ### File Watcher Sync Pipeline
 
-The `start_soul_watcher()` function in `soul.rs` monitors soul files for changes:
+The `start_soul_watcher()` function in `soul.rs` monitors the soul file for changes:
 
 ```
-.md file change on disk
+SOUL.md file change on disk
     → notify-debouncer-mini (2s debounce)
     → SoulManager::sync_to_db()
         → compute_soul_hash() [BLAKE3]

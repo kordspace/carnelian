@@ -1,17 +1,17 @@
 //! Soul File Management and Synchronization
 //!
-//! This module provides automatic discovery and synchronization of soul files
-//! (identity definitions in Markdown format) from the filesystem to PostgreSQL.
+//! This module provides automatic discovery and synchronization of the soul file
+//! (identity definition in Markdown format) from the filesystem to PostgreSQL.
 //!
 //! ## Architecture
 //!
-//! - **SoulDirective**: Parsed actionable directive from a SOUL.md file
-//! - **SoulManager**: Loads, parses, and syncs soul files to the `identities` table
+//! - **SoulDirective**: Parsed actionable directive from SOUL.md
+//! - **SoulManager**: Loads, parses, and syncs the soul file to the `identities` table
 //! - **File Watcher**: Debounced filesystem watcher (2s) for automatic re-sync
 //!
 //! ## File Format
 //!
-//! Soul files are Markdown documents with structured sections:
+//! The soul file (SOUL.md in project root) is a Markdown document with structured sections:
 //!
 //! ```text
 //! # Identity Name
