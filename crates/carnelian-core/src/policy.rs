@@ -255,13 +255,11 @@ impl PolicyEngine {
             return Err(Error::ApprovalRequired(approval_id));
         }
 
-        let result = sqlx::query(
-            r#"DELETE FROM capability_grants WHERE grant_id = $1"#,
-        )
-        .bind(grant_id)
-        .execute(&self.pool)
-        .await
-        .map_err(Error::Database)?;
+        let result = sqlx::query(r#"DELETE FROM capability_grants WHERE grant_id = $1"#)
+            .bind(grant_id)
+            .execute(&self.pool)
+            .await
+            .map_err(Error::Database)?;
 
         let revoked = result.rows_affected() > 0;
 
@@ -512,13 +510,12 @@ impl PolicyEngine {
         }
 
         // Get skill's required capabilities (TEXT[] in database)
-        let required_capabilities: Option<Vec<String>> = sqlx::query_scalar(
-            r#"SELECT capabilities_required FROM skills WHERE skill_id = $1"#,
-        )
-        .bind(skill_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(Error::Database)?;
+        let required_capabilities: Option<Vec<String>> =
+            sqlx::query_scalar(r#"SELECT capabilities_required FROM skills WHERE skill_id = $1"#)
+                .bind(skill_id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(Error::Database)?;
 
         // Check each required capability for the skill
         if let Some(caps) = required_capabilities {
