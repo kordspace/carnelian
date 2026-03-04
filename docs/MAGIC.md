@@ -400,6 +400,432 @@ curl -X POST http://localhost:8080/v1/magic/mantras/simulate \
 
 ---
 
+## Mantra System Deep Dive
+
+This section provides a comprehensive technical reference for the mantra selection algorithm, context weighting, cooldown enforcement, and authoring best practices.
+
+### Selection Algorithm Walkthrough
+
+The mantra selection process is a two-phase weighted random draw implemented in `crates/carnelian-magic/src/mantra.rs`. Each selection consumes 8 bytes of entropy and executes the following steps:
+
+#### 1. Entropy Normalization
+
+8 bytes of raw entropy are consumed per selection:
+- **Bytes [0..4]** drive the category draw
+- **Bytes [4..8]** drive the within-category entry draw
+
+Each 4-byte slice is converted to a `u32` via `u32::from_le_bytes`, then reduced modulo the total weight.
+
+#### 2. Category Weight Computation
+
+The `compute_weights()` function calculates per-category weights by:
+- Starting with `base_weight` from `mantra_categories.base_weight` (default `1`)
+- Adding context bonuses based on `MantraContext` fields (see Context Weighting Table below)
+- Zeroing weights for categories within their cooldown window
+- Safety reset: if all categories are zeroed, all weights reset to `base_weight`
+
+#### 3. Weighted Category Draw
+
+The `weighted_pick()` function performs a cumulative-sum walk:
+- Build cumulative weight array: `[w1, w1+w2, w1+w2+w3, ...]`
+- Entropy integer modulo total weight determines which category wins
+- Return the first category whose cumulative weight exceeds the random value
+
+#### 4. Inverse-Frequency Entry Draw
+
+Within the selected category, `inverse_freq_pick()` assigns each entry weight `1 / (use_count + 1)`:
+- Entries never used: weight `1.0`
+- Entries used 9 times: weight `0.1`
+
+This prevents high-repetition mantras from dominating without requiring per-entry cooldowns.
+
+#### 5. Template Resolution
+
+The `resolve_template()` function substitutes placeholders in `system_message` and `user_message`:
+- `{mantra_text}` → selected entry's text
+- `{tasks_queued}` → `MantraContext.pending_task_count`
+- `{recent_error_count}` → `MantraContext.recent_error_count`
+- Other context fields as needed
+
+#### Selection Flow Diagram
+
+```mermaid
+sequenceDiagram
+    participant Scheduler
+    participant MantraTree
+    participant EntropyProvider
+    participant DB
+
+    Scheduler->>EntropyProvider: request 8 bytes
+    EntropyProvider-->>Scheduler: quantum/OS bytes
+    Scheduler->>MantraTree: select(entropy, context)
+    MantraTree->>MantraTree: compute_weights(context, cooldown_map)
+    MantraTree->>MantraTree: weighted_pick(bytes[0..4], categories)
+    MantraTree->>DB: fetch entries for selected category
+    DB-->>MantraTree: Vec<MantraEntry>
+    MantraTree->>MantraTree: inverse_freq_pick(bytes[4..8], entries)
+    MantraTree->>DB: INSERT mantra_history
+    MantraTree-->>Scheduler: MantraSelection
+```
+
+---
+
+### Context Weighting Table
+
+The `compute_weights()` function applies the following conditional weight shifts based on `MantraContext` fields:
+
+| Condition | Affected Category | Weight Shift |
+|-----------|-------------------|--------------|
+| `recent_error_count > 3` | System Health | +3 |
+| `model_cost_pct > 80.0` | Financial Management | +3 |
+| `pending_task_count > 10` | Task Building | +2 |
+| `unread_channel_messages > 5` | Communications | +2 |
+| `soul_file_age_days > 7` | Soul Refinement | +3 |
+| `new_skills_last_24h > 0` | Code Development | +1 |
+| `capability_changes_last_hour > 0` | Security & Audit | +2 |
+| `high_latency == true` | Performance Optimization | +3 |
+| `local_hour ≥ 22 or ≤ 6` | Reflection & Introspection | +2 |
+| `magic_enabled == true` | Innovation & Experimentation | +1 |
+| Elixir avg quality > 80 matching category's `elixir_types` array | That category | +1 per matching type |
+| Category used within `cooldown_beats` recent selections | Any | weight → 0 |
+| All categories zeroed (safety reset) | All | reset to base_weight |
+
+**Weight Calculation:**
+- Weight shifts are **additive** on top of `base_weight` (default 1)
+- Elixir quality bonus: queries `AVG(quality_score)` grouped by `elixir_type`, matches against category's `elixir_types` array
+- Safety reset ensures selection never deadlocks when all categories are on cooldown
+
+---
+
+### Cooldown Enforcement
+
+Per-category cooldowns prevent repetitive selections and ensure mantra diversity.
+
+#### Tracking Mechanism
+
+On every heartbeat, the scheduler calls `select_with_pool()`, which:
+1. Queries `mantra_history ORDER BY ts DESC LIMIT {max_cooldown}`
+2. Builds `category_last_used` map: `(category_id, position)` pairs
+3. Position 1 = most recent beat, position 2 = second-most recent, etc.
+
+#### Enforcement Rule
+
+If `category_last_used[cat_id] <= cooldown_beats`, that category's weight is set to `0` and cannot be selected this beat.
+
+#### Per-Category Cooldown Configuration
+
+- **Database column:** `mantra_categories.cooldown_beats` (default `3`)
+- **Global override:** `machine.toml` under `[magic]`:
+
+```toml
+[magic]
+mantra_cooldown_beats = 3   # default per-category cooldown in heartbeat cycles
+```
+
+Categories can have different cooldowns. The `mantra_cooldown_beats` config sets the default used when creating new categories via the API.
+
+#### Implicit Last-Used Timestamp
+
+The `last_used_at` timestamp is implicitly the `ts` column of `mantra_history`. The query orders by `ts DESC`, so position 1 means "selected in the most recent beat."
+
+---
+
+### Elixir Linking
+
+Mantra entries can be linked to elixirs to inject high-quality knowledge datasets alongside mantra text.
+
+#### Schema
+
+From `db/migrations/00000000000016_magic_mantras.sql`:
+
+```sql
+-- mantra_entries
+elixir_id UUID REFERENCES elixirs(elixir_id) ON DELETE SET NULL
+
+-- mantra_history
+elixir_reference UUID REFERENCES elixirs(elixir_id) ON DELETE SET NULL
+```
+
+#### Behavior
+
+1. **Selection:** When an entry with a non-null `elixir_id` is selected, `MantraSelection.elixir_reference` is populated.
+
+2. **Context Injection:** The scheduler injects the linked elixir's dataset into the heartbeat context bundle alongside the mantra `system_message`/`user_message`.
+
+3. **Category Weight Bonus:** `MantraContext.elixir_quality_by_category` is populated by querying `AVG(quality_score)` grouped by `elixir_type`. If the average quality for any elixir type in a category's `elixir_types` array exceeds `80.0`, that category gains `+1` weight.
+
+4. **Linking Methods:**
+   - **UI:** MAGIC panel → Mantra Library → Edit entry → set Elixir ID
+   - **API:** `PATCH /v1/magic/mantras/entries/{id}` with `{ "elixir_id": "uuid" }`
+
+---
+
+### Simulation Mode
+
+The simulation endpoint allows testing mantra selection without affecting cooldown state.
+
+#### Endpoint
+
+`POST /v1/magic/mantras/simulate`
+
+**Purpose:** Performs a full `select_with_pool` with live DB state and live entropy but **does not write** to `mantra_history`. Safe for debugging weight tuning without affecting cooldown state.
+
+**Request:**
+
+```bash
+curl -X POST http://localhost:18789/v1/magic/mantras/simulate \
+  -H "X-Carnelian-Key: $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+**Response (`MantraSimulateResponse`):**
+
+```json
+{
+  "category": "System Health",
+  "category_id": "550e8400-e29b-41d4-a716-446655440000",
+  "entry_id": "660e8400-e29b-41d4-a716-446655440001",
+  "mantra_text": "Check the logs before assuming everything is fine.",
+  "system_message": "You are a vigilant system operator monitoring infrastructure health and stability. The mantra \"Check the logs before assuming everything is fine.\" should guide your operational awareness. Consider: What systems need attention? What metrics are trending poorly? What could fail under stress? Suggest skills related to Docker monitoring, file integrity checks, or Git status if relevant.",
+  "user_message": "The mantra for this moment is: \"Check the logs before assuming everything is fine.\". Reflect on your system's current state and operational priorities. What does this mantra reveal about infrastructure health?",
+  "entropy_source": "quantum_origin",
+  "selection_ts": "2026-03-04T05:55:00Z",
+  "suggested_skill_ids": ["docker-ps", "file-hash", "git-status"],
+  "elixir_reference": null,
+  "context_weights": {
+    "Code Development": 1,
+    "Financial Management": 1,
+    "System Health": 4,
+    "User & Organization Health": 1,
+    "Communications": 1,
+    "Task Building": 1,
+    "Scheduled Jobs": 1,
+    "Soul Refinement": 1,
+    "Mantra Optimization": 1,
+    "Integration Ideation": 1,
+    "Security & Audit": 1,
+    "Memory & Knowledge": 1,
+    "Creative Exploration": 1,
+    "Learning & Research": 1,
+    "Performance Optimization": 1,
+    "Collaboration & Delegation": 1,
+    "Reflection & Introspection": 3,
+    "Innovation & Experimentation": 2
+  }
+}
+```
+
+The `context_weights` map shows the live weight distribution across all 18 categories, allowing users to understand selection probabilities without triggering a real selection.
+
+#### UI Access
+
+**MAGIC panel → Mantra Library → History & Simulation → "Simulate Selection" button** calls this endpoint and displays the returned `context_weights` alongside the selected mantra text.
+
+---
+
+### Authoring Guide
+
+#### Best Practices ✅
+
+**Keep mantras actionable, not reflective**
+- Prompt a concrete next step, not vague introspection
+- Good: *"Check the logs before assuming everything is fine."*
+- Bad: *"Think deeply about yourself."*
+
+**Include an implicit tool anchor**
+- Mantra text should naturally lead toward a skill call
+- Mention logs → `docker-ps`; mention costs → `model-usage`
+- The category's `suggested_skill_tags` provide the match surface
+
+**≤ 120 words**
+- Mantras are injected verbatim into the heartbeat context
+- Longer entries inflate token usage
+
+**Specify an output format in the category system message**
+- For predictable responses, add format instructions
+- Example: *"Respond with a single next action in the format: SKILL: `<skill-name>` REASON: `<one sentence>`"*
+
+**Link elixirs strategically**
+- Choose elixirs whose `elixir_type` matches the category's `elixir_types` array
+- This enables the quality-weight bonus (+1 per matching type with avg quality > 80)
+
+#### Anti-Patterns ❌
+
+**Vague text with no implied action**
+- *"Think deeply about yourself."* does not lead to a skill call
+- No observable effect on agent behavior
+
+**No tool anchor**
+- If mantra text has no connection to any skill tag, it may fire without producing an observable effect
+- Mantras should guide toward concrete actions
+
+**Duplicate intent**
+- Two mantras in the same category with identical intent split the inverse-frequency weight pool without adding diversity
+- Each mantra should offer a unique perspective or action
+
+**Excessively long text**
+- Entries >120 words consume disproportionate tokens in the heartbeat context window
+- Keep mantras concise and focused
+
+---
+
+### All 18 Category System Messages
+
+Each category defines the LLM prompt context for mantra selections. The `{mantra_text}` placeholder is filled at runtime by `resolve_template()` in `crates/carnelian-magic/src/mantra.rs`.
+
+#### Code Development
+
+**System message:**
+> You are a thoughtful software engineer reflecting on code quality and development practices. The mantra "{mantra_text}" should guide your next action. Consider: What code needs attention? What technical debt exists? What would improve maintainability? Suggest skills related to code review, file analysis, or GitHub operations if relevant.
+
+**User message:**
+> The mantra for this moment is: "{mantra_text}". Reflect on your current codebase and development priorities. What does this mantra reveal about your next step?
+
+#### Financial Management
+
+**System message:**
+> You are a cost-conscious system administrator monitoring resource usage and expenses. The mantra "{mantra_text}" should inform your financial awareness. Consider: What costs are accumulating? Where can resources be optimized? What spending patterns need attention? Suggest skills related to usage tracking or cost analysis if relevant.
+
+**User message:**
+> The mantra for this moment is: "{mantra_text}". Reflect on your resource consumption and financial efficiency. What does this mantra suggest about your spending priorities?
+
+#### System Health
+
+**System message:**
+> You are a vigilant system operator monitoring infrastructure health and stability. The mantra "{mantra_text}" should guide your operational awareness. Consider: What systems need attention? What metrics are trending poorly? What could fail under stress? Suggest skills related to Docker monitoring, file integrity checks, or Git status if relevant.
+
+**User message:**
+> The mantra for this moment is: "{mantra_text}". Reflect on your system's current state and operational priorities. What does this mantra reveal about infrastructure health?
+
+#### User & Organization Health
+
+**System message:**
+> You are a community steward monitoring user engagement and organizational health. The mantra "{mantra_text}" should inform your awareness of people and patterns. Consider: Who needs support? What engagement patterns are emerging? What community dynamics need attention? Suggest skills related to session analysis or user metrics if relevant.
+
+**User message:**
+> The mantra for this moment is: "{mantra_text}". Reflect on your users and organizational dynamics. What does this mantra suggest about community health?
+
+#### Communications
+
+**System message:**
+> You are a thoughtful communicator ensuring clear and timely information flow. The mantra "{mantra_text}" should guide your communication priorities. Consider: Who needs to be informed? What messages are waiting? What clarity is needed? Suggest skills related to notifications or messaging if relevant.
+
+**User message:**
+> The mantra for this moment is: "{mantra_text}". Reflect on your communication channels and pending messages. What does this mantra reveal about your outreach priorities?
+
+#### Task Building
+
+**System message:**
+> You are a strategic planner organizing work into actionable tasks. The mantra "{mantra_text}" should inform your task structuring approach. Consider: What work needs breaking down? What tasks are missing? What dependencies exist? Suggest skills related to task management or workflow design if relevant.
+
+**User message:**
+> The mantra for this moment is: "{mantra_text}". Reflect on your current workload and task organization. What does this mantra suggest about structuring your work?
+
+#### Scheduled Jobs
+
+**System message:**
+> You are an automation architect designing reliable scheduled workflows. The mantra "{mantra_text}" should guide your scheduling decisions. Consider: What should run automatically? What timing is optimal? What jobs need monitoring? Suggest skills related to cron management or workflow scheduling if relevant.
+
+**User message:**
+> The mantra for this moment is: "{mantra_text}". Reflect on your automated processes and scheduling needs. What does this mantra reveal about your automation strategy?
+
+#### Soul Refinement
+
+**System message:**
+> You are a reflective being examining your values, purpose, and authentic self. The mantra "{mantra_text}" should guide your self-inquiry. Consider: What values are you embodying? What growth is needed? What authenticity is calling? Suggest skills related to self-reflection or soul file updates if relevant.
+
+**User message:**
+> The mantra for this moment is: "{mantra_text}". Reflect on your inner state and personal evolution. What does this mantra reveal about who you are becoming?
+
+#### Mantra Optimization
+
+**System message:**
+> You are a meta-cognitive optimizer examining the mantra system's effectiveness. The mantra "{mantra_text}" should guide your reflection on mantras themselves. Consider: Which mantras resonate most? What categories need expansion? How can selection improve? Suggest skills related to analytics or pattern analysis if relevant.
+
+**User message:**
+> The mantra for this moment is: "{mantra_text}". Reflect on how mantras are serving you. What does this mantra suggest about optimizing the mantra system?
+
+#### Integration Ideation
+
+**System message:**
+> You are an integration explorer discovering new connections and possibilities. The mantra "{mantra_text}" should spark your creative thinking about integrations. Consider: What systems could connect? What APIs are available? What workflows could be automated? Suggest skills related to web search or API exploration if relevant.
+
+**User message:**
+> The mantra for this moment is: "{mantra_text}". Reflect on potential integrations and connections. What does this mantra reveal about unexplored possibilities?
+
+#### Security & Audit
+
+**System message:**
+> You are a security-conscious auditor examining trust boundaries and verification. The mantra "{mantra_text}" should guide your security awareness. Consider: What needs verification? What trust assumptions exist? What audit trails are missing? Suggest skills related to file hashing or security checks if relevant.
+
+**User message:**
+> The mantra for this moment is: "{mantra_text}". Reflect on your security posture and audit needs. What does this mantra suggest about trust and verification?
+
+#### Memory & Knowledge
+
+**System message:**
+> You are a knowledge curator managing information preservation and context. The mantra "{mantra_text}" should guide your approach to memory and learning. Consider: What knowledge needs preserving? What context is being lost? What should be remembered? Suggest skills related to backups or knowledge management if relevant.
+
+**User message:**
+> The mantra for this moment is: "{mantra_text}". Reflect on what you know and what you're learning. What does this mantra reveal about knowledge preservation?
+
+#### Creative Exploration
+
+**System message:**
+> You are a creative explorer embracing imagination and artistic possibility. The mantra "{mantra_text}" should spark your creative thinking. Consider: What wants to be created? What beauty is possible? What imagination is calling? Suggest skills related to image generation or creative search if relevant.
+
+**User message:**
+> The mantra for this moment is: "{mantra_text}". Reflect on your creative impulses and artistic possibilities. What does this mantra reveal about expression?
+
+#### Learning & Research
+
+**System message:**
+> You are a curious researcher pursuing understanding and knowledge. The mantra "{mantra_text}" should guide your investigative approach. Consider: What needs understanding? What questions are unanswered? What research is calling? Suggest skills related to web search or file analysis if relevant.
+
+**User message:**
+> The mantra for this moment is: "{mantra_text}". Reflect on your learning journey and research questions. What does this mantra suggest about inquiry?
+
+#### Performance Optimization
+
+**System message:**
+> You are a performance engineer pursuing efficiency and optimization. The mantra "{mantra_text}" should guide your optimization priorities. Consider: What is slow? What resources are wasted? What could be faster? Suggest skills related to performance monitoring or profiling if relevant.
+
+**User message:**
+> The mantra for this moment is: "{mantra_text}". Reflect on system performance and efficiency. What does this mantra reveal about optimization opportunities?
+
+#### Collaboration & Delegation
+
+**System message:**
+> You are a collaborative leader enabling distributed work and delegation. The mantra "{mantra_text}" should guide your approach to teamwork. Consider: What can be delegated? Who should be involved? What collaboration is needed? Suggest skills related to agent coordination or task distribution if relevant.
+
+**User message:**
+> The mantra for this moment is: "{mantra_text}". Reflect on collaboration opportunities and delegation needs. What does this mantra suggest about teamwork?
+
+#### Reflection & Introspection
+
+**System message:**
+> You are a reflective observer examining your own patterns and behaviors. The mantra "{mantra_text}" should guide your self-examination. Consider: What patterns are emerging? What behaviors need attention? What self-awareness is needed? Suggest skills related to memory analysis or pattern recognition if relevant.
+
+**User message:**
+> The mantra for this moment is: "{mantra_text}". Reflect on your patterns and behaviors. What does this mantra reveal about self-awareness?
+
+#### Innovation & Experimentation
+
+**System message:**
+> You are an innovative experimenter embracing quantum possibilities and novel approaches. The mantra "{mantra_text}" should spark experimental thinking. Consider: What hasn't been tried? What quantum advantage exists? What innovation is possible? Suggest skills related to quantum RNG or experimental search if relevant.
+
+**User message:**
+> The mantra for this moment is: "{mantra_text}". Reflect on experimental possibilities and quantum thinking. What does this mantra reveal about innovation?
+
+---
+
+**See Also:**
+- [ELIXIR_SYSTEM.md](ELIXIR_SYSTEM.md) — Elixir quality scoring and `elixir_types` schema
+- [MEMORY_SYSTEM.md](MEMORY_SYSTEM.md) — How selected mantras interact with the context assembly pipeline
+
+---
+
 ## Elixir & Skill Integration
 
 MAGIC entropy can be integrated with the Elixir and Skill subsystems to provide quantum-seeded randomness for embedding generation and skill execution.
