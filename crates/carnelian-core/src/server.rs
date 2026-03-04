@@ -81,7 +81,7 @@ const X_CARNELIAN_KEY: &str = "X-Carnelian-Key";
 /// Bypasses authentication for localhost requests.
 /// For remote requests, validates the X-Carnelian-Key header against the owner key.
 async fn carnelian_key_auth(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     req: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> axum::response::Response {
@@ -549,33 +549,30 @@ impl Server {
         };
 
         let state = Arc::new(AppState {
-            pool: self.config.pool().expect("Database pool required for AppState"),
             config: self.config.clone(),
-            model_router: model_router.clone(),
-            ledger: self.ledger.clone(),
             event_stream: self.event_stream.clone(),
-            xp_manager: xp_manager.clone(),
             policy_engine: self.policy_engine.clone(),
+            ledger: self.ledger.clone(),
+            worker_manager: self.worker_manager.clone(),
             scheduler: self.scheduler.clone(),
+            metrics: Arc::new(MetricsCollector::new()),
+            model_router: model_router.clone(),
+            safe_mode_guard: safe_mode_guard.clone(),
             session_manager: session_manager.clone(),
-            elixir_manager: elixir_manager.clone(),
             memory_manager: memory_manager.clone(),
-            skill_bridge: self.skill_bridge.clone(),
+            sub_agent_manager: sub_agent_manager.clone(),
+            workflow_engine: workflow_engine.clone(),
+            xp_manager: xp_manager.clone(),
+            voice_gateway: voice_gateway.clone(),
+            skill_book: skill_book.clone(),
+            elixir_manager: elixir_manager.clone(),
             entropy_provider: entropy_provider.clone(),
-            mantra_tree: self.mantra_tree.clone(),
-            approval_manager: self.approval_manager.clone(),
-            safe_mode_active: Arc::new(AtomicBool::new(false)),
+            integrity_cache: Arc::new(RwLock::new(HashMap::new())),
+            channel_adapters: Arc::new(RwLock::new(HashMap::new())),
+            channel_adapter_factory: self.adapter_factory.clone(),
+            correlation_counter: Arc::new(AtomicU64::new(0)),
+            started_at: std::time::Instant::now(),
         });
-
-        // Wire in the adapter factory if configured
-        let state = if let Some(ref factory) = self.adapter_factory {
-            AppState {
-                channel_adapter_factory: Some(factory.clone()),
-                ..state
-            }
-        } else {
-            state
-        };
 
         // Share the metrics collector, workflow engine, and entropy provider with the scheduler
         {
@@ -726,7 +723,7 @@ impl Server {
 
 /// Build the Axum router with all routes and middleware.
 #[allow(deprecated)] // TimeoutLayer::new is deprecated but simpler than with_status_code
-fn build_router(state: AppState) -> Router {
+fn build_router(state: Arc<AppState>) -> Router {
     // Health endpoint - exempt from auth (must be first)
     let health_routes = Router::new()
         .route("/v1/health", get(health_handler))
@@ -973,7 +970,7 @@ fn build_router(state: AppState) -> Router {
 /// Health check endpoint handler.
 ///
 /// Returns the overall health status of the system including database connectivity.
-async fn health_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn health_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let db_healthy = state.check_database_health().await;
 
     let response = HealthResponse {
@@ -1004,7 +1001,7 @@ async fn health_handler(State(state): State<AppState>) -> impl IntoResponse {
 ///
 /// Returns extended health diagnostics including uptime, last heartbeat,
 /// scheduler state, worker manager state, and event stream subscriber count.
-async fn detailed_health_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn detailed_health_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let db_healthy = state.check_database_health().await;
     let uptime_seconds = state.started_at.elapsed().as_secs();
 
@@ -1070,7 +1067,7 @@ async fn detailed_health_handler(State(state): State<AppState>) -> impl IntoResp
 ///
 /// Returns current system status including workers, models, and queue depth.
 /// Note: Workers and models will be populated when those systems are implemented.
-async fn status_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let workers = {
         let worker_manager = state.worker_manager.lock().await;
         worker_manager.get_worker_status().await
@@ -1136,7 +1133,7 @@ async fn status_handler(State(state): State<AppState>) -> impl IntoResponse {
 ///
 /// Publishes the event to the EventStream so WebSocket subscribers receive it.
 async fn publish_event_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<serde_json::Value>,
 ) -> impl IntoResponse {
     let event_type_str = body["event_type"].as_str().unwrap_or("Custom");
@@ -1176,7 +1173,7 @@ async fn publish_event_handler(
 /// Metrics endpoint handler — returns aggregated performance metrics.
 ///
 /// Returns task latency percentiles, event throughput, and stream stats.
-async fn metrics_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn metrics_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let event_stats = state.event_stream.stats();
     let snapshot = state.metrics.get_snapshot(&event_stats);
 
@@ -1210,7 +1207,7 @@ async fn metrics_handler(State(state): State<AppState>) -> impl IntoResponse {
 
 /// Create a new task via `POST /v1/tasks`.
 async fn create_task_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<CreateTaskRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -1288,7 +1285,7 @@ async fn create_task_handler(
 
 /// List all tasks via `GET /v1/tasks`.
 #[allow(clippy::type_complexity)]
-async fn list_tasks_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn list_tasks_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(_) => {
@@ -1357,7 +1354,7 @@ async fn list_tasks_handler(State(state): State<AppState>) -> impl IntoResponse 
 /// Get a single task via `GET /v1/tasks/:task_id`.
 #[allow(clippy::type_complexity)]
 async fn get_task_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(task_id): Path<Uuid>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -1430,7 +1427,7 @@ async fn get_task_handler(
 
 /// Cancel a task via `POST /v1/tasks/:task_id/cancel`.
 async fn cancel_task_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(task_id): Path<Uuid>,
     Json(body): Json<CancelTaskRequest>,
 ) -> impl IntoResponse {
@@ -1464,7 +1461,7 @@ async fn cancel_task_handler(
 /// List runs for a task via `GET /v1/tasks/:task_id/runs`.
 #[allow(clippy::type_complexity)]
 async fn list_runs_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(task_id): Path<Uuid>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -1539,7 +1536,7 @@ async fn list_runs_handler(
 /// Get a single run by ID via `GET /v1/runs/:run_id`.
 #[allow(clippy::type_complexity)]
 async fn get_run_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(run_id): Path<Uuid>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -1620,7 +1617,7 @@ async fn get_run_handler(
 /// Get paginated logs for a run via `GET /v1/runs/:run_id/logs`.
 #[allow(clippy::type_complexity)]
 async fn get_run_logs_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(run_id): Path<Uuid>,
     Query(params): Query<RunLogsQuery>,
 ) -> impl IntoResponse {
@@ -1765,7 +1762,7 @@ pub async fn insert_run_log(
 
 /// List all skills via `GET /v1/skills`.
 #[allow(clippy::type_complexity)]
-async fn list_skills_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn list_skills_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(_) => {
@@ -1819,7 +1816,7 @@ async fn list_skills_handler(State(state): State<AppState>) -> impl IntoResponse
 
 /// Enable a skill via `POST /v1/skills/:skill_id/enable`.
 async fn enable_skill_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(skill_id): Path<Uuid>,
 ) -> impl IntoResponse {
     toggle_skill(state, skill_id, true).await
@@ -1827,14 +1824,14 @@ async fn enable_skill_handler(
 
 /// Disable a skill via `POST /v1/skills/:skill_id/disable`.
 async fn disable_skill_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(skill_id): Path<Uuid>,
 ) -> impl IntoResponse {
     toggle_skill(state, skill_id, false).await
 }
 
 /// Shared logic for enable/disable skill.
-async fn toggle_skill(state: AppState, skill_id: Uuid, enabled: bool) -> axum::response::Response {
+async fn toggle_skill(state: Arc<AppState>, skill_id: Uuid, enabled: bool) -> axum::response::Response {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(_) => {
@@ -1878,7 +1875,7 @@ async fn toggle_skill(state: AppState, skill_id: Uuid, enabled: bool) -> axum::r
 ///
 /// Scans the skills registry directory for new, updated, or removed skill
 /// manifests and synchronizes the database accordingly.
-async fn refresh_skills_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn refresh_skills_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p.clone(),
         Err(e) => {
@@ -1927,7 +1924,7 @@ struct SafeModeToggleRequest {
 }
 
 /// GET `/v1/safe-mode/status` — query current safe mode state.
-async fn safe_mode_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn safe_mode_status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match state.safe_mode_guard.is_enabled().await {
         Ok(enabled) => (StatusCode::OK, Json(json!({"safe_mode": enabled}))).into_response(),
         Err(e) => {
@@ -1943,7 +1940,7 @@ async fn safe_mode_status_handler(State(state): State<AppState>) -> impl IntoRes
 
 /// POST `/v1/safe-mode/enable` — enable safe mode.
 async fn enable_safe_mode_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<SafeModeToggleRequest>,
 ) -> impl IntoResponse {
     let signing_key = state.config.owner_signing_key();
@@ -1970,7 +1967,7 @@ async fn enable_safe_mode_handler(
 
 /// POST `/v1/safe-mode/disable` — disable safe mode.
 async fn disable_safe_mode_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<SafeModeToggleRequest>,
 ) -> impl IntoResponse {
     let signing_key = state.config.owner_signing_key();
@@ -2036,7 +2033,7 @@ struct IngestUsageRequest {
 /// Resolves each record's `provider` name to a `provider_id` in `model_providers`,
 /// then inserts a row into `usage_costs`. Unknown providers are skipped with a warning.
 async fn ingest_usage_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<IngestUsageRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -2225,7 +2222,7 @@ const fn default_approval_limit() -> i64 {
 
 /// List pending approvals via `GET /v1/approvals`.
 async fn list_approvals_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<ListApprovalsQuery>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -2284,7 +2281,7 @@ async fn list_approvals_handler(
 
 /// Approve a pending action via `POST /v1/approvals/:id/approve`.
 async fn approve_approval_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(approval_id): Path<Uuid>,
     Json(body): Json<carnelian_common::types::ApprovalActionRequest>,
 ) -> impl IntoResponse {
@@ -2408,7 +2405,7 @@ async fn approve_approval_handler(
 
 /// Deny a pending action via `POST /v1/approvals/:id/deny`.
 async fn deny_approval_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(approval_id): Path<Uuid>,
     Json(body): Json<carnelian_common::types::ApprovalActionRequest>,
 ) -> impl IntoResponse {
@@ -2506,7 +2503,7 @@ async fn deny_approval_handler(
 
 /// Batch approve pending actions via `POST /v1/approvals/batch`.
 async fn batch_approve_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<carnelian_common::types::BatchApprovalRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -2652,7 +2649,7 @@ struct ListCapabilitiesQuery {
 
 /// List capability grants via `GET /v1/capabilities`.
 async fn list_capabilities_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<ListCapabilitiesQuery>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -2738,7 +2735,7 @@ async fn list_capabilities_handler(
 ///
 /// If the action requires approval, returns 202 Accepted with the approval_id.
 async fn grant_capability_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<carnelian_common::types::GrantCapabilityRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -2813,7 +2810,7 @@ async fn grant_capability_handler(
 
 /// Revoke a capability via `DELETE /v1/capabilities/:id`.
 async fn revoke_capability_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(grant_id): Path<Uuid>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -2897,7 +2894,7 @@ fn default_memory_limit() -> i64 {
 
 /// Create a new memory via `POST /v1/memories`.
 async fn create_memory_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<CreateMemoryRequest>,
 ) -> impl IntoResponse {
     // Validate source
@@ -2952,7 +2949,7 @@ async fn create_memory_handler(
 
 /// List memories with optional filtering via `GET /v1/memories`.
 async fn list_memories_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<ListMemoriesQuery>,
 ) -> impl IntoResponse {
     let limit = params.limit.clamp(1, 200);
@@ -3014,7 +3011,7 @@ async fn list_memories_handler(
 
 /// Retrieve a single memory via `GET /v1/memories/{memory_id}`.
 async fn get_memory_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(memory_id): Path<Uuid>,
 ) -> impl IntoResponse {
     match state.memory_manager.get_memory(memory_id).await {
@@ -3056,7 +3053,7 @@ async fn get_memory_handler(
 
 /// Export memories as a signed, encrypted CBOR envelope via `POST /v1/memories/export`.
 async fn export_memories_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<ExportMemoryRequest>,
 ) -> impl IntoResponse {
     use crate::memory::MemoryExportOptions;
@@ -3123,7 +3120,7 @@ async fn export_memories_handler(
 
 /// Import memories from a CBOR envelope via `POST /v1/memories/import`.
 async fn import_memories_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<ImportMemoryRequest>,
 ) -> impl IntoResponse {
     use base64::Engine;
@@ -3218,7 +3215,7 @@ fn default_heartbeat_limit() -> i64 {
 
 /// List recent heartbeat records via `GET /v1/heartbeats`.
 async fn list_heartbeats_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<ListHeartbeatsQuery>,
 ) -> impl IntoResponse {
     let limit = params.limit.clamp(1, 100);
@@ -3283,7 +3280,7 @@ async fn list_heartbeats_handler(
 }
 
 /// Get current heartbeat status via `GET /v1/heartbeats/status`.
-async fn heartbeat_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn heartbeat_status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(e) => {
@@ -3339,7 +3336,7 @@ async fn heartbeat_status_handler(State(state): State<AppState>) -> impl IntoRes
 // =============================================================================
 
 /// Get core identity information via `GET /v1/identity`.
-async fn get_identity_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn get_identity_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(e) => {
@@ -3402,7 +3399,7 @@ async fn get_identity_handler(State(state): State<AppState>) -> impl IntoRespons
 }
 
 /// Get SOUL.md content via `GET /v1/identity/soul`.
-async fn get_soul_content_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn get_soul_content_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(e) => {
@@ -3460,7 +3457,7 @@ async fn get_soul_content_handler(State(state): State<AppState>) -> impl IntoRes
 // =============================================================================
 
 /// List all model providers via `GET /v1/providers`.
-async fn list_providers_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn list_providers_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(e) => {
@@ -3522,7 +3519,7 @@ async fn list_providers_handler(State(state): State<AppState>) -> impl IntoRespo
 }
 
 /// Get Ollama connection status via `GET /v1/providers/ollama/status`.
-async fn ollama_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn ollama_status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let gateway_url = format!("{}/health", state.model_router.gateway_url());
     let http_client = reqwest::Client::new();
 
@@ -3712,7 +3709,7 @@ async fn spawn_worker_for_sub_agent(
 /// sub_agent records in a transaction, grants requested capabilities, and
 /// spawns a worker process for the new sub-agent.
 async fn create_sub_agent_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(body): Json<CreateSubAgentRequest>,
 ) -> impl IntoResponse {
@@ -3799,7 +3796,7 @@ async fn create_sub_agent_handler(
 
 /// List sub-agents via `GET /v1/sub-agents`.
 async fn list_sub_agents_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<ListSubAgentsParams>,
 ) -> impl IntoResponse {
     match state
@@ -3818,7 +3815,7 @@ async fn list_sub_agents_handler(
 
 /// Get a sub-agent by ID via `GET /v1/sub-agents/{id}`.
 async fn get_sub_agent_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     match state.sub_agent_manager.get_sub_agent(id).await {
@@ -3838,7 +3835,7 @@ async fn get_sub_agent_handler(
 
 /// Update a sub-agent via `PUT /v1/sub-agents/{id}`.
 async fn update_sub_agent_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
     Json(body): Json<UpdateSubAgentRequest>,
 ) -> impl IntoResponse {
@@ -3856,7 +3853,7 @@ async fn update_sub_agent_handler(
 ///
 /// Stops the worker process if one is running, then soft-deletes the record.
 async fn delete_sub_agent_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     // Stop worker if running
@@ -3885,7 +3882,7 @@ async fn delete_sub_agent_handler(
 ///
 /// Stops the worker process and sets the `_paused` flag in directives.
 async fn pause_sub_agent_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     // Stop worker if running
@@ -3910,7 +3907,7 @@ async fn pause_sub_agent_handler(
 /// Removes the `_paused` flag from directives and spawns a new worker process
 /// using the runtime stored in the sub-agent's directives.
 async fn resume_sub_agent_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     // First resume the record (remove _paused flag)
@@ -3969,12 +3966,12 @@ async fn resume_sub_agent_handler(
 // =============================================================================
 
 /// WebSocket upgrade handler for event streaming.
-async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
+async fn ws_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> impl IntoResponse {
     ws.on_upgrade(|socket| handle_websocket(socket, state))
 }
 
 /// Handle an established WebSocket connection.
-async fn handle_websocket(socket: axum::extract::ws::WebSocket, state: AppState) {
+async fn handle_websocket(socket: axum::extract::ws::WebSocket, state: Arc<AppState>) {
     let connection_start = std::time::Instant::now();
     let subscriber_count = state.event_stream.subscriber_count();
 
@@ -4074,7 +4071,7 @@ async fn handle_websocket(socket: axum::extract::ws::WebSocket, state: AppState)
 ///
 /// Handles Meta hub challenge verification for webhook subscription.
 async fn whatsapp_verify_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
     // Find the WhatsApp adapter
@@ -4109,7 +4106,7 @@ async fn whatsapp_verify_handler(
 ///
 /// Processes incoming messages from WhatsApp Cloud API.
 async fn whatsapp_inbound_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     body: bytes::Bytes,
 ) -> impl IntoResponse {
@@ -4148,7 +4145,7 @@ async fn whatsapp_inbound_handler(
 ///
 /// Handles both URL verification and message events from Slack.
 async fn slack_event_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     body: bytes::Bytes,
 ) -> impl IntoResponse {
@@ -4217,7 +4214,7 @@ async fn shutdown_signal() {
 
 /// Create a workflow via `POST /v1/workflows`.
 async fn create_workflow_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(body): Json<CreateWorkflowRequest>,
 ) -> impl IntoResponse {
@@ -4268,7 +4265,7 @@ async fn create_workflow_handler(
 
 /// List workflows via `GET /v1/workflows`.
 async fn list_workflows_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<ListWorkflowsParams>,
 ) -> impl IntoResponse {
     match state
@@ -4294,7 +4291,7 @@ async fn list_workflows_handler(
 
 /// Get a workflow via `GET /v1/workflows/{id}`.
 async fn get_workflow_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     match state.workflow_engine.get_workflow(id).await {
@@ -4314,7 +4311,7 @@ async fn get_workflow_handler(
 
 /// Update a workflow via `PUT /v1/workflows/{id}`.
 async fn update_workflow_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
     Json(body): Json<UpdateWorkflowRequest>,
 ) -> impl IntoResponse {
@@ -4337,7 +4334,7 @@ async fn update_workflow_handler(
 
 /// Delete a workflow via `DELETE /v1/workflows/{id}`.
 async fn delete_workflow_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     match state.workflow_engine.delete_workflow(id).await {
@@ -4357,7 +4354,7 @@ async fn delete_workflow_handler(
 
 /// Execute a workflow via `POST /v1/workflows/{id}/execute`.
 async fn execute_workflow_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
     Json(body): Json<ExecuteWorkflowRequest>,
 ) -> impl IntoResponse {
@@ -4489,7 +4486,7 @@ async fn build_and_start_adapter(
 
 /// List all channel sessions via `GET /v1/channels`.
 async fn list_channels_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<ListChannelsQuery>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -4596,7 +4593,7 @@ async fn list_channels_handler(
 /// in `config_store`, builds the corresponding adapter, starts it, and
 /// tracks it in `AppState::channel_adapters`.
 async fn create_channel_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<CreateChannelRequest>,
 ) -> impl IntoResponse {
     // Validate channel_type early
@@ -4728,7 +4725,7 @@ async fn create_channel_handler(
 
 /// Get a single channel session via `GET /v1/channels/{id}`.
 async fn get_channel_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -4811,7 +4808,7 @@ async fn get_channel_handler(
 /// If `bot_token` is provided, the existing adapter is stopped, credentials
 /// are updated, and a new adapter is built and started.
 async fn update_channel_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
     Json(body): Json<UpdateChannelRequest>,
 ) -> impl IntoResponse {
@@ -4948,7 +4945,7 @@ async fn update_channel_handler(
 /// Stops the running adapter, removes credentials from `config_store`,
 /// and deletes the session row.
 async fn delete_channel_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -5027,7 +5024,7 @@ async fn delete_channel_handler(
 ///
 /// Generates a pairing token and stores it in the session metadata.
 async fn pair_channel_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
     Json(body): Json<PairChannelRequest>,
 ) -> impl IntoResponse {
@@ -5118,7 +5115,7 @@ async fn pair_channel_handler(
 
 /// Get agent XP details via `GET /v1/xp/agents/:id`.
 async fn get_agent_xp_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(identity_id): Path<Uuid>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -5246,7 +5243,7 @@ async fn get_agent_xp_handler(
 
 /// Get paginated XP history via `GET /v1/xp/agents/:id/history`.
 async fn get_xp_history_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(identity_id): Path<Uuid>,
     Query(params): Query<XpHistoryQuery>,
 ) -> impl IntoResponse {
@@ -5348,7 +5345,7 @@ async fn get_xp_history_handler(
 }
 
 /// Get XP leaderboard via `GET /v1/xp/leaderboard`.
-async fn get_xp_leaderboard_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn get_xp_leaderboard_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(_) => {
@@ -5402,7 +5399,7 @@ async fn get_xp_leaderboard_handler(State(state): State<AppState>) -> impl IntoR
 
 /// Get skill metrics via `GET /v1/xp/skills/:id`.
 async fn get_skill_metrics_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(skill_id): Path<Uuid>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -5501,7 +5498,7 @@ async fn get_skill_metrics_handler(
 
 /// Get top skills by XP earned via `GET /v1/xp/skills/top`.
 async fn get_top_skills_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<TopSkillsQuery>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -5597,7 +5594,7 @@ async fn get_top_skills_handler(
 
 /// Admin-gated XP award via `POST /v1/xp/award`.
 async fn award_xp_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<AwardXpRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -5783,7 +5780,7 @@ async fn award_xp_handler(
 
 /// Configure voice settings via `POST /v1/voice/configure`.
 async fn configure_voice_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(req): Json<ConfigureVoiceRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -5852,7 +5849,7 @@ async fn configure_voice_handler(
 
 /// Test text-to-speech via `POST /v1/voice/test`.
 async fn test_voice_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(req): Json<TestVoiceRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -5912,7 +5909,7 @@ async fn test_voice_handler(
 }
 
 /// List available voices via `GET /v1/voice/voices`.
-async fn list_voices_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn list_voices_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(_) => {
@@ -5953,7 +5950,7 @@ async fn list_voices_handler(State(state): State<AppState>) -> impl IntoResponse
 
 /// Transcribe audio to text via `POST /v1/voice/transcribe`.
 async fn transcribe_voice_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(req): Json<TranscribeVoiceRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -6231,7 +6228,7 @@ pub struct PublishAnchorResponse {
 
 /// Publish a ledger slice anchor
 async fn publish_ledger_anchor_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<PublishAnchorRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -6317,7 +6314,7 @@ pub struct AnchorProofResponse {
 
 /// Get anchor proof by ID
 async fn get_ledger_anchor_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -6392,7 +6389,7 @@ async fn get_ledger_anchor_handler(
 
 /// Verify a hash against a stored anchor
 async fn verify_ledger_anchor_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Query(params): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
@@ -6466,7 +6463,7 @@ pub struct RevokedGrantResponse {
 
 /// List revoked capability grants via `GET /v1/memory/revoked-grants`.
 async fn list_revoked_grants_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<ListRevokedGrantsQuery>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -6541,7 +6538,7 @@ fn default_ledger_limit() -> i64 {
 
 /// List ledger events via `GET /v1/ledger/events`.
 async fn list_ledger_events_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<LedgerEventsQuery>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -6661,7 +6658,7 @@ async fn list_ledger_events_handler(
 }
 
 /// Verify ledger chain integrity via `GET /v1/ledger/verify`.
-async fn verify_ledger_chain_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn verify_ledger_chain_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match state.ledger.verify_chain(None).await {
         Ok(intact) => {
             let (event_count, first_event_id, last_event_id) = if let Ok(pool) = state.config.pool()
@@ -6708,7 +6705,7 @@ async fn verify_ledger_chain_handler(State(state): State<AppState>) -> impl Into
 }
 
 /// Get setup status via `GET /v1/config/setup-status`.
-async fn get_setup_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn get_setup_status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(_) => {
@@ -6746,7 +6743,7 @@ async fn get_setup_status_handler(State(state): State<AppState>) -> impl IntoRes
 }
 
 /// Mark setup as complete via `POST /v1/config/setup-complete`.
-async fn post_setup_complete_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn post_setup_complete_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(_) => {
@@ -6790,7 +6787,7 @@ async fn post_setup_complete_handler(State(state): State<AppState>) -> impl Into
 // =============================================================================
 
 /// List all skills in the Skill Book catalog via `GET /v1/node-registry`.
-async fn list_skill_book_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn list_skill_book_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match state.skill_book.load_catalog() {
         Ok(catalog) => (
             StatusCode::OK,
@@ -6810,7 +6807,7 @@ async fn list_skill_book_handler(State(state): State<AppState>) -> impl IntoResp
 
 /// Get a single Skill Book entry via `GET /v1/node-registry/:id`.
 async fn get_skill_book_entry_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(skill_id): Path<String>,
 ) -> impl IntoResponse {
     match state.skill_book.get_entry(&skill_id) {
@@ -6829,7 +6826,7 @@ async fn get_skill_book_entry_handler(
 
 /// Activate a skill from the Skill Book via `POST /v1/node-registry/:id/activate`.
 async fn activate_skill_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(skill_id): Path<String>,
     Json(body): Json<carnelian_common::types::ActivateSkillRequest>,
 ) -> impl IntoResponse {
@@ -6849,7 +6846,7 @@ async fn activate_skill_handler(
 
 /// Deactivate a skill via `DELETE /v1/node-registry/:id/deactivate`.
 async fn deactivate_skill_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(skill_id): Path<String>,
 ) -> impl IntoResponse {
     match state.skill_book.deactivate(&skill_id).await {
@@ -6872,7 +6869,7 @@ async fn deactivate_skill_handler(
 
 /// Get API key for remote clients via `GET /v1/config/api-key`.
 /// Restricted to localhost-only access.
-async fn get_api_key_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn get_api_key_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     // Get owner signing key hash as API key
     let api_key = state
         .config
@@ -6944,7 +6941,7 @@ struct RejectDraftBody {
 
 /// GET /v1/elixirs - List elixirs with optional filtering and pagination
 async fn list_elixirs_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<ListElixirsQuery>,
 ) -> impl IntoResponse {
     match state.elixir_manager.list_elixirs(params).await {
@@ -6963,7 +6960,7 @@ async fn list_elixirs_handler(
 
 /// POST /v1/elixirs - Create a new elixir
 async fn create_elixir_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<CreateElixirRequest>,
 ) -> impl IntoResponse {
     let created_by = body.created_by;
@@ -6984,7 +6981,7 @@ async fn create_elixir_handler(
 
 /// GET /v1/elixirs/:id - Get a single elixir by ID
 async fn get_elixir_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(elixir_id): Path<Uuid>,
 ) -> impl IntoResponse {
     match state.elixir_manager.get_elixir(elixir_id).await {
@@ -7008,7 +7005,7 @@ async fn get_elixir_handler(
 
 /// GET /v1/elixirs/search - Search elixirs using semantic search
 async fn search_elixirs_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<SearchElixirsQuery>,
 ) -> impl IntoResponse {
     let limit = params.limit.unwrap_or(10);
@@ -7028,7 +7025,7 @@ async fn search_elixirs_handler(
 }
 
 /// GET /v1/elixirs/drafts - List all elixir drafts
-async fn list_elixir_drafts_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn list_elixir_drafts_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(e) => {
@@ -7090,7 +7087,7 @@ async fn list_elixir_drafts_handler(State(state): State<AppState>) -> impl IntoR
 
 /// POST /v1/elixirs/drafts/:id/approve - Approve a draft and promote to elixir
 async fn approve_elixir_draft_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(draft_id): Path<Uuid>,
     Json(body): Json<ApproveDraftBody>,
 ) -> impl IntoResponse {
@@ -7117,7 +7114,7 @@ async fn approve_elixir_draft_handler(
 
 /// POST /v1/elixirs/drafts/:id/reject - Reject a draft
 async fn reject_elixir_draft_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(draft_id): Path<Uuid>,
     Json(body): Json<RejectDraftBody>,
 ) -> impl IntoResponse {
@@ -7147,7 +7144,7 @@ async fn reject_elixir_draft_handler(
 // =============================================================================
 
 /// GET /v1/magic/entropy/health - Check entropy provider health
-async fn magic_entropy_health_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn magic_entropy_health_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match &state.entropy_provider {
         Some(provider) => {
             // Try to downcast to MixedEntropyProvider to get all provider health
@@ -7190,7 +7187,7 @@ fn default_sample_bytes() -> usize {
 }
 
 async fn magic_entropy_sample_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<EntropySampleRequest>,
 ) -> impl IntoResponse {
     let bytes = body.bytes.clamp(1, 1024);
@@ -7225,7 +7222,7 @@ async fn magic_entropy_sample_handler(
 
 /// GET /v1/magic/entropy/log - Get entropy log entries
 async fn magic_entropy_log_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -7282,7 +7279,7 @@ async fn magic_entropy_log_handler(
 }
 
 /// POST /v1/magic/elixirs/rehash - Rehash all elixirs with fresh entropy
-async fn magic_elixirs_rehash_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn magic_elixirs_rehash_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(e) => {
@@ -7365,7 +7362,7 @@ async fn magic_elixirs_rehash_handler(State(state): State<AppState>) -> impl Int
 }
 
 /// GET /v1/magic/config - Get MAGIC configuration (with masked API keys)
-async fn magic_get_config_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn magic_get_config_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let config = &state.config.magic;
     
     let masked_config = json!({
@@ -7395,7 +7392,7 @@ struct MagicConfigUpdate {
 }
 
 async fn magic_update_config_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<MagicConfigUpdate>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -7508,7 +7505,7 @@ struct QuantinuumLoginRequest {
 }
 
 async fn magic_quantinuum_login_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<QuantinuumLoginRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -7692,7 +7689,7 @@ struct QuantinuumPersistRequest {
 }
 
 async fn magic_quantinuum_persist_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<QuantinuumPersistRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -7804,7 +7801,7 @@ async fn magic_quantinuum_persist_handler(
 }
 
 /// POST /v1/magic/auth/quantinuum/refresh - Refresh Quantinuum tokens
-async fn magic_quantinuum_refresh_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn magic_quantinuum_refresh_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(e) => {
@@ -7976,7 +7973,7 @@ async fn magic_quantinuum_refresh_handler(State(state): State<AppState>) -> impl
 }
 
 /// GET /v1/magic/auth/status - Check authentication status for quantum providers
-async fn magic_auth_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn magic_auth_status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(e) => {
@@ -8034,7 +8031,7 @@ async fn magic_auth_status_handler(State(state): State<AppState>) -> impl IntoRe
 // =============================================================================
 
 /// GET /v1/magic/mantras - List all mantra categories with entry counts
-async fn magic_list_mantras_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn magic_list_mantras_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(e) => {
@@ -8089,7 +8086,7 @@ async fn magic_list_mantras_handler(State(state): State<AppState>) -> impl IntoR
 
 /// GET /v1/magic/mantras/categories/{id} - List entries for a category
 async fn magic_list_category_entries_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(category_id): Path<uuid::Uuid>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -8145,7 +8142,7 @@ struct AddMantraEntryRequest {
 /// POST /v1/magic/mantras - Add a new mantra entry (category_id from payload)
 /// POST /v1/magic/mantras/categories/{id}/entries - Add a new mantra entry (category_id from path)
 async fn magic_add_mantra_entry_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     path: Option<Path<uuid::Uuid>>,
     Json(body): Json<AddMantraEntryRequest>,
 ) -> impl IntoResponse {
@@ -8230,7 +8227,7 @@ struct UpdateMantraEntryRequest {
 /// PUT /v1/magic/mantras/entries/{id} - Update a mantra entry
 /// PATCH /v1/magic/mantras/{entry_id} - Update a mantra entry
 async fn magic_update_mantra_entry_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(entry_id): Path<uuid::Uuid>,
     Json(body): Json<UpdateMantraEntryRequest>,
 ) -> impl IntoResponse {
@@ -8312,7 +8309,7 @@ async fn magic_update_mantra_entry_handler(
 
 /// DELETE /v1/magic/mantras/entries/{id} - Soft-delete a mantra entry
 async fn magic_delete_mantra_entry_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(entry_id): Path<uuid::Uuid>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -8360,7 +8357,7 @@ async fn magic_delete_mantra_entry_handler(
 }
 
 /// GET /v1/magic/mantras/history - Get recent mantra selection history
-async fn magic_mantra_history_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn magic_mantra_history_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(e) => {
@@ -8425,7 +8422,7 @@ async fn magic_mantra_history_handler(State(state): State<AppState>) -> impl Int
 }
 
 /// GET /v1/magic/mantras/context - Get current mantra context
-async fn magic_mantra_context_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn magic_mantra_context_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(e) => {
@@ -8452,7 +8449,7 @@ async fn magic_mantra_context_handler(State(state): State<AppState>) -> impl Int
 }
 
 /// POST /v1/magic/mantras/simulate - Simulate mantra selection with live entropy
-async fn magic_mantra_simulate_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn magic_mantra_simulate_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(e) => {
@@ -8530,7 +8527,7 @@ struct IntegrityBackfillResponse {
 
 /// POST /v1/magic/integrity/verify - Verify quantum checksums for specified tables
 async fn magic_integrity_verify_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<IntegrityVerifyRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -8621,7 +8618,7 @@ async fn magic_integrity_verify_handler(
 }
 
 /// GET /v1/magic/integrity/status - Get cached integrity verification status
-async fn magic_integrity_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn magic_integrity_status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let cache = state.integrity_cache.read().await;
     
     if cache.is_empty() {
@@ -8645,7 +8642,7 @@ async fn magic_integrity_status_handler(State(state): State<AppState>) -> impl I
 }
 
 /// POST /v1/magic/integrity/backfill - Backfill missing quantum checksums
-async fn magic_integrity_backfill_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn magic_integrity_backfill_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(e) => {
