@@ -121,7 +121,7 @@ These primitives are **fully implemented and tested** but ship as an opt-in feat
 
 ### Documentation
 
-- **Full Roadmap**: See `docs/FUTURE_PQC.md` for detailed migration plan, CLI commands, and security considerations
+- **Full Roadmap**: See `DOCUMENTATION/FUTURE_PQC.md` for detailed migration plan, CLI commands, and security considerations
 - **Architecture Review**: See `docs/SECURITY_ARCHITECTURE_REVIEW_V1.md` for comprehensive PQC analysis
 - **MAGIC Subsystem**: See `docs/MAGIC.md` for quantum entropy provider setup
 

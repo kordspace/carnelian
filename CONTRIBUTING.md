@@ -498,7 +498,7 @@ The `crates/carnelian-magic/src/pqc.rs` module ships fully implemented in v1.0.0
 - **`KyberKem`** — CRYSTALS-Kyber1024 key encapsulation mechanism for quantum-resistant shared-secret exchange
 - **`KeyAlgorithm` enum** — Variants: `Ed25519` (current v1.0.0 default), `HybridDilithiumEd25519` (v1.1.0 opt-in), `Dilithium3` (v2.0.0+)
 
-v1.0.0 deployments use `KeyAlgorithm::Ed25519` via the owner keypair in `carnelian-core`. The full migration path is documented in `docs/FUTURE_PQC.md`.
+v1.0.0 deployments use `KeyAlgorithm::Ed25519` via the owner keypair in `carnelian-core`. The full migration path is documented in `DOCUMENTATION/FUTURE_PQC.md`.
 
 ### Running the PQC Tests
 
@@ -530,7 +530,7 @@ The planned CLI migration command for v1.1.0:
 carnelian crypto migrate --to hybrid
 ```
 
-This command will handle key rotation from Ed25519 to HybridDilithiumEd25519. Direct readers to `docs/FUTURE_PQC.md` for the complete v1.1.0/v1.2.0/v2.0.0 roadmap.
+This command will handle key rotation from Ed25519 to HybridDilithiumEd25519. Direct readers to `DOCUMENTATION/FUTURE_PQC.md` for the complete v1.1.0/v1.2.0/v2.0.0 roadmap.
 
 ### Extending `HybridSigningKey`
 
@@ -540,7 +540,7 @@ To add a new signing algorithm:
 2. Add a new `KeyAlgorithm` variant to the enum
 3. Wire the new algorithm into `carnelian-core/src/crypto.rs` hybrid helper functions
 4. Add comprehensive tests following the existing 8-test pattern
-5. Update `docs/FUTURE_PQC.md` with migration documentation
+5. Update `DOCUMENTATION/FUTURE_PQC.md` with migration documentation
 
 ---
 
