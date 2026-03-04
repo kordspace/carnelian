@@ -2,7 +2,7 @@
   <img src="assets/logos/banners/carnelian-v1-banner-animated.gif" alt="Carnelian OS Banner" width="100%">
 </p>
 
-<h1 align="center">🔥 Carnelian</h1>
+<h1 align="center">🔥 CARNELIAN 🦎</h1>
 
 <p align="center">
   <a href="https://github.com/kordspace/carnelian/actions/workflows/ci.yml"><img src="https://github.com/kordspace/carnelian/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
