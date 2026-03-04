@@ -2261,6 +2261,78 @@ impl WorkspaceScanner {
     }
 }
 
+/// Internal helper to insert a single auto-queued task with deduplication.
+/// Returns the task_id if inserted, None if skipped (duplicate or error).
+async fn insert_auto_queued_task(
+    pool: &PgPool,
+    event_stream: &EventStream,
+    title: &str,
+    description: &str,
+    identity_id: Uuid,
+    priority: i32,
+    correlation_id: Uuid,
+    origin: Option<&str>,
+    event_metadata: serde_json::Value,
+) -> Result<Option<Uuid>> {
+    // Dedup: skip if a non-terminal task with the same title already exists
+    let existing: Option<i64> = sqlx::query_scalar(
+        r"SELECT COUNT(*) FROM tasks WHERE title = $1 AND state IN ('pending', 'running')",
+    )
+    .bind(title)
+    .fetch_one(pool)
+    .await
+    .map_err(Error::Database)?;
+
+    if existing.unwrap_or(0) > 0 {
+        tracing::debug!(title = %title, "Task already exists, skipping");
+        return Ok(None);
+    }
+
+    // Insert new task
+    let task_id: Uuid = if let Some(origin_val) = origin {
+        sqlx::query_scalar(
+            r"INSERT INTO tasks (title, description, created_by, priority, correlation_id, origin)
+              VALUES ($1, $2, $3, $4, $5, $6)
+              RETURNING task_id",
+        )
+        .bind(title)
+        .bind(description)
+        .bind(identity_id)
+        .bind(priority)
+        .bind(correlation_id)
+        .bind(origin_val)
+        .fetch_one(pool)
+        .await
+        .map_err(Error::Database)?
+    } else {
+        sqlx::query_scalar(
+            r"INSERT INTO tasks (title, description, created_by, priority, correlation_id)
+              VALUES ($1, $2, $3, $4, $5)
+              RETURNING task_id",
+        )
+        .bind(title)
+        .bind(description)
+        .bind(identity_id)
+        .bind(priority)
+        .bind(correlation_id)
+        .fetch_one(pool)
+        .await
+        .map_err(Error::Database)?
+    };
+
+    // Emit TaskAutoQueued event
+    event_stream.publish(
+        EventEnvelope::new(
+            EventLevel::Info,
+            EventType::TaskAutoQueued,
+            event_metadata,
+        )
+        .with_correlation_id(correlation_id),
+    );
+
+    Ok(Some(task_id))
+}
+
 /// Auto-queue scanned markers as tasks in the database, skipping duplicates
 /// and privileged tasks. Returns the number of tasks actually inserted.
 ///
@@ -2299,59 +2371,38 @@ pub async fn auto_queue_scanned_tasks(
             marker.marker_type, marker.file_path, marker.line_number
         );
 
-        // Dedup: skip if a non-terminal task with the same title already exists
-        let existing: Option<i64> = sqlx::query_scalar(
-            r"SELECT COUNT(*) FROM tasks WHERE title = $1 AND state IN ('pending', 'running')",
+        // Use shared helper for dedup + insert + event
+        match insert_auto_queued_task(
+            pool,
+            event_stream,
+            &title,
+            &marker.description,
+            identity_id,
+            0_i32, // default priority for auto-queued tasks
+            correlation_id,
+            None, // no origin for workspace-scanned tasks
+            json!({
+                "task_id": "", // will be filled by helper
+                "title": title,
+                "marker_type": marker.marker_type,
+                "file_path": marker.file_path,
+                "line_number": marker.line_number,
+                "description": marker.description,
+                "correlation_id": correlation_id,
+            }),
         )
-        .bind(&title)
-        .fetch_one(pool)
-        .await
-        .map_err(Error::Database)?;
-
-        if existing.unwrap_or(0) > 0 {
-            tracing::debug!(title = %title, "Task already exists, skipping");
-            continue;
+        .await?
+        {
+            Some(task_id) => {
+                tracing::info!(
+                    task_id = %task_id,
+                    title = %title,
+                    "Auto-queued task from workspace scan"
+                );
+                queued += 1;
+            }
+            None => continue, // Duplicate, already logged by helper
         }
-
-        // Insert new task
-        let task_id: Uuid = sqlx::query_scalar(
-            r"INSERT INTO tasks (title, description, created_by, priority, correlation_id)
-              VALUES ($1, $2, $3, $4, $5)
-              RETURNING task_id",
-        )
-        .bind(&title)
-        .bind(&marker.description)
-        .bind(identity_id)
-        .bind(0_i32) // default priority for auto-queued tasks
-        .bind(correlation_id)
-        .fetch_one(pool)
-        .await
-        .map_err(Error::Database)?;
-
-        event_stream.publish(
-            EventEnvelope::new(
-                EventLevel::Info,
-                EventType::TaskAutoQueued,
-                json!({
-                    "task_id": task_id,
-                    "title": title,
-                    "marker_type": marker.marker_type,
-                    "file_path": marker.file_path,
-                    "line_number": marker.line_number,
-                    "description": marker.description,
-                    "correlation_id": correlation_id,
-                }),
-            )
-            .with_correlation_id(correlation_id),
-        );
-
-        tracing::info!(
-            task_id = %task_id,
-            title = %title,
-            "Auto-queued task from workspace scan"
-        );
-
-        queued += 1;
     }
 
     Ok(queued)
@@ -2380,15 +2431,16 @@ pub async fn auto_queue_llm_tasks(
             break;
         }
 
-        // Build description from arguments
-        let description = serde_json::to_string(&tool_call.arguments)
+        // Build combined description from tool_name and arguments for safety classification
+        let arguments_json = serde_json::to_string(&tool_call.arguments)
             .unwrap_or_else(|_| "{}".to_string());
+        let combined_description = format!("{} {}", tool_call.tool_name, arguments_json);
 
-        // Safety gate: skip privileged tool calls
-        if !WorkspaceScanner::classify_safe(&description) {
+        // Safety gate: skip privileged tool calls (checks both tool_name and arguments)
+        if !WorkspaceScanner::classify_safe(&combined_description) {
             tracing::debug!(
                 tool_name = %tool_call.tool_name,
-                description = %description,
+                arguments = %arguments_json,
                 "Skipping privileged LLM tool call"
             );
             continue;
@@ -2396,62 +2448,40 @@ pub async fn auto_queue_llm_tasks(
 
         let title = format!("[tool_call] {}", tool_call.tool_name);
 
-        // Dedup: skip if a non-terminal task with the same title already exists
-        let existing: Option<i64> = sqlx::query_scalar(
-            r"SELECT COUNT(*) FROM tasks WHERE title = $1 AND state IN ('pending', 'running')",
+        // Use shared helper for dedup + insert + event
+        match insert_auto_queued_task(
+            pool,
+            event_stream,
+            &title,
+            &arguments_json,
+            identity_id,
+            -1_i32, // low priority for LLM-suggested tasks
+            correlation_id,
+            Some("llm_suggested"),
+            json!({
+                "task_id": "", // will be filled by helper
+                "title": title,
+                "tool_name": tool_call.tool_name,
+                "arguments": tool_call.arguments,
+                "source": "heartbeat_tool_call",
+                "priority": -1,
+                "correlation_id": correlation_id,
+                "origin": "llm_suggested",
+            }),
         )
-        .bind(&title)
-        .fetch_one(pool)
-        .await
-        .map_err(Error::Database)?;
-
-        if existing.unwrap_or(0) > 0 {
-            tracing::debug!(title = %title, "LLM task already exists, skipping");
-            continue;
+        .await?
+        {
+            Some(task_id) => {
+                tracing::info!(
+                    task_id = %task_id,
+                    tool_name = %tool_call.tool_name,
+                    correlation_id = %correlation_id,
+                    "Auto-queued LLM-suggested task from heartbeat"
+                );
+                queued += 1;
+            }
+            None => continue, // Duplicate, already logged by helper
         }
-
-        // Insert new task with origin='llm_suggested'
-        let task_id: Uuid = sqlx::query_scalar(
-            r"INSERT INTO tasks (title, description, created_by, priority, correlation_id, origin)
-              VALUES ($1, $2, $3, $4, $5, $6)
-              RETURNING task_id",
-        )
-        .bind(&title)
-        .bind(&description)
-        .bind(identity_id)
-        .bind(-1_i32) // low priority for LLM-suggested tasks
-        .bind(correlation_id)
-        .bind("llm_suggested")
-        .fetch_one(pool)
-        .await
-        .map_err(Error::Database)?;
-
-        event_stream.publish(
-            EventEnvelope::new(
-                EventLevel::Info,
-                EventType::TaskAutoQueued,
-                json!({
-                    "task_id": task_id,
-                    "title": title,
-                    "tool_name": tool_call.tool_name,
-                    "arguments": tool_call.arguments,
-                    "source": "heartbeat_tool_call",
-                    "priority": -1,
-                    "correlation_id": correlation_id,
-                    "origin": "llm_suggested",
-                }),
-            )
-            .with_correlation_id(correlation_id),
-        );
-
-        tracing::info!(
-            task_id = %task_id,
-            tool_name = %tool_call.tool_name,
-            correlation_id = %correlation_id,
-            "Auto-queued LLM-suggested task from heartbeat"
-        );
-
-        queued += 1;
     }
 
     Ok(queued)
