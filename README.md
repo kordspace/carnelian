@@ -1130,6 +1130,12 @@ All contributors who submit accepted pull requests are recognized in [CONTRIBUTO
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the Contributor License Agreement and detailed guidelines.
 
+## Acknowledgments
+
+Carnelian was inspired by OpenClaw, an AI agent framework created by Peter Steinberger. For a detailed architectural comparison, see [docs/OPENCLAW_COMPARISON.md](docs/OPENCLAW_COMPARISON.md).
+
+---
+
 ## License
 
 **Copyright © 2024-2026 Marco Julio Lopes and Kordspace LLC**

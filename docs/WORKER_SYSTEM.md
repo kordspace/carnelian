@@ -348,7 +348,8 @@ Used by WASM and Node.js skills:
   "description": "...",
   "runtime": "wasm",
   "version": "1.0.0",
-  "capabilities_required": ["fs.read", "network"]
+  "capabilities_required": ["fs.read", "network"],
+  "net_allowlist": ["api.github.com", "*.example.com"]
 }
 ```
 
@@ -369,6 +370,35 @@ required = ["fs.read"]
 [limits]
 timeout_secs = 60
 max_output_bytes = 524288
+```
+
+### Network Allowlist
+
+The `net_allowlist` field provides granular network access control for skills requiring the `network` capability:
+
+**Purpose:**
+- Restricts network access to specific domains at runtime
+- Complements WASM's `inherit_network()` and Native `http_*` operations
+- Supports wildcard patterns (`*.example.com`) for subdomain matching
+- Empty array `[]` denies all network access even if `network` capability is granted
+
+**Current Status:**
+- **Planned** for enforcement in future releases
+- Currently informational via `sandbox.network` field in `SandboxConfig`
+- WASM skills: Documented in [WASM_SKILLS.md](WASM_SKILLS.md)
+- Native skills: `http_get` and `http_post` operations will validate against allowlist when implemented
+
+**Enforcement Model (Planned):**
+
+```rust
+// PolicyEngine checks intersection of:
+// 1. Declared allowlist in skill manifest
+// 2. Granted network capability
+// 3. Requested URL domain
+
+if !skill.net_allowlist.matches(url.domain()) {
+    return Err(CapabilityDenied("Domain not in allowlist"));
+}
 ```
 
 ### Build Checksum
@@ -392,8 +422,9 @@ Before skill execution, `PolicyEngine.check_task_execution()` verifies:
 
 1. **Identity capability** — Identity has `task.create` capability
 2. **Skill capabilities** — All capabilities in the skill's `capabilities_required` are granted to the skill subject
+3. **Network allowlist** — For skills with `network` capability, runtime URL validation against `net_allowlist` (planned enforcement)
 
-The intersection of **declared** (in manifest) vs **granted** (in `capability_grants` table) must be satisfied.
+The intersection of **declared** (in manifest) vs **granted** (in `capability_grants` table) must be satisfied. Network access is further restricted by the `net_allowlist` field (see [Skill Manifest Format](#skill-manifest-format)).
 
 ### Denial Handling
 

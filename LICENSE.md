@@ -210,8 +210,3 @@ These individuals represent the collaborative spirit of innovation and mentorshi
 ---
 
 **Last Updated**: March 3, 2026
-## Relationship to OpenClaw
-
-Carnelian was inspired by OpenClaw, an AI agent framework created by Peter Steinberger. While OpenClaw provided foundational inspiration for agent orchestration concepts, Carnelian is a fundamentally different implementation with distinct architectural choices.
-
-For a detailed comparison, see [docs/OPENCLAW_COMPARISON.md](docs/OPENCLAW_COMPARISON.md).
