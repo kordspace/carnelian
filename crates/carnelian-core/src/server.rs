@@ -6160,6 +6160,7 @@ mod tests {
             voice_gateway,
             skill_book,
             elixir_manager,
+            None, // entropy_provider
         )
     }
 

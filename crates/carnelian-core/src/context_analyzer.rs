@@ -83,7 +83,7 @@ impl ContextAnalyzer {
         .bind(limit)
         .fetch_all(self.pool.as_ref())
         .await
-        .map_err(|e| Error::Database(e.to_string()))?;
+        .map_err(Error::Database)?;
 
         Ok(rows.into_iter().map(|r| r.0).collect())
     }
@@ -218,7 +218,7 @@ impl ContextAnalyzer {
             .bind("pending")
             .bind(item.priority)
             .bind(session_id)
-            .fetch_one(&self.pool)
+            .fetch_one(self.pool.as_ref())
             .await
             .map_err(Error::Database)?;
 
