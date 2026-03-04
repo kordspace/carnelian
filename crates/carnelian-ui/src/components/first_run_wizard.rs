@@ -425,14 +425,12 @@ fn Step5StarterSkills(selected_skills: Signal<Vec<(&'static str, bool)>>) -> Ele
                         input {
                             r#type: "checkbox",
                             checked: checked,
-                            onchange: {
-                                spawn(async move {
-                                    let mut skills = selected_skills.read().clone();
-                                    if let Some(idx) = skills.iter().position(|(id, _)| *id == skill_id) {
-                                        skills[idx].1 = !skills[idx].1;
-                                        selected_skills.set(skills);
-                                    }
-                                })
+                            onchange: move |_| {
+                                let mut skills = selected_skills.read().clone();
+                                if let Some(idx) = skills.iter().position(|(id, _)| *id == skill_id) {
+                                    skills[idx].1 = !skills[idx].1;
+                                    selected_skills.set(skills);
+                                }
                             },
                         }
                         span { "{skill_name(skill_id)}" }
