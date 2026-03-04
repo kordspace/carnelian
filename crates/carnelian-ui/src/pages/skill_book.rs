@@ -1,11 +1,12 @@
 //! Skill Book Library page — curated skill catalog with activation.
 //!
-//! Features:
+//! # Features
+//!
 //! - Category filter tabs
 //! - Grid of skill cards with activation status
 //! - Inline activation wizard with config prompts
 //! - Deactivate functionality
-//! Skill Book page — browse and activate skills from the catalog.
+//! - Skill Book page — browse and activate skills from the catalog.
 
 use dioxus::prelude::*;
 use std::collections::HashMap;

@@ -609,11 +609,11 @@ fn ChannelWizardModal(on_close: EventHandler, on_created: EventHandler) -> Eleme
                                     {
                                         if let Some(ref token) = *pairing_token.read() {
                                             match channel_type.read().as_str() {
-                                                "telegram" => format!("Send /pair {} to your Telegram bot to complete pairing.", token),
-                                                "discord" => format!("Send !pair {} in your Discord channel to complete pairing.", token),
-                                                "whatsapp" => format!("Send /pair {} to your WhatsApp bot to complete pairing.", token),
-                                                "slack" => format!("Run /carnelian pair {} in your Slack workspace to complete pairing.", token),
-                                                _ => format!("Use the pairing token {} in your channel to complete pairing.", token),
+                                                "telegram" => format!("Send /pair {token} to your Telegram bot to complete pairing."),
+                                                "discord" => format!("Send !pair {token} in your Discord channel to complete pairing."),
+                                                "whatsapp" => format!("Send /pair {token} to your WhatsApp bot to complete pairing."),
+                                                "slack" => format!("Run /carnelian pair {token} in your Slack workspace to complete pairing."),
+                                                _ => format!("Use the pairing token {token} in your channel to complete pairing."),
                                             }
                                         } else {
                                             "Use the pairing token in your channel to complete pairing.".to_string()

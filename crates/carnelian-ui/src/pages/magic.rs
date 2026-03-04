@@ -128,7 +128,7 @@ fn EntropyDashboard(toasts: Signal<Vec<ToastMessage>>) -> Element {
                                 p {
                                     {
                                         if let Some(qo) = h.get("quantum-origin") {
-                                            if qo.get("available").and_then(|v| v.as_bool()).unwrap_or(false) {
+                                            if qo.get("available").and_then(serde_json::Value::as_bool).unwrap_or(false) {
                                                 "✅ Available"
                                             } else {
                                                 "❌ Unavailable"
@@ -144,7 +144,7 @@ fn EntropyDashboard(toasts: Signal<Vec<ToastMessage>>) -> Element {
                                 p {
                                     {
                                         if let Some(qq) = h.get("quantinuum-h2") {
-                                            if qq.get("available").and_then(|v| v.as_bool()).unwrap_or(false) {
+                                            if qq.get("available").and_then(serde_json::Value::as_bool).unwrap_or(false) {
                                                 "✅ Available"
                                             } else {
                                                 "❌ Unavailable"
@@ -160,7 +160,7 @@ fn EntropyDashboard(toasts: Signal<Vec<ToastMessage>>) -> Element {
                                 p {
                                     {
                                         if let Some(qk) = h.get("qiskit-rng") {
-                                            if qk.get("available").and_then(|v| v.as_bool()).unwrap_or(false) {
+                                            if qk.get("available").and_then(serde_json::Value::as_bool).unwrap_or(false) {
                                                 "✅ Available"
                                             } else {
                                                 "❌ Unavailable"
@@ -176,7 +176,7 @@ fn EntropyDashboard(toasts: Signal<Vec<ToastMessage>>) -> Element {
                                 p {
                                     {
                                         if let Some(os) = h.get("os") {
-                                            if os.get("available").and_then(|v| v.as_bool()).unwrap_or(false) {
+                                            if os.get("available").and_then(serde_json::Value::as_bool).unwrap_or(false) {
                                                 "✅ Available"
                                             } else {
                                                 "❌ Unavailable"
@@ -199,7 +199,7 @@ fn EntropyDashboard(toasts: Signal<Vec<ToastMessage>>) -> Element {
                 input {
                     r#type: "number",
                     value: "{sample_bytes}",
-                    oninput: move |e| sample_bytes.set(e.value().clone()),
+                    oninput: move |e| sample_bytes.set(e.value()),
                     placeholder: "Bytes"
                 }
                 button {
@@ -494,13 +494,13 @@ fn MantraLibrary(toasts: Signal<Vec<ToastMessage>>) -> Element {
                             div { class: "add-entry-form",
                                 textarea {
                                     value: "{new_text}",
-                                    oninput: move |e| new_text.set(e.value().clone()),
+                                    oninput: move |e| new_text.set(e.value()),
                                     placeholder: "Mantra text"
                                 }
                                 input {
                                     r#type: "text",
                                     value: "{new_elixir_id}",
-                                    oninput: move |e| new_elixir_id.set(e.value().clone()),
+                                    oninput: move |e| new_elixir_id.set(e.value()),
                                     placeholder: "Elixir UUID (optional)"
                                 }
                                 button {
@@ -611,7 +611,7 @@ fn QuantumJobs(toasts: Signal<Vec<ToastMessage>>) -> Element {
                     last_result.set(Some(resp));
                     toasts.write().push(ToastMessage {
                         id: Uuid::new_v4().to_string(),
-                        message: format!("Entropy sample completed (source: {})", source),
+                        message: format!("Entropy sample completed (source: {source})"),
                         toast_type: ToastType::Success,
                         duration_secs: 3,
                     });
@@ -917,13 +917,13 @@ fn AuthSettings(toasts: Signal<Vec<ToastMessage>>) -> Element {
                 input {
                     r#type: "email",
                     value: "{qq_email}",
-                    oninput: move |e| qq_email.set(e.value().clone()),
+                    oninput: move |e| qq_email.set(e.value()),
                     placeholder: "Email"
                 }
                 input {
                     r#type: "password",
                     value: "{qq_password}",
-                    oninput: move |e| qq_password.set(e.value().clone()),
+                    oninput: move |e| qq_password.set(e.value()),
                     placeholder: "Password"
                 }
                 button {
@@ -951,7 +951,7 @@ fn AuthSettings(toasts: Signal<Vec<ToastMessage>>) -> Element {
                             input {
                                 r#type: "text",
                                 value: "{origin_key}",
-                                oninput: move |e| origin_key.set(e.value().clone()),
+                                oninput: move |e| origin_key.set(e.value()),
                                 placeholder: "Quantum Origin API Key"
                             }
                             label {

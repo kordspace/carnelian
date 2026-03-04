@@ -426,14 +426,13 @@ fn Step5StarterSkills(selected_skills: Signal<Vec<(&'static str, bool)>>) -> Ele
                             r#type: "checkbox",
                             checked: checked,
                             onchange: {
-                                let skill_id = skill_id;
-                                move |_| {
+                                spawn(async move {
                                     let mut skills = selected_skills.read().clone();
                                     if let Some(idx) = skills.iter().position(|(id, _)| *id == skill_id) {
                                         skills[idx].1 = !skills[idx].1;
                                         selected_skills.set(skills);
                                     }
-                                }
+                                })
                             },
                         }
                         span { "{skill_name(skill_id)}" }
@@ -488,7 +487,7 @@ fn Step6MagicSetup() -> Element {
                     feedback.set("Quantum Origin key saved ✓".to_string());
                 }
                 Err(e) => {
-                    feedback.set(format!("Error: {}", e));
+                    feedback.set(format!("Error: {e}"));
                 }
             }
             loading.set(false);
@@ -509,7 +508,7 @@ fn Step6MagicSetup() -> Element {
                     quantinuum_password.set(String::new());
                 }
                 Err(e) => {
-                    feedback.set(format!("Error: {}", e));
+                    feedback.set(format!("Error: {e}"));
                 }
             }
             loading.set(false);
@@ -527,7 +526,7 @@ fn Step6MagicSetup() -> Element {
                             let qiskit_available = health
                                 .get("qiskit-rng")
                                 .and_then(|v| v.get("available"))
-                                .and_then(|v| v.as_bool())
+                                .and_then(serde_json::Value::as_bool)
                                 .unwrap_or(false);
 
                             if qiskit_available {
@@ -542,18 +541,18 @@ fn Step6MagicSetup() -> Element {
                                     .and_then(|v| v.as_str())
                                     .unwrap_or("Provider not available");
                                 feedback
-                                    .set(format!("IBM Quantum provider not ready: {}", error_msg));
+                                    .set(format!("IBM Quantum provider not ready: {error_msg}"));
                             }
                         }
                         Err(e) => {
                             // Revert qiskit_enabled on health check failure
                             let _ = api::magic_update_config(None, None, Some(false)).await;
-                            feedback.set(format!("Connection test failed: {}", e));
+                            feedback.set(format!("Connection test failed: {e}"));
                         }
                     }
                 }
                 Err(e) => {
-                    feedback.set(format!("Error: {}", e));
+                    feedback.set(format!("Error: {e}"));
                 }
             }
             loading.set(false);
@@ -587,7 +586,7 @@ fn Step6MagicSetup() -> Element {
                 input {
                     r#type: "password",
                     value: "{quantum_origin_key}",
-                    oninput: move |e| quantum_origin_key.set(e.value().clone()),
+                    oninput: move |e| quantum_origin_key.set(e.value()),
                     placeholder: "API Key",
                     disabled: *loading.read()
                 }
@@ -627,14 +626,14 @@ fn Step6MagicSetup() -> Element {
                 input {
                     r#type: "email",
                     value: "{quantinuum_email}",
-                    oninput: move |e| quantinuum_email.set(e.value().clone()),
+                    oninput: move |e| quantinuum_email.set(e.value()),
                     placeholder: "Email",
                     disabled: *loading.read()
                 }
                 input {
                     r#type: "password",
                     value: "{quantinuum_password}",
-                    oninput: move |e| quantinuum_password.set(e.value().clone()),
+                    oninput: move |e| quantinuum_password.set(e.value()),
                     placeholder: "Password",
                     disabled: *loading.read()
                 }

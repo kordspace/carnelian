@@ -78,22 +78,22 @@ fn carnelian_icon_rgba(r: u8, g: u8, b: u8) -> TrayIconImage {
 
             if dist < radius {
                 // Main gemstone color with gradient toward center
-                let gradient = 1.0 - (dist / radius) * 0.4;
+                let gradient = (dist / radius).mul_add(-0.4, 1.0);
                 // Gradient clamped 0.0-1.0 on u8 input ensures output <=255
                 #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-                let br = (r as f32).mul_add(gradient, 0.0) as u8;
+                let br = f32::from(r).mul_add(gradient, 0.0) as u8;
                 #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-                let bg = (g as f32).mul_add(gradient, 0.0) as u8;
+                let bg = f32::from(g).mul_add(gradient, 0.0) as u8;
                 #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-                let bb = (b as f32).mul_add(gradient, 0.0) as u8;
+                let bb = f32::from(b).mul_add(gradient, 0.0) as u8;
 
                 // Highlight in center
                 if dist < 4.0 {
                     let highlight = (1.0 - dist / 4.0) * 60.0;
                     rgba.extend_from_slice(&[
-                        (br.saturating_add(highlight as u8)).min(255),
-                        (bg.saturating_add(highlight as u8 * 2 / 3)).min(255),
-                        (bb.saturating_add(highlight as u8 / 3)).min(255),
+                        (br.saturating_add(highlight as u8)),
+                        (bg.saturating_add(highlight as u8 * 2 / 3)),
+                        (bb.saturating_add(highlight as u8 / 3)),
                         255,
                     ]);
                 } else {

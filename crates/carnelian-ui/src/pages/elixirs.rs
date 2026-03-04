@@ -30,11 +30,7 @@ pub fn Elixirs() -> Element {
             loading_elixirs.set(true);
             let query_str = search_query.read().clone();
 
-            let result = if !query_str.is_empty() {
-                api::elixirs_search(query_str, 50)
-                    .await
-                    .map(|resp| (resp.results, resp.total))
-            } else {
+            let result = if query_str.is_empty() {
                 let filter_type_val = filter_type.read().clone();
                 let query = ListElixirsQuery {
                     elixir_type: if filter_type_val.is_empty() {
@@ -50,6 +46,10 @@ pub fn Elixirs() -> Element {
                 api::elixirs_list(query)
                     .await
                     .map(|resp| (resp.elixirs, resp.total))
+            } else {
+                api::elixirs_search(query_str, 50)
+                    .await
+                    .map(|resp| (resp.results, resp.total))
             };
 
             match result {
