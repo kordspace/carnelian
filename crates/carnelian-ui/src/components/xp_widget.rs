@@ -45,9 +45,11 @@ pub fn XpWidget() -> Element {
             // XP to next level
             div { style: "font-size: 12px; color: #A0A0A0; margin-bottom: 16px;",
                 "{xp_to_next} XP to next level"
-                if let Some(ref feat) = milestone {
-                    span { style: "margin-left: 8px; color: #F39C12;", "Next: {feat}" }
-                }
+                let milestone_text = xp
+                    .milestone_feature
+                    .as_ref()
+                    .map_or_else(|| "No milestone unlocked yet".to_string(), |feature| format!("Next milestone: {feature}"));
+                span { style: "margin-left: 8px; color: #F39C12;", "{milestone_text}" }
             }
 
             // Source breakdown pie chart

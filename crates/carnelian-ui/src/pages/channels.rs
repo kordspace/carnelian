@@ -148,7 +148,7 @@ pub fn Channels() -> Element {
                         }
                         tbody {
                             for channel in filtered {
-                                { render_channel_row(channel, &mut edit_channel, &mut confirm_delete, &mut refresh) }
+                                { render_channel_row(&channel, &edit_channel, &confirm_delete, &refresh) }
                             }
                         }
                     }
@@ -987,6 +987,10 @@ fn EditChannelModal(
 
                             submitting.set(true);
                             let tl = trust_level.read().clone();
+                            let status_text = channel
+                                .status
+                                .as_ref()
+                                .map_or_else(|| "unknown".to_string(), |status| status.clone());
                             spawn(async move {
                                 let req = UpdateChannelApiRequest {
                                     trust_level: Some(tl),

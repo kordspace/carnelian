@@ -14,6 +14,18 @@ use crate::store::EventStreamStore;
 use crate::theme::Theme;
 use carnelian_common::types::{LedgerEventDetail, LedgerVerifyResponse};
 
+/// Format a ledger event for display.
+fn format_event(event: &LedgerEventDetail) -> String {
+    format!(
+        "{} | {} | {}",
+        event.ts.format("%Y-%m-%d %H:%M:%S"),
+        event.action_type,
+        event
+            .actor_id
+            .map_or_else(|| "system".to_string(), |id| id.to_string())
+    )
+}
+
 /// Ledger Viewer page component.
 #[component]
 pub fn Ledger() -> Element {

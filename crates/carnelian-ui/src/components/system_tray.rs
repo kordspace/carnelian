@@ -49,6 +49,7 @@ fn load_carnelian_icon() -> TrayIconImage {
 
 /// Generate a 32×32 RGBA icon with Carnelian gemstone colors.
 #[cfg(feature = "desktop")]
+#[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn carnelian_icon_rgba(r: u8, g: u8, b: u8) -> TrayIconImage {
     let size = 32_u32;
     let mut rgba = Vec::with_capacity((size * size * 4) as usize);

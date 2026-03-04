@@ -1181,6 +1181,7 @@ pub async fn magic_mantra_add(
 }
 
 /// Update a mantra entry.
+#[allow(clippy::option_option)]
 pub async fn magic_mantra_update(
     entry_id: Uuid,
     text: Option<String>,
