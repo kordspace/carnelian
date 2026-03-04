@@ -208,18 +208,13 @@ mod tests {
         assert!(!result.timed_out);
     }
 
-    #[test]
+    #[tokio::test]
     #[cfg(target_family = "unix")]
-    fn test_timeout_enforcement() {
+    async fn test_timeout_enforcement() {
         let mut limits = ResourceLimits::default();
         limits.timeout_seconds = 1;
 
-        #[cfg(unix)]
         let result = execute_sandboxed("sleep", &["5".to_string()], &limits).await;
-
-        #[cfg(windows)]
-        let result =
-            execute_sandboxed("timeout", &["/t".to_string(), "5".to_string()], &limits).await;
 
         assert!(result.is_ok());
         let result = result.unwrap();
