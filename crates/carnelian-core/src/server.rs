@@ -530,8 +530,6 @@ impl Server {
                         None
                     }
                 });
-                None
-            };
 
             // Known limitation (v1.0.0): Quantinuum and Qiskit entropy providers not wired
             // via SkillBridge; returns None until bridge is available.
