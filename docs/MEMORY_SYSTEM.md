@@ -503,7 +503,7 @@ curl -X POST http://localhost:18789/v1/magic/integrity/backfill \
 
 ## API Reference
 
-See [docs/API.md](API.md#memory-management) for complete endpoint documentation.
+See [API.md](API.md) for complete endpoint documentation.
 
 ### Quick Reference
 
@@ -646,7 +646,7 @@ CREATE INDEX idx_memories_quantum_checksum
 - **[ELIXIR_SYSTEM.md](ELIXIR_SYSTEM.md)** — RAG knowledge persistence layer
 - **[MAGIC.md](MAGIC.md)** — Quantum entropy for checksums
 - **[LEDGER_SYSTEM.md](LEDGER_SYSTEM.md)** — Hash-chain audit trail
-- **[API.md](API.md#memory-management)** — Complete API reference
+- **[API.md](API.md)** — Complete API reference
 - **[SESSION_MANAGEMENT.md](SESSION_MANAGEMENT.md)** — Session compaction & memory flush protocol
 
 ---

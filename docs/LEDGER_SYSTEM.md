@@ -401,7 +401,7 @@ The Dioxus desktop UI includes a **Ledger Viewer** page (`ledger.rs`) with:
 
 ## API Reference
 
-See [docs/API.md](API.md#ledger) for complete endpoint documentation.
+See [API.md](API.md) for complete endpoint documentation.
 
 ### Quick Reference
 
@@ -580,7 +580,7 @@ curl -X GET "http://localhost:18789/v1/ledger/export?format=csv" \
 
 - **[MAGIC.md](MAGIC.md)** — Quantum entropy system
 - **[SECURITY.md](SECURITY.md)** — Security architecture
-- **[API.md](API.md#ledger)** — Complete API reference
+- **[API.md](API.md)** — Complete API reference
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** — System architecture
 
 ---

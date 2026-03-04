@@ -479,7 +479,7 @@ curl -X POST http://localhost:18789/v1/magic/elixirs/rehash \
 
 ## API Reference
 
-See [docs/API.md](API.md#elixirs) for complete endpoint documentation.
+See [API.md](API.md) for complete endpoint documentation.
 
 ### Quick Reference
 
@@ -687,7 +687,7 @@ curl -X POST http://localhost:18789/v1/elixirs/drafts/01936a1c-.../approve \
 ## See Also
 
 - **[MAGIC.md](MAGIC.md)** — Quantum entropy system for checksums
-- **[API.md](API.md#elixirs)** — Complete API reference
+- **[API.md](API.md)** — Complete API reference
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** — System architecture overview
 - **[SECURITY.md](SECURITY.md)** — Security best practices
 

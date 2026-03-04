@@ -2,6 +2,31 @@
 
 Thank you for your interest in contributing to Carnelian Core! We welcome contributions from the community and are excited to work with you.
 
+## Repository Structure
+
+The repository is organized by language and purpose:
+
+```
+CARNELIAN/
+├── crates/              # Rust workspace (core, UI, workers, adapters, magic)
+├── packages/            # TypeScript/JavaScript standalone services
+│   ├── gateway/         # LLM gateway service
+│   └── mcp-server/      # MCP server for Windsurf IDE integration
+├── workers/             # Skill execution runtimes
+│   ├── node-worker/     # Node.js/TypeScript worker
+│   ├── python-worker/   # Python worker
+│   └── shell-worker/    # Shell script worker
+├── skills/              # Skill definitions (50+ curated skills)
+├── db/                  # Database migrations and schemas
+└── docs/                # Documentation
+```
+
+**Key Principles:**
+- `packages/` contains standalone services that can be deployed independently
+- `workers/` contains skill execution runtimes (all conceptually related)
+- `crates/` contains the Rust monorepo workspace
+- All TypeScript packages use `@carnelian/` scope
+
 ## Open Source & Licensing
 
 **Carnelian is open source software** authored by **Marco Lopes**.

@@ -620,7 +620,7 @@ See [§ 8 — Ledger Integration](#ledger-integration) for the complete schema.
 
 - **[LEDGER_SYSTEM.md](LEDGER_SYSTEM.md)** — Hash-chain audit trail; XpAwarded & LevelUp event definitions
 - **[ELIXIR_SYSTEM.md](ELIXIR_SYSTEM.md)** — Elixir quality scoring and XP integration
-- **[API.md](API.md#xp-system-phase-5)** — Complete XP endpoint reference
+- **[API.md](API.md)** — Complete XP endpoint reference
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** — System overview
 
 ---
