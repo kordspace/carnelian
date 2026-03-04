@@ -18,8 +18,9 @@
 # Determines resource limits and default model settings.
 #
 # Available profiles:
-# - "standard": Entry-level (8GB VRAM, 32GB RAM) - good for most tasks
-# - "performance": High-end (11GB+ VRAM, 64GB RAM) - for demanding workloads
+# - "standard": RTX 2080 Super (8GB VRAM, 32GB RAM) - DeepSeek R1:7b
+# - "performance": RTX 5090 (24GB VRAM, 64GB RAM) - QwQ:32b or DeepSeek R1:70b
+# - "ultra": M3 Ultra (192GB unified memory) - QwQ:32b or larger models
 # - "custom": User-defined settings (see [machine] section below)
 #
 # Can be overridden with MACHINE_PROFILE environment variable.
@@ -149,7 +150,8 @@ ollama_url = "http://localhost:11434"
 # max_workers = 4
 # max_memory_mb = 16384
 # gpu_enabled = true
-# default_model = "deepseek-r1:7b"
+# default_model = "deepseek-r1:7b"  # Standard profile
+# default_model = "qwq:32b"           # Performance/Ultra profiles
 
 # =============================================================================
 # Workspace Scanning Configuration

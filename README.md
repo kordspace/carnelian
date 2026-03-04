@@ -281,8 +281,9 @@ All endpoints are prefixed with `/v1`.
 - **Git** - Version control
 
 ### For GPU Support
-- **NVIDIA GPU** - RTX 2080 or better recommended
-- **NVIDIA Container Toolkit** - For GPU passthrough to Docker
+- **NVIDIA GPU** - RTX 2080 Super or better (RTX 5090 recommended for advanced models)
+- **Apple Silicon** - M3 Ultra with unified memory for large model inference
+- **NVIDIA Container Toolkit** - For GPU passthrough to Docker (NVIDIA only)
 
 ### For Workers
 - **Node.js 18+** - For Node.js worker (600+ skills)
@@ -325,11 +326,10 @@ See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for detailed setup and developmen
 
 | Profile | GPU | VRAM | RAM | Recommended Model | Notes |
 |---------|-----|------|-----|-------------------|-------|
-| **Urim** | RTX 2080 Ti | 11 GB | 64 GB | `deepseek-r1:14b` | High-end workstation — local LLMs + heavy workloads |
-| **Thummim** | RTX 2080 Super | 8 GB | 32 GB | `deepseek-r1:7b` | Standard desktop — balanced local + API usage |
+| **Standard** | RTX 2080 Super | 8 GB | 32 GB | `deepseek-r1:7b` | Entry-level — balanced local + API usage |
+| **Performance** | RTX 5090 | 24 GB | 64 GB | `qwq:32b` | High-end workstation — advanced reasoning models |
+| **Ultra** | M3 Ultra | 192 GB | 128 GB | `qwq:32b` or larger | Apple Silicon — unified memory architecture |
 | **Custom** | User-defined | — | — | User-defined | Expert mode — manual resource limits |
-
-> **Important**: Do **not** expose Urim and Thummim as system-internal identifiers or cross-reference them to any distributed product persona. The table is purely hardware specification documentation for the first-run setup wizard selection.
 
 Profiles affect Docker resource limits and worker concurrency settings. See [docker-compose.yml](docker-compose.yml) and [machine.toml.example](machine.toml.example) for configuration.
 
@@ -1140,16 +1140,11 @@ Carnelian was inspired by OpenClaw, an AI agent framework created by Peter Stein
 
 **Copyright © 2024-2026 Marco Julio Lopes and Kordspace LLC**
 
-Carnelian Core is open source software:
-- **Free for Personal Use** — Use freely for personal, educational, and non-commercial purposes
-- **Commercial Use** — Requires commercial license from Kordspace LLC (contact: info@kordspace.com)
-- **Patent Pending** — Proprietary innovations protected under patent application
+Carnelian is open source software with commercial licensing options available.
 
-See [LICENSE.md](LICENSE.md) for complete terms, contributor agreement, and OpenClaw attribution.
+See [LICENSE.md](LICENSE.md) for complete terms and licensing details.
 
-### Acknowledgments
-
-Special thanks to our contributors and mentors who made Carnelian Core possible. See [CONTRIBUTORS.md](CONTRIBUTORS.md) for full acknowledgments.
+Special thanks to our contributors and mentors who made Carnelian possible. See [CONTRIBUTORS.md](CONTRIBUTORS.md) for full acknowledgments.
 
 ## Repository
 
