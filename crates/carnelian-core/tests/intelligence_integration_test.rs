@@ -2208,9 +2208,11 @@ async fn test_heartbeat_agentic_turn_pipeline() {
             Some(correlation_id),
             None,
             None,
+            None,
+            None,
         )
         .await
-        .expect("Failed to log heartbeat to ledger");
+        .expect("Failed to log heartbeat");
 
     // Verify heartbeat_history record
     let (stored_status, stored_duration, stored_corr): (String, i32, Option<Uuid>) = sqlx::query_as(
