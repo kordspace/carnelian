@@ -218,13 +218,13 @@ Carnelian Core was inspired by [OpenClaw](https://github.com/openclaw), an AI ag
 
 | Aspect | OpenClaw | Carnelian Core |
 |--------|----------|----------------|
-| **Language** | Python | Rust (core), TypeScript (UI), Python (workers) |
+| **Language** | TypeScript (85.4%), Swift (9.9%), Kotlin (2.3%) | Rust (core), TypeScript (UI), Python (workers) |
 | **Architecture** | Monolithic agent framework | Multi-runtime worker orchestration with JSONL transport |
 | **Security Model** | Traditional permissions | Capability-based deny-by-default with Ed25519 signatures |
 | **State Management** | In-memory/file-based | PostgreSQL with pgvector, ledger-backed event sourcing |
 | **Quantum Integration** | None | MAGIC subsystem with quantum entropy providers (Quantum Origin, Quantinuum H2, Qiskit) |
 | **Knowledge Persistence** | RAG with vector DB | Elixir system with approval workflow, quality scoring, version control |
-| **Skill System** | Python plugins | Multi-runtime (Node.js, Python, WASM, Rust) with 50+ curated skills |
+| **Skill System** | TypeScript-based tools | Multi-runtime (Node.js, Python, WASM, Rust) with 50+ curated skills |
 | **Mantra System** | None | Quantum-seeded weighted context injection with cooldowns |
 | **XP Progression** | None | Ledger-backed XP with automatic event sourcing and BLAKE3 hash-chaining |
 | **Desktop UI** | CLI/Web | Dioxus native desktop application |
