@@ -148,7 +148,7 @@ pub fn Channels() -> Element {
                         }
                         tbody {
                             for channel in filtered {
-                                { render_channel_row(&channel, &edit_channel, &confirm_delete, &refresh) }
+                                { render_channel_row(channel, &edit_channel, &confirm_delete, &refresh) }
                             }
                         }
                     }

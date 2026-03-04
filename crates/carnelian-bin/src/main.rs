@@ -247,8 +247,9 @@ enum MagicCommands {
     Providers,
 }
 
+#[allow(clippy::too_many_lines)]
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let result = match cli.command {
@@ -2668,7 +2669,7 @@ async fn handle_magic_status(url: &str) -> carnelian_common::Result<()> {
     let providers_array = if health_status.is_array() {
         health_status.as_array().cloned().unwrap_or_default()
     } else if health_status.is_object() {
-        vec![health_status.clone()]
+        vec![health_status]
     } else {
         vec![]
     };
@@ -2706,7 +2707,7 @@ async fn handle_magic_status(url: &str) -> carnelian_common::Result<()> {
 
 /// Handle `magic sample` - draw entropy sample
 async fn handle_magic_sample(url: &str, bytes: usize) -> carnelian_common::Result<()> {
-    if bytes < 1 || bytes > 1024 {
+    if !(1..=1024).contains(&bytes) {
         return Err(carnelian_common::Error::Config(
             "Bytes must be between 1 and 1024".to_string(),
         ));
@@ -2796,15 +2797,15 @@ async fn handle_magic_providers(url: &str) -> carnelian_common::Result<()> {
 
         println!("🔥 Entropy Providers");
         println!(
-            "   {:<18} {:<12} {:<10} {}",
-            "SOURCE", "AVAILABLE", "LATENCY", "ERROR"
+            "   {:<18} {:<12} {:<10} ERROR",
+            "SOURCE", "AVAILABLE", "LATENCY"
         );
 
         // Normalize body to array (handle both object and array responses)
         let providers_array = if body.is_array() {
             body.as_array().cloned().unwrap_or_default()
         } else if body.is_object() {
-            vec![body.clone()]
+            vec![body]
         } else {
             vec![]
         };

@@ -361,14 +361,14 @@ impl EventStreamStore {
                             .get("total_channels")
                             .and_then(serde_json::Value::as_u64)
                         {
-                            cs.total_channels = total as usize;
+                            cs.total_channels = usize::try_from(total).unwrap_or(0);
                         }
                         if let Some(running) = envelope
                             .payload
                             .get("running_channels")
                             .and_then(serde_json::Value::as_u64)
                         {
-                            cs.running_channels = running as usize;
+                            cs.running_channels = usize::try_from(running).unwrap_or(0);
                         }
                     }
                 }

@@ -1,4 +1,4 @@
-//! Integration tests for ContextAnalyzer
+//! Integration tests for `ContextAnalyzer`
 //!
 //! Tests conversation-to-task creation flow with real database
 
