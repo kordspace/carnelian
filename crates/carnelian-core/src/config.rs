@@ -1061,7 +1061,7 @@ impl Config {
 
         // CARNELIAN_QUANTUM_ORIGIN_API_KEY — Quantum Origin API key for MAGIC subsystem
         if let Ok(val) = std::env::var("CARNELIAN_QUANTUM_ORIGIN_API_KEY") {
-            self.magic.quantum_origin_api_key = val.clone();
+            self.magic.quantum_origin_api_key.clone_from(&val);
             // Also populate nested config if present
             if let Some(ref mut qo) = self.magic.quantum_origin {
                 qo.api_key = val;

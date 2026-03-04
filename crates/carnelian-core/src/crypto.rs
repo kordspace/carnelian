@@ -16,7 +16,7 @@
 //! When MAGIC is enabled, Carnelian uses hybrid signatures combining:
 //! - CRYSTALS-Dilithium3 (quantum-resistant, NIST Level 3)
 //! - Ed25519 (classical, backward compatible)
-//! Both signatures must verify for defense-in-depth security.
+//!   Both signatures must verify for defense-in-depth security.
 //!
 //! # Key Derivation
 //!
