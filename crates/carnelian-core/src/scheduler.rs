@@ -58,7 +58,7 @@
 //! Call `shutdown()` before stopping the server to ensure proper cleanup.
 
 use crate::agentic::AgenticEngine;
-use crate::config::Config;
+use crate::config::{Config, WorkerLane};
 use crate::context::ContextWindow;
 use crate::events::EventStream;
 use crate::ledger::Ledger;
@@ -77,7 +77,7 @@ use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::watch;
+use tokio::sync::{watch, Semaphore};
 use uuid::Uuid;
 
 
@@ -117,6 +117,12 @@ pub struct Scheduler {
     mantra_tree: Option<Arc<carnelian_magic::MantraTree>>,
     /// Entropy provider for quantum-salted correlation IDs and ledger events
     entropy_provider: Option<Arc<carnelian_magic::MixedEntropyProvider>>,
+    /// Per-lane concurrency semaphores for task execution control.
+    ///
+    /// The `Heartbeat` lane semaphore is reserved for future use if heartbeat tasks
+    /// are ever routed through the queue. The heartbeat loop invokes `run_heartbeat`
+    /// directly, bypassing semaphore acquisition and guaranteeing it always runs.
+    lane_semaphores: Arc<HashMap<WorkerLane, Arc<Semaphore>>>,
 }
 
 impl Scheduler {
@@ -152,6 +158,29 @@ impl Scheduler {
         ledger: Arc<Ledger>,
         safe_mode_guard: Arc<crate::safe_mode::SafeModeGuard>,
     ) -> Self {
+        // Build per-lane semaphores from config
+        let mut lane_map = HashMap::new();
+        lane_map.insert(
+            WorkerLane::Heartbeat,
+            Arc::new(Semaphore::new(config.worker_lanes.heartbeat)),
+        );
+        lane_map.insert(
+            WorkerLane::CodeTask,
+            Arc::new(Semaphore::new(config.worker_lanes.code_task)),
+        );
+        lane_map.insert(
+            WorkerLane::DataTask,
+            Arc::new(Semaphore::new(config.worker_lanes.data_task)),
+        );
+        lane_map.insert(
+            WorkerLane::IoTask,
+            Arc::new(Semaphore::new(config.worker_lanes.io_task)),
+        );
+        lane_map.insert(
+            WorkerLane::ChatTask,
+            Arc::new(Semaphore::new(config.worker_lanes.chat_task)),
+        );
+
         Self {
             pool,
             event_stream,
@@ -168,6 +197,7 @@ impl Scheduler {
             xp_manager: None,
             mantra_tree: None,
             entropy_provider: None,
+            lane_semaphores: Arc::new(lane_map),
         }
     }
 
@@ -234,6 +264,7 @@ impl Scheduler {
         let xp_manager = self.xp_manager.clone();
         let mantra_tree = self.mantra_tree.clone();
         let entropy_provider = self.entropy_provider.clone();
+        let lane_semaphores = self.lane_semaphores.clone();
 
         tokio::spawn(async move {
             Self::run_heartbeat_loop(
@@ -252,6 +283,7 @@ impl Scheduler {
                 xp_manager,
                 mantra_tree,
                 entropy_provider,
+                lane_semaphores,
             )
             .await;
         });
@@ -294,6 +326,7 @@ impl Scheduler {
         xp_manager: Option<Arc<crate::xp::XpManager>>,
         mantra_tree: Option<Arc<carnelian_magic::MantraTree>>,
         entropy_provider: Option<Arc<carnelian_magic::MixedEntropyProvider>>,
+        lane_semaphores: Arc<HashMap<WorkerLane, Arc<Semaphore>>>,
     ) {
         let mut ticker = tokio::time::interval(interval);
         // Skip the first immediate tick
@@ -327,6 +360,7 @@ impl Scheduler {
                         &workflow_engine,
                         &xp_manager,
                         &entropy_provider,
+                        &lane_semaphores,
                     ).await {
                         tracing::warn!(error = %e, "Task queue polling failed");
                     }
@@ -1025,9 +1059,11 @@ impl Scheduler {
         config: &Arc<Config>,
         active_tasks: &Arc<tokio::sync::Mutex<HashMap<Uuid, tokio::task::JoinHandle<()>>>>,
         metrics: &Arc<MetricsCollector>,
+        ledger: &Arc<Ledger>,
         safe_mode_guard: &Arc<crate::safe_mode::SafeModeGuard>,
         workflow_engine: &Option<Arc<WorkflowEngine>>,
         xp_manager: &Option<Arc<crate::xp::XpManager>>,
+        lane_semaphores: &Arc<HashMap<WorkerLane, Arc<Semaphore>>>,
         entropy_provider: &Option<Arc<carnelian_magic::MixedEntropyProvider>>,
     ) -> Result<()> {
         // If safe mode is active, skip dequeuing entirely — tasks stay pending
@@ -1036,37 +1072,42 @@ impl Scheduler {
             return Ok(());
         }
 
-        // Check concurrency: count active tasks
-        let active_count = active_tasks.lock().await.len();
-        let max_workers = config.machine_config().max_workers as usize;
-
-        if active_count >= max_workers {
-            tracing::debug!(
-                active_count = active_count,
-                max_workers = max_workers,
-                "All execution slots occupied, skipping dequeue"
-            );
-            return Ok(());
-        }
-
-        let available_slots = max_workers - active_count;
-
         // Query pending tasks ordered by priority DESC, created_at ASC
-        let pending_tasks: Vec<(Uuid, Option<Uuid>, i32)> = sqlx::query_as(
-            r"SELECT task_id, skill_id, priority FROM tasks WHERE state = 'pending' ORDER BY priority DESC, created_at ASC LIMIT $1",
+        // Fetch title and description for lane classification
+        let max_workers = config.machine_config().max_workers as usize;
+        let pending_tasks: Vec<(Uuid, Option<Uuid>, i32, String, Option<String>)> = sqlx::query_as(
+            r"SELECT task_id, skill_id, priority, title, description FROM tasks WHERE state = 'pending' ORDER BY priority DESC, created_at ASC LIMIT $1",
         )
-        .bind(i64::try_from(available_slots).unwrap_or(i64::MAX))
+        .bind(i64::try_from(max_workers).unwrap_or(i64::MAX))
         .fetch_all(pool)
         .await
         .map_err(Error::Database)?;
 
         tracing::debug!(
             pending_count = pending_tasks.len(),
-            available_slots = available_slots,
             "Polled task queue"
         );
 
-        for (task_id, skill_id, priority) in pending_tasks {
+        for (task_id, skill_id, priority, title, description) in pending_tasks {
+            // Classify task into lane
+            let lane = crate::config::classify_task_lane(&title, &description.unwrap_or_default());
+            
+            // Try to acquire a permit for this lane (non-blocking)
+            let semaphore = lane_semaphores.get(&lane).ok_or_else(|| {
+                Error::Config(format!("Missing semaphore for lane {:?}", lane))
+            })?;
+            
+            let permit = match semaphore.clone().try_acquire_owned() {
+                Ok(p) => p,
+                Err(_) => {
+                    tracing::debug!(
+                        task_id = %task_id,
+                        lane = ?lane,
+                        "No available permits for lane, skipping task"
+                    );
+                    continue; // Skip this task, try next one
+                }
+            };
             tracing::debug!(
                 task_id = %task_id,
                 skill_id = ?skill_id,
@@ -1130,6 +1171,9 @@ impl Scheduler {
 
                 // Remove from active_tasks on completion
                 active_tasks_clone.lock().await.remove(&task_id);
+                
+                // Drop permit to release semaphore slot
+                drop(permit);
             });
 
             // Store handle for cancellation support
@@ -1449,7 +1493,7 @@ impl Scheduler {
             None
         };
 
-        let (skill_name, _runtime) = match skill_info {
+        let (skill_name, runtime) = match skill_info {
             Some(info) => info,
             None => {
                 let error_msg = format!("Skill not found or disabled: {:?}", skill_id);
@@ -1482,38 +1526,20 @@ impl Scheduler {
 
         let input = task_description.map_or_else(|| json!({}), |desc| json!({"description": desc}));
 
-        // Get a running, non-quarantined worker's transport
+        // Parse runtime and get transport for that runtime
+        let parsed_runtime = runtime.parse::<crate::worker::WorkerRuntime>().map_err(|e| {
+            Error::Config(format!("Invalid worker runtime '{}': {}", runtime, e))
+        })?;
+
         let transport = {
             let wm = worker_manager.lock().await;
-            let workers = wm.get_worker_status().await;
-            let mut found_transport = None;
-            for w in &workers {
-                if w.status == "running" {
-                    // Skip quarantined workers
-                    if !wm.can_assign_task(&w.id).await.unwrap_or(false) {
-                        tracing::debug!(
-                            worker_id = %w.id,
-                            task_id = %task_id,
-                            "Skipping quarantined worker for task assignment"
-                        );
-                        continue;
-                    }
-                    match wm.get_transport(&w.id).await {
-                        Ok(t) => {
-                            found_transport = Some(t);
-                            break;
-                        }
-                        Err(_) => continue,
-                    }
-                }
-            }
-            found_transport
+            wm.get_transport_for_runtime(parsed_runtime).await
         };
 
         let transport = match transport {
-            Some(t) => t,
-            None => {
-                let error_msg = "No running worker with transport available".to_string();
+            Ok(t) => t,
+            Err(e) => {
+                let error_msg = format!("No running {} worker available: {}", runtime, e);
                 tracing::warn!(task_id = %task_id, "{}", error_msg);
 
                 Self::update_task_run_failed(pool, run_id, &error_msg, exec_start).await?;

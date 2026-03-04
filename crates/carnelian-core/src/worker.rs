@@ -3345,8 +3345,7 @@ impl WorkerManager {
     }
 
     /// Get the transport for a specific worker.
-    ///
-    /// # Errors
+    /// Get a worker's transport by worker ID.
     ///
     /// Returns an error if the worker is not found or has no transport.
     #[allow(clippy::significant_drop_tightening)]
@@ -3354,11 +3353,40 @@ impl WorkerManager {
         let workers = self.workers.read().await;
         let worker = workers
             .get(worker_id)
-            .ok_or_else(|| Error::Config(format!("Worker not found: {}", worker_id)))?;
-        worker
-            .transport
-            .clone()
-            .ok_or_else(|| Error::Config(format!("Worker {} has no transport", worker_id)))
+            .ok_or_else(|| Error::Config(format!("Worker '{}' not found", worker_id)))?;
+
+        worker.transport.clone().ok_or_else(|| {
+            Error::Config(format!(
+                "Worker '{}' has no transport configured",
+                worker_id
+            ))
+        })
+    }
+
+    /// Get a transport for a specific runtime by finding a running, non-quarantined worker.
+    ///
+    /// Returns the first matching worker's transport, or an error if no suitable worker is found.
+    pub async fn get_transport_for_runtime(&self, runtime: WorkerRuntime) -> Result<Arc<dyn WorkerTransport>> {
+        let workers = self.workers.read().await;
+        
+        for worker in workers.values() {
+            if worker.runtime == runtime 
+                && worker.status == WorkerStatus::Running 
+                && !worker.quarantined 
+            {
+                return worker.transport.clone().ok_or_else(|| {
+                    Error::Config(format!(
+                        "Worker '{}' has no transport configured",
+                        worker.id
+                    ))
+                });
+            }
+        }
+        
+        Err(Error::Config(format!(
+            "No running {} worker available",
+            runtime
+        )))
     }
 
     /// Spawn a background task to read and log worker stderr.

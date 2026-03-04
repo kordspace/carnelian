@@ -1344,6 +1344,38 @@ impl Config {
             }
         }
 
+        // Worker lane validation
+        if self.worker_lanes.heartbeat != 1 {
+            return Err(Error::Config(format!(
+                "worker_lanes.heartbeat must be exactly 1 (reserved for internal heartbeat pulse), got {}",
+                self.worker_lanes.heartbeat
+            )));
+        }
+
+        if self.worker_lanes.code_task == 0 {
+            return Err(Error::Config(
+                "worker_lanes.code_task must be at least 1, got 0".to_string()
+            ));
+        }
+
+        if self.worker_lanes.data_task == 0 {
+            return Err(Error::Config(
+                "worker_lanes.data_task must be at least 1, got 0".to_string()
+            ));
+        }
+
+        if self.worker_lanes.io_task == 0 {
+            return Err(Error::Config(
+                "worker_lanes.io_task must be at least 1, got 0".to_string()
+            ));
+        }
+
+        if self.worker_lanes.chat_task == 0 {
+            return Err(Error::Config(
+                "worker_lanes.chat_task must be at least 1, got 0".to_string()
+            ));
+        }
+
         Ok(())
     }
 
