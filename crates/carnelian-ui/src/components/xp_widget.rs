@@ -1,5 +1,7 @@
 //! XP Widget component — compact card showing level, progress, and recent gains.
 
+#![allow(clippy::option_if_let_else)]
+
 use dioxus::prelude::*;
 
 use crate::store::EventStreamStore;

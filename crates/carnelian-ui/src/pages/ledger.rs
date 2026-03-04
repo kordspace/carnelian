@@ -6,6 +6,9 @@
 //! - Chain integrity verification button
 //! - Auto-refresh on `LedgerEvent` WebSocket events
 
+#![allow(clippy::items_after_statements)]
+#![allow(clippy::redundant_locals)]
+
 use dioxus::prelude::*;
 
 use crate::api;

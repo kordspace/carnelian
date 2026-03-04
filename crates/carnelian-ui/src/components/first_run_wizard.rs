@@ -2,6 +2,8 @@
 //! 4. Workspace & Models configuration
 //! 5. Starter Skills activation
 
+#![allow(clippy::option_if_let_else)]
+
 use dioxus::prelude::*;
 
 use crate::api;
