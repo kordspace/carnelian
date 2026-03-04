@@ -54,21 +54,21 @@ XP_for_level(N) = floor(100 × 1.172^(N-1))
 | Level | XP Required (this level) | Cumulative XP Required |
 |-------|--------------------------|------------------------|
 | 1 | 0 | 0 |
-| 5 | 174 | 573 |
-| 10 | 351 | 1,927 |
-| 25 | 2,862 | 21,170 |
-| 50 | 94,231 | 721,650 |
-| 75 | 3,101,988 | 23,781,111 |
-| 99 | 88,794,967 | 680,760,606 |
+| 5 | 188 | 615 |
+| 10 | 406 | 2,231 |
+| 25 | 3,672 | 27,241 |
+| 50 | 142,724 | 1,094,299 |
+| 75 | 5,433,584 | 41,653,854 |
+| 99 | 155,579,927 | 1,192,598,341 |
 
-**Values verified against migration `00000000000004_xp_curve_retune.sql` using `power(1.172, level-1)` cumulative seed.**
+**Values computed from migration `00000000000004_xp_curve_retune.sql` formula: `floor(100 × 1.172^(level-1))` for `xp_required`, summed cumulatively for `total_xp_required`.**
 
 ### Curve Evolution
 
 The exponent was retuned from **1.15** (migration `00000000000002_phase1_delta.sql`) to **1.172** (migration `00000000000004_xp_curve_retune.sql`):
 
-- **Old curve (1.15):** Topped out at ~680 M cumulative XP
-- **New curve (1.172):** Reaches ~3.88 B cumulative XP, providing much more headroom for long-running agents
+- **Old curve (1.15):** Topped out at ~680 M cumulative XP at level 99
+- **New curve (1.172):** Reaches ~1.19 B cumulative XP at level 99, providing significantly more headroom for long-running agents
 
 The `level_progression` table is a precomputed lookup table queried by `XpManager::award_xp` to find the agent's new level after each award.
 
@@ -185,6 +185,12 @@ High-quality elixir context
             → +5% XP daily bonus
 ```
 
+**Current Implementation vs Requested Spec:**
+
+- **Implemented:** Elixirs provide contextual XP boost via improved task success rates (indirect)
+- **Not Implemented:** Direct "+10% XP per active elixir" multiplier does not exist in current code
+- **Actual Mechanism:** Quality score > 80.0 boosts MAGIC mantra category weights, increasing task throughput and thus XP gain rate over time
+
 **Cross-reference:** See [ELIXIR_SYSTEM.md](ELIXIR_SYSTEM.md) for elixir lifecycle and quality scoring.
 
 ---
@@ -287,19 +293,20 @@ The Desktop UI exposes XP progression through three surfaces: a dedicated page, 
 - `xp-progress-bar-container` / `xp-progress-bar-fill` — Shows `progress_pct` width
 - `xp-progress-label` — Displays total XP count
 
-**Data source:** `EventStreamStore.xp_state` (reactive via SSE)
+**Data source:** Polling `GET /v1/xp/agents/:id` every 30 seconds (SSE integration pending)
 
 ### 7.3 Level-Up Toast
 
 **Component:** `Toast` (`crates/carnelian-ui/src/components/toast.rs`)  
 **Store:** `EventStreamStore` (`crates/carnelian-ui/src/store.rs`)
 
-**Trigger:** `XpLevelUp` SSE event from Core
+**Current Implementation:** Level-up toasts are not currently emitted. Desktop UI shows level changes on next poll cycle.
 
-**Rendering:**
-- Class: `toast-level-up` (gold border, bold text)
-- Message: **"🎉 Level Up! Now Level N"**
-- Queue: Up to 10 toasts; oldest drained when overflow
+**Planned Implementation:**
+- **Trigger:** `XpLevelUp` SSE event from Core
+- **Rendering:** Class `toast-level-up` (gold border, bold text)
+- **Message:** "🎉 Level Up! Now Level N"
+- **Queue:** Up to 10 toasts; oldest drained when overflow
 
 ---
 
@@ -313,10 +320,11 @@ XP awarded
      ├── INSERT xp_events (source, xp_amount, task_id, skill_id, metadata)
      │
      └── UPDATE agent_xp (total_xp, level, xp_to_next_level)
-              │
-              └── If level > old_level → LedgerManager writes LevelUp event
-                  to ledger_events with BLAKE3 hash-chain entry
 ```
+
+**Current Implementation:** XP events are persisted to the `xp_events` table and `agent_xp` is updated atomically. Level-up detection occurs by comparing the new `total_xp` against `level_progression.total_xp_required`.
+
+**Event Stream Integration:** WebSocket event emission (`XpAwarded`, `LevelUp`) and ledger event writes are not currently implemented in `XpManager`. Desktop UI reactivity relies on polling the `/v1/xp/agents/:id` endpoint rather than SSE events.
 
 ### XP Events Schema
 
@@ -337,9 +345,11 @@ CREATE TABLE xp_events (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_xp_events_identity  ON xp_events(identity_id);
-CREATE INDEX idx_xp_events_source    ON xp_events(source);
-CREATE INDEX idx_xp_events_created   ON xp_events(created_at DESC);
+CREATE INDEX idx_xp_events_identity ON xp_events(identity_id);
+CREATE INDEX idx_xp_events_source ON xp_events(source);
+CREATE INDEX idx_xp_events_created ON xp_events(created_at DESC);
+CREATE INDEX idx_xp_events_task ON xp_events(task_id);
+CREATE INDEX idx_xp_events_skill ON xp_events(skill_id);
 ```
 
 ### Ledger Correlation
@@ -375,7 +385,9 @@ ORDER BY xe.created_at DESC;
 | `/v1/xp/leaderboard` | GET | All agents ranked by total XP |
 | `/v1/xp/skills/:id` | GET | Skill metrics and level for one skill |
 | `/v1/xp/skills/top` | GET | Top skills by total XP (max 50) |
-| `/v1/xp/award` | POST | Manually award XP (requires `xp.award` capability) |
+| `/v1/xp/award` | POST | Manually award XP (requires Ed25519 signature) |
+
+**Note:** `POST /v1/xp/events` is not currently implemented. XP events are created internally by `XpManager::award_xp` and can be queried via `GET /v1/xp/agents/:id/history`.
 
 ### Get Agent XP
 
@@ -391,19 +403,15 @@ curl http://localhost:18789/v1/xp/agents/01936a1a-... \
   "total_xp": 12450,
   "level": 18,
   "xp_to_next_level": 1234,
-  "xp_for_current_level": 1927,
   "progress_pct": 36.0,
-  "next_milestone": {
-    "level": 20,
-    "feature": "unlock_voice"
-  }
+  "milestone_feature": "unlock_voice"
 }
 ```
 
 ### Get XP History
 
 ```bash
-curl "http://localhost:18789/v1/xp/agents/01936a1a-.../history?limit=25&offset=0" \
+curl "http://localhost:18789/v1/xp/agents/01936a1a-.../history?page=1&page_size=25" \
   -H "X-Carnelian-Key: $KEY"
 ```
 
@@ -412,30 +420,29 @@ curl "http://localhost:18789/v1/xp/agents/01936a1a-.../history?limit=25&offset=0
 {
   "events": [
     {
-      "event_id": "01936a1d-...",
+      "event_id": 12345,
       "source": "task_completion",
       "xp_amount": 30,
       "task_id": "01936a1e-...",
       "skill_id": null,
-      "created_at": "2026-03-04T10:30:00Z",
-      "metadata": {
-        "task_duration_secs": 420
-      }
+      "ledger_event_id": null,
+      "metadata": {},
+      "created_at": "2026-03-04T10:30:00Z"
     },
     {
-      "event_id": "01936a1c-...",
+      "event_id": 12344,
       "source": "elixir_creation",
       "xp_amount": 50,
-      "elixir_id": "01936a1f-...",
-      "created_at": "2026-03-04T09:15:00Z",
-      "metadata": {
-        "elixir_name": "Rust Error Patterns"
-      }
+      "task_id": null,
+      "skill_id": null,
+      "ledger_event_id": null,
+      "metadata": {},
+      "created_at": "2026-03-04T09:15:00Z"
     }
   ],
-  "total": 342,
-  "limit": 25,
-  "offset": 0
+  "page": 1,
+  "page_size": 25,
+  "total": 342
 }
 ```
 
@@ -449,7 +456,7 @@ curl http://localhost:18789/v1/xp/leaderboard \
 **Response (200 OK):**
 ```json
 {
-  "leaderboard": [
+  "entries": [
     {
       "rank": 1,
       "identity_id": "01936a20-...",
@@ -525,34 +532,40 @@ curl http://localhost:18789/v1/xp/skills/top \
 ```bash
 curl -X POST http://localhost:18789/v1/xp/award \
   -H "X-Carnelian-Key: $KEY" \
+  -H "Content-Type: application/json" \
   -d '{
     "identity_id": "01936a1a-...",
     "source": "quality_bonus",
     "xp_amount": 100,
-    "metadata": {
-      "reason": "Weekly quality bonus"
-    }
+    "signature": "<ed25519_signature_hex>",
+    "metadata": {}
   }'
 ```
 
-**Response (201 Created):**
+**Response (200 OK):**
 ```json
 {
-  "event_id": "01936a24-...",
+  "identity_id": "01936a1a-...",
+  "xp_awarded": 100,
   "new_total_xp": 12550,
-  "new_level": 18,
-  "level_up": false
+  "level_up": null
 }
 ```
 
+**Note:** The `signature` field is required and must be an Ed25519 signature over the canonical message `"{identity_id}:{xp_amount}:{source}"` using the owner signing key.
+
 ### WebSocket Events
 
-XP-related events are emitted automatically and delivered via `ws://localhost:18789/v1/events/ws`:
+**Current Implementation:** XP-related WebSocket events are not currently emitted by `XpManager`.
+
+**Planned Events:**
 
 | EventType | Payload | Description |
 |-----------|---------|-------------|
 | `XpAwarded` | `{ "identity_id": "...", "source": "task_completion", "xp_amount": 30, "new_total_xp": 12450, "new_level": 18 }` | XP awarded to agent |
 | `LevelUp` | `{ "identity_id": "...", "old_level": 17, "new_level": 18, "total_xp": 12450, "milestone_feature": null }` | Agent leveled up |
+
+**Workaround:** Desktop UI polls `GET /v1/xp/agents/:id` every 30 seconds for XP state updates.
 
 ---
 
@@ -576,16 +589,22 @@ CREATE TABLE level_progression (
 
 ```sql
 CREATE TABLE agent_xp (
-    identity_id     UUID PRIMARY KEY REFERENCES identities(identity_id) ON DELETE CASCADE,
+    xp_id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    identity_id     UUID NOT NULL REFERENCES identities(identity_id) ON DELETE CASCADE,
     total_xp        BIGINT NOT NULL DEFAULT 0,
     level           INTEGER NOT NULL DEFAULT 1 CHECK (level >= 1 AND level <= 99),
-    xp_to_next_level BIGINT NOT NULL DEFAULT 100,
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    xp_to_next_level BIGINT NOT NULL DEFAULT 115,  -- Updated to 117 by migration 0004
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (identity_id)
 );
 
+CREATE INDEX idx_agent_xp_identity ON agent_xp(identity_id);
 CREATE INDEX idx_agent_xp_level ON agent_xp(level DESC);
-CREATE INDEX idx_agent_xp_total ON agent_xp(total_xp DESC);
+CREATE INDEX idx_agent_xp_total_xp ON agent_xp(total_xp DESC);
 ```
+
+**Note:** Runtime code queries by `identity_id` (UNIQUE constraint), not by `xp_id` primary key.
 
 ### 3. Skill Metrics (Per-Skill Counters)
 
