@@ -14,7 +14,6 @@ pub fn XpWidget() -> Element {
     let total_xp = xp.total_xp;
     let xp_to_next = xp.xp_to_next_level;
     let progress_pct = xp.progress_pct;
-    let milestone = xp.milestone_feature.clone();
     let identity_id = xp.identity_id;
     let width_style = format!("width: {progress_pct:.1}%");
 

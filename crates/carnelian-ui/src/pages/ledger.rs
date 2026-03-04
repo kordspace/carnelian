@@ -15,12 +15,17 @@ use crate::theme::Theme;
 use carnelian_common::types::{LedgerEventDetail, LedgerVerifyResponse};
 
 /// Format a ledger event for display.
+#[allow(dead_code)]
 fn format_event(event: &LedgerEventDetail) -> String {
     format!(
         "{} | {} | {}",
         event.timestamp,
         event.action_type,
-        if event.actor_id.is_empty() { "system" } else { &event.actor_id }
+        if event.actor_id.is_empty() {
+            "system"
+        } else {
+            &event.actor_id
+        }
     )
 }
 
