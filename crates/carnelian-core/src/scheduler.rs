@@ -765,8 +765,8 @@ impl Scheduler {
 
                         match sqlx::query_scalar::<_, Uuid>(
                             r"
-                            INSERT INTO tasks (title, description, created_by, priority, correlation_id)
-                            VALUES ($1, $2, $3, $4, $5)
+                            INSERT INTO tasks (title, description, created_by, priority, correlation_id, origin)
+                            VALUES ($1, $2, $3, $4, $5, $6)
                             RETURNING task_id
                             "
                         )
@@ -775,6 +775,7 @@ impl Scheduler {
                         .bind(identity_id)
                         .bind(-1_i32)
                         .bind(correlation_id)
+                        .bind("llm_suggested")
                         .fetch_one(pool)
                         .await
                         {

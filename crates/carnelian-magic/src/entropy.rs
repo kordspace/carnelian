@@ -414,18 +414,44 @@ impl MixedEntropyProvider {
         }
     }
 
-    /// Get health status from all configured providers
+    /// Get health status from all configured providers (concurrent)
     pub async fn all_health(&self) -> Vec<EntropyHealth> {
-        let mut health = vec![self.os.health().await];
+        // Execute all health checks concurrently
+        let (os_health, qo_health, qh_health, qk_health) = tokio::join!(
+            self.os.health(),
+            async {
+                if let Some(ref qo) = self.quantum_origin {
+                    Some(qo.health().await)
+                } else {
+                    None
+                }
+            },
+            async {
+                if let Some(ref qh) = self.quantinuum {
+                    Some(qh.health().await)
+                } else {
+                    None
+                }
+            },
+            async {
+                if let Some(ref qk) = self.qiskit {
+                    Some(qk.health().await)
+                } else {
+                    None
+                }
+            },
+        );
 
-        if let Some(ref qo) = self.quantum_origin {
-            health.push(qo.health().await);
+        // Collect results in order: OS first, then quantum providers
+        let mut health = vec![os_health];
+        if let Some(h) = qo_health {
+            health.push(h);
         }
-        if let Some(ref qh) = self.quantinuum {
-            health.push(qh.health().await);
+        if let Some(h) = qh_health {
+            health.push(h);
         }
-        if let Some(ref qk) = self.qiskit {
-            health.push(qk.health().await);
+        if let Some(h) = qk_health {
+            health.push(h);
         }
 
         health
