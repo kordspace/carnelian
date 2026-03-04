@@ -142,9 +142,10 @@ fn apply_unix_limits(cmd: &mut Command, limits: &ResourceLimits) -> Result<()> {
     use std::os::unix::process::CommandExt;
 
     // Use pre_exec to set resource limits in the child process
+    #[allow(unsafe_code)]
     unsafe {
         cmd.pre_exec(move || {
-            use libc::{RLIMIT_AS, RLIMIT_CPU, RLIMIT_NPROC, rlimit, setrlimit};
+            use nix::libc::{rlimit, setrlimit, RLIMIT_AS, RLIMIT_CPU, RLIMIT_NPROC};
 
             // Memory limit
             let mem_limit = rlimit {
