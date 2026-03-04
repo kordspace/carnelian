@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logos/banners/carnelian-v1-banner-animated.gif" alt="Carnelian OS Banner" width="100%">
+</p>
+
 <h1 align="center">🔥 Carnelian</h1>
 
 <p align="center">
@@ -79,7 +83,7 @@
 - 🎤 Voice gateway (ElevenLabs STT/TTS)
 - Skill Book catalog with activation flow
 
-**🖥️ Desktop UI**
+** Desktop UI**
 - Dioxus native desktop — 17 pages, 6 components
 - WebSocket event streaming with priority-based ring buffer
 - Real-time metrics and monitoring
