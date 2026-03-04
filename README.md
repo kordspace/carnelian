@@ -86,7 +86,7 @@ CARNELIAN is a production-ready AI workspace harness with comprehensive capabili
 
 **Desktop UI** (Complete)
 - ✅ Dioxus desktop UI — 17 pages, 6 components
-- ✅ WebSocket event streaming with bounded ring buffer
+- ✅ WebSocket event streaming with priority-based ring buffer
 - ✅ Real-time metrics and monitoring
 
 ## Why Carnelian Core?
@@ -774,14 +774,14 @@ See [skills/registry/README.md](skills/registry/README.md) for the full manifest
 
 The ledger uses **blake3** (not SHA-256) for hash-chain integrity, providing faster performance than traditional cryptographic hashes while maintaining collision resistance.
 
-The policy engine (`crates/carnelian-core/src/policy.rs`) and ledger manager (`crates/carnelian-core/src/ledger.rs`) shipped early as part of Phase 1 foundation, though originally planned for Phase 4 in the roadmap.
+The policy engine and ledger manager are shipped and active.
 
 ## Development
 
 - **Setup Guide:** [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 - **Docker Guide:** [docs/DOCKER.md](docs/DOCKER.md)
 - **Logging Guide:** [docs/LOGGING.md](docs/LOGGING.md)
-- **Phase 3 Architecture:** [docs/PHASE3.md](docs/PHASE3.md)
+- **Architecture:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 Pre-commit hooks (prek) run automatically on commit. CI enforces formatting (rustfmt), linting (clippy), and secret scanning.
 
@@ -827,7 +827,7 @@ The project has **120+ tests** across 10 test suites:
 | Scheduler tests | 7 | Yes | Priority scheduling, concurrency, retries |
 | Server tests | 8 | Yes | HTTP API, WebSocket, compression |
 | Worker transport tests | 7 | Yes | JSONL protocol, timeouts, cancellation |
-| Phase 3 agentic tests | 40+ | Mixed | Soul/session/memory/context/compaction/routing/heartbeat/restart |
+| Agentic engine tests | 40+ | Mixed | Soul/session/memory/context/compaction/routing/heartbeat/restart |
 
 ```bash
 # Unit tests only (no Docker)
@@ -860,7 +860,7 @@ PostgreSQL 16 with pgvector extension. Schema managed via SQLx migrations in `db
 |-----------|-------------|
 | `00000000000000_init.sql` | pgvector extension |
 | `00000000000001_core_schema.sql` | Core tables (identities, skills, tasks, task_runs, run_logs, etc.) |
-| `00000000000002_phase1_delta.sql` | Session, skill_versions, workflows, sub_agents, XP, elixirs |
+| `00000000000002_phase1_delta.sql` | Sessions, skill versions, workflows, sub-agents, XP, elixirs |
 | `00000000000003_schema_fixes.sql` | Schema refinements (pronouns, subject_id TEXT, LZ4 compression) |
 | `00000000000004_xp_curve_retune.sql` | XP curve rebalancing |
 | `00000000000005_config_store_value_blob.sql` | Config store value column |
@@ -946,7 +946,7 @@ See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 
 | Document | Description |
 |----------|-------------|
-| [docs/PHASE3.md](docs/PHASE3.md) | Phase 3 architecture deep-dive |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Agentic architecture deep-dive |
 | [docs/WASM_SKILLS.md](docs/WASM_SKILLS.md) | WASM skill system documentation |
 | [docs/RUST_SKILL_SYSTEM.md](docs/RUST_SKILL_SYSTEM.md) | Rust skill system design |
 | [docs/ATTESTATION.md](docs/ATTESTATION.md) | Attestation and verification system |

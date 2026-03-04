@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.0] - 2026-03-03
 
-### Added — Phase 1: Foundation
+### Added — Core Orchestration & Infrastructure
 
 - **Core Orchestrator** — Axum HTTP API (`:18789`) with WebSocket event streaming
 - **CLI Binary** — `carnelian` command with `start`, `stop`, `status`, `migrate`, `logs`, `keygen` subcommands
@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Task Scheduler** — Priority-based task queue with retry policies and concurrency limits
 - **Heartbeat System** — 555,555ms wake routine with database-backed monitoring
 
-### Added — Phase 2: Task Execution
+### Added — Task Execution & Worker System
 
 - **Worker Manager** — Multi-runtime worker orchestration with JSONL transport protocol
 - **Node Worker** — Node.js/TypeScript worker with subprocess lifecycle management
@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **WebSocket Events** — Real-time event streaming with priority-based sampling and bounded buffers
 - **Task Lifecycle** — Task creation, assignment, execution, completion, and cancellation
 
-### Added — Phase 3: Intelligence
+### Added — Intelligence Layer — Sessions, Context & Model Routing
 
 - **Soul File Manager** — Personality state management with TOML-based soul files
 - **Memory Manager** — Memory creation, retrieval, and pgvector similarity search
@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **LLM Gateway** — TypeScript gateway (`:18790`) with Ollama, OpenAI, Anthropic, Fireworks providers
 - **Model Router** — LLM provider routing with fallback logic
 
-### Added — Phase 4: Security
+### Added — Security — Capabilities, Encryption & Audit Ledger
 
 - **Attestation System** — Worker identity verification with Ed25519 signatures
 - **Encryption at Rest** — AES-256-GCM encryption for sensitive data with key management
@@ -45,7 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Approval Queue** — Human-in-the-loop approval workflow for high-risk operations
 - **Authentication** — `X-Carnelian-Key` header-based authentication for API endpoints
 
-### Added — Phase 5: Advanced Features
+### Added — Advanced Features — Sub-Agents, Workflows & Channels
 
 - **Sub-Agents** — Delegated agent execution with isolated contexts
 - **Workflows** — Multi-step workflow orchestration with state management
@@ -54,7 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **XP System** — Experience point tracking with 1.172-exponent level curve (Level 1-99)
 - **Skill Metrics** — Per-skill performance tracking with execution count, success rate, and XP earned
 
-### Added — Phase 6: Production
+### Added — Production — pgvector, XP, Voice & Packaging
 
 - **pgvector Integration** — 1536-dimensional embeddings for memory similarity search
 - **XP Ledger** — Event sourcing table for XP awards with full auditability
@@ -64,7 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Topic-Scoped Capability Grants** — Topic-based access control for memory operations
 - **Cross-Instance Grant Revocation** — Persistent revocation records with sync endpoints
 
-### Added — Phase 7: Settings, Ledger UI & Skill Book
+### Added — Settings, Ledger UI & Skill Book
 
 - **Desktop UI Expansion** — 17 Dioxus pages (up from 12): added `settings.rs`, `ledger.rs`, `magic.rs`, `elixirs.rs`, `xp_progression.rs`
 - **Settings Page** — System configuration UI with MAGIC provider settings
@@ -72,7 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Skill Book Catalog** — Curated skill catalog with 7 categories and 30+ pre-integrated skills
 - **Skill Book Database** — `skill_book_catalog`, `skill_book_categories`, `skill_book_activations` tables
 
-### Added — Phase 8: Worker Ecosystem
+### Added — Worker Ecosystem — WASM, Native Ops & Channel Adapters
 
 - **WASM Worker Runtime** — wasmtime 27 + WASI P1 sandboxed skill execution in `carnelian-core/src/skills/wasm_runtime.rs`
 - **Native Ops Worker** — In-process Rust operations (`carnelian-worker-native/`): `git_status`, `file_hash` (blake3), `docker_ps` (bollard), `dir_list` (walkdir)
@@ -80,7 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Worker Attestation** — `worker_attestations` table with Ed25519 verification
 - **Channel Sessions** — `channel_sessions` table for Telegram/Discord session management
 
-### Added — Phase 9: Skills Import & Elixirs
+### Added — Skills Import, Elixir System & Knowledge Persistence
 
 - **Elixir System** — RAG-based knowledge persistence with pgvector embeddings
 - **Elixir Database Schema** — `elixirs`, `elixir_versions`, `elixir_usage` tables
@@ -91,9 +91,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Memory Tags** — `memory_tags` table for memory categorization
 - **Skills Import** — 50+ curated skills migrated to Skill Book with bulk import tooling
 
-### Added — Phase 10: MAGIC — Quantum Intelligence
+### Added — MAGIC — Quantum Entropy & Mantra System
 
-#### Phase 10A: Entropy Provider Chain
+#### Entropy Provider Chain
 
 - **`carnelian-magic` Crate** — Quantum entropy generation and mantra matrix system
 - **`EntropyProvider` Trait** — Waterfall chain: Quantum Origin → Quantinuum H2 → Qiskit → OS CSPRNG
@@ -104,7 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Entropy Audit Log** — `magic_entropy_log` table tracking provider usage and byte counts
 - **Entropy API** — 4 endpoints: health check, sample bytes, audit log, elixir rehash
 
-#### Phase 10B: Mantra Matrix
+#### Mantra Matrix
 
 - **`MantraTree`** — Weighted category selection seeded with quantum entropy
 - **Mantra Database** — `mantra_categories` (18 categories), `mantra_entries` (100+ mantras), `mantra_history` tables
@@ -113,14 +113,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Inverse Frequency Selection** — Least-recently-used mantra selection within chosen category
 - **Mantra API** — 8 endpoints: list categories, add entry, list entries, update/delete, history, context, simulate
 
-#### Phase 10C: MAGIC UI & Documentation
+#### MAGIC UI & Documentation
 
 - **MAGIC Desktop UI Page** — `carnelian-ui/src/pages/magic.rs` with entropy dashboard, mantra library, and auth settings
 - **MAGIC CLI Commands** — `carnelian magic auth`, `carnelian magic status`, `carnelian magic sample`, `carnelian magic providers`
 - **MAGIC Documentation** — `docs/MAGIC.md` with provider setup, troubleshooting, and security notes
 - **README MAGIC Section** — Comprehensive MAGIC documentation in main README
 
-#### Phase 10D: Quantum Integrity
+#### Quantum Integrity
 
 - **`QuantumHasher`** — BLAKE3 + MAGIC-mixed entropy salt for quantum-resistant checksums
 - **`QuantumIntegrityVerifier`** — Table verification, row verification, and missing checksum backfill
@@ -129,7 +129,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Integrity API** — 3 endpoints: verify tables, get status, backfill missing checksums
 - **Migration 17** — `00000000000017_quantum_integrity.sql` with partial indexes
 
-### Added — Phase 12: Post-Quantum Cryptography (Production-Ready, v1.1.0 Opt-In)
+### Added — Post-Quantum Cryptography (Production-Ready, v1.1.0 Opt-In)
 
 - **`carnelian-magic/src/pqc.rs`** — Full NIST PQC implementation (363 lines, 8 tests)
   - `HybridSigningKey` — Dual-signature scheme (CRYSTALS-Dilithium3 + Ed25519) with defense-in-depth verification
@@ -163,14 +163,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Security Note:** All 7 items from `SECURITY_ARCHITECTURE_REVIEW_V1.md` are fully implemented. PQC primitives ship in v1.0.0 but activate as opt-in feature in v1.1.0 to allow gradual migration from Ed25519.
 
-### Added — Phase 12: Code Quality & Release Hardening
+### Added — Code Quality & Release Hardening
 
 - **Clippy Clean (`-D warnings`)** — Resolved 2,510-line warning backlog across `carnelian-ui`; removed 35 blanket `#![allow(...)]` suppressions from `elixirs.rs`, `ledger.rs`, `skill_book.rs`, `channels.rs`, `xp_widget.rs`, `store.rs`, `system_tray.rs`, `first_run_wizard.rs`; replaced with 20 targeted `#[allow(clippy::clone_on_copy)]` with explanatory comments for Dioxus `Signal` clones; fixed cast warnings, suboptimal flops, bool-to-int patterns
 - **README Truth Alignment** — Desktop UI status updated to Complete (✅), Phase Status table added (12 phases), Key Components table updated to algorithm-agnostic language, Machine Profiles table updated to Urim/Thummim hardware specs, Elixir API section promoted from "Planned" to live with 7 endpoints
 - **PQC Opt-In Deferral** — Ed25519 remains the v1.0.0 default; `HybridSigningKey` and `KyberKem` ship in `carnelian-magic` but activate as opt-in in v1.1.0; UI text neutralized to algorithm-agnostic labels ("Owner signature" vs "Ed25519 signature") across `first_run_wizard.rs`, `approvals.rs`, `attestation.rs`; migration path documented in `FUTURE_PQC.md`
 - **UI Bug Fixes** — Fixed ledger pagination bug (signal handles vs snapshotted values), fixed channels token placeholder interpolation, added targeted cast suppressions with rationale in `system_tray.rs`, `xp_widget.rs`, `store.rs`
 
-### Added — Phase 11: Documentation & Release
+### Added — Documentation & Release
 
 - **LICENSE.md** — Proprietary license with Marco Julio Lopes and Kordspace LLC attribution, patent-pending notice, CLA requirements
 - **CHANGELOG.md** — Full v1.0.0 release notes (this file)
