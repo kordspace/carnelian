@@ -15,6 +15,7 @@ pub struct MemoryMerkleTree {
     /// Leaf hashes (one per memory entry)
     leaves: Vec<[u8; 32]>,
     /// Internal node hashes (computed from leaves)
+    #[allow(dead_code)]
     nodes: Vec<[u8; 32]>,
 }
 
@@ -44,7 +45,7 @@ impl MemoryMerkleTree {
             };
         }
 
-        let mut leaves = leaf_hashes;
+        let leaves = leaf_hashes;
         let mut nodes = Vec::new();
         
         // Build tree bottom-up

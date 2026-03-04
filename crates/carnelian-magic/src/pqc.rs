@@ -14,8 +14,8 @@
 use crate::{EntropyProvider, MagicError};
 use pqcrypto_dilithium::dilithium3;
 use pqcrypto_kyber::kyber1024;
-use pqcrypto_traits::kem::{Ciphertext as KemCiphertext, PublicKey as KemPublicKey, SecretKey as KemSecretKey, SharedSecret as KemSharedSecret};
-use pqcrypto_traits::sign::{DetachedSignature, PublicKey as SigPublicKey, SecretKey as SigSecretKey};
+use pqcrypto_traits::kem::{Ciphertext as KemCiphertext, PublicKey as KemPublicKey, SharedSecret as KemSharedSecret};
+use pqcrypto_traits::sign::{DetachedSignature, PublicKey as SigPublicKey};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -107,11 +107,12 @@ impl HybridSigningKey {
     /// # Returns
     /// A `HybridSignature` containing both Dilithium3 and Ed25519 signatures
     pub fn sign(&self, message: &[u8]) -> HybridSignature {
+        use ed25519_dalek::Signer;
+        
         // Dilithium3 detached signature
         let dilithium_sig = dilithium3::detached_sign(message, &self.dilithium_sk);
         
         // Ed25519 signature
-        use ed25519_dalek::Signer;
         let ed25519_sig = self.ed25519_sk.sign(message);
 
         HybridSignature {
@@ -133,15 +134,15 @@ impl HybridSigningKey {
     /// # Returns
     /// `Ok(())` if both signatures are valid, `Err` otherwise
     pub fn verify(&self, message: &[u8], signature: &HybridSignature) -> Result<(), MagicError> {
+        use ed25519_dalek::Verifier;
+        
         // Verify Dilithium3 signature
         let dilithium_sig = dilithium3::DetachedSignature::from_bytes(&signature.dilithium_sig)
             .map_err(|_| MagicError::CryptoError("Invalid Dilithium signature format".into()))?;
-        
         dilithium3::verify_detached_signature(&dilithium_sig, message, &self.dilithium_pk)
             .map_err(|_| MagicError::CryptoError("Dilithium signature verification failed".into()))?;
-
+        
         // Verify Ed25519 signature
-        use ed25519_dalek::Verifier;
         let sig_bytes: [u8; 64] = signature.ed25519_sig.clone().try_into()
             .map_err(|_| MagicError::CryptoError("Invalid Ed25519 signature format".into()))?;
         let ed25519_sig = ed25519_dalek::Signature::from_bytes(&sig_bytes);
