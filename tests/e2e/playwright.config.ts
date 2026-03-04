@@ -77,7 +77,7 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: 'docker-compose up -d',
+    command: 'docker compose up -d',
     url: 'http://localhost:18789/v1/health',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
