@@ -1111,7 +1111,6 @@ We welcome contributions from the community! Carnelian Core is open source softw
 
 **Key Resources:**
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — Development setup, code style, testing, and pull request process
-- **[CONTRIBUTORS.md](CONTRIBUTORS.md)** — Acknowledgments and contributor recognition
 - **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** — Detailed development workflow and architecture guide
 
 ### Quick Start for Contributors
@@ -1133,7 +1132,7 @@ cargo test --all
 
 ### Contributor Recognition
 
-All contributors who submit accepted pull requests are recognized in [CONTRIBUTORS.md](CONTRIBUTORS.md). We value contributions across code, documentation, testing, design, and community support.
+All contributors who submit accepted pull requests are valued and recognized. We appreciate contributions across code, documentation, testing, design, and community support.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the Contributor License Agreement and detailed guidelines.
 
@@ -1151,7 +1150,7 @@ Carnelian is open source software with commercial licensing options available.
 
 See [LICENSE.md](LICENSE.md) for complete terms and licensing details.
 
-Special thanks to our contributors and mentors who made Carnelian possible. See [CONTRIBUTORS.md](CONTRIBUTORS.md) for full acknowledgments.
+Special thanks to our contributors and mentors who made Carnelian possible.
 
 ## Repository
 

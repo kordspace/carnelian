@@ -192,11 +192,11 @@ Carnelian Core has been inspired by and built upon the work of many talented ind
 
 - **Jonathan Essex** — Founder of [Software Plumbers](https://softwareplumbers.com), whose mentorship in cryptography, PostgreSQL transactional ledgers, Merkle tree architectures, and blake3 hash-chain design directly influenced Carnelian's ledger system and capability-based security model.
 
-- **Vincent Haliburton** — Provided inspiration and strategic guidance for Carnelian's planned utility token on Base (Ethereum L2), shaping the vision for future Web3 integration and token-gated capability grants.
+- **Vincent Haliburton** — Founder of [Knowit Owlz](https://owlz.xyz), provided inspiration and strategic guidance for Carnelian's planned utility token on Base (Ethereum L2), shaping the vision for future Web3 integration and token-gated capability grants.
 
 - **Marcelino Class** — Contributed UI/UX design insights, animation knowledge, and research assistance that helped refine the Dioxus desktop UI and agent interaction patterns.
 
-These individuals represent the collaborative spirit of innovation and mentorship that made Carnelian Core possible. For detailed contributor acknowledgments, see [CONTRIBUTORS.md](CONTRIBUTORS.md).
+These individuals represent the collaborative spirit of innovation and mentorship that made Carnelian Core possible.
 
 ---
 
