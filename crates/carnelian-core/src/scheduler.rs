@@ -1067,7 +1067,7 @@ impl Scheduler {
             + config.worker_lanes.data_task
             + config.worker_lanes.io_task
             + config.worker_lanes.chat_task;
-        let fetch_limit = total_lane_permits as usize;
+        let fetch_limit = total_lane_permits;
 
         let pending_tasks: Vec<(Uuid, Option<Uuid>, i32, String, Option<String>)> = sqlx::query_as(
             r"SELECT task_id, skill_id, priority, title, description FROM tasks WHERE state = 'pending' ORDER BY priority DESC, created_at ASC LIMIT $1",

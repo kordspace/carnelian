@@ -514,21 +514,22 @@ impl Server {
 
             // Build QuantumOrigin provider if API key is configured
             // Prefer nested config, fallback to flat fields for backward compatibility
-            let quantum_origin = if let Some(ref qo_config) = self.config.magic.quantum_origin {
-                if !qo_config.api_key.is_empty() {
-                    Some(carnelian_magic::QuantumOriginProvider::new(
-                        qo_config.url.clone(),
-                        qo_config.api_key.clone(),
-                    ))
-                } else {
-                    None
-                }
-            } else if !self.config.magic.quantum_origin_api_key.is_empty() {
-                Some(carnelian_magic::QuantumOriginProvider::new(
-                    self.config.magic.quantum_origin_url.clone(),
-                    self.config.magic.quantum_origin_api_key.clone(),
-                ))
-            } else {
+            let quantum_origin = self
+                .config
+                .magic
+                .quantum_origin
+                .as_ref()
+                .and_then(|qo_config| {
+                    if !qo_config.api_key.is_empty() {
+                        Some(carnelian_magic::QuantumOriginProvider::new(
+                            qo_config.url.clone(),
+                            qo_config.api_key.clone(),
+                        ))
+                    } else {
+                        tracing::warn!("Quantum Origin API key is empty, provider disabled");
+                        None
+                    }
+                });
                 None
             };
 
