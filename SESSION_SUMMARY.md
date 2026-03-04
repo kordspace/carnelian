@@ -38,8 +38,8 @@
 - **Impact**: Load tests now pass instead of failing
 
 **d) Created Documentation**
-- **CI_OPTIMIZATION.md**: Comprehensive CI/CD optimization analysis
-- **LOCAL_LAUNCH_GUIDE.md**: Complete guide for local development
+- **DOCUMENTATION/CI_OPTIMIZATION.md**: Comprehensive CI/CD optimization analysis
+- **docs/LOCAL_LAUNCH_GUIDE.md**: Complete guide for local development
 
 ---
 
@@ -99,14 +99,14 @@ cargo run -p carnelian-bin --bin carnelian -- migrate --database-url $env:DATABA
 
 ### 4. ✅ **Documentation Created**
 
-**CI_OPTIMIZATION.md**
+**DOCUMENTATION/CI_OPTIMIZATION.md**
 - Problem analysis (benchmarks, load tests, ARM64)
 - Solutions implemented
 - Performance comparison (before/after)
 - Local testing workflows
 - Future optimization recommendations
 
-**LOCAL_LAUNCH_GUIDE.md**
+**docs/LOCAL_LAUNCH_GUIDE.md**
 - Quick start guide
 - Database management
 - Testing workflows
@@ -206,7 +206,7 @@ perf: optimize CI/CD - disable ARM64 builds and benchmarks, fix load tests
 - Disabled ARM64 Docker build (saves 6+ hours)
 - Disabled benchmarks in CI (saves 25 minutes)
 - Fixed load test server startup with health check
-- Created CI_OPTIMIZATION.md documentation
+- Created DOCUMENTATION/CI_OPTIMIZATION.md documentation
 ```
 
 ### Commit 2: `3d070ca` - Benchmark Fix & Documentation
@@ -215,7 +215,7 @@ fix: benchmark database connection + add local launch guide
 
 - Fixed benchmark database credentials
 - Validated benchmarks work with database
-- Created LOCAL_LAUNCH_GUIDE.md
+- Created docs/LOCAL_LAUNCH_GUIDE.md
 ```
 
 ---
@@ -249,8 +249,8 @@ fix: benchmark database connection + add local launch guide
 
 | File | Purpose |
 |------|---------|
-| `CI_OPTIMIZATION.md` | CI/CD optimization analysis and recommendations |
-| `LOCAL_LAUNCH_GUIDE.md` | Complete local development guide |
+| `DOCUMENTATION/CI_OPTIMIZATION.md` | CI/CD optimization analysis and recommendations |
+| `docs/LOCAL_LAUNCH_GUIDE.md` | Complete local development guide |
 | `SESSION_SUMMARY.md` | This file - session overview |
 | `TESTING.md` | Existing - comprehensive testing guide |
 
