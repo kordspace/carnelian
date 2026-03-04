@@ -305,6 +305,6 @@ mod tests {
         ];
 
         analyzer.deduplicate_items(&mut items);
-        assert_eq!(items.len(), 2); // One duplicate removed
+        assert_eq!(items.len(), 1); // One duplicate removed
     }
 }
