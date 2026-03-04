@@ -16,13 +16,14 @@ use carnelian_common::types::{LedgerEventDetail, LedgerVerifyResponse};
 
 /// Format a ledger event for display.
 fn format_event(event: &LedgerEventDetail) -> String {
+    let actor = event
+        .actor_id
+        .map_or_else(|| "system".to_string(), |id| id.to_string());
     format!(
         "{} | {} | {}",
         event.timestamp.format("%Y-%m-%d %H:%M:%S"),
         event.action_type,
-        event
-            .actor_id
-            .map_or("system", |id| id.to_string().as_str())
+        actor
     )
 }
 
