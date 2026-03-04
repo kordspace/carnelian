@@ -1,8 +1,11 @@
 //! MAGIC page — quantum entropy, mantra library, auth, and configuration.
 
-#![allow(clippy::nonminimal_bool)]
-#![allow(clippy::collapsible_else_if)]
-#![allow(clippy::if_not_else)]
+#![allow(
+    clippy::option_if_let_else,
+    clippy::nonminimal_bool,
+    clippy::collapsible_else_if,
+    clippy::if_not_else
+)]
 
 use crate::api;
 use crate::components::{Toast, ToastMessage, ToastType};
