@@ -208,8 +208,9 @@ mod tests {
         assert!(!result.timed_out);
     }
 
-    #[tokio::test]
-    async fn test_timeout_enforcement() {
+    #[test]
+    #[cfg(target_family = "unix")]
+    fn test_timeout_enforcement() {
         let mut limits = ResourceLimits::default();
         limits.timeout_seconds = 1;
 

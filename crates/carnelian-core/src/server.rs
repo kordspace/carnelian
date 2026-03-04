@@ -929,10 +929,6 @@ fn build_router(state: Arc<AppState>) -> Router {
             get(magic_list_mantras_handler).post(magic_add_mantra_entry_handler),
         )
         .route(
-            "/v1/magic/mantras/{category_id}",
-            get(magic_list_category_entries_handler),
-        )
-        .route(
             "/v1/magic/mantras/{entry_id}",
             patch(magic_update_mantra_entry_handler).delete(magic_delete_mantra_entry_handler),
         )

@@ -263,8 +263,8 @@ mod tests {
         (pool, analyzer)
     }
 
-    #[test]
-    fn test_extract_item_from_pattern() {
+    #[tokio::test]
+    async fn test_extract_item_from_pattern() {
         let (_pool, analyzer) = create_test_context_analyzer();
 
         let context = "We need to implement the new authentication system with OAuth2 support";
@@ -276,8 +276,8 @@ mod tests {
         assert_eq!(item.priority, 3);
     }
 
-    #[test]
-    fn test_deduplicate_items() {
+    #[tokio::test]
+    async fn test_deduplicate_items() {
         let (_pool, analyzer) = create_test_context_analyzer();
 
         let mut items = vec![

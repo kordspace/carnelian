@@ -45,7 +45,6 @@
 
 ### Release Information
 - **[CHANGELOG.md](CHANGELOG.md)** - Version history and changes
-- **[../RELEASE_NOTES.md](../RELEASE_NOTES.md)** - Latest release notes
 
 ## System Overview
 
