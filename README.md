@@ -328,7 +328,7 @@ See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for detailed setup and developmen
 |---------|-----|------|-----|-------------------|-------|
 | **Standard** | RTX 2080 Super | 8 GB | 32 GB | `deepseek-r1:7b` | Entry-level — balanced local + API usage |
 | **Performance** | RTX 5090 | 24 GB | 64 GB | `qwq:32b` | High-end workstation — advanced reasoning models |
-| **Ultra** | M3 Ultra | 192 GB | 128 GB | `qwq:32b` or larger | Apple Silicon — unified memory architecture |
+| **Ultra** | M3 Ultra | 192 GB | 192 GB | `qwq:32b`, `kimi:k2.5` | Apple Silicon — unified memory architecture (500+ GB configurations available) |
 | **Custom** | User-defined | — | — | User-defined | Expert mode — manual resource limits |
 
 Profiles affect Docker resource limits and worker concurrency settings. See [docker-compose.yml](docker-compose.yml) and [machine.toml.example](machine.toml.example) for configuration.
