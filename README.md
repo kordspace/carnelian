@@ -81,10 +81,10 @@ CARNELIAN is a production-ready AI workspace harness with comprehensive capabili
 - ✅ Sub-agents and workflow orchestration
 - ✅ Telegram + Discord adapters with pairing
 - ✅ Voice gateway (ElevenLabs STT/TTS)
-- ✅ 🧪 Elixir system for knowledge persistence
+- ✅ 🧪 Elixir system for knowledge persistence — [Learn more](docs/ELIXIR_SYSTEM.md)
 - ✅ Skill Book catalog with activation flow
 
-**Desktop UI** (Complete)
+**Desktop UI**
 - ✅ Dioxus desktop UI — 17 pages, 6 components
 - ✅ WebSocket event streaming with priority-based ring buffer
 - ✅ Real-time metrics and monitoring
@@ -772,7 +772,7 @@ See [skills/registry/README.md](skills/registry/README.md) for the full manifest
 
 ### Security Architecture Notes
 
-The ledger uses **blake3** (not SHA-256) for hash-chain integrity, providing faster performance than traditional cryptographic hashes while maintaining collision resistance.
+The ledger uses **BLAKE3** hash-chaining for tamper-resistant audit trails, with optional quantum entropy salting from the MAGIC subsystem. For complete documentation on chain verification, anchoring, and event types, see [docs/LEDGER_SYSTEM.md](docs/LEDGER_SYSTEM.md).
 
 The policy engine and ledger manager are shipped and active.
 
@@ -947,6 +947,8 @@ See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 | Document | Description |
 |----------|-------------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Agentic architecture deep-dive |
+| [docs/ELIXIR_SYSTEM.md](docs/ELIXIR_SYSTEM.md) | Elixir knowledge persistence system |
+| [docs/LEDGER_SYSTEM.md](docs/LEDGER_SYSTEM.md) | Ledger hash-chain and audit trail |
 | [docs/WASM_SKILLS.md](docs/WASM_SKILLS.md) | WASM skill system documentation |
 | [docs/RUST_SKILL_SYSTEM.md](docs/RUST_SKILL_SYSTEM.md) | Rust skill system design |
 | [docs/ATTESTATION.md](docs/ATTESTATION.md) | Attestation and verification system |
