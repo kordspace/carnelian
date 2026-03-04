@@ -482,6 +482,17 @@ mod tests {
         let (signing_key, _) = crypto::generate_ed25519_keypair();
         let approver_id = Uuid::now_v7();
 
+        // Create identity record for approver to satisfy foreign key constraint
+        sqlx::query!(
+            "INSERT INTO identities (identity_id, name, identity_type) VALUES ($1, $2, $3)",
+            approver_id,
+            "test_approver",
+            "owner"
+        )
+        .execute(&pool)
+        .await
+        .expect("Failed to create test identity");
+
         let approval_id = queue
             .queue_action("capability.grant", json!({"test": true}), None, None)
             .await
@@ -519,6 +530,17 @@ mod tests {
         let (signing_key, _) = crypto::generate_ed25519_keypair();
         let denier_id = Uuid::now_v7();
 
+        // Create identity record for denier to satisfy foreign key constraint
+        sqlx::query!(
+            "INSERT INTO identities (identity_id, name, identity_type) VALUES ($1, $2, $3)",
+            denier_id,
+            "test_denier",
+            "owner"
+        )
+        .execute(&pool)
+        .await
+        .expect("Failed to create test identity");
+
         let approval_id = queue
             .queue_action("config.change", json!({"key": "test"}), None, None)
             .await
@@ -554,6 +576,17 @@ mod tests {
         let ledger = Ledger::new(pool.clone());
         let (signing_key, _) = crypto::generate_ed25519_keypair();
         let approver_id = Uuid::now_v7();
+
+        // Create identity record for approver to satisfy foreign key constraint
+        sqlx::query!(
+            "INSERT INTO identities (identity_id, name, identity_type) VALUES ($1, $2, $3)",
+            approver_id,
+            "test_batch_approver",
+            "owner"
+        )
+        .execute(&pool)
+        .await
+        .expect("Failed to create test identity");
 
         let id1 = queue
             .queue_action("capability.grant", json!({"cap": "fs.read"}), None, None)
@@ -595,6 +628,17 @@ mod tests {
         let (signing_key, _) = crypto::generate_ed25519_keypair();
         let public_hex = crypto::public_key_from_signing_key(&signing_key);
         let approver_id = Uuid::now_v7();
+
+        // Create identity record for approver to satisfy foreign key constraint
+        sqlx::query!(
+            "INSERT INTO identities (identity_id, name, identity_type) VALUES ($1, $2, $3)",
+            approver_id,
+            "test_verifier",
+            "owner"
+        )
+        .execute(&pool)
+        .await
+        .expect("Failed to create test identity");
 
         let approval_id = queue
             .queue_action("capability.grant", json!({"test": true}), None, None)
@@ -638,6 +682,17 @@ mod tests {
         let ledger = Ledger::new(pool.clone());
         let (signing_key, _) = crypto::generate_ed25519_keypair();
         let actor = Uuid::now_v7();
+
+        // Create identity record for actor to satisfy foreign key constraint
+        sqlx::query!(
+            "INSERT INTO identities (identity_id, name, identity_type) VALUES ($1, $2, $3)",
+            actor,
+            "test_actor",
+            "owner"
+        )
+        .execute(&pool)
+        .await
+        .expect("Failed to create test identity");
 
         let approval_id = queue
             .queue_action("capability.grant", json!({"test": true}), None, None)

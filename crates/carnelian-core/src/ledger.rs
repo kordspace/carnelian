@@ -995,7 +995,7 @@ mod tests {
             .expect("Failed to connect to database");
 
         // Clean slate: remove any events left by other tests
-        sqlx::query("TRUNCATE ledger_events")
+        sqlx::query("TRUNCATE ledger_events CASCADE")
             .execute(&pool)
             .await
             .expect("Failed to truncate ledger_events");
