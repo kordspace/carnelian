@@ -17,7 +17,7 @@
 use std::process::Command;
 use std::time::Duration;
 
-use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
+use testcontainers::{runners::AsyncRunner, GenericImage, ImageExt};
 
 /// Create a PostgreSQL container for testing
 async fn create_postgres_container() -> testcontainers::ContainerAsync<GenericImage> {

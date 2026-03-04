@@ -84,8 +84,8 @@ use chrono::{DateTime, Duration, Utc};
 use ed25519_dalek::SigningKey;
 use pgvector::Vector;
 use serde::{Deserialize, Serialize};
-use serde_json::Value as JsonValue;
 use serde_json::json;
+use serde_json::Value as JsonValue;
 use sqlx::{FromRow, PgPool, Row};
 use uuid::Uuid;
 

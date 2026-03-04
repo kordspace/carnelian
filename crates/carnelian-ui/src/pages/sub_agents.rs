@@ -279,7 +279,11 @@ fn sort_sub_agents<'a>(
             "last_active_at" => a.last_active_at.cmp(&b.last_active_at),
             _ => a.created_at.cmp(&b.created_at),
         };
-        if asc { ord } else { ord.reverse() }
+        if asc {
+            ord
+        } else {
+            ord.reverse()
+        }
     });
     agents
 }
@@ -297,7 +301,11 @@ fn sortable_th(
     let current_col = sort_col.read().clone();
     let current_asc = *sort_asc.read();
     let indicator = if current_col == col {
-        if current_asc { "\u{25B2}" } else { "\u{25BC}" }
+        if current_asc {
+            "\u{25B2}"
+        } else {
+            "\u{25BC}"
+        }
     } else {
         ""
     };

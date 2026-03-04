@@ -98,7 +98,7 @@ use tokio::io::AsyncWriteExt;
 
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value as JsonValue, json};
+use serde_json::{json, Value as JsonValue};
 use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
@@ -107,7 +107,7 @@ use carnelian_common::{Error, Result};
 use carnelian_magic::QuantumHasher;
 
 use crate::config::Config;
-use crate::context::{ContextWindow, estimate_tokens};
+use crate::context::{estimate_tokens, ContextWindow};
 use crate::events::EventStream;
 use crate::ledger::Ledger;
 use crate::memory::{MemoryManager, MemorySource};
@@ -2689,7 +2689,7 @@ mod tests {
 
     #[test]
     fn test_soft_trim_reduces_token_count() {
-        use crate::context::{ContextWindow, estimate_tokens};
+        use crate::context::{estimate_tokens, ContextWindow};
 
         // Generate a large tool result
         let large_content = "word ".repeat(2000); // ~2000 tokens
@@ -2719,7 +2719,7 @@ mod tests {
 
     #[test]
     fn test_soft_trim_no_op_when_under_threshold() {
-        use crate::context::{ContextWindow, estimate_tokens};
+        use crate::context::{estimate_tokens, ContextWindow};
 
         let small_content = "Hello, this is a short tool result.";
         let original_tokens = estimate_tokens(small_content, "deepseek-r1:7b");
@@ -2749,7 +2749,7 @@ mod tests {
 
     #[test]
     fn test_soft_trim_token_delta_for_counter_adjustment() {
-        use crate::context::{ContextWindow, estimate_tokens};
+        use crate::context::{estimate_tokens, ContextWindow};
 
         let large_content = "token ".repeat(3000);
         #[allow(clippy::cast_possible_wrap)]

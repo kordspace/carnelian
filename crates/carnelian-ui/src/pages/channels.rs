@@ -29,7 +29,11 @@ pub fn Channels() -> Element {
         let _ = refresh();
         let type_filter = {
             let v = filter_type.read().clone();
-            if v == "All" { None } else { Some(v) }
+            if v == "All" {
+                None
+            } else {
+                Some(v)
+            }
         };
         crate::api::list_channels(type_filter)
             .await

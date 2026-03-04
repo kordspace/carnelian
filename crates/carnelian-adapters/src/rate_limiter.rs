@@ -8,7 +8,7 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use dashmap::DashMap;
-use governor::{Quota, RateLimiter as GovRateLimiter, clock::DefaultClock, state::InMemoryState};
+use governor::{clock::DefaultClock, state::InMemoryState, Quota, RateLimiter as GovRateLimiter};
 use serde_json::json;
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};

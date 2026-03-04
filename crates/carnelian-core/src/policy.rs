@@ -9,13 +9,13 @@ use carnelian_common::{Error, Result};
 use chrono::{DateTime, Utc};
 use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value as JsonValue, json};
+use serde_json::{json, Value as JsonValue};
 use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
-use crate::EventStream;
 use crate::approvals::ApprovalQueue;
 use crate::ledger::Ledger;
+use crate::EventStream;
 
 /// Represents a capability grant from the database
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -408,9 +408,10 @@ impl PolicyEngine {
         let scope = payload
             .get("scope")
             .and_then(|v| if v.is_null() { None } else { Some(v.clone()) });
-        let constraints = payload
-            .get("constraints")
-            .and_then(|v| if v.is_null() { None } else { Some(v.clone()) });
+        let constraints =
+            payload
+                .get("constraints")
+                .and_then(|v| if v.is_null() { None } else { Some(v.clone()) });
         let approved_by = payload["approved_by"]
             .as_str()
             .and_then(|s| Uuid::parse_str(s).ok());

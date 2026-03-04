@@ -219,7 +219,11 @@ pub fn Elixirs() -> Element {
             "created_at" => a.created_at.cmp(&b.created_at),
             _ => a.name.cmp(&b.name),
         };
-        if sort_asc_val { cmp } else { cmp.reverse() }
+        if sort_asc_val {
+            cmp
+        } else {
+            cmp.reverse()
+        }
     });
 
     let pending_drafts: Vec<ElixirDraft> = drafts

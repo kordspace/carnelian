@@ -270,7 +270,11 @@ fn sort_skills<'a>(mut skills: Vec<&'a SkillDetail>, col: &str, asc: bool) -> Ve
             "updated_at" => a.updated_at.cmp(&b.updated_at),
             _ => a.discovered_at.cmp(&b.discovered_at),
         };
-        if asc { ord } else { ord.reverse() }
+        if asc {
+            ord
+        } else {
+            ord.reverse()
+        }
     });
     skills
 }
@@ -286,7 +290,11 @@ fn sortable_th(
     let current_col = sort_col.read().clone();
     let current_asc = *sort_asc.read();
     let indicator = if current_col == col {
-        if current_asc { "\u{25B2}" } else { "\u{25BC}" }
+        if current_asc {
+            "\u{25B2}"
+        } else {
+            "\u{25BC}"
+        }
     } else {
         ""
     };

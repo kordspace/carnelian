@@ -70,14 +70,14 @@ use carnelian_common::types::{
     EventEnvelope, EventLevel, EventType, InvokeRequest, InvokeStatus, RunId,
 };
 use carnelian_common::{Error, Result};
-use carnelian_magic::{EntropyProvider, QuantumHasher, entropy_arc_impl as _};
+use carnelian_magic::{entropy_arc_impl as _, EntropyProvider, QuantumHasher};
 use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{Semaphore, watch};
+use tokio::sync::{watch, Semaphore};
 use uuid::Uuid;
 
 /// Background task scheduler managing heartbeats, task queue polling, and task execution.

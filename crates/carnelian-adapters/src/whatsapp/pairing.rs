@@ -12,13 +12,13 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
-use carnelian_core::EventStream;
 use carnelian_core::policy::PolicyEngine;
+use carnelian_core::EventStream;
 
-use crate::ChannelAdapter;
 use crate::db as channel_db;
 use crate::events;
 use crate::types::{ChannelType, PairingRequest, TrustLevel};
+use crate::ChannelAdapter;
 
 use super::WhatsAppAdapter;
 

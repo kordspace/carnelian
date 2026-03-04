@@ -14,9 +14,9 @@ use teloxide::types::Update;
 use uuid::Uuid;
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
-use carnelian_core::EventStream;
 use carnelian_core::policy::PolicyEngine;
 use carnelian_core::session::SessionManager;
+use carnelian_core::EventStream;
 
 use crate::events;
 use crate::rate_limiter::RateLimiter;

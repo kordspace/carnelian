@@ -215,9 +215,9 @@ fn test_log_level_priority() {
 #[test]
 fn test_correlation_id_in_span() {
     use tracing::subscriber::with_default;
-    use tracing_subscriber::EnvFilter;
     use tracing_subscriber::fmt;
     use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::EnvFilter;
 
     let writer = TestWriter::new();
     let writer_clone = writer.clone();
@@ -256,9 +256,9 @@ fn test_correlation_id_in_span() {
 #[test]
 fn test_json_output_format() {
     use tracing::subscriber::with_default;
-    use tracing_subscriber::EnvFilter;
     use tracing_subscriber::fmt;
     use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::EnvFilter;
 
     let writer = TestWriter::new();
     let writer_clone = writer.clone();
@@ -295,9 +295,9 @@ fn test_json_output_format() {
 #[test]
 fn test_log_level_filtering() {
     use tracing::subscriber::with_default;
-    use tracing_subscriber::EnvFilter;
     use tracing_subscriber::fmt;
     use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::EnvFilter;
 
     let writer = TestWriter::new();
     let writer_clone = writer.clone();
@@ -345,9 +345,9 @@ fn test_log_level_filtering() {
 #[test]
 fn test_pretty_output_format() {
     use tracing::subscriber::with_default;
-    use tracing_subscriber::EnvFilter;
     use tracing_subscriber::fmt;
     use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::EnvFilter;
 
     let writer = TestWriter::new();
     let writer_clone = writer.clone();

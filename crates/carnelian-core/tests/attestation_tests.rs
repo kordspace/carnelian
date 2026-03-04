@@ -6,8 +6,8 @@
 mod common;
 
 use carnelian_core::attestation::{
-    WorkerAttestation, get_quarantined_workers, is_worker_quarantined, quarantine_worker,
-    record_attestation, verify_attestation,
+    get_quarantined_workers, is_worker_quarantined, quarantine_worker, record_attestation,
+    verify_attestation, WorkerAttestation,
 };
 use common::*;
 

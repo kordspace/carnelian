@@ -398,7 +398,7 @@ pub fn start_soul_watcher(
     souls_path: PathBuf,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        use notify_debouncer_mini::{DebouncedEventKind, new_debouncer};
+        use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
 
         let (tx, mut rx) = tokio::sync::mpsc::channel(16);
 

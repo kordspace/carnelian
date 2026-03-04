@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use serde_json::json;
 use sqlx::PgPool;
-use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
+use testcontainers::{runners::AsyncRunner, GenericImage, ImageExt};
 use uuid::Uuid;
 
 // =============================================================================

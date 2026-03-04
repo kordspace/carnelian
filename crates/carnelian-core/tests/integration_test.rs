@@ -48,7 +48,7 @@ use carnelian_core::{
 };
 use futures_util::StreamExt;
 use memory_stats::memory_stats;
-use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
+use testcontainers::{runners::AsyncRunner, GenericImage, ImageExt};
 use tokio::sync::oneshot;
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;

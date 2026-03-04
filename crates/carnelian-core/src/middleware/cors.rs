@@ -3,7 +3,7 @@
 //! Configures Cross-Origin Resource Sharing (CORS) policies.
 //! Provides different configurations for development and production environments.
 
-use axum::http::{HeaderName, HeaderValue, Method, header};
+use axum::http::{header, HeaderName, HeaderValue, Method};
 use std::time::Duration;
 use tower_http::cors::{Any, CorsLayer};
 

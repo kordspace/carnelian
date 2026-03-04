@@ -83,7 +83,7 @@ use std::time::Instant;
 use sysinfo::{Disks, Networks, ProcessRefreshKind, RefreshKind, System};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout};
-use tokio::sync::{RwLock, mpsc, oneshot, watch};
+use tokio::sync::{mpsc, oneshot, watch, RwLock};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -3466,12 +3466,10 @@ mod tests {
 
         let result = manager.spawn_worker(WorkerRuntime::Node, false).await;
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Max workers limit reached")
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Max workers limit reached"));
     }
 
     #[tokio::test]

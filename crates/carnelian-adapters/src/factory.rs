@@ -22,11 +22,11 @@ use std::time::Duration;
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use carnelian_common::ChannelAdapter;
 use carnelian_common::channel::ChannelAdapterFactory;
-use carnelian_core::EventStream;
+use carnelian_common::ChannelAdapter;
 use carnelian_core::policy::PolicyEngine;
 use carnelian_core::session::SessionManager;
+use carnelian_core::EventStream;
 use sqlx::PgPool;
 
 use crate::config;

@@ -68,15 +68,15 @@ use carnelian_common::{Error, Result};
 use futures_util::stream::{Stream, StreamExt};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value as JsonValue, json};
+use serde_json::{json, Value as JsonValue};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::EventStream;
 use crate::context::ContextProvenance;
 use crate::ledger::Ledger;
 use crate::policy::PolicyEngine;
 use crate::providers::ProviderRegistry;
+use crate::EventStream;
 
 // =============================================================================
 // REQUEST / RESPONSE TYPES

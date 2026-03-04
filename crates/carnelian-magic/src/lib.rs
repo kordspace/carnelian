@@ -47,7 +47,7 @@ pub mod pqc;
 pub mod verifier;
 
 pub use self::batch_verify::{
-    BatchVerificationResult, batch_verify_hybrid, sequential_verify_hybrid, verify_batch_fail_fast,
+    batch_verify_hybrid, sequential_verify_hybrid, verify_batch_fail_fast, BatchVerificationResult,
 };
 pub use self::merkle::{MemoryMerkleTree, MerkleProof};
 pub use entropy::{

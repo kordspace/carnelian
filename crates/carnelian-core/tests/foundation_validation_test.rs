@@ -37,7 +37,7 @@ use carnelian_core::{
 use futures_util::StreamExt;
 use serde_json::json;
 use std::process::Stdio;
-use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
+use testcontainers::{runners::AsyncRunner, GenericImage, ImageExt};
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;

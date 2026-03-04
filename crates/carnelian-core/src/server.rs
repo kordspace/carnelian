@@ -4,14 +4,13 @@
 //! for real-time event streaming to UI clients.
 
 use axum::{
-    Json, Router,
-    extract::{Path, Query, State, WebSocketUpgrade, ws::Message},
+    extract::{ws::Message, Path, Query, State, WebSocketUpgrade},
     http::StatusCode,
     response::IntoResponse,
     routing::{delete, get, patch, post, put},
+    Json, Router,
 };
 use base64::Engine as _;
-use carnelian_common::Result;
 use carnelian_common::types::{
     AgentXpResponse, AwardXpRequest, AwardXpResponse, CancelTaskRequest, CancelTaskResponse,
     ConfigureVoiceRequest, ConfigureVoiceResponse, CreateElixirRequest, CreateMemoryRequest,
@@ -28,13 +27,14 @@ use carnelian_common::types::{
     TopSkillsQuery, TopSkillsResponse, TranscribeVoiceRequest, TranscribeVoiceResponse,
     UpdateWorkflowRequest, XpEventDetail, XpHistoryQuery, XpHistoryResponse, XpLeaderboardResponse,
 };
+use carnelian_common::Result;
 use futures_util::{SinkExt, StreamExt};
-use http::{HeaderMap, Method, header};
+use http::{header, HeaderMap, Method};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::Row;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tower_http::{
@@ -59,7 +59,7 @@ use crate::safe_mode::SafeModeGuard;
 use crate::session::SessionManager;
 use crate::sub_agent::{CreateSubAgentRequest, SubAgentManager, UpdateSubAgentRequest};
 use crate::worker::{WorkerManager, WorkerRuntime};
-use crate::{Config, EventStream, Scheduler, db, policy::PolicyEngine};
+use crate::{db, policy::PolicyEngine, Config, EventStream, Scheduler};
 
 // Import MAGIC entropy provider and trait
 use carnelian_magic::EntropyProvider;
@@ -1141,7 +1141,7 @@ async fn status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse
         .unwrap_or(0)
     } else {
         0 // Known limitation (v1.0.0): returns 0 when pool is unreachable; a meaningful
-        // estimate requires pool introspection not yet exposed.
+          // estimate requires pool introspection not yet exposed.
     };
 
     // Look up the core identity

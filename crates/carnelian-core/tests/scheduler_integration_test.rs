@@ -33,7 +33,7 @@ use carnelian_core::{
     WorkerManager,
 };
 use serde_json::json;
-use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
+use testcontainers::{runners::AsyncRunner, GenericImage, ImageExt};
 use uuid::Uuid;
 
 /// Create a PostgreSQL container for testing (matches integration_test.rs pattern).

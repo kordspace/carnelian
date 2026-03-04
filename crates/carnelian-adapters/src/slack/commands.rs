@@ -7,11 +7,11 @@ use std::sync::Arc;
 
 use sqlx::PgPool;
 
-use carnelian_core::EventStream;
 use carnelian_core::policy::PolicyEngine;
+use carnelian_core::EventStream;
 
-use crate::ChannelAdapter;
 use crate::db as channel_db;
+use crate::ChannelAdapter;
 
 use super::SlackAdapter;
 

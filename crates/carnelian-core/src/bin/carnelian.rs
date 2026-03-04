@@ -27,7 +27,7 @@
 //! - `carnelian migrate` - Run database migrations
 //! - `carnelian logs` - Stream events from running instance
 
-use std::io::{Write, stdin, stdout};
+use std::io::{stdin, stdout, Write};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -42,11 +42,11 @@ use carnelian_core::{
     Config, EventStream, Ledger, ModelRouter, PolicyEngine, Scheduler, Server, WorkerManager,
 };
 
-use bollard::Docker;
 use bollard::container::StartContainerOptions;
 use bollard::container::{Config as ContainerConfig, CreateContainerOptions};
 use bollard::image::CreateImageOptions;
 use bollard::models::{HostConfig, PortBinding};
+use bollard::Docker;
 use futures_util::stream::TryStreamExt;
 
 /// 🔥 Carnelian OS - Local-first AI agent mainframe
@@ -2444,7 +2444,7 @@ async fn handle_ui(web: bool) -> carnelian_common::Result<()> {
 
 /// Serve web UI static files
 async fn serve_web_ui(web_dir: &std::path::Path, port: u16) -> carnelian_common::Result<()> {
-    use axum::{Router, http::StatusCode};
+    use axum::{http::StatusCode, Router};
     use tokio::net::TcpListener;
     use tower_http::services::ServeDir;
 

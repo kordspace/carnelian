@@ -134,10 +134,10 @@ pub mod xp;
 
 use std::env;
 use tracing_subscriber::{
-    EnvFilter, Layer,
     fmt::{self, format::FmtSpan},
     layer::SubscriberExt,
     util::SubscriberInitExt,
+    EnvFilter, Layer,
 };
 
 pub use agentic::{

@@ -1,5 +1,5 @@
-use carnelian_core::skills::SkillInput;
 use carnelian_core::skills::wasm_runtime::WasmSkillRuntime;
+use carnelian_core::skills::SkillInput;
 use serde_json::json;
 use std::path::PathBuf;
 
@@ -227,11 +227,9 @@ async fn test_code_format_json() {
         .unwrap();
 
     assert!(output.success);
-    assert!(
-        output.data["data"]["formatted"]
-            .as_str()
-            .unwrap()
-            .contains("\"a\":")
-    );
+    assert!(output.data["data"]["formatted"]
+        .as_str()
+        .unwrap()
+        .contains("\"a\":"));
     assert_eq!(output.data["data"]["lang"], "json");
 }

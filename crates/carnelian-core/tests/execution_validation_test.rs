@@ -33,14 +33,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
-use carnelian_core::scheduler::{WorkspaceScanner, auto_queue_scanned_tasks};
+use carnelian_core::scheduler::{auto_queue_scanned_tasks, WorkspaceScanner};
 use carnelian_core::soul::SoulManager;
 use carnelian_core::{
     Config, EventStream, Ledger, ModelRouter, PolicyEngine, Scheduler, Server, WorkerManager,
 };
 use futures_util::StreamExt;
 use serde_json::json;
-use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
+use testcontainers::{runners::AsyncRunner, GenericImage, ImageExt};
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
@@ -471,8 +471,8 @@ fn assert_event_contains_field(
 /// - `GET /api/tags` with a list of models
 fn start_mock_ollama_server(port: u16) -> tokio::task::JoinHandle<()> {
     use axum::{
-        Router,
         routing::{get, post},
+        Router,
     };
 
     let app = Router::new()

@@ -3,14 +3,14 @@
 //! Provides mock adapters and helper functions for integration tests
 //! without requiring real bot tokens.
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use crate::ChannelAdapter;
 use crate::types::{ChannelSession, ChannelType, TrustLevel};
+use crate::ChannelAdapter;
 
 /// Mock channel adapter for testing.
 ///

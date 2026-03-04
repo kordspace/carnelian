@@ -16,7 +16,7 @@
 //! cargo test --test migration_test -- --ignored
 //! ```
 
-use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
+use testcontainers::{runners::AsyncRunner, GenericImage, ImageExt};
 
 /// Create a PostgreSQL container for testing
 async fn create_postgres_container() -> testcontainers::ContainerAsync<GenericImage> {

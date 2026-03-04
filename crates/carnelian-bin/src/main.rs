@@ -30,12 +30,12 @@ use carnelian_core::{
     Config, EventStream, Ledger, ModelRouter, PolicyEngine, Scheduler, Server, WorkerManager,
 };
 
-use bollard::Docker;
 use bollard::container::{
     Config as ContainerConfig, CreateContainerOptions, StartContainerOptions,
 };
 use bollard::image::CreateImageOptions;
 use bollard::models::{HostConfig, PortBinding};
+use bollard::Docker;
 use futures_util::stream::TryStreamExt;
 
 /// 🔥 Carnelian OS - Local-first AI agent mainframe
@@ -1116,7 +1116,7 @@ async fn handle_init(
     _resume: bool,
     key_path: Option<PathBuf>,
 ) -> carnelian_common::Result<()> {
-    use std::io::{Write, stdin, stdout};
+    use std::io::{stdin, stdout, Write};
     use sysinfo::{RefreshKind, System};
 
     // Welcome banner
@@ -2121,7 +2121,7 @@ async fn handle_ui(web: bool) -> carnelian_common::Result<()> {
 
 /// Serve web UI static files
 async fn serve_web_ui(web_dir: &std::path::Path, port: u16) -> carnelian_common::Result<()> {
-    use axum::{Router, http::StatusCode};
+    use axum::{http::StatusCode, Router};
     use tokio::net::TcpListener;
     use tower_http::services::ServeDir;
 
@@ -2481,7 +2481,7 @@ async fn handle_magic_auth(url: &str, refresh: bool) -> carnelian_common::Result
             )));
         }
     } else {
-        use std::io::{Write, stdout};
+        use std::io::{stdout, Write};
 
         print!("Email: ");
         stdout().flush().map_err(|e| {

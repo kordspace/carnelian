@@ -125,7 +125,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Value as JsonValue, json};
+use serde_json::{json, Value as JsonValue};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -133,7 +133,7 @@ use carnelian_common::types::{EventEnvelope, EventLevel, EventType, InvokeReques
 use carnelian_common::{Error, Result};
 
 use crate::config::Config;
-use crate::context::{ContextProvenance, ContextWindow, estimate_tokens};
+use crate::context::{estimate_tokens, ContextProvenance, ContextWindow};
 use crate::events::EventStream;
 use crate::ledger::Ledger;
 use crate::memory::{MemoryManager, MemorySource};
@@ -2094,7 +2094,7 @@ mod tests {
                     skill_name: None,
                     parameters: json!({}),
                     dependencies: vec![
-                        Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap(),
+                        Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap()
                     ],
                 },
                 PlanStep {
@@ -2103,7 +2103,7 @@ mod tests {
                     skill_name: None,
                     parameters: json!({}),
                     dependencies: vec![
-                        Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
+                        Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap()
                     ],
                 },
             ],
@@ -2111,12 +2111,10 @@ mod tests {
 
         let result = AgenticEngine::validate_plan_dependencies(&plan);
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Circular dependency")
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Circular dependency"));
     }
 
     #[test]
