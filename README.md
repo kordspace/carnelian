@@ -22,10 +22,9 @@
 
 | Symbol | Name | Role |
 |--------|------|------|
-| 🔥 | **Carnelian Core** | AI workspace harness — the runtime that orchestrates agents |
-| 🦎 | **Lian** | Agent personality — the spirit that reasons and decides |
-| 💎 | **Carnelian Core** | Architectural guarantees — security, ledger, auditability |
-| 🔮 | **MAGIC** | Quantum intelligence layer — entropy, mantras, optimization |
+| 🔥 | **Carnelian** | AI workspace harness with capability-based security, ledger-backed auditability, and local-first execution |
+| 🦎 | **Lian** | Default agent identity — the reasoning personality that executes tasks |
+| 🔮 | **MAGIC** | Quantum intelligence subsystem — entropy providers, mantra matrix, integrity verification |
 
 ### Brand Assets
 
