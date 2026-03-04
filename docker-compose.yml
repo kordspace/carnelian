@@ -129,7 +129,7 @@ services:
     image: carnelian/gateway:latest
     build:
       context: .
-      dockerfile: gateway/Dockerfile
+      dockerfile: packages/gateway/Dockerfile
     container_name: carnelian-gateway
     environment:
       GATEWAY_PORT: 18790

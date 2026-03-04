@@ -403,10 +403,12 @@ carnelian/
 │   ├── carnelian-worker-node/    # Node.js worker wrapper crate
 │   ├── carnelian-worker-python/  # Python worker wrapper crate
 │   └── carnelian-worker-native/  # Rust named ops (git, blake3, docker, dir)
-├── gateway/                      # TypeScript LLM Gateway (:18790)
-│   └── src/
-│       ├── server.ts             # Express server, routing
-│       ├── router.ts             # Provider selection logic
+├── packages/
+│   ├── gateway/                  # TypeScript LLM Gateway (:18790)
+│   │   └── src/
+│   │       ├── server.ts         # Express server, routing
+│   │       ├── router.ts         # Provider selection logic
+│   └── mcp-server/               # MCP server for Windsurf IDE integration
 │       ├── providers/
 │       │   ├── ollama.ts         # Ollama provider
 │       │   ├── openai.ts         # OpenAI provider

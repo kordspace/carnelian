@@ -246,7 +246,7 @@ Records are buffered and flushed every 10 seconds. The Rust core inserts them in
 ## Project Structure
 
 ```
-gateway/
+packages/gateway/
 ├── package.json
 ├── tsconfig.json
 ├── README.md

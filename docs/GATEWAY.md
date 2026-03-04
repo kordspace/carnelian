@@ -112,7 +112,7 @@ The Gateway implements per-provider circuit breakers to prevent cascading failur
 
 ### Implementation
 
-Source: `gateway/src/router.ts`
+Source: `packages/gateway/src/router.ts`
 
 ```typescript
 interface CircuitState {
@@ -286,7 +286,7 @@ The Gateway uses a three-layer configuration priority:
 
 ## Usage Tracking
 
-The `UsageTracker` (implemented in `gateway/src/usage.ts`) maintains an in-memory buffer of completion usage and periodically flushes to the Core.
+The `UsageTracker` (implemented in `packages/gateway/src/usage.ts`) maintains an in-memory buffer of completion usage and periodically flushes to the Core.
 
 ### Tracking Flow
 
