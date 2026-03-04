@@ -255,10 +255,10 @@ impl PolicyEngine {
             return Err(Error::ApprovalRequired(approval_id));
         }
 
-        let result = sqlx::query!(
+        let result = sqlx::query(
             r#"DELETE FROM capability_grants WHERE grant_id = $1"#,
-            grant_id,
         )
+        .bind(grant_id)
         .execute(&self.pool)
         .await
         .map_err(Error::Database)?;
@@ -269,14 +269,14 @@ impl PolicyEngine {
             tracing::info!(grant_id = %grant_id, "Capability revoked");
 
             // Insert into revoked_capability_grants for cross-instance sync
-            if let Err(e) = sqlx::query!(
+            if let Err(e) = sqlx::query(
                 r#"INSERT INTO revoked_capability_grants (grant_id, revoked_by, reason)
                     VALUES ($1, $2, $3)
                     ON CONFLICT (grant_id) DO NOTHING"#,
-                grant_id,
-                revoked_by,
-                Some("explicit_revocation"),
             )
+            .bind(grant_id)
+            .bind(revoked_by)
+            .bind(Some("explicit_revocation"))
             .execute(&self.pool)
             .await
             {
@@ -512,14 +512,13 @@ impl PolicyEngine {
         }
 
         // Get skill's required capabilities (TEXT[] in database)
-        let required_capabilities: Option<Vec<String>> = sqlx::query_scalar!(
+        let required_capabilities: Option<Vec<String>> = sqlx::query_scalar(
             r#"SELECT capabilities_required FROM skills WHERE skill_id = $1"#,
-            skill_id,
         )
+        .bind(skill_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Error::Database)?
-        .flatten();
+        .map_err(Error::Database)?;
 
         // Check each required capability for the skill
         if let Some(caps) = required_capabilities {

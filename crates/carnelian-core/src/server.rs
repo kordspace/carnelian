@@ -6166,7 +6166,7 @@ mod tests {
     #[tokio::test]
     async fn test_health_endpoint_structure() {
         let state = create_test_state();
-        let router = build_router(state);
+        let router = build_router(Arc::new(state));
 
         let request = Request::builder()
             .uri("/v1/health")
@@ -6196,7 +6196,7 @@ mod tests {
     #[tokio::test]
     async fn test_status_endpoint_structure() {
         let state = create_test_state();
-        let router = build_router(state);
+        let router = build_router(Arc::new(state));
 
         let request = Request::builder()
             .uri("/v1/status")
@@ -6227,7 +6227,7 @@ mod tests {
     #[tokio::test]
     async fn test_health_response_content_type() {
         let state = create_test_state();
-        let router = build_router(state);
+        let router = build_router(Arc::new(state));
 
         let request = Request::builder()
             .uri("/v1/health")
@@ -6248,7 +6248,7 @@ mod tests {
     #[tokio::test]
     async fn test_status_response_content_type() {
         let state = create_test_state();
-        let router = build_router(state);
+        let router = build_router(Arc::new(state));
 
         let request = Request::builder()
             .uri("/v1/status")

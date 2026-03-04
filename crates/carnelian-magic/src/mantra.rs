@@ -807,7 +807,7 @@ mod tests {
 
     #[test]
     fn test_compute_weights_system_health_boost() {
-        let tree = MantraTree::new(None);
+        let _tree = MantraTree::new(None);
         let mut context = MantraContext::default_for_fallback();
         context.recent_error_count = 5;
 
@@ -841,7 +841,7 @@ mod tests {
 
     #[test]
     fn test_cooldown_zeroes_weight() {
-        let tree = MantraTree::new(None);
+        let _tree = MantraTree::new(None);
         let context = MantraContext::default_for_fallback();
 
         let cat_id = Uuid::new_v4();
@@ -876,7 +876,7 @@ mod tests {
 
     #[test]
     fn test_weighted_pick_distribution() {
-        let tree = MantraTree::new(None);
+        let _tree = MantraTree::new(None);
         let cat1 = Uuid::new_v4();
         let cat2 = Uuid::new_v4();
 
@@ -926,7 +926,7 @@ mod tests {
 
     #[test]
     fn test_inverse_freq_pick_favors_low_use_count() {
-        let tree = MantraTree::new(None);
+        let _tree = MantraTree::new(None);
         let entries = vec![
             MantraEntry {
                 entry_id: Uuid::new_v4(),
@@ -974,7 +974,7 @@ mod tests {
         context.recent_error_count = 7;
         context.local_hour = 14;
 
-        let tree = MantraTree::new(None);
+        let _tree = MantraTree::new(None);
         let template = "Tasks: {tasks_queued}, Errors: {recent_error_count}, Hour: {local_hour}";
         let result = MantraTree::resolve_template(template, &context);
 
@@ -1069,7 +1069,7 @@ mod tests {
 
     #[test]
     fn test_elixir_quality_boost_fires() {
-        let tree = MantraTree::new(None);
+        let _tree = MantraTree::new(None);
         let mut context = MantraContext::default_for_fallback();
 
         // Populate elixir_quality_by_category

@@ -141,6 +141,11 @@ pub async fn execute_sandboxed(
 fn apply_unix_limits(cmd: &mut Command, limits: &ResourceLimits) -> Result<()> {
     use std::os::unix::process::CommandExt;
 
+    // Copy limit values to avoid lifetime issues with pre_exec closure
+    let max_memory_mb = limits.max_memory_mb;
+    let max_cpu_seconds = limits.max_cpu_seconds;
+    let max_processes = limits.max_processes;
+
     // Use pre_exec to set resource limits in the child process
     #[allow(unsafe_code)]
     unsafe {
@@ -149,22 +154,22 @@ fn apply_unix_limits(cmd: &mut Command, limits: &ResourceLimits) -> Result<()> {
 
             // Memory limit
             let mem_limit = rlimit {
-                rlim_cur: (limits.max_memory_mb * 1024 * 1024) as u64,
-                rlim_max: (limits.max_memory_mb * 1024 * 1024) as u64,
+                rlim_cur: (max_memory_mb * 1024 * 1024) as u64,
+                rlim_max: (max_memory_mb * 1024 * 1024) as u64,
             };
             setrlimit(RLIMIT_AS, &mem_limit);
 
             // CPU time limit
             let cpu_limit = rlimit {
-                rlim_cur: limits.max_cpu_seconds as u64,
-                rlim_max: limits.max_cpu_seconds as u64,
+                rlim_cur: max_cpu_seconds as u64,
+                rlim_max: max_cpu_seconds as u64,
             };
             setrlimit(RLIMIT_CPU, &cpu_limit);
 
             // Process limit
             let proc_limit = rlimit {
-                rlim_cur: limits.max_processes as u64,
-                rlim_max: limits.max_processes as u64,
+                rlim_cur: max_processes as u64,
+                rlim_max: max_processes as u64,
             };
             setrlimit(RLIMIT_NPROC, &proc_limit);
 
