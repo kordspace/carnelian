@@ -323,14 +323,14 @@ pub struct MemoryEnvelope {
 ```rust
 let envelope = memory_manager.export_memory(
     memory_id,
-    MemoryExportOptions {
+    &MemoryExportOptions {
         include_embedding: true,
         include_ledger_proof: true,
         include_capabilities: true,
         topic_filter: Some(vec!["security".to_string()]),
         min_importance: Some(0.7),
-        signing_key: Some(owner_keypair),
-    }
+    },
+    Some(&owner_keypair),  // signing_key passed as separate parameter
 ).await?;
 ```
 
@@ -351,14 +351,11 @@ let envelope = memory_manager.export_memory(
 
 **Example:**
 ```rust
+// Import with signature verification
 let result = memory_manager.import_memory(
-    envelope_bytes,
-    MemoryImportOptions {
-        verify_signature: true,
-        verify_ledger_proof: true,
-        verify_capabilities: true,
-        target_identity_id: local_identity_id,
-    }
+    &envelope_bytes,
+    Some(&public_key),  // verify_key for signature verification
+    local_identity_id,
 ).await?;
 ```
 
@@ -380,9 +377,9 @@ let result = memory_manager.import_memory(
 
 ```rust
 let envelopes = memory_manager.export_memories_batch(
-    memory_ids,
-    export_options,
-    Some(owner_keypair),
+    &memory_ids,
+    &export_options,
+    Some(&owner_keypair),
 ).await?;
 ```
 
@@ -390,8 +387,9 @@ let envelopes = memory_manager.export_memories_batch(
 
 ```rust
 let results = memory_manager.import_memories_batch(
-    batch_bytes,
-    import_options,
+    &batch_bytes,
+    Some(&public_key),
+    target_identity_id,
 ).await?;
 
 for result in results {
@@ -466,37 +464,40 @@ curl -X POST http://localhost:18789/v1/magic/integrity/verify \
 **Response:**
 ```json
 {
-  "results": [
+  "reports": [
     {
       "table": "memories",
-      "total_rows": 1542,
+      "total": 1542,
       "verified": 1542,
       "tampered": 0,
-      "missing_checksums": 0,
-      "tampered_rows": []
+      "missing": 0
     }
-  ]
+  ],
+  "overall_status": "verified",
+  "missing": 0
 }
 ```
 
-### Rehashing
+### Backfilling Checksums
 
-Periodically rehash memories with fresh quantum entropy:
+For memories created before quantum integrity was enabled, use the backfill endpoint:
 
 ```bash
-curl -X POST http://localhost:18789/v1/magic/memories/rehash \
-  -H "X-Carnelian-Key: $KEY"
+curl -X POST http://localhost:18789/v1/magic/integrity/backfill \
+  -H "X-Carnelian-Key: $KEY" \
+  -d '{"tables": ["memories"]}'
 ```
 
 **Response:**
 ```json
 {
-  "message": "Rehashed all memories with fresh entropy",
-  "rehashed": 1542
+  "backfilled": {
+    "memories": 342
+  }
 }
 ```
 
-**Recommendation:** Run quarterly or after major security events.
+**Recommendation:** Run verification quarterly or after major security events. Use backfill when enabling quantum integrity on existing data.
 
 ---
 
@@ -511,9 +512,10 @@ See [docs/API.md](API.md#memory-management) for complete endpoint documentation.
 | `/v1/memories` | POST | Create a new memory |
 | `/v1/memories` | GET | List memories (filter by `identity_id`, `source`, `min_importance`) |
 | `/v1/memories/{id}` | GET | Get memory by ID (auto-updates `accessed_at`) |
-| `/v1/memories/search` | GET | pgvector similarity search |
 | `/v1/memories/export` | POST | Export memories as signed CBOR envelope |
 | `/v1/memories/import` | POST | Import memory from CBOR envelope |
+
+**Note:** pgvector similarity search is available via `MemoryManager::search_memories()` in Rust code but does not currently have a dedicated HTTP endpoint.
 
 ### WebSocket Events
 
