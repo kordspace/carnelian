@@ -955,6 +955,7 @@ See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 | [docs/XP_SYSTEM.md](docs/XP_SYSTEM.md) | XP level curve, earning sources, elixir boost, skill metrics board, ledger integration |
 | [docs/SESSION_MANAGEMENT.md](docs/SESSION_MANAGEMENT.md) | Soul files, session lifecycle, DB-backed transcripts, compaction protocol |
 | [docs/WORKER_SYSTEM.md](docs/WORKER_SYSTEM.md) | JSONL protocol, four runtimes (Node/Python/WASM/Native), attestation, capability enforcement |
+| [docs/FUTURE_PQC.md](docs/FUTURE_PQC.md) | Post-quantum cryptography roadmap, hybrid signatures, v1.1.0/v1.2.0/v2.0.0 migration plan |
 
 ### Project Planning
 

@@ -384,11 +384,11 @@ impl SoulManager {
 // FILE WATCHER
 // =============================================================================
 
-/// Start a background file watcher on the souls directory.
+/// Start a background file watcher on the root directory.
 ///
 /// Uses `notify-debouncer-mini` with a 2-second debounce to batch rapid
-/// filesystem changes. When `.md` file changes are detected, triggers a
-/// sync for all identities with non-null `soul_file_path`.
+/// filesystem changes. When SOUL.md changes are detected, triggers a
+/// sync for all identities with a non-null `soul_file_path`.
 ///
 /// Returns a `JoinHandle` for the background task. The watcher runs until
 /// the handle is aborted or the process exits.
