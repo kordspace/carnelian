@@ -297,15 +297,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Magic { command, url } => handle_magic(command, &resolve_url(url)).await,
     };
 
-    result.map_err(|e| anyhow::anyhow!("{}", e))?;
-
-    if let Err(e) = result {
-        eprintln!("Error: {}", e);
-        if let carnelian_common::Error::ExitCode(code, _) = e.downcast::<carnelian_common::Error>().unwrap() {
-            std::process::exit(code);
-        }
-        std::process::exit(1);
-    }
+    result.map_err(|e| anyhow::anyhow!("{}", e))
 }
 
 /// Resolve the server URL from an explicit value, `CARNELIAN_HTTP_PORT` env var, or default.
