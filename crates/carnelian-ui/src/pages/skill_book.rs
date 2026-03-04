@@ -1,4 +1,4 @@
-//! Skill Book Library page — curated skill catalog with activation.
+//! Skill Book page — browse and activate skills from the catalog.
 //!
 //! # Features
 //!
@@ -6,7 +6,6 @@
 //! - Grid of skill cards with activation status
 //! - Inline activation wizard with config prompts
 //! - Deactivate functionality
-//! - Skill Book page — browse and activate skills from the catalog.
 
 use dioxus::prelude::*;
 use std::collections::HashMap;
@@ -82,21 +81,25 @@ pub fn SkillBook() -> Element {
     let categories: Vec<(String, String)> = catalog
         .read()
         .as_ref()
-        .map(|c| {
-            let mut cats = vec![("all".to_string(), "All".to_string())];
-            cats.extend(c.categories.iter().map(|id| {
-                let name = match id.as_str() {
-                    "code" => "Code",
-                    "research" => "Research",
-                    "communication" => "Communication",
-                    "creative" => "Creative",
-                    "data" => "Data",
-                    "automation" => "Automation",
-                    _ => id.as_str(),
-                };
-                (id.clone(), name.to_string())
-            }));
-            cats
+        .map_or_else(
+            || vec![("all".to_string(), "All".to_string())],
+            |c| {
+                let mut cats = vec![("all".to_string(), "All".to_string())];
+                cats.extend(c.categories.iter().map(|id| {
+                    let name = match id.as_str() {
+                        "code" => "Code",
+                        "research" => "Research",
+                        "communication" => "Communication",
+                        "creative" => "Creative",
+                        "data" => "Data",
+                        "automation" => "Automation",
+                        _ => id.as_str(),
+                    };
+                    (id.clone(), name.to_string())
+                }));
+                cats
+            },
+        );
         })
         .unwrap_or_else(|| vec![("all".to_string(), "All".to_string())]);
 

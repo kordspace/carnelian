@@ -2431,6 +2431,7 @@ async fn handle_magic(command: MagicCommands, url: &str) -> carnelian_common::Re
 }
 
 /// Handle `magic auth` - authenticate with Quantinuum or refresh token
+#[allow(clippy::too_many_lines)]
 async fn handle_magic_auth(url: &str, refresh: bool) -> carnelian_common::Result<()> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
@@ -2577,6 +2578,7 @@ async fn handle_magic_auth(url: &str, refresh: bool) -> carnelian_common::Result
 }
 
 /// Handle `magic status` - show authentication and provider health status
+#[allow(clippy::too_many_lines)]
 async fn handle_magic_status(url: &str) -> carnelian_common::Result<()> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
@@ -2811,11 +2813,8 @@ async fn handle_magic_providers(url: &str) -> carnelian_common::Result<()> {
             let error = provider["error"].as_str();
 
             let available_text = if available { "✓" } else { "✗" };
-            let latency_text = if let Some(ms) = latency_ms {
-                format!("{} ms", ms)
-            } else {
-                "—".to_string()
-            };
+            let latency_text =
+                latency_ms.map_or_else(|| "—".to_string(), |ms| format!("{} ms", ms));
             let error_text = error.unwrap_or("—");
 
             println!(
@@ -2830,7 +2829,4 @@ async fn handle_magic_providers(url: &str) -> carnelian_common::Result<()> {
             "Failed to get provider health: {}",
             error_msg
         )));
-    }
-
-    Ok(())
-}
+    
