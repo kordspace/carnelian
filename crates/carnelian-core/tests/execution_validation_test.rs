@@ -375,7 +375,7 @@ fn latency_stats(latencies: &[Duration]) -> (Duration, Duration, Duration, Durat
 async fn insert_test_identity(pool: &sqlx::PgPool, soul_file_path: Option<&str>) -> Uuid {
     sqlx::query_scalar(
         r"INSERT INTO identities (name, pronouns, identity_type, soul_file_path, directives)
-          VALUES ('Lian', 'she/her', 'core', $1, '[]'::jsonb)
+          VALUES ('Lian', NULL, 'core', $1, '[]'::jsonb)
           RETURNING identity_id",
     )
     .bind(soul_file_path)

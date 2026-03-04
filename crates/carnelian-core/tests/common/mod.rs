@@ -83,7 +83,7 @@ pub async fn insert_test_identity_with_soul(pool: &PgPool, name: &str, soul_path
     let identity_id = Uuid::new_v4();
     sqlx::query(
         r"INSERT INTO identities (identity_id, name, pronouns, identity_type, directives, soul_file_path)
-          VALUES ($1, $2, 'they/them', 'core', '[]'::jsonb, $3)",
+          VALUES ($1, $2, NULL, 'core', '[]'::jsonb, $3)",
     )
     .bind(identity_id)
     .bind(name)

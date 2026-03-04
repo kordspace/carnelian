@@ -399,7 +399,7 @@ Get core identity (Lian) information including directive count and soul file pat
 {
   "identity_id": "fedcba98-7654-3210-fedc-ba9876543210",
   "name": "Lian",
-  "pronouns": "she/her",
+  "pronouns": null,
   "identity_type": "core",
   "soul_file_path": "souls/lian.md",
   "directive_count": 12,

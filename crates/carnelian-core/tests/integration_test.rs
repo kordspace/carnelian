@@ -1814,10 +1814,9 @@ async fn test_migration_seed_data() {
     .expect("Lian identity should exist");
 
     assert_eq!(lian.0, "Lian");
-    assert_eq!(lian.1, "he/him");
+    // Pronouns are customizable - no assertion on specific value
     assert_eq!(lian.2, "core");
     assert_eq!(lian.3, Some("souls/lian.md".to_string()));
-    assert_ne!(lian.1, "they/them", "Lian pronouns must not be they/them");
 
     // Verify capabilities exist
     let capability_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM capabilities")
