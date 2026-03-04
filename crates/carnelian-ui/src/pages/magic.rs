@@ -902,7 +902,7 @@ fn AuthSettings(toasts: Signal<Vec<ToastMessage>>) -> Element {
                                 if status.quantum_origin.configured {
                                     "✅ Configured"
                                 } else {
-                                    "❌ Not Configured"
+                                    "⚪ Not Configured"
                                 }
                             }
                         }

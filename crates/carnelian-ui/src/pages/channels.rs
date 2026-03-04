@@ -987,10 +987,6 @@ fn EditChannelModal(
 
                             submitting.set(true);
                             let tl = trust_level.read().clone();
-                            let status_text = channel
-                                .status
-                                .as_ref()
-                                .map_or_else(|| "unknown".to_string(), |status| status.clone());
                             spawn(async move {
                                 let req = UpdateChannelApiRequest {
                                     trust_level: Some(tl),

@@ -18,11 +18,11 @@ use carnelian_common::types::{LedgerEventDetail, LedgerVerifyResponse};
 fn format_event(event: &LedgerEventDetail) -> String {
     format!(
         "{} | {} | {}",
-        event.ts.format("%Y-%m-%d %H:%M:%S"),
+        event.timestamp.format("%Y-%m-%d %H:%M:%S"),
         event.action_type,
         event
             .actor_id
-            .map_or_else(|| "system".to_string(), |id| id.to_string())
+            .map_or("system", |id| id.to_string().as_str())
     )
 }
 
