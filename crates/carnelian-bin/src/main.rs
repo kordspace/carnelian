@@ -249,7 +249,7 @@ enum MagicCommands {
 
 #[allow(clippy::too_many_lines)]
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     let result = match cli.command {
