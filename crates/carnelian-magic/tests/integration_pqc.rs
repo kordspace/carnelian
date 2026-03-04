@@ -36,7 +36,7 @@ async fn test_pqc_hybrid_sign_verify_e2e() {
         "Ed25519 public key should be 32 bytes"
     );
     assert!(
-        public_keys.dilithium_pk.len() > 0,
+        !public_keys.dilithium_pk.is_empty(),
         "Dilithium public key should exist"
     );
 }

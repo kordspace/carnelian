@@ -817,8 +817,8 @@ mod tests {
                 "System Health".into(),
                 1,
                 3,
-                "".into(),
-                "".into(),
+                String::new(),
+                String::new(),
                 vec![],
             ),
             (
@@ -851,8 +851,8 @@ mod tests {
                 "System Health".into(),
                 5,
                 3,
-                "".into(),
-                "".into(),
+                String::new(),
+                String::new(),
                 vec![],
             ),
             (
@@ -860,8 +860,8 @@ mod tests {
                 "Code Development".into(),
                 1,
                 3,
-                "".into(),
-                "".into(),
+                String::new(),
+                String::new(),
                 vec![],
             ),
         ];

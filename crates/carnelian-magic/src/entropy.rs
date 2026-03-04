@@ -576,13 +576,15 @@ mod tests {
             }
 
             // Infer byte count from input (n_bits or shots field)
-            let n_bytes = if let Some(n_bits) = input.get("n_bits").and_then(|v| v.as_u64()) {
-                (n_bits / 8) as usize
-            } else if let Some(shots) = input.get("shots").and_then(|v| v.as_u64()) {
-                (shots / 8) as usize
-            } else {
-                32 // default
-            };
+            let n_bytes = input.get("n_bits").and_then(|v| v.as_u64()).map_or_else(
+                || {
+                    input
+                        .get("shots")
+                        .and_then(|v| v.as_u64())
+                        .map_or(32, |shots| (shots / 8) as usize)
+                },
+                |n_bits| (n_bits / 8) as usize,
+            );
 
             // Return mock quantum bytes (0xAB repeated)
             let mock_bytes = vec![0xABu8; n_bytes];
