@@ -145,7 +145,7 @@ fn apply_unix_limits(cmd: &mut Command, limits: &ResourceLimits) -> Result<()> {
     #[allow(unsafe_code)]
     unsafe {
         cmd.pre_exec(move || {
-            use nix::libc::{rlimit, setrlimit, RLIMIT_AS, RLIMIT_CPU, RLIMIT_NPROC};
+            use nix::libc::{RLIMIT_AS, RLIMIT_CPU, RLIMIT_NPROC, rlimit, setrlimit};
 
             // Memory limit
             let mem_limit = rlimit {
