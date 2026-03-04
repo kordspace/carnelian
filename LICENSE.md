@@ -188,13 +188,15 @@ Carnelian Core has been inspired by and built upon the work of many talented ind
 
 - **Peter Steinberger** — Creator of [OpenClaw](https://github.com/openclaw), whose pioneering work on AI agent frameworks and tool orchestration provided foundational inspiration for Carnelian's architecture.
 
-- **Jonathan Essex** — Founder of [Software Plumbers](https://softwareplumbers.com), whose insights on modular software design and API architecture influenced Carnelian's capability-based security model.
+- **Justin Oberg** — Early collaborator who started this journey with Marco by working on getting the original GPT-2 1B model running on local hardware, kicking off the exploration that led to Carnelian's local-first LLM architecture.
 
-- **Marcelino Class** — Whose contributions to distributed systems thinking and event-driven architectures informed Carnelian's event-stream design.
+- **Jonathan Essex** — Founder of [Software Plumbers](https://softwareplumbers.com), whose mentorship in cryptography, PostgreSQL transactional ledgers, Merkle tree architectures, and blake3 hash-chain design directly influenced Carnelian's ledger system and capability-based security model.
 
-- **Vincent Haliburton** — Creator of [Knowit Owlz](https://knowitowlz.com), whose work on knowledge management and AI-assisted learning shaped Carnelian's Elixir knowledge persistence system.
+- **Vincent Haliburton** — Provided inspiration and strategic guidance for Carnelian's planned utility token on Base (Ethereum L2), shaping the vision for future Web3 integration and token-gated capability grants.
 
-These individuals and their projects represent the collaborative spirit of the open source and AI communities. While Carnelian Core is an independent work, it stands on the shoulders of these innovators.
+- **Marcelino Class** — Contributed UI/UX design insights, animation knowledge, and research assistance that helped refine the Dioxus desktop UI and agent interaction patterns.
+
+These individuals represent the collaborative spirit of innovation and mentorship that made Carnelian Core possible. For detailed contributor acknowledgments, see [CONTRIBUTORS.md](CONTRIBUTORS.md).
 
 ---
 

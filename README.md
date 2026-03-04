@@ -89,23 +89,6 @@ CARNELIAN is a production-ready AI workspace harness with comprehensive capabili
 - ✅ WebSocket event streaming with bounded ring buffer
 - ✅ Real-time metrics and monitoring
 
-## Phase Status
-
-| Phase | Description | Status |
-|-------|-------------|--------|
-| 1 | Core Foundation (Axum, scheduler, policy, ledger) | ✅ Done |
-| 2 | Worker System (Node, Python, WASM, Native) | ✅ Done |
-| 3 | Agentic Loop & Session Management | ✅ Done |
-| 4 | Memory & pgvector Retrieval | ✅ Done |
-| 5 | Elixir Knowledge Persistence | ✅ Done |
-| 6 | XP Progression & Leaderboard | ✅ Done |
-| 7 | MAGIC Quantum Entropy Core | ✅ Done |
-| 8 | Channel Adapters (Telegram, Discord) | ✅ Done |
-| 9 | Voice Gateway (ElevenLabs STT/TTS) | ✅ Done |
-| 10 | Desktop UI — Dioxus (17 pages, 6 components) | ✅ Done |
-| 11 | PQC & Security Architecture (`carnelian-magic`) | ✅ Done |
-| 12 | README Truth Alignment & Clippy Clean (`-D warnings`) | 🔄 In Progress |
-
 ## Why Carnelian Core?
 
 **Built for Production AI Workflows:**
@@ -1120,11 +1103,12 @@ sequenceDiagram
 
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
-- Development setup
-- Code style guidelines
-- Testing requirements
-- Pull request process
+We welcome contributions from the community! Carnelian Core is open source software with a vibrant ecosystem of contributors and collaborators.
+
+**Key Resources:**
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — Development setup, code style, testing, and pull request process
+- **[CONTRIBUTORS.md](CONTRIBUTORS.md)** — Acknowledgments and contributor recognition
+- **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** — Detailed development workflow and architecture guide
 
 ### Quick Start for Contributors
 
@@ -1135,22 +1119,34 @@ cd carnelian
 
 # Install dependencies
 cargo build
-npm install --prefix tests/e2e
+
+# Start development services
+docker-compose up -d
 
 # Run tests
 cargo test --all
-
-# Start development server
-docker-compose up -d
 ```
 
-See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for detailed development workflow.
+### Contributor Recognition
 
-This is currently a personal project (Marco + Mim). The architecture is designed for eventual sharing as a platform.
+All contributors who submit accepted pull requests are recognized in [CONTRIBUTORS.md](CONTRIBUTORS.md). We value contributions across code, documentation, testing, design, and community support.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the Contributor License Agreement and detailed guidelines.
 
 ## License
 
-MIT
+**Copyright © 2024-2026 Marco Julio Lopes and Kordspace LLC**
+
+Carnelian Core is open source software:
+- **Free for Personal Use** — Use freely for personal, educational, and non-commercial purposes
+- **Commercial Use** — Requires commercial license from Kordspace LLC (contact: info@kordspace.com)
+- **Patent Pending** — Proprietary innovations protected under patent application
+
+See [LICENSE.md](LICENSE.md) for complete terms, contributor agreement, and OpenClaw attribution.
+
+### Acknowledgments
+
+Special thanks to our contributors and mentors who made Carnelian Core possible. See [CONTRIBUTORS.md](CONTRIBUTORS.md) for full acknowledgments.
 
 ## Repository
 
