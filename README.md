@@ -530,9 +530,10 @@ CREATE TABLE elixir_usage (
 ### XP Integration
 
 Elixirs are integrated with the XP progression system:
-- **Creation**: Earn XP when creating high-quality elixirs
-- **Usage**: Track effectiveness and award XP for helpful elixirs
-- **Quality Bonuses**: Higher quality scores yield more XP
+- **Elixir Quality** — Quality scores (0–100) influence XP rewards: high-quality elixirs (>80) boost task XP by 10%
+- **Skill Metrics** — Elixir-backed skills earn bonus XP when the linked elixir has high effectiveness scores
+
+**See Also:** [docs/ELIXIR_SYSTEM.md](docs/ELIXIR_SYSTEM.md) — Full technical deep-dive covering versioning internals, embedding pipeline, draft promotion flow, and complete API reference.
 
 ## XP Progression System
 
@@ -767,7 +768,7 @@ See [skills/registry/README.md](skills/registry/README.md) for the full manifest
 
 ### Security Architecture Notes
 
-The ledger uses **BLAKE3** hash-chaining for tamper-resistant audit trails, with optional quantum entropy salting from the MAGIC subsystem. For complete documentation on chain verification, anchoring, and event types, see [docs/LEDGER_SYSTEM.md](docs/LEDGER_SYSTEM.md).
+Carnelian's security model is built on **capability-based access control** with deny-by-default enforcement. Every privileged action (file writes, git commits, network requests) requires an explicit capability grant signed by the owner keypair. The ledger provides tamper-resistant audit trails for all security-critical events — see **[Ledger System — Technical Deep Dive](docs/LEDGER_SYSTEM.md)** for chain verification, block anchoring, event types, and the BLAKE3 hash-chain specification.
 
 The policy engine and ledger manager are shipped and active.
 
@@ -799,7 +800,7 @@ prek run --all-files
 Run the local CI script before pushing to catch issues early:
 
 ```bash
-# Quick checks (fmt, clippy, unit tests, doc-tests) — no Docker needed
+# Quick checks (fmt, clippy, unit tests) — no Docker needed
 ./scripts/ci-local.sh
 
 # Full checks including integration tests — requires Docker
@@ -948,7 +949,12 @@ See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 | [docs/RUST_SKILL_SYSTEM.md](docs/RUST_SKILL_SYSTEM.md) | Rust skill system design |
 | [docs/ATTESTATION.md](docs/ATTESTATION.md) | Attestation and verification system |
 | [docs/SKILL_GAP_ANALYSIS.md](docs/SKILL_GAP_ANALYSIS.md) | Skills gap analysis |
-| [docs/DOCKER_ECOSYSTEM.md](docs/DOCKER_ECOSYSTEM.md) | Docker ecosystem overview |
+| [docs/DOCKER_ECOSYSTEM.md](docs/DOCKER_ECOSYSTEM.md) | Multi-container orchestration (Core + Ollama + PostgreSQL + Gateway) |
+| [docs/GATEWAY.md](docs/GATEWAY.md) | LLM Gateway routing algorithm, circuit breaker, provider config, voice integration |
+| [docs/MEMORY_SYSTEM.md](docs/MEMORY_SYSTEM.md) | Memory lifecycle, pgvector embeddings, context assembly pipeline, cross-instance portability |
+| [docs/XP_SYSTEM.md](docs/XP_SYSTEM.md) | XP level curve, earning sources, elixir boost, skill metrics board, ledger integration |
+| [docs/SESSION_MANAGEMENT.md](docs/SESSION_MANAGEMENT.md) | Soul files, session lifecycle, DB-backed transcripts, compaction protocol |
+| [docs/WORKER_SYSTEM.md](docs/WORKER_SYSTEM.md) | JSONL protocol, four runtimes (Node/Python/WASM/Native), attestation, capability enforcement |
 
 ### Project Planning
 
