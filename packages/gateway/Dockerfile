@@ -4,7 +4,7 @@
 # Builds the TypeScript gateway service for unified LLM completion API
 # with local-first routing and remote fallback.
 #
-# Build: docker build -t carnelian/gateway:latest -f gateway/Dockerfile .
+# Build: docker build -t carnelian/gateway:latest -f packages/gateway/Dockerfile .
 # Run:   docker run -p 18790:18790 carnelian/gateway:latest
 # =============================================================================
 
@@ -16,15 +16,15 @@ FROM node:22-alpine AS builder
 WORKDIR /build
 
 # Copy package files
-COPY gateway/package.json gateway/package-lock.json* ./
+COPY packages/gateway/package.json packages/gateway/package-lock.json* ./
 
 # Install ALL dependencies (including dev deps for TypeScript build)
 RUN npm ci && \
     npm cache clean --force
 
 # Copy source code
-COPY gateway/tsconfig.json ./
-COPY gateway/src ./src
+COPY packages/gateway/tsconfig.json ./
+COPY packages/gateway/src ./src
 
 # Build TypeScript
 RUN npm run build
@@ -40,7 +40,7 @@ WORKDIR /app
 RUN apk add --no-cache curl
 
 # Copy package files
-COPY gateway/package.json gateway/package-lock.json* ./
+COPY packages/gateway/package.json packages/gateway/package-lock.json* ./
 
 # Install production dependencies only
 RUN npm ci --only=production && \
