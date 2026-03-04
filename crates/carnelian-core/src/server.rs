@@ -3198,9 +3198,10 @@ async fn import_memories_handler(
         };
 
     let public_key = if body.verify_signature {
-        body.public_key
-            .as_ref()
-            .map_or_else(|| state.config.owner_public_key.as_deref(), |pk| Some(pk.as_str()))
+        body.public_key.as_ref().map_or_else(
+            || state.config.owner_public_key.as_deref(),
+            |pk| Some(pk.as_str()),
+        )
     } else {
         None
     };
