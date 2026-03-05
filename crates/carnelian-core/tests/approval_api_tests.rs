@@ -307,11 +307,11 @@ async fn test_batch_approve() {
     let client = reqwest::Client::new();
 
     // Generate valid signature for batch approval - must use sorted IDs like server expects
-    let mut sorted_ids = vec![id1, id2];
+    let mut sorted_ids = [id1, id2];
     sorted_ids.sort();
     let message = sorted_ids
         .iter()
-        .map(|id| id.to_string())
+        .map(std::string::ToString::to_string)
         .collect::<Vec<_>>()
         .join(",");
     let signature = config
