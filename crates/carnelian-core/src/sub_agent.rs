@@ -685,27 +685,7 @@ mod tests {
         assert!(json["terminated_at"].is_null());
     }
 
-    #[tokio::test]
-    #[ignore = "requires database connection"]
-    async fn test_create_and_retrieve_sub_agent() {
-        unimplemented!("Run with: cargo test --test sub_agent -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "requires database connection"]
-    async fn test_list_sub_agents_with_filters() {
-        unimplemented!("Run with: cargo test --test sub_agent -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "requires database connection"]
-    async fn test_pause_and_resume_sub_agent() {
-        unimplemented!("Run with: cargo test --test sub_agent -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "requires database connection"]
-    async fn test_soft_delete_sub_agent() {
-        unimplemented!("Run with: cargo test --test sub_agent -- --ignored");
-    }
+    // Sub-agent integration tests removed - these are placeholder stubs.
+    // Real integration tests should be implemented in the tests/ directory
+    // when sub-agent management features are fully developed.
 }

@@ -19,7 +19,7 @@ WORKDIR /build
 COPY packages/gateway/package.json packages/gateway/package-lock.json* ./
 
 # Install ALL dependencies (including dev deps for TypeScript build)
-RUN npm ci && \
+RUN npm install && \
     npm cache clean --force
 
 # Copy source code
@@ -43,7 +43,7 @@ RUN apk add --no-cache curl
 COPY packages/gateway/package.json packages/gateway/package-lock.json* ./
 
 # Install production dependencies only
-RUN npm ci --only=production && \
+RUN npm install --only=production && \
     npm cache clean --force
 
 # Copy built JavaScript from builder

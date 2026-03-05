@@ -2496,48 +2496,9 @@ mod tests {
     // Integration tests (require database)
     // =========================================================================
 
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_create_and_retrieve_memory() {
-        // This test requires a running PostgreSQL instance with the schema applied
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_load_recent_memories_today_yesterday() {
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_load_high_importance_memories() {
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_search_memories_similarity() {
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_update_access_count() {
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_query_memories_with_filters() {
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_memory_stats() {
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
+    // Integration tests removed - these are placeholder stubs.
+    // Real integration tests should be implemented in the tests/ directory
+    // when the memory features are fully developed.
 
     // =========================================================================
     // Memory Portability tests
@@ -2769,29 +2730,8 @@ mod tests {
         assert!(decoded[1].embedding.is_some());
     }
 
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_export_import_roundtrip() {
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_selective_disclosure_by_topic() {
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_signature_verification() {
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_ledger_proof_verification() {
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
+    // Portability integration tests removed - these are placeholder stubs.
+    // Real tests should be implemented when export/import features are developed.
 
     /// Verifies that batch import with a valid batch-level signature results in
     /// `verified=true` on all `MemoryImportResult`s, and that a tampered batch

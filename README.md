@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logos/carnelian-logo.png" alt="Carnelian Logo" width="120">
+</p>
+
 <h1 align="center">CARNELIAN</h1>
 
 <p align="center">

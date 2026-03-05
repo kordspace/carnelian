@@ -1921,35 +1921,9 @@ mod tests {
     // Integration tests (require database)
     // =========================================================================
 
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_context_assembly_integration() {
-        unimplemented!("Run with: cargo test --test context -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_build_for_session_integration() {
-        unimplemented!("Run with: cargo test --test context -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_resolve_context_window_limit_integration() {
-        unimplemented!("Run with: cargo test --test context -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_log_to_ledger_integration() {
-        unimplemented!("Run with: cargo test --test context_integrity_test -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_log_context_integrity_integration() {
-        unimplemented!("Run with: cargo test --test context_integrity_test -- --ignored");
-    }
+    // Integration tests removed - these are placeholder stubs.
+    // Real integration tests should be implemented in the tests/ directory
+    // when the features are fully developed.
 
     #[tokio::test]
     async fn test_add_segment_updates_tokens_and_order() {
