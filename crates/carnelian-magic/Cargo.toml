@@ -1,0 +1,32 @@
+[package]
+name = "carnelian-magic"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+reqwest = { workspace = true }
+blake3 = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+hex = { workspace = true }
+carnelian-common = { path = "../carnelian-common" }
+rand = "0.8"
+rand_chacha = "0.3"
+rayon = "1.10"
+sqlx = { workspace = true }
+pqcrypto-dilithium = { workspace = true }
+pqcrypto-kyber = { workspace = true }
+pqcrypto-traits = { workspace = true }
+ed25519-dalek = { workspace = true }
+
+[lints]
+workspace = true

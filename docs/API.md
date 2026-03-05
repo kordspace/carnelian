@@ -2,9 +2,13 @@
 
 Base URL: `http://localhost:18789`
 
+Total endpoints: ~65 across 11 sections.
+
+> Each section is annotated with the Phase in which it was introduced.
+
 ---
 
-## Approval Queue
+## Approval Queue _Phase 4_
 
 ### List Pending Approvals
 
@@ -105,7 +109,7 @@ Partial failures are tolerated — successfully approved IDs are returned in `ap
 
 ---
 
-## Capability Management
+## Capability Management _Phase 4_
 
 ### List Capability Grants
 
@@ -210,7 +214,7 @@ DELETE /v1/capabilities/{grant_id}
 
 ---
 
-## Memory Management
+## Memory Management _Phase 3_
 
 ### Create a Memory
 
@@ -331,7 +335,7 @@ Memory-related events are emitted automatically by `MemoryManager` and delivered
 
 ---
 
-## Heartbeat Monitoring
+## Heartbeat Monitoring _Phase 1_
 
 ### `GET /v1/heartbeats`
 
@@ -383,7 +387,7 @@ Get current heartbeat status including the active mantra and timing information.
 
 ---
 
-## Identity
+## Identity _Phase 1_
 
 ### `GET /v1/identity`
 
@@ -395,9 +399,9 @@ Get core identity (Lian) information including directive count and soul file pat
 {
   "identity_id": "fedcba98-7654-3210-fedc-ba9876543210",
   "name": "Lian",
-  "pronouns": "she/her",
+  "pronouns": null,
   "identity_type": "core",
-  "soul_file_path": "souls/lian.md",
+  "soul_file_path": "SOUL.md",
   "directive_count": 12,
   "created_at": "2025-01-01T00:00:00Z",
   "updated_at": "2025-01-15T10:00:00Z"
@@ -440,7 +444,7 @@ Content-Type: text/plain; charset=utf-8
 
 ---
 
-## Providers
+## Providers _Phase 3_
 
 ### `GET /v1/providers`
 
@@ -491,7 +495,7 @@ When the gateway is unreachable:
 
 ---
 
-## WebSocket Events
+## WebSocket Events _Phase 2_
 
 ### Approval Lifecycle Events
 
@@ -507,7 +511,7 @@ New event types for approval lifecycle:
 
 ---
 
-## Authentication
+## Authentication _Phase 4_
 
 Approval and denial actions are cryptographically signed server-side using the owner's Ed25519 signing key (stored in `config_store` under key `owner_keypair`). The signature is recorded in the `approval_queue` table and logged to the tamper-resistant audit ledger.
 
@@ -515,7 +519,7 @@ If no owner signing key is configured, approval/deny endpoints return `401 Unaut
 
 ---
 
-## XP System
+## XP System _Phase 5_
 
 ### `GET /v1/xp/agents/{id}`
 
@@ -695,7 +699,7 @@ Manually award XP to an agent. Requires the `xp.award` capability.
 
 ---
 
-## Voice Gateway
+## Voice Gateway _Phase 6_
 
 ### `POST /v1/voice/configure`
 
@@ -799,3 +803,772 @@ List available ElevenLabs voices.
 | `401 Unauthorized` | API key not configured (run `POST /v1/voice/configure` first) |
 | `429 Too Many Requests` | ElevenLabs rate limit — reduce request frequency or upgrade plan |
 | `503 Service Unavailable` | ElevenLabs API unreachable — check network connectivity |
+
+---
+
+## Elixirs _Phase 9_
+
+### `GET /v1/elixirs`
+
+List elixirs with pagination and filtering.
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `page` | u32 | 1 | Page number (1-indexed) |
+| `page_size` | u32 | 50 | Items per page |
+| `elixir_type` | string | — | Filter by type: `skill_backup`, `domain_knowledge`, `context_cache`, `training_data` |
+| `skill_id` | UUID | — | Filter by skill ID |
+| `active` | bool | — | Filter by active status |
+
+**Response (200 OK):**
+
+```json
+{
+  "elixirs": [
+    {
+      "elixir_id": "01936a1b-...",
+      "name": "rust-async-patterns",
+      "description": "Comprehensive guide to async patterns",
+      "elixir_type": "domain_knowledge",
+      "skill_id": "01936a1a-...",
+      "dataset": { "content": "...", "metadata": {} },
+      "embedding": [0.123, -0.456],
+      "quality_score": 85.5,
+      "usage_count": 12,
+      "icon": "📘",
+      "active": true,
+      "created_at": "2026-01-15T10:30:00Z",
+      "updated_at": "2026-01-16T14:20:00Z",
+      "created_by": "01936a19-..."
+    }
+  ],
+  "page": 1,
+  "page_size": 50,
+  "total": 42
+}
+```
+
+### `POST /v1/elixirs`
+
+Create a new elixir.
+
+**Headers:** `X-Carnelian-Key: <owner-key>`
+
+**Request Body:**
+
+```json
+{
+  "name": "rust-async-patterns",
+  "description": "Comprehensive guide to async patterns",
+  "elixir_type": "domain_knowledge",
+  "skill_id": "01936a1a-...",
+  "dataset": {
+    "content": "Async patterns in Rust...",
+    "metadata": { "language": "rust", "topic": "async" }
+  },
+  "icon": "📘",
+  "created_by": "01936a19-..."
+}
+```
+
+**Response (201 Created):**
+
+Returns the full `ElixirDetail` object (same structure as GET /v1/elixirs/{id})
+```
+
+### `GET /v1/elixirs/{id}`
+
+Get a single elixir by ID.
+
+**Response (200 OK):**
+
+```json
+{
+  "elixir_id": "01936a1b-...",
+  "name": "rust-async-patterns",
+  "description": "Comprehensive guide to async patterns",
+  "elixir_type": "domain_knowledge",
+  "skill_id": "01936a1a-...",
+  "dataset": { "content": "...", "metadata": {} },
+  "embedding": [0.123, -0.456],
+  "quality_score": 85.5,
+  "usage_count": 12,
+  "icon": "📘",
+  "active": true,
+  "created_at": "2026-01-15T10:30:00Z",
+  "updated_at": "2026-01-16T14:20:00Z",
+  "created_by": "01936a19-..."
+}
+```
+
+### `GET /v1/elixirs/search`
+
+Semantic search using pgvector embeddings.
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `query` | string | Search query text |
+| `limit` | i64 | Maximum results (default: 10) |
+| `min_similarity` | f32 | Minimum cosine similarity (0.0-1.0, default: 0.7) |
+
+**Response (200 OK):**
+
+```json
+{
+  "results": [
+    {
+      "elixir_id": "01936a1b-...",
+      "name": "rust-async-patterns",
+      "description": "Comprehensive guide to async patterns",
+      "elixir_type": "domain_knowledge",
+      "skill_id": "01936a1a-...",
+      "dataset": { "content": "...", "metadata": {} },
+      "embedding": [0.123, -0.456],
+      "quality_score": 85.5,
+      "usage_count": 12,
+      "icon": "📘",
+      "active": true,
+      "created_at": "2026-01-15T10:30:00Z",
+      "updated_at": "2026-01-16T14:20:00Z",
+      "created_by": "01936a19-..."
+    }
+  ],
+  "query": "async rust patterns",
+  "total": 5
+}
+```
+
+### `GET /v1/elixirs/drafts`
+
+List pending elixir drafts awaiting approval.
+
+**Response (200 OK):**
+
+```json
+{
+  "drafts": [
+    {
+      "draft_id": "01936a1c-...",
+      "skill_id": "01936a1b-...",
+      "proposed_name": "python-ml-patterns",
+      "elixir_type": "domain_knowledge",
+      "dataset": { "content": "...", "metadata": {} },
+      "quality_score": 78.5,
+      "auto_generated": true,
+      "created_at": "2026-01-17T09:15:00Z",
+      "reviewed_at": null,
+      "reviewed_by": null
+    }
+  ],
+  "total": 3
+}
+```
+
+### `POST /v1/elixirs/drafts/{id}/approve`
+
+Approve a draft and create the elixir.
+
+**Headers:** `X-Carnelian-Key: <owner-key>`
+
+**Request Body (optional):**
+
+```json
+{
+  "reviewed_by": "01936a1e-..."
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "draft_id": "01936a1c-...",
+  "elixir_id": "01936a1d-...",
+  "approved": true
+}
+```
+
+### `POST /v1/elixirs/drafts/{id}/reject`
+
+Reject a draft.
+
+**Headers:** `X-Carnelian-Key: <owner-key>`
+
+**Request Body (optional):**
+
+```json
+{
+  "reviewed_by": "01936a1e-..."
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "draft_id": "01936a1c-...",
+  "rejected": true
+}
+```
+
+---
+
+## MAGIC _Phase 10_
+
+### Entropy
+
+#### `GET /v1/magic/entropy/health`
+
+Get provider health status for all entropy providers.
+
+**Response (200 OK):**
+
+```json
+{
+  "providers": [
+    {
+      "name": "quantum-origin",
+      "available": true,
+      "last_success": "2026-03-03T10:30:00Z"
+    },
+    {
+      "name": "quantinuum-h2",
+      "available": false,
+      "error": "Not authenticated"
+    },
+    {
+      "name": "qiskit-rng",
+      "available": true,
+      "last_success": "2026-03-03T10:25:00Z"
+    },
+    {
+      "name": "os",
+      "available": true,
+      "last_success": "2026-03-03T10:30:00Z"
+    }
+  ]
+}
+```
+
+#### `POST /v1/magic/entropy/sample`
+
+Sample N quantum-random bytes.
+
+**Request Body:**
+
+```json
+{
+  "bytes": 32,
+  "provider": "quantum-origin"
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "bytes": 32,
+  "hex": "a3f5c2d8e1b4f7a9c6d3e8f1b2a5c7d9e4f6a8b1c3d5e7f9a2b4c6d8e1f3a5b7",
+  "source": "quantum-origin"
+}
+```
+
+#### `GET /v1/magic/entropy/log`
+
+Get entropy audit log entries.
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `limit` | i64 | 50 | Maximum entries to return |
+| `provider` | string | — | Filter by provider name |
+
+**Response (200 OK):**
+
+```json
+{
+  "entries": [
+    {
+      "log_id": "01936a1e-...",
+      "ts": "2026-03-03T10:30:00Z",
+      "source": "quantum-origin",
+      "bytes_requested": 32,
+      "quantum_available": true,
+      "latency_ms": 125,
+      "correlation_id": "01936a1f-..."
+    }
+  ],
+  "limit": 50
+}
+```
+
+#### `POST /v1/magic/elixirs/rehash`
+
+Rehash all elixir embeddings with quantum entropy.
+
+**Headers:** `X-Carnelian-Key: <owner-key>`
+
+**Response (200 OK):**
+
+```json
+{
+  "message": "Rehashed all elixirs with fresh entropy",
+  "rehashed": 42
+}
+```
+
+### Configuration
+
+#### `GET /v1/magic/config`
+
+Get current MAGIC configuration.
+
+**Response (200 OK):**
+
+```json
+{
+  "enabled": true,
+  "quantum_origin_url": "https://api.quantumorigin.com/v1",
+  "quantum_origin_api_key": "qo_***",
+  "quantinuum_enabled": true,
+  "quantinuum_device": "H2-1E",
+  "quantinuum_n_bits": 8,
+  "qiskit_enabled": true,
+  "qiskit_backend": "ibm_brisbane",
+  "entropy_timeout_ms": 5000,
+  "entropy_mix_ratio": 0.5,
+  "log_entropy_events": true,
+  "mantra_cooldown_beats": 5
+}
+```
+
+#### `POST /v1/magic/config`
+
+Update MAGIC configuration.
+
+**Headers:** `X-Carnelian-Key: <owner-key>`
+
+**Request Body:**
+
+```json
+{
+  "quantum_origin_api_key": "qo_new_key",
+  "quantinuum_enabled": true,
+  "qiskit_enabled": false
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "message": "Configuration updated"
+}
+```
+
+### Auth
+
+#### `POST /v1/magic/auth/quantinuum/login`
+
+Authenticate with Quantinuum (interactive).
+
+**Request Body:**
+
+```json
+{
+  "username": "user@example.com",
+  "password": "..."
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "id_token": "eyJ...",
+  "refresh_token": "eyJ...",
+  "expires_in": 3600
+}
+```
+
+#### `PUT /v1/magic/auth/quantinuum`
+
+Persist Quantinuum tokens to config store.
+
+**Headers:** `X-Carnelian-Key: <owner-key>`
+
+**Request Body:**
+
+```json
+{
+  "id_token": "eyJ...",
+  "refresh_token": "eyJ..."
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "message": "Tokens stored"
+}
+```
+
+#### `POST /v1/magic/auth/quantinuum/refresh`
+
+Refresh Quantinuum tokens.
+
+**Response (200 OK):**
+
+```json
+{
+  "id_token": "eyJ...",
+  "refresh_token": "eyJ...",
+  "expires_in": 3600
+}
+```
+
+#### `GET /v1/magic/auth/status`
+
+Get authentication status for all providers.
+
+**Response (200 OK):**
+
+```json
+{
+  "quantinuum": {
+    "authenticated": true,
+    "id_token_present": true,
+    "refresh_token_present": true,
+    "token_expires_at": "2026-03-03T11:30:00Z"
+  },
+  "quantum_origin": {
+    "authenticated": true,
+    "api_key_configured": true
+  }
+}
+```
+
+### Mantras
+
+#### `GET /v1/magic/mantras`
+
+List all mantra categories.
+
+**Response (200 OK):**
+
+```json
+{
+  "categories": [
+    {
+      "category_id": "01936a20-...",
+      "name": "Exploration",
+      "base_weight": 100,
+      "cooldown_beats": 5,
+      "entry_count": 12
+    }
+  ]
+}
+```
+
+#### `POST /v1/magic/mantras`
+
+Add a mantra entry.
+
+**Headers:** `X-Carnelian-Key: <owner-key>`
+
+**Request Body:**
+
+```json
+{
+  "text": "What patterns emerge from recent errors?",
+  "elixir_id": "01936a20-..."
+}
+```
+
+**Response (201 Created):**
+
+```json
+{
+  "entry_id": "01936a21-...",
+  "message": "Mantra entry created"
+}
+```
+
+#### `GET /v1/magic/mantras/{category_id}`
+
+List entries for a category.
+
+**Response (200 OK):**
+
+```json
+{
+  "entries": [
+    {
+      "entry_id": "01936a21-...",
+      "category_id": "01936a20-...",
+      "text": "What patterns emerge from recent errors?",
+      "usage_count": 5,
+      "last_used": "2026-03-03T09:15:00Z"
+    }
+  ],
+  "category_id": "01936a20-..."
+}
+```
+
+#### `GET /v1/magic/mantras/categories/{id}`
+
+Alternate path for listing entries for a category (same as `GET /v1/magic/mantras/{category_id}`).
+
+#### `POST /v1/magic/mantras/categories/{id}/entries`
+
+Alternate path for adding a mantra entry to a category (same as `POST /v1/magic/mantras`).
+
+#### `PATCH /v1/magic/mantras/{entry_id}`
+
+Update a mantra entry (alternate method to `PUT /v1/magic/mantras/entries/{id}`).
+
+**Headers:** `X-Carnelian-Key: <owner-key>`
+
+**Request Body:**
+
+```json
+{
+  "text": "Updated mantra text",
+  "enabled": true,
+  "elixir_id": "01936a21-..."
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "message": "Mantra entry updated"
+}
+```
+
+#### `DELETE /v1/magic/mantras/{entry_id}`
+
+Delete a mantra entry (alternate path to `DELETE /v1/magic/mantras/entries/{id}`).
+
+**Headers:** `X-Carnelian-Key: <owner-key>`
+
+**Response (200 OK):**
+
+```json
+{
+  "message": "Mantra entry deleted"
+}
+```
+
+#### `PUT /v1/magic/mantras/entries/{id}`
+
+Update a mantra entry.
+
+**Headers:** `X-Carnelian-Key: <owner-key>`
+
+**Request Body:**
+
+```json
+{
+  "text": "Updated mantra text",
+  "enabled": true,
+  "elixir_id": "01936a21-..."
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "message": "Mantra entry updated"
+}
+```
+
+#### `DELETE /v1/magic/mantras/entries/{id}`
+
+Delete a mantra entry.
+
+**Headers:** `X-Carnelian-Key: <owner-key>`
+
+**Response (200 OK):**
+
+```json
+{
+  "message": "Mantra entry deleted"
+}
+```
+
+#### `GET /v1/magic/mantras/history`
+
+Get last 10 mantra selection records.
+
+**Response (200 OK):**
+
+```json
+{
+  "history": [
+    {
+      "history_id": "01936a22-...",
+      "ts": "2026-03-03T10:30:00Z",
+      "category_id": "01936a20-...",
+      "entry_id": "01936a21-...",
+      "entropy_source": "quantum-origin",
+      "context_snapshot": { "pending_tasks": 5, "recent_errors": 2 },
+      "context_weights": { "Exploration": 120, "Reflection": 80 },
+      "suggested_skill_ids": ["01936a23-..."],
+      "elixir_reference": "01936a24-..."
+    }
+  ]
+}
+```
+
+#### `GET /v1/magic/mantras/context`
+
+Get current mantra context (weights, cooldowns).
+
+**Response (200 OK):**
+
+```json
+{
+  "weights": {
+    "Exploration": 120,
+    "Reflection": 80,
+    "Planning": 100
+  },
+  "cooldowns": {
+    "Exploration": 2
+  }
+}
+```
+
+#### `POST /v1/magic/mantras/simulate`
+
+Simulate mantra selection without persisting.
+
+**Request Body:**
+
+```json
+{
+  "context": {
+    "pending_task_count": 5,
+    "recent_error_count": 2
+  }
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "category": "Exploration",
+  "category_id": "01936a20-...",
+  "entry_id": "01936a21-...",
+  "mantra_text": "What patterns emerge from recent errors?",
+  "system_message": "You are analyzing error patterns.",
+  "user_message": "Review the last 10 errors and identify common themes.",
+  "entropy_source": "quantum-origin",
+  "selection_ts": "2026-03-03T10:30:00Z",
+  "suggested_skill_ids": ["01936a23-..."],
+  "elixir_reference": "01936a24-...",
+  "context_weights": { "Exploration": 120, "Reflection": 80, "Planning": 100 }
+}
+```
+
+### Integrity
+
+#### `POST /v1/magic/integrity/verify`
+
+Verify quantum checksums for specified tables.
+
+**Headers:** `X-Carnelian-Key: <owner-key>`
+
+**Request Body:**
+
+```json
+{
+  "tables": ["memories", "elixirs"]
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "reports": [
+    {
+      "table": "memories",
+      "total_rows": 1250,
+      "verified": 1235,
+      "tampered": 0,
+      "missing": 15,
+      "overall_status": "partial",
+      "tampered_rows": []
+    }
+  ],
+  "failed_tables": [],
+  "overall_status": "partial",
+  "verified_at": "2026-03-03T10:30:00Z"
+}
+```
+
+#### `GET /v1/magic/integrity/status`
+
+Get cached integrity verification status.
+
+**Response (200 OK):**
+
+```json
+{
+  "reports": [
+    {
+      "table": "memories",
+      "total_rows": 1250,
+      "verified": 1235,
+      "tampered": 0,
+      "missing": 15,
+      "overall_status": "partial",
+      "tampered_rows": []
+    },
+    {
+      "table": "elixirs",
+      "total_rows": 42,
+      "verified": 42,
+      "tampered": 0,
+      "missing": 0,
+      "overall_status": "ok",
+      "tampered_rows": []
+    }
+  ]
+}
+```
+
+#### `POST /v1/magic/integrity/backfill`
+
+Backfill missing quantum checksums in background.
+
+**Headers:** `X-Carnelian-Key: <owner-key>`
+
+**Request Body:**
+
+```json
+{
+  "tables": ["memories", "elixirs"]
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "message": "Backfill completed",
+  "tables": ["memories", "elixirs"],
+  "backfilled": 47
+}
+```

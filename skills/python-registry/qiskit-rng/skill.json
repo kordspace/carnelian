@@ -1,0 +1,9 @@
+{
+  "name": "qiskit-rng",
+  "description": "Quantum entropy generation via Qiskit circuits on IBM Quantum backends",
+  "runtime": "python",
+  "version": "1.0.0",
+  "capabilities_required": [],
+  "category": "quantum",
+  "required_config": ["IBM_QUANTUM_TOKEN"]
+}

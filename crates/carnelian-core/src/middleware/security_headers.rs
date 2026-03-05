@@ -10,7 +10,7 @@
 
 use axum::{
     extract::Request,
-    http::{HeaderName, HeaderValue, header},
+    http::{header, HeaderName, HeaderValue},
     middleware::Next,
     response::Response,
 };

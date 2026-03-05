@@ -7,7 +7,7 @@
 
 use carnelian_core::skills::skill_trait::SkillInput;
 use carnelian_core::skills::wasm_runtime::WasmSkillRuntime;
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use serde_json::json;
 
 fn test_skill_input() -> SkillInput {

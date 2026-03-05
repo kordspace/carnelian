@@ -121,6 +121,8 @@ impl SafeModeGuard {
                 None,
                 owner_signing_key,
                 None,
+                None,
+                None,
             )
             .await?;
 
@@ -167,6 +169,8 @@ impl SafeModeGuard {
                 }),
                 None,
                 owner_signing_key,
+                None,
+                None,
                 None,
             )
             .await?;

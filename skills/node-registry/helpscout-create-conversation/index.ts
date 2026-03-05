@@ -1,4 +1,4 @@
-import type { SkillContext, SkillResult } from '../../../workers/node-worker/src/types';
+import type { SkillContext, SkillResult } from '../../types';
 
 interface HelpScoutCreateConversationParams {
   subject: string;
@@ -12,14 +12,6 @@ export async function execute(
   context: SkillContext,
   params: HelpScoutCreateConversationParams
 ): Promise<SkillResult> {
-  const { gateway } = context;
-
-  if (!gateway) {
-    return {
-      success: false,
-      error: 'Gateway connection not available',
-    };
-  }
 
   if (!params.subject || !params.customerEmail || !params.mailboxId || !params.message) {
     return {
@@ -29,17 +21,30 @@ export async function execute(
   }
 
   try {
-    const response = await gateway.call('helpscout.createConversation', {
-      subject: params.subject,
-      customerEmail: params.customerEmail,
-      mailboxId: params.mailboxId,
-      message: params.message,
-      type: params.type || 'email',
+    const response = await fetch(`${context.gateway}/internal/helpscout/create-conversation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subject: params.subject,
+        customerEmail: params.customerEmail,
+        mailboxId: params.mailboxId,
+        message: params.message,
+        type: params.type || 'email',
+      }),
     });
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `HelpScout conversation creation failed: ${response.statusText}`,
+      };
+    }
+
+    const data = await response.json();
 
     return {
       success: true,
-      data: response,
+      data,
     };
   } catch (error) {
     return {

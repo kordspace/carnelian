@@ -14,9 +14,9 @@ use teloxide::types::Update;
 use uuid::Uuid;
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
-use carnelian_core::EventStream;
 use carnelian_core::policy::PolicyEngine;
 use carnelian_core::session::SessionManager;
+use carnelian_core::EventStream;
 
 use crate::events;
 use crate::rate_limiter::RateLimiter;
@@ -180,7 +180,8 @@ async fn handle_message(
     // 8. Update last_seen_at
     let _ = channel_db::touch_channel_session(&db_pool, session.session_id).await;
 
-    // TODO: Process through agentic loop and send response back
+    // Known limitation (v1.0.0): adapter acknowledges receipt only; full agentic loop
+    // routing from channel messages deferred.
     // For now, acknowledge receipt
     bot.send_message(msg.chat.id, "✅ Message received.")
         .await?;

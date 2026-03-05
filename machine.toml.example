@@ -1,4 +1,4 @@
-# 🔥 Carnelian OS Machine Configuration
+# 🔥 Carnelian Machine Configuration
 #
 # Copy this file to `machine.toml` and customize for your environment.
 #
@@ -18,8 +18,9 @@
 # Determines resource limits and default model settings.
 #
 # Available profiles:
-# - "standard": Entry-level (8GB VRAM, 32GB RAM) - good for most tasks
-# - "performance": High-end (11GB+ VRAM, 64GB RAM) - for demanding workloads
+# - "standard": RTX 2080 Super (8GB VRAM, 32GB RAM) - DeepSeek R1:7b
+# - "performance": RTX 5090 (24GB VRAM, 64GB RAM) - QwQ:32b or DeepSeek R1:70b
+# - "ultra": M3 Ultra (192GB unified memory) - QwQ:32b or larger models
 # - "custom": User-defined settings (see [machine] section below)
 #
 # Can be overridden with MACHINE_PROFILE environment variable.
@@ -149,7 +150,8 @@ ollama_url = "http://localhost:11434"
 # max_workers = 4
 # max_memory_mb = 16384
 # gpu_enabled = true
-# default_model = "deepseek-r1:7b"
+# default_model = "deepseek-r1:7b"  # Standard profile
+# default_model = "qwq:32b"           # Performance/Ultra profiles
 
 # =============================================================================
 # Workspace Scanning Configuration
@@ -204,3 +206,54 @@ workspace_scan_paths = ["."]
 #
 # bot_token      = ""   # xoxb-... OAuth Bot Token
 # signing_secret = ""   # Used to verify Slack request signatures (HMAC-SHA256)
+
+# =============================================================================
+# MAGIC — Mixed Authenticated Quantum Intelligence Core
+# =============================================================================
+# Quantum-enhanced entropy for key generation, ledger salting, and mantras.
+# All quantum providers are optional; OS CSPRNG is always the safe fallback.
+#
+# MAGIC never blocks core operations — all quantum calls time out gracefully.
+
+[magic]
+enabled = true
+entropy_timeout_secs = 5
+mantra_cooldown_beats = 3
+log_entropy_events = true
+auto_suggest_skills = true
+
+[magic.quantum_origin]
+api_key = ""   # set via CARNELIAN_QUANTUM_ORIGIN_API_KEY env var
+url = "https://origin.quantinuum.com"
+
+[magic.quantinuum]
+# Credentials stored encrypted via `carnelian magic auth`
+device = "H1-1E"   # H1-1E (emulator, free), H1-1 (hardware), H2-1 (hardware)
+
+[magic.ibm_quantum]
+token = ""   # set via IBM_QUANTUM_TOKEN env var
+backend = "ibm_brisbane"
+
+[magic.cors_origins]
+# Add extra CORS origins beyond localhost defaults
+# extra = ["https://your-domain.com"]
+
+# =============================================================================
+# Worker Lane Concurrency Configuration
+# =============================================================================
+# Controls the maximum number of concurrently running tasks per lane.
+# The scheduler assigns each task to a lane based on its title/description.
+#
+# Lane descriptions:
+# - heartbeat : Reserved for the internal heartbeat pulse (always 1)
+# - code_task : Code generation, refactor, build, compile, test, lint
+# - data_task : Data analysis, database queries, migrations, ETL
+# - io_task   : File I/O, network, workspace scanning (default lane)
+# - chat_task : Conversational / reply tasks
+
+[worker_lanes]
+heartbeat  = 1
+code_task  = 2
+data_task  = 4
+io_task    = 8
+chat_task  = 2

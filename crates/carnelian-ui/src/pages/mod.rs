@@ -9,6 +9,7 @@ pub mod events;
 pub mod heartbeat;
 pub mod identity;
 pub mod ledger;
+pub mod magic;
 pub mod providers;
 pub mod settings;
 pub mod skill_book;

@@ -118,6 +118,7 @@ impl EventLevel {
 pub enum EventType {
     // Task lifecycle
     TaskCreated,
+    TaskQueued,
     TaskStarted,
     TaskCompleted,
     TaskFailed,
@@ -1779,4 +1780,207 @@ pub struct ApproveDraftResponse {
 pub struct RejectDraftResponse {
     pub draft_id: Uuid,
     pub rejected: bool,
+}
+
+// =============================================================================
+// MAGIC API TYPES
+// =============================================================================
+
+use std::collections::HashMap;
+
+/// A single mantra category with entry count.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MantraCategory {
+    pub category_id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub base_weight: i32,
+    pub cooldown_beats: i32,
+    pub enabled: bool,
+    pub entry_count: i64,
+}
+
+/// Response body for GET /v1/magic/mantras.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListMantraCategoriesResponse {
+    pub categories: Vec<MantraCategory>,
+}
+
+/// A single mantra entry detail.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MantraEntryDetail {
+    pub entry_id: Uuid,
+    pub category_id: Uuid,
+    pub text: String,
+    pub use_count: i32,
+    pub enabled: bool,
+    pub elixir_id: Option<Uuid>,
+}
+
+/// Response body for `GET /v1/magic/mantras/{category_id}`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListMantraEntriesResponse {
+    pub entries: Vec<MantraEntryDetail>,
+    pub category_id: Uuid,
+}
+
+/// Request body for POST /v1/magic/mantras.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddMantraEntryRequest {
+    pub text: String,
+    pub elixir_id: Option<Uuid>,
+}
+
+/// Request body for `PATCH /v1/magic/mantras/{entry_id}`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateMantraEntryRequest {
+    pub text: Option<String>,
+    pub enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub elixir_id: Option<Option<Uuid>>,
+}
+
+/// A single mantra history record.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MantraHistoryRecord {
+    pub history_id: Uuid,
+    pub ts: DateTime<Utc>,
+    pub category_id: Uuid,
+    pub entry_id: Uuid,
+    pub entropy_source: String,
+    pub context_snapshot: Option<JsonValue>,
+    pub context_weights: Option<JsonValue>,
+    pub suggested_skill_ids: Vec<Uuid>,
+    pub elixir_reference: Option<Uuid>,
+}
+
+/// Response body for GET /v1/magic/mantras/history.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MantraHistoryResponse {
+    pub history: Vec<MantraHistoryRecord>,
+}
+
+/// Response body for POST /v1/magic/mantras/simulate.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MantraSimulateResponse {
+    pub category: String,
+    pub category_id: Uuid,
+    pub entry_id: Uuid,
+    pub mantra_text: String,
+    pub system_message: String,
+    pub user_message: String,
+    pub entropy_source: String,
+    pub selection_ts: DateTime<Utc>,
+    pub suggested_skill_ids: Vec<Uuid>,
+    pub elixir_reference: Option<Uuid>,
+    pub context_weights: HashMap<String, i32>,
+}
+
+/// Request body for POST /v1/magic/entropy/sample.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntropySampleRequest {
+    pub bytes: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+}
+
+/// Response body for POST /v1/magic/entropy/sample.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntropySampleResponse {
+    pub bytes: usize,
+    pub hex: String,
+    pub source: String,
+}
+
+/// A single entropy log entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntropyLogEntry {
+    pub log_id: Uuid,
+    pub ts: DateTime<Utc>,
+    pub source: String,
+    pub bytes_requested: i32,
+    pub quantum_available: bool,
+    pub latency_ms: Option<i64>,
+    pub correlation_id: Option<Uuid>,
+}
+
+/// Response body for GET /v1/magic/entropy/log.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntropyLogResponse {
+    pub entries: Vec<EntropyLogEntry>,
+    pub limit: i64,
+}
+
+/// Response body for `GET /v1/magic/config`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct MagicConfigResponse {
+    pub enabled: bool,
+    pub quantum_origin_url: String,
+    pub quantum_origin_api_key: String,
+    pub quantinuum_enabled: bool,
+    pub quantinuum_device: String,
+    pub quantinuum_n_bits: u32,
+    pub qiskit_enabled: bool,
+    pub qiskit_backend: String,
+    pub entropy_timeout_ms: u64,
+    pub entropy_mix_ratio: f64,
+    pub log_entropy_events: bool,
+    pub mantra_cooldown_beats: i32,
+}
+
+/// Request body for POST /v1/magic/config.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MagicConfigUpdateRequest {
+    pub quantum_origin_api_key: Option<String>,
+    pub quantinuum_enabled: Option<bool>,
+    pub qiskit_enabled: Option<bool>,
+}
+
+/// Request body for POST /v1/magic/auth/quantinuum/login.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuantinuumLoginRequest {
+    pub email: String,
+    pub password: String,
+}
+
+/// Response body for POST /v1/magic/auth/quantinuum/login.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuantinuumLoginResponse {
+    pub message: String,
+    pub expires_at: String,
+}
+
+/// Response body for POST /v1/magic/auth/quantinuum/refresh.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuantinuumRefreshResponse {
+    pub message: String,
+    pub token_expiry: String,
+}
+
+/// Quantinuum authentication status.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuantinuumAuthStatus {
+    pub authenticated: bool,
+    pub expiry: Option<String>,
+}
+
+/// Quantum Origin authentication status.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuantumOriginAuthStatus {
+    pub configured: bool,
+}
+
+/// Response body for GET /v1/magic/auth/status.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MagicAuthStatusResponse {
+    pub quantinuum: QuantinuumAuthStatus,
+    pub quantum_origin: QuantumOriginAuthStatus,
+}
+
+/// Response body for POST /v1/magic/elixirs/rehash.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MagicElixirsRehashResponse {
+    pub message: String,
+    pub rehashed: i64,
 }

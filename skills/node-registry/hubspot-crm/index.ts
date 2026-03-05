@@ -1,4 +1,4 @@
-import type { SkillContext, SkillResult } from '../../../workers/node-worker/src/types';
+import type { SkillContext, SkillResult } from '../../types';
 
 interface HubSpotCRMParams {
   action: 'create_contact' | 'update_contact' | 'create_deal' | 'get_company' | 'search';

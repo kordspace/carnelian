@@ -14,16 +14,16 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
-use carnelian_core::EventStream;
 use carnelian_core::policy::PolicyEngine;
 use carnelian_core::session::SessionManager;
+use carnelian_core::EventStream;
 
-use crate::ChannelAdapter;
 use crate::db as channel_db;
 use crate::events;
 use crate::rate_limiter::RateLimiter;
 use crate::spam_detector::SpamDetector;
 use crate::types::{ChannelType, TrustLevel};
+use crate::ChannelAdapter;
 
 use super::WhatsAppAdapter;
 
@@ -367,11 +367,9 @@ mod tests {
 
         let result = handle_verification(&query, "my_verify_token", &event_stream);
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Invalid verify token")
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid verify token"));
     }
 }

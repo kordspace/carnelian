@@ -1,4 +1,4 @@
-import type { SkillContext, SkillResult } from '../../../workers/node-worker/src/types';
+import type { SkillContext, SkillResult } from '../../types';
 
 interface DriftSendMessageParams {
   conversationId: string;
@@ -10,14 +10,6 @@ export async function execute(
   context: SkillContext,
   params: DriftSendMessageParams
 ): Promise<SkillResult> {
-  const { gateway } = context;
-
-  if (!gateway) {
-    return {
-      success: false,
-      error: 'Gateway connection not available',
-    };
-  }
 
   if (!params.conversationId || !params.message) {
     return {
@@ -27,15 +19,28 @@ export async function execute(
   }
 
   try {
-    const response = await gateway.call('drift.sendMessage', {
-      conversationId: params.conversationId,
-      message: params.message,
-      type: params.type || 'chat',
+    const response = await fetch(`${context.gateway}/internal/drift/send-message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        conversationId: params.conversationId,
+        message: params.message,
+        type: params.type || 'chat',
+      }),
     });
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `Drift message failed: ${response.statusText}`,
+      };
+    }
+
+    const data = await response.json();
 
     return {
       success: true,
-      data: response,
+      data,
     };
   } catch (error) {
     return {

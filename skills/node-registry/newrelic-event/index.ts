@@ -1,4 +1,4 @@
-import type { SkillContext, SkillResult } from '../../../workers/node-worker/src/types';
+import type { SkillContext, SkillResult } from '../../types';
 
 interface NewRelicEventParams {
   action: 'post_event' | 'query_events' | 'create_dashboard';

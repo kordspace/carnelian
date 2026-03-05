@@ -84,13 +84,14 @@ use chrono::{DateTime, Duration, Utc};
 use ed25519_dalek::SigningKey;
 use pgvector::Vector;
 use serde::{Deserialize, Serialize};
-use serde_json::Value as JsonValue;
 use serde_json::json;
+use serde_json::Value as JsonValue;
 use sqlx::{FromRow, PgPool, Row};
 use uuid::Uuid;
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
 use carnelian_common::{Error, Result};
+use carnelian_magic::QuantumHasher;
 
 use crate::encryption::EncryptionHelper;
 use crate::events::EventStream;
@@ -511,7 +512,8 @@ pub struct MemoryStats {
 /// The concrete implementation will call an embedding model (e.g., OpenAI
 /// text-embedding-3-small or a local model via Ollama) to produce 1536-dimension
 /// vectors for semantic similarity search.
-// TODO: Implement concrete EmbeddingService when LLM Gateway Service phase begins
+// Known limitation (v1.0.0): `EmbeddingService` is a trait stub; the concrete
+// implementation (OpenAI / Ollama embeddings) is deferred to a post-v1.0.0 phase.
 #[async_trait]
 pub trait EmbeddingService: Send + Sync {
     /// Generate a 1536-dimension embedding vector from text.
@@ -696,6 +698,26 @@ impl MemoryManager {
             access_count: row.get("access_count"),
             tags: returned_tags,
         };
+
+        // Compute quantum checksum for integrity verification
+        let created_at: DateTime<Utc> = row.get("created_at");
+        let hasher = QuantumHasher::with_os_entropy();
+        match hasher.compute_with_ts("memories", memory_id, &content_bytes, created_at) {
+            Ok(checksum) => {
+                if let Err(e) =
+                    sqlx::query("UPDATE memories SET quantum_checksum = $1 WHERE memory_id = $2")
+                        .bind(&checksum)
+                        .bind(memory_id)
+                        .execute(&self.pool)
+                        .await
+                {
+                    tracing::warn!(memory_id = %memory_id, error = %e, "Failed to store quantum checksum");
+                }
+            }
+            Err(e) => {
+                tracing::warn!(memory_id = %memory_id, error = %e, "Failed to compute quantum checksum");
+            }
+        }
 
         tracing::info!(
             memory_id = %memory_id,
@@ -1320,7 +1342,8 @@ impl MemoryManager {
     /// Generate and add an embedding for a memory (stub).
     ///
     /// This method will be implemented when the embedding service is available.
-    // TODO: Implement when LLM Gateway Service phase begins
+    // Known limitation (v1.0.0): embedding generation deferred until LLM Gateway Service
+    // is available; returns error for now.
     #[allow(clippy::unused_async)]
     pub async fn generate_and_add_embedding(&self, _memory_id: Uuid) -> Result<()> {
         Err(Error::Config(
@@ -1779,6 +1802,8 @@ impl MemoryManager {
                     None,
                     None,
                     None,
+                    None,
+                    None,
                 )
                 .await
             {
@@ -2086,25 +2111,25 @@ impl MemoryManager {
     /// Verify a ledger proof by recomputing the event hash and checking the
     /// Ed25519 `core_signature` against the owner public key when present.
     async fn verify_ledger_proof(&self, proof: &LedgerProofMaterial) -> Result<bool> {
-        // Query the actual ledger event to compare
-        let row: Option<(String, DateTime<Utc>, Option<Uuid>, String, String)> = sqlx::query_as(
-            r"SELECT action_type, ts, actor_id, payload_hash, event_hash
-              FROM ledger_events
-              WHERE event_id = $1",
+        // Fetch the event from the ledger including quantum_salt
+        let row: Option<(String, DateTime<Utc>, Option<Uuid>, String, String, Option<Vec<u8>>)> = sqlx::query_as(
+            "SELECT action_type, ts, actor_id, payload_hash, event_hash, quantum_salt FROM ledger_events WHERE event_id = $1",
         )
         .bind(proof.event_id)
         .fetch_optional(&self.pool)
-        .await?;
+        .await
+        .map_err(Error::Database)?;
 
         match row {
-            Some((action_type, ts, actor_id, payload_hash, stored_hash)) => {
-                // Recompute event hash
+            Some((action_type, ts, actor_id, payload_hash, stored_hash, quantum_salt)) => {
+                // Recompute event hash with quantum_salt for verification
                 let computed = Ledger::compute_event_hash(
                     &ts,
                     actor_id,
                     &action_type,
                     &payload_hash,
                     proof.prev_hash.as_deref(),
+                    quantum_salt.as_deref(),
                 );
                 if computed != stored_hash || stored_hash != proof.event_hash {
                     return Ok(false);
@@ -2471,48 +2496,9 @@ mod tests {
     // Integration tests (require database)
     // =========================================================================
 
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_create_and_retrieve_memory() {
-        // This test requires a running PostgreSQL instance with the schema applied
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_load_recent_memories_today_yesterday() {
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_load_high_importance_memories() {
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_search_memories_similarity() {
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_update_access_count() {
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_query_memories_with_filters() {
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_memory_stats() {
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
+    // Integration tests removed - these are placeholder stubs.
+    // Real integration tests should be implemented in the tests/ directory
+    // when the memory features are fully developed.
 
     // =========================================================================
     // Memory Portability tests
@@ -2744,29 +2730,8 @@ mod tests {
         assert!(decoded[1].embedding.is_some());
     }
 
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_export_import_roundtrip() {
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_selective_disclosure_by_topic() {
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_signature_verification() {
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_ledger_proof_verification() {
-        unimplemented!("Run with: cargo test --test memory -- --ignored");
-    }
+    // Portability integration tests removed - these are placeholder stubs.
+    // Real tests should be implemented when export/import features are developed.
 
     /// Verifies that batch import with a valid batch-level signature results in
     /// `verified=true` on all `MemoryImportResult`s, and that a tampered batch

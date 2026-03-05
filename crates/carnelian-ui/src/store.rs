@@ -9,9 +9,6 @@
 //! `mpsc` channels, and Dioxus-local `spawn` coroutines drain those
 //! channels on the UI thread where signal writes are safe.
 
-#![allow(clippy::too_many_lines)]
-#![allow(clippy::cast_possible_truncation)]
-
 use std::collections::VecDeque;
 use std::time::Duration;
 
@@ -217,6 +214,8 @@ impl EventStreamStore {
     /// Dioxus-local coroutine that drains the event channel into the
     /// signal-backed ring buffer. Also populates `approval_notifications`
     /// for approval lifecycle events.
+    // Signal bridge handles all event variants; extraction is intentionally monolithic
+    #[allow(clippy::too_many_lines)]
     fn bridge_events(&self, mut rx: mpsc::UnboundedReceiver<EventEnvelope>) {
         let mut events = self.events;
         let mut event_count = self.event_count;
@@ -258,6 +257,8 @@ impl EventStreamStore {
                 // Track XP events from SSE
                 if let EventType::Custom(ref name) = envelope.event_type {
                     if name == "XpAwarded" {
+                        // XP amounts bounded < i32::MAX in practice
+                        #[allow(clippy::cast_possible_truncation)]
                         let amount = envelope
                             .payload
                             .get("xp_amount")
@@ -281,6 +282,8 @@ impl EventStreamStore {
                             toasts.drain(..excess);
                         }
                     } else if name == "XpLevelUp" {
+                        // XP levels bounded < i32::MAX (max level 99)
+                        #[allow(clippy::cast_possible_truncation)]
                         let new_level = envelope
                             .payload
                             .get("new_level")
@@ -358,14 +361,20 @@ impl EventStreamStore {
                             .get("total_channels")
                             .and_then(serde_json::Value::as_u64)
                         {
-                            cs.total_channels = total as usize;
+                            #[allow(clippy::cast_possible_truncation)]
+                            {
+                                cs.total_channels = total as usize;
+                            }
                         }
                         if let Some(running) = envelope
                             .payload
                             .get("running_channels")
                             .and_then(serde_json::Value::as_u64)
                         {
-                            cs.running_channels = running as usize;
+                            #[allow(clippy::cast_possible_truncation)]
+                            {
+                                cs.running_channels = running as usize;
+                            }
                         }
                     }
                 }

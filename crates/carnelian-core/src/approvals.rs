@@ -24,7 +24,7 @@ use carnelian_common::{Error, Result};
 use chrono::{DateTime, Utc};
 use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value as JsonValue, json};
+use serde_json::{json, Value as JsonValue};
 use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
@@ -199,6 +199,8 @@ impl ApprovalQueue {
                 request.correlation_id,
                 Some(owner_signing_key),
                 None,
+                None,
+                None,
             )
             .await
         {
@@ -282,6 +284,8 @@ impl ApprovalQueue {
                 }),
                 request.correlation_id,
                 Some(owner_signing_key),
+                None,
+                None,
                 None,
             )
             .await
@@ -478,6 +482,17 @@ mod tests {
         let (signing_key, _) = crypto::generate_ed25519_keypair();
         let approver_id = Uuid::now_v7();
 
+        // Create identity record for approver to satisfy foreign key constraint
+        sqlx::query(
+            "INSERT INTO identities (identity_id, name, identity_type) VALUES ($1, $2, $3)",
+        )
+        .bind(approver_id)
+        .bind("test_approver")
+        .bind("core")
+        .execute(&pool)
+        .await
+        .expect("Failed to create test identity");
+
         let approval_id = queue
             .queue_action("capability.grant", json!({"test": true}), None, None)
             .await
@@ -515,6 +530,17 @@ mod tests {
         let (signing_key, _) = crypto::generate_ed25519_keypair();
         let denier_id = Uuid::now_v7();
 
+        // Create identity record for denier to satisfy foreign key constraint
+        sqlx::query(
+            "INSERT INTO identities (identity_id, name, identity_type) VALUES ($1, $2, $3)",
+        )
+        .bind(denier_id)
+        .bind("test_denier")
+        .bind("core")
+        .execute(&pool)
+        .await
+        .expect("Failed to create test identity");
+
         let approval_id = queue
             .queue_action("config.change", json!({"key": "test"}), None, None)
             .await
@@ -550,6 +576,17 @@ mod tests {
         let ledger = Ledger::new(pool.clone());
         let (signing_key, _) = crypto::generate_ed25519_keypair();
         let approver_id = Uuid::now_v7();
+
+        // Create identity record for approver to satisfy foreign key constraint
+        sqlx::query(
+            "INSERT INTO identities (identity_id, name, identity_type) VALUES ($1, $2, $3)",
+        )
+        .bind(approver_id)
+        .bind("test_batch_approver")
+        .bind("core")
+        .execute(&pool)
+        .await
+        .expect("Failed to create test identity");
 
         let id1 = queue
             .queue_action("capability.grant", json!({"cap": "fs.read"}), None, None)
@@ -591,6 +628,17 @@ mod tests {
         let (signing_key, _) = crypto::generate_ed25519_keypair();
         let public_hex = crypto::public_key_from_signing_key(&signing_key);
         let approver_id = Uuid::now_v7();
+
+        // Create identity record for approver to satisfy foreign key constraint
+        sqlx::query(
+            "INSERT INTO identities (identity_id, name, identity_type) VALUES ($1, $2, $3)",
+        )
+        .bind(approver_id)
+        .bind("test_verifier")
+        .bind("core")
+        .execute(&pool)
+        .await
+        .expect("Failed to create test identity");
 
         let approval_id = queue
             .queue_action("capability.grant", json!({"test": true}), None, None)
@@ -634,6 +682,17 @@ mod tests {
         let ledger = Ledger::new(pool.clone());
         let (signing_key, _) = crypto::generate_ed25519_keypair();
         let actor = Uuid::now_v7();
+
+        // Create identity record for actor to satisfy foreign key constraint
+        sqlx::query(
+            "INSERT INTO identities (identity_id, name, identity_type) VALUES ($1, $2, $3)",
+        )
+        .bind(actor)
+        .bind("test_actor")
+        .bind("core")
+        .execute(&pool)
+        .await
+        .expect("Failed to create test identity");
 
         let approval_id = queue
             .queue_action("capability.grant", json!({"test": true}), None, None)

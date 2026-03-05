@@ -1,8 +1,5 @@
 //! XP Widget component — compact card showing level, progress, and recent gains.
 
-#![allow(clippy::manual_map)]
-#![allow(clippy::bool_to_int_with_if)]
-#![allow(clippy::suboptimal_flops)]
 #![allow(clippy::option_if_let_else)]
 
 use dioxus::prelude::*;
@@ -19,7 +16,6 @@ pub fn XpWidget() -> Element {
     let total_xp = xp.total_xp;
     let xp_to_next = xp.xp_to_next_level;
     let progress_pct = xp.progress_pct;
-    let milestone = xp.milestone_feature.clone();
     let identity_id = xp.identity_id;
     let width_style = format!("width: {progress_pct:.1}%");
 
@@ -48,10 +44,16 @@ pub fn XpWidget() -> Element {
             }
 
             // XP to next level
-            div { style: "font-size: 12px; color: #A0A0A0; margin-bottom: 16px;",
-                "{xp_to_next} XP to next level"
-                if let Some(ref feat) = milestone {
-                    span { style: "margin-left: 8px; color: #F39C12;", "Next: {feat}" }
+            {
+                let milestone_text = xp
+                    .milestone_feature
+                    .as_ref()
+                    .map_or_else(|| "No milestone unlocked yet".to_string(), |feature| format!("Next milestone: {feature}"));
+                rsx! {
+                    div { style: "font-size: 12px; color: #A0A0A0; margin-bottom: 16px;",
+                        "{xp_to_next} XP to next level"
+                        span { style: "margin-left: 8px; color: #F39C12;", "{milestone_text}" }
+                    }
                 }
             }
 
@@ -88,14 +90,14 @@ pub fn XpWidget() -> Element {
                         if *frac > 0.0 {
                             let sweep = frac * 360.0;
                             let end_angle = start_angle + sweep;
-                            let large_arc = if sweep > 180.0 { 1 } else { 0 };
+                            let large_arc = u8::from(sweep > 180.0);
                             let r = 40.0_f64;
                             let cx = 50.0_f64;
                             let cy = 50.0_f64;
-                            let x1 = cx + r * start_angle.to_radians().cos();
-                            let y1 = cy + r * start_angle.to_radians().sin();
-                            let x2 = cx + r * end_angle.to_radians().cos();
-                            let y2 = cy + r * end_angle.to_radians().sin();
+                            let x1 = r.mul_add(start_angle.to_radians().cos(), cx);
+                            let y1 = r.mul_add(start_angle.to_radians().sin(), cy);
+                            let x2 = r.mul_add(end_angle.to_radians().cos(), cx);
+                            let y2 = r.mul_add(end_angle.to_radians().sin(), cy);
                             let d = format!(
                                 "M {cx} {cy} L {x1:.2} {y1:.2} A {r} {r} 0 {large_arc} 1 {x2:.2} {y2:.2} Z"
                             );

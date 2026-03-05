@@ -38,13 +38,13 @@
 ### Advanced Topics
 - **[LOGGING.md](LOGGING.md)** - Logging philosophy and conventions
 - **[ATTESTATION.md](ATTESTATION.md)** - Cryptographic attestation system
+- **[MAGIC.md](MAGIC.md)** - Quantum entropy subsystem setup and reference
 
 ### Branding & Design
 - **[BRAND.md](BRAND.md)** - Brand identity, logos, and color palette
 
 ### Release Information
 - **[CHANGELOG.md](CHANGELOG.md)** - Version history and changes
-- **[../RELEASE_NOTES.md](../RELEASE_NOTES.md)** - Latest release notes
 
 ## System Overview
 
@@ -57,7 +57,7 @@
 - **Security**: blake3-based hash-chain ledger, capability grants, deny-by-default policy
 
 **Key Features:**
-- 530+ built-in skills (Node.js, WASM, Native Ops)
+- 50+ curated skills with bulk import tooling (Node.js, WASM, Native Ops)
 - Event-stream architecture with backpressure handling
 - Capability-based security with approval workflows
 - Tamper-resistant audit ledger
@@ -91,7 +91,7 @@ We welcome contributions! See [DEVELOPMENT.md](DEVELOPMENT.md) for:
 
 ## License
 
-MIT License - see [LICENSE](../LICENSE) for details.
+MIT License - see [LICENSE.md](../LICENSE.md) for details.
 
 ## Support
 

@@ -55,6 +55,9 @@
 //! ```
 
 use carnelian_common::{Error, Result};
+use carnelian_magic::{EntropyProvider, MixedEntropyProvider};
+// Import Arc impl to enable EntropyProvider methods on Arc<MixedEntropyProvider>
+use carnelian_magic::entropy_arc_impl as _;
 use chrono::{DateTime, Timelike, Utc};
 use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
@@ -109,6 +112,8 @@ pub struct LedgerEvent {
     pub correlation_id: Option<Uuid>,
     /// Additional metadata (JSON)
     pub metadata: Option<JsonValue>,
+    /// 16-byte quantum salt from MixedEntropyProvider (NULL when MAGIC is disabled)
+    pub quantum_salt: Option<Vec<u8>>,
 }
 
 /// Tamper-resistant audit ledger backed by PostgreSQL with blake3 hash-chaining.
@@ -176,7 +181,7 @@ impl Ledger {
     /// Compute the blake3 hash of a ledger event.
     ///
     /// The hash covers all critical fields concatenated as:
-    /// `timestamp || actor_id || action_type || payload_hash || prev_hash`
+    /// `timestamp || actor_id || action_type || payload_hash || prev_hash || quantum_salt`
     ///
     /// This ensures any change to any field will produce a different hash.
     #[must_use]
@@ -186,6 +191,7 @@ impl Ledger {
         action_type: &str,
         payload_hash: &str,
         prev_hash: Option<&str>,
+        quantum_salt: Option<&[u8]>,
     ) -> String {
         let mut input = String::new();
         input.push_str(&ts.to_rfc3339());
@@ -193,6 +199,7 @@ impl Ledger {
         input.push_str(action_type);
         input.push_str(payload_hash);
         input.push_str(prev_hash.unwrap_or("genesis"));
+        input.push_str(&quantum_salt.map_or_else(|| "no-salt".to_string(), hex::encode));
         let hash = blake3::hash(input.as_bytes());
         hex::encode(hash.as_bytes())
     }
@@ -228,6 +235,8 @@ impl Ledger {
         correlation_id: Option<Uuid>,
         owner_signing_key: Option<&SigningKey>,
         metadata: Option<JsonValue>,
+        quantum_salt: Option<Vec<u8>>,
+        entropy_provider: Option<&Arc<carnelian_magic::MixedEntropyProvider>>,
     ) -> Result<i64> {
         let payload_hash = Self::compute_payload_hash(&payload);
         // Truncate to microsecond precision to match PostgreSQL TIMESTAMPTZ storage.
@@ -249,12 +258,37 @@ impl Ledger {
         .await
         .map_err(Error::Database)?;
 
+        // Resolve quantum salt: use provided salt, or generate from entropy provider
+        let (resolved_salt, entropy_latency_ms) = if let Some(salt) = quantum_salt {
+            (Some(salt), None)
+        } else if let Some(provider) = entropy_provider {
+            let start = std::time::Instant::now();
+            match provider.as_ref().get_bytes(16).await {
+                Ok(salt_bytes) => {
+                    let latency_ms = start.elapsed().as_millis() as i64;
+                    tracing::debug!(
+                        latency_ms = latency_ms,
+                        "Generated quantum salt for ledger event"
+                    );
+                    (Some(salt_bytes), Some(latency_ms))
+                }
+                Err(e) => {
+                    let latency_ms = start.elapsed().as_millis() as i64;
+                    tracing::warn!(error = %e, latency_ms = latency_ms, "Failed to generate quantum salt, proceeding without");
+                    (None, Some(latency_ms))
+                }
+            }
+        } else {
+            (None, None)
+        };
+
         let event_hash = Self::compute_event_hash(
             &ts,
             actor_id,
             action_type,
             &payload_hash,
             prev_hash.as_deref(),
+            resolved_salt.as_deref(),
         );
 
         // Sign privileged actions with the owner's Ed25519 key
@@ -275,8 +309,8 @@ impl Ledger {
 
         let event_id: i64 = sqlx::query_scalar(
             r"
-            INSERT INTO ledger_events (ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            INSERT INTO ledger_events (ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata, quantum_salt)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING event_id
             ",
         )
@@ -289,6 +323,7 @@ impl Ledger {
         .bind(&core_signature)
         .bind(correlation_id)
         .bind(&metadata_value)
+        .bind(&resolved_salt)
         .fetch_one(&mut *tx)
         .await
         .map_err(Error::Database)?;
@@ -298,11 +333,39 @@ impl Ledger {
         // Update in-memory cache only after successful commit
         *self.last_hash.write().await = Some(event_hash.clone());
 
+        // Log entropy event to magic_entropy_log for every request (success and failure)
+        if entropy_provider.is_some() {
+            let log_id = Uuid::now_v7();
+            let source = "mixed";
+            let bytes_requested = 16i32;
+            let quantum_available = resolved_salt.is_some();
+            let latency_ms = entropy_latency_ms;
+
+            let pool = self.pool.clone();
+            let source_owned = source.to_string();
+            let correlation_id_owned = correlation_id;
+            tokio::spawn(async move {
+                let _ = sqlx::query(
+                    r"INSERT INTO magic_entropy_log (log_id, ts, source, bytes_requested, quantum_available, latency_ms, correlation_id)
+                      VALUES ($1, NOW(), $2, $3, $4, $5, $6)"
+                )
+                .bind(log_id)
+                .bind(source_owned)
+                .bind(bytes_requested)
+                .bind(quantum_available)
+                .bind(latency_ms)
+                .bind(correlation_id_owned)
+                .execute(&pool)
+                .await;
+            });
+        }
+
         tracing::info!(
             event_id = event_id,
             action_type = %action_type,
             actor_id = ?actor_id,
             signed = core_signature.is_some(),
+            quantum_salt = resolved_salt.is_some(),
             "Ledger event appended"
         );
 
@@ -339,7 +402,7 @@ impl Ledger {
     /// `Ok(true)` if the chain is intact, `Ok(false)` if tampering is detected.
     pub async fn verify_chain(&self, owner_public_key: Option<&str>) -> Result<bool> {
         let rows: Vec<LedgerEvent> = sqlx::query_as(
-            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata FROM ledger_events ORDER BY event_id ASC",
+            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata, quantum_salt FROM ledger_events ORDER BY event_id ASC",
         )
         .fetch_all(&self.pool)
         .await
@@ -371,6 +434,7 @@ impl Ledger {
                 &event.action_type,
                 &event.payload_hash,
                 event.prev_hash.as_deref(),
+                event.quantum_salt.as_deref(),
             );
 
             if computed_hash != event.event_hash {
@@ -410,11 +474,14 @@ impl Ledger {
                         }
                     }
                 } else {
-                    tracing::warn!(
+                    // If event has a signature but we don't have the public key to verify it,
+                    // this is a verification failure for security reasons
+                    tracing::error!(
                         event_id = event.event_id,
                         action_type = %event.action_type,
-                        "Signed event cannot be verified: owner public key not loaded"
+                        "Ledger chain break: signed event cannot be verified without owner public key"
                     );
+                    return Ok(false);
                 }
             } else if is_privileged_action(&event.action_type) {
                 tracing::warn!(
@@ -456,6 +523,8 @@ impl Ledger {
             None,
             owner_signing_key,
             None,
+            None,
+            None,
         )
         .await
     }
@@ -475,6 +544,8 @@ impl Ledger {
             }),
             None,
             owner_signing_key,
+            None,
+            None,
             None,
         )
         .await
@@ -499,6 +570,8 @@ impl Ledger {
             }),
             None,
             owner_signing_key,
+            None,
+            None,
             None,
         )
         .await
@@ -536,6 +609,8 @@ impl Ledger {
             correlation_id,
             None, // session.compacted is not a privileged action
             None,
+            None,
+            None,
         )
         .await
     }
@@ -555,6 +630,8 @@ impl Ledger {
             None,
             owner_signing_key,
             None,
+            None,
+            None,
         )
         .await
     }
@@ -568,7 +645,7 @@ impl Ledger {
         limit: i64,
     ) -> Result<Vec<LedgerEvent>> {
         let rows: Vec<LedgerEvent> = sqlx::query_as(
-            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata FROM ledger_events WHERE actor_id = $1 ORDER BY ts DESC LIMIT $2",
+            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata, quantum_salt FROM ledger_events WHERE actor_id = $1 ORDER BY ts DESC LIMIT $2",
         )
         .bind(actor_id)
         .bind(limit)
@@ -586,7 +663,7 @@ impl Ledger {
         limit: i64,
     ) -> Result<Vec<LedgerEvent>> {
         let rows: Vec<LedgerEvent> = sqlx::query_as(
-            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata FROM ledger_events WHERE action_type = $1 ORDER BY ts DESC LIMIT $2",
+            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata, quantum_salt FROM ledger_events WHERE action_type = $1 ORDER BY ts DESC LIMIT $2",
         )
         .bind(action_type)
         .bind(limit)
@@ -603,7 +680,7 @@ impl Ledger {
         correlation_id: Uuid,
     ) -> Result<Vec<LedgerEvent>> {
         let rows: Vec<LedgerEvent> = sqlx::query_as(
-            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata FROM ledger_events WHERE correlation_id = $1 ORDER BY ts ASC",
+            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata, quantum_salt FROM ledger_events WHERE correlation_id = $1 ORDER BY ts ASC",
         )
         .bind(correlation_id)
         .fetch_all(&self.pool)
@@ -616,7 +693,7 @@ impl Ledger {
     /// Query the most recent ledger events.
     pub async fn get_recent_events(&self, limit: i64) -> Result<Vec<LedgerEvent>> {
         let rows: Vec<LedgerEvent> = sqlx::query_as(
-            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata FROM ledger_events ORDER BY ts DESC LIMIT $1",
+            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata, quantum_salt FROM ledger_events ORDER BY ts DESC LIMIT $1",
         )
         .bind(limit)
         .fetch_all(&self.pool)
@@ -775,6 +852,8 @@ impl Ledger {
             None,
             owner_signing_key,
             None,
+            None,
+            None,
         )
         .await
     }
@@ -813,42 +892,56 @@ mod tests {
         let payload_hash = "abc123";
         let prev_hash = Some("def456");
 
-        let base_hash = Ledger::compute_event_hash(&ts, actor, action, payload_hash, prev_hash);
+        let base_hash =
+            Ledger::compute_event_hash(&ts, actor, action, payload_hash, prev_hash, None);
 
         // Changing any field should produce a different hash
         let different_action =
-            Ledger::compute_event_hash(&ts, actor, "other.action", payload_hash, prev_hash);
+            Ledger::compute_event_hash(&ts, actor, "other.action", payload_hash, prev_hash, None);
         assert_ne!(base_hash, different_action);
 
-        let different_actor =
-            Ledger::compute_event_hash(&ts, Some(Uuid::new_v4()), action, payload_hash, prev_hash);
+        let different_actor = Ledger::compute_event_hash(
+            &ts,
+            Some(Uuid::new_v4()),
+            action,
+            payload_hash,
+            prev_hash,
+            None,
+        );
         assert_ne!(base_hash, different_actor);
 
         let different_prev =
-            Ledger::compute_event_hash(&ts, actor, action, payload_hash, Some("other"));
+            Ledger::compute_event_hash(&ts, actor, action, payload_hash, Some("other"), None);
         assert_ne!(base_hash, different_prev);
 
-        let no_prev = Ledger::compute_event_hash(&ts, actor, action, payload_hash, None);
+        let no_prev = Ledger::compute_event_hash(&ts, actor, action, payload_hash, None, None);
         assert_ne!(base_hash, no_prev);
     }
 
     #[test]
     fn test_compute_event_hash_genesis() {
         let ts = Utc::now();
-        let hash = Ledger::compute_event_hash(&ts, None, "genesis", "empty", None);
+        let hash = Ledger::compute_event_hash(&ts, None, "genesis", "empty", None, None);
         assert_eq!(hash.len(), 64);
     }
 
     #[tokio::test]
     #[ignore = "requires database connection"]
     async fn test_append_event_updates_last_hash() {
-        let db_url = std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian".into());
+        let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+            "postgresql://carnelian:carnelian@localhost:5432/carnelian_test".into()
+        });
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
             .connect(&db_url)
             .await
             .expect("Failed to connect to database");
+
+        // Clean slate: remove any events left by other tests
+        sqlx::query("TRUNCATE ledger_events CASCADE")
+            .execute(&pool)
+            .await
+            .expect("Failed to truncate ledger_events");
 
         let ledger = Ledger::new(pool);
         ledger
@@ -864,6 +957,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .expect("append_event failed");
@@ -876,8 +971,9 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires database connection"]
     async fn test_verify_chain_empty_ledger() {
-        let db_url = std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian".into());
+        let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+            "postgresql://carnelian:carnelian@localhost:5432/carnelian_test".into()
+        });
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
             .connect(&db_url)
@@ -885,7 +981,7 @@ mod tests {
             .expect("Failed to connect to database");
 
         // Clean slate: remove any events left by other tests
-        sqlx::query("TRUNCATE ledger_events")
+        sqlx::query("TRUNCATE ledger_events CASCADE")
             .execute(&pool)
             .await
             .expect("Failed to truncate ledger_events");
@@ -901,8 +997,9 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires database connection"]
     async fn test_verify_chain_multiple_events() {
-        let db_url = std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian".into());
+        let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+            "postgresql://carnelian:carnelian@localhost:5432/carnelian_test".into()
+        });
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
             .connect(&db_url)
@@ -910,7 +1007,7 @@ mod tests {
             .expect("Failed to connect to database");
 
         // Clean slate: remove any events left by other tests
-        sqlx::query("TRUNCATE ledger_events")
+        sqlx::query("TRUNCATE ledger_events CASCADE")
             .execute(&pool)
             .await
             .expect("Failed to truncate ledger_events");
@@ -928,6 +1025,8 @@ mod tests {
                     None,
                     "test.chain",
                     serde_json::json!({"iteration": i}),
+                    None,
+                    None,
                     None,
                     None,
                     None,
@@ -962,15 +1061,16 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires database connection"]
     async fn test_append_privileged_event_with_signature() {
-        let db_url = std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian".into());
+        let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+            "postgresql://carnelian:carnelian@localhost:5432/carnelian_test".into()
+        });
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
             .connect(&db_url)
             .await
             .expect("Failed to connect to database");
 
-        sqlx::query("TRUNCATE ledger_events")
+        sqlx::query("TRUNCATE ledger_events CASCADE")
             .execute(&pool)
             .await
             .expect("Failed to truncate ledger_events");
@@ -991,12 +1091,14 @@ mod tests {
                 None,
                 Some(&signing_key),
                 None,
+                None,
+                None,
             )
             .await
             .expect("append_event failed");
 
         let event: LedgerEvent = sqlx::query_as(
-            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata FROM ledger_events WHERE event_id = $1",
+            "SELECT event_id, ts, actor_id, action_type, payload_hash, prev_hash, event_hash, core_signature, correlation_id, metadata, quantum_salt FROM ledger_events WHERE event_id = $1",
         )
         .bind(event_id)
         .fetch_one(&pool)
@@ -1017,15 +1119,16 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires database connection"]
     async fn test_verify_chain_with_signatures() {
-        let db_url = std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian".into());
+        let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+            "postgresql://carnelian:carnelian@localhost:5432/carnelian_test".into()
+        });
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
             .connect(&db_url)
             .await
             .expect("Failed to connect to database");
 
-        sqlx::query("TRUNCATE ledger_events")
+        sqlx::query("TRUNCATE ledger_events CASCADE")
             .execute(&pool)
             .await
             .expect("Failed to truncate ledger_events");
@@ -1041,7 +1144,16 @@ mod tests {
 
         // Mix of signed privileged and unsigned non-privileged events
         ledger
-            .append_event(None, "test.action", serde_json::json!({}), None, None, None)
+            .append_event(
+                None,
+                "test.action",
+                serde_json::json!({}),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .expect("append failed");
         ledger
@@ -1051,6 +1163,8 @@ mod tests {
                 serde_json::json!({"g": 1}),
                 None,
                 Some(&signing_key),
+                None,
+                None,
                 None,
             )
             .await
@@ -1063,11 +1177,22 @@ mod tests {
                 None,
                 Some(&signing_key),
                 None,
+                None,
+                None,
             )
             .await
             .expect("append failed");
         ledger
-            .append_event(None, "test.other", serde_json::json!({}), None, None, None)
+            .append_event(
+                None,
+                "test.other",
+                serde_json::json!({}),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .expect("append failed");
 
@@ -1081,15 +1206,16 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires database connection"]
     async fn test_verify_chain_rejects_invalid_signature() {
-        let db_url = std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian".into());
+        let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+            "postgresql://carnelian:carnelian@localhost:5432/carnelian_test".into()
+        });
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
             .connect(&db_url)
             .await
             .expect("Failed to connect to database");
 
-        sqlx::query("TRUNCATE ledger_events")
+        sqlx::query("TRUNCATE ledger_events CASCADE")
             .execute(&pool)
             .await
             .expect("Failed to truncate ledger_events");
@@ -1111,6 +1237,8 @@ mod tests {
                 serde_json::json!({"test": true}),
                 None,
                 Some(&signing_key),
+                None,
+                None,
                 None,
             )
             .await

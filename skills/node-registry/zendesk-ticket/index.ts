@@ -1,4 +1,4 @@
-import type { SkillContext, SkillResult } from '../../../workers/node-worker/src/types';
+import type { SkillContext, SkillResult } from '../../types';
 
 interface ZendeskTicketParams {
   action: 'create' | 'update' | 'get' | 'list' | 'add_comment';

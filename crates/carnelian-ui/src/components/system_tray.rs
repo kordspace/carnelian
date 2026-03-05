@@ -15,14 +15,6 @@
 //! the event loop is running.
 
 #![allow(dead_code)]
-#![allow(clippy::cast_possible_wrap)]
-#![allow(clippy::cast_precision_loss)]
-#![allow(clippy::cast_possible_truncation)]
-#![allow(clippy::cast_sign_loss)]
-#![allow(clippy::cast_lossless)]
-#![allow(clippy::suboptimal_flops)]
-#![allow(clippy::unnecessary_min_or_max)]
-#![allow(clippy::no_effect_underscore_binding)]
 
 use std::sync::OnceLock;
 
@@ -49,9 +41,6 @@ const MENU_QUIT: &str = "quit";
 /// The icon is loaded at compile time and parsed into RGBA for the tray.
 #[cfg(feature = "desktop")]
 fn load_carnelian_icon() -> TrayIconImage {
-    // Embed the SVG file at compile time
-    let _svg_bytes = include_bytes!("../../../../assets/logos/carnelian-icon.svg");
-
     // For now, create a colored icon based on the SVG palette
     // In a full implementation, you'd parse the SVG and render it to RGBA
     // This uses the Carnelian Red color from the brand palette (#B7410E)
@@ -60,11 +49,18 @@ fn load_carnelian_icon() -> TrayIconImage {
 
 /// Generate a 32×32 RGBA icon with Carnelian gemstone colors.
 #[cfg(feature = "desktop")]
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 fn carnelian_icon_rgba(r: u8, g: u8, b: u8) -> TrayIconImage {
     let size = 32_u32;
     let mut rgba = Vec::with_capacity((size * size * 4) as usize);
 
     // Create a faceted gemstone pattern
+    // Bounded 32x32 icon geometry: dx/dy range is -16..16, safe for i32
+    #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
     for y in 0..size {
         for x in 0..size {
             // Center of icon
@@ -87,18 +83,22 @@ fn carnelian_icon_rgba(r: u8, g: u8, b: u8) -> TrayIconImage {
 
             if dist < radius {
                 // Main gemstone color with gradient toward center
-                let gradient = 1.0 - (dist / radius) * 0.4;
-                let br = (r as f32 * gradient) as u8;
-                let bg = (g as f32 * gradient) as u8;
-                let bb = (b as f32 * gradient) as u8;
+                let gradient = (dist / radius).mul_add(-0.4, 1.0);
+                // Gradient clamped 0.0-1.0 on u8 input ensures output <=255
+                #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+                let br = f32::from(r).mul_add(gradient, 0.0) as u8;
+                #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+                let bg = f32::from(g).mul_add(gradient, 0.0) as u8;
+                #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+                let bb = f32::from(b).mul_add(gradient, 0.0) as u8;
 
                 // Highlight in center
                 if dist < 4.0 {
                     let highlight = (1.0 - dist / 4.0) * 60.0;
                     rgba.extend_from_slice(&[
-                        (br.saturating_add(highlight as u8)).min(255),
-                        (bg.saturating_add(highlight as u8 * 2 / 3)).min(255),
-                        (bb.saturating_add(highlight as u8 / 3)).min(255),
+                        (br.saturating_add(highlight as u8)),
+                        (bg.saturating_add(highlight as u8 * 2 / 3)),
+                        (bb.saturating_add(highlight as u8 / 3)),
                         255,
                     ]);
                 } else {

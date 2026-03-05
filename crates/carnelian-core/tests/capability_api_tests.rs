@@ -17,7 +17,7 @@ use carnelian_core::{
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
-use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
+use testcontainers::{runners::AsyncRunner, GenericImage, ImageExt};
 use tokio::net::TcpListener;
 
 async fn allocate_random_port() -> u16 {

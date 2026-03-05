@@ -35,6 +35,7 @@ use sqlx::PgPool;
 use crate::events::EventStream;
 
 // pub mod native_loader;
+pub mod sandbox;
 pub mod skill_trait;
 pub mod wasm_runtime;
 
@@ -613,7 +614,7 @@ pub fn start_file_watcher(
     registry_path: PathBuf,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        use notify_debouncer_mini::{DebouncedEventKind, new_debouncer};
+        use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
 
         let (tx, mut rx) = tokio::sync::mpsc::channel(16);
 

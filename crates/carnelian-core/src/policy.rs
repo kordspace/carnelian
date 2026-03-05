@@ -9,13 +9,13 @@ use carnelian_common::{Error, Result};
 use chrono::{DateTime, Utc};
 use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value as JsonValue, json};
+use serde_json::{json, Value as JsonValue};
 use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
-use crate::EventStream;
 use crate::approvals::ApprovalQueue;
 use crate::ledger::Ledger;
+use crate::EventStream;
 
 /// Represents a capability grant from the database
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -255,13 +255,11 @@ impl PolicyEngine {
             return Err(Error::ApprovalRequired(approval_id));
         }
 
-        let result = sqlx::query!(
-            r#"DELETE FROM capability_grants WHERE grant_id = $1"#,
-            grant_id,
-        )
-        .execute(&self.pool)
-        .await
-        .map_err(Error::Database)?;
+        let result = sqlx::query(r#"DELETE FROM capability_grants WHERE grant_id = $1"#)
+            .bind(grant_id)
+            .execute(&self.pool)
+            .await
+            .map_err(Error::Database)?;
 
         let revoked = result.rows_affected() > 0;
 
@@ -269,14 +267,14 @@ impl PolicyEngine {
             tracing::info!(grant_id = %grant_id, "Capability revoked");
 
             // Insert into revoked_capability_grants for cross-instance sync
-            if let Err(e) = sqlx::query!(
+            if let Err(e) = sqlx::query(
                 r#"INSERT INTO revoked_capability_grants (grant_id, revoked_by, reason)
                     VALUES ($1, $2, $3)
                     ON CONFLICT (grant_id) DO NOTHING"#,
-                grant_id,
-                revoked_by,
-                Some("explicit_revocation"),
             )
+            .bind(grant_id)
+            .bind(revoked_by)
+            .bind(Some("explicit_revocation"))
             .execute(&self.pool)
             .await
             {
@@ -410,9 +408,10 @@ impl PolicyEngine {
         let scope = payload
             .get("scope")
             .and_then(|v| if v.is_null() { None } else { Some(v.clone()) });
-        let constraints = payload
-            .get("constraints")
-            .and_then(|v| if v.is_null() { None } else { Some(v.clone()) });
+        let constraints =
+            payload
+                .get("constraints")
+                .and_then(|v| if v.is_null() { None } else { Some(v.clone()) });
         let approved_by = payload["approved_by"]
             .as_str()
             .and_then(|s| Uuid::parse_str(s).ok());
@@ -488,7 +487,8 @@ impl PolicyEngine {
     /// 1. The identity has `task.create` capability
     /// 2. The skill has all its required capabilities granted
     ///
-    /// TODO: Full integration with task execution in Phase 2
+    /// Known limitation (v1.0.0): checks `task.create` capability and required-capability
+    /// list; deeper execution-path integration deferred.
     pub async fn check_task_execution(
         &self,
         identity_id: Uuid,
@@ -511,14 +511,12 @@ impl PolicyEngine {
         }
 
         // Get skill's required capabilities (TEXT[] in database)
-        let required_capabilities: Option<Vec<String>> = sqlx::query_scalar!(
-            r#"SELECT capabilities_required FROM skills WHERE skill_id = $1"#,
-            skill_id,
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(Error::Database)?
-        .flatten();
+        let required_capabilities: Option<Vec<String>> =
+            sqlx::query_scalar(r#"SELECT capabilities_required FROM skills WHERE skill_id = $1"#)
+                .bind(skill_id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(Error::Database)?;
 
         // Check each required capability for the skill
         if let Some(caps) = required_capabilities {

@@ -30,12 +30,12 @@ use carnelian_core::{
     Config, EventStream, Ledger, ModelRouter, PolicyEngine, Scheduler, Server, WorkerManager,
 };
 
-use bollard::Docker;
 use bollard::container::{
     Config as ContainerConfig, CreateContainerOptions, StartContainerOptions,
 };
 use bollard::image::CreateImageOptions;
 use bollard::models::{HostConfig, PortBinding};
+use bollard::Docker;
 use futures_util::stream::TryStreamExt;
 
 /// 🔥 Carnelian OS - Local-first AI agent mainframe
@@ -55,7 +55,11 @@ use futures_util::stream::TryStreamExt;
   carnelian task create \"Task\" --priority 10  Create high-priority task
   carnelian logs -f --level ERROR    Stream only ERROR events
   carnelian logs --url http://remote:18789  Connect to remote instance
-  carnelian --database-url postgres://user:pass@host/db migrate  Use specific database")]
+  carnelian --database-url postgres://user:pass@host/db migrate  Use specific database
+  carnelian magic auth               Authenticate with Quantinuum H2
+  carnelian magic status             Show MAGIC provider health
+  carnelian magic sample 64          Sample 64 bytes of quantum entropy
+  carnelian magic providers          List all entropy providers")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -175,6 +179,16 @@ enum Commands {
         #[arg(long)]
         path: Option<PathBuf>,
     },
+
+    /// MAGIC quantum entropy subsystem
+    Magic {
+        #[command(subcommand)]
+        command: MagicCommands,
+
+        /// URL of the Carnelian server
+        #[arg(long, env = "CARNELIAN_URL")]
+        url: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -210,8 +224,32 @@ enum KeyCommands {
     Rotate,
 }
 
+#[derive(Subcommand)]
+enum MagicCommands {
+    /// Authenticate with Quantinuum (or refresh token)
+    Auth {
+        /// Refresh the existing token instead of re-authenticating
+        #[arg(long)]
+        refresh: bool,
+    },
+
+    /// Show authentication and provider health status
+    Status,
+
+    /// Draw a sample of quantum-mixed entropy bytes
+    Sample {
+        /// Number of bytes to sample (default: 32)
+        #[arg(default_value_t = 32)]
+        bytes: usize,
+    },
+
+    /// List all configured entropy providers and their availability
+    Providers,
+}
+
+#[allow(clippy::too_many_lines)]
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     let result = match cli.command {
@@ -256,15 +294,10 @@ async fn main() {
         Commands::MigrateFromThummim { path } => {
             handle_migrate_from_thummim(path, cli.config, cli.log_level, cli.database_url).await
         }
+        Commands::Magic { command, url } => handle_magic(command, &resolve_url(url)).await,
     };
 
-    if let Err(e) = result {
-        eprintln!("Error: {}", e);
-        if let carnelian_common::Error::ExitCode(code, _) = e {
-            std::process::exit(code);
-        }
-        std::process::exit(1);
-    }
+    result.map_err(|e| anyhow::anyhow!("{}", e))
 }
 
 /// Resolve the server URL from an explicit value, `CARNELIAN_HTTP_PORT` env var, or default.
@@ -1078,7 +1111,7 @@ async fn handle_init(
     _resume: bool,
     key_path: Option<PathBuf>,
 ) -> carnelian_common::Result<()> {
-    use std::io::{Write, stdin, stdout};
+    use std::io::{stdin, stdout, Write};
     use sysinfo::{RefreshKind, System};
 
     // Welcome banner
@@ -2083,7 +2116,7 @@ async fn handle_ui(web: bool) -> carnelian_common::Result<()> {
 
 /// Serve web UI static files
 async fn serve_web_ui(web_dir: &std::path::Path, port: u16) -> carnelian_common::Result<()> {
-    use axum::{Router, http::StatusCode};
+    use axum::{http::StatusCode, Router};
     use tokio::net::TcpListener;
     use tower_http::services::ServeDir;
 
@@ -2379,6 +2412,424 @@ async fn handle_migrate_from_thummim(
     println!("╚═══════════════════════════════════════════════════════════════╝");
     println!();
     println!("Next: carnelian skills refresh");
+
+    Ok(())
+}
+
+// =============================================================================
+// MAGIC HANDLERS
+// =============================================================================
+
+/// Handle the `magic` subcommands
+async fn handle_magic(command: MagicCommands, url: &str) -> carnelian_common::Result<()> {
+    match command {
+        MagicCommands::Auth { refresh } => handle_magic_auth(url, refresh).await,
+        MagicCommands::Status => handle_magic_status(url).await,
+        MagicCommands::Sample { bytes } => handle_magic_sample(url, bytes).await,
+        MagicCommands::Providers => handle_magic_providers(url).await,
+    }
+}
+
+/// Handle `magic auth` - authenticate with Quantinuum or refresh token
+#[allow(clippy::too_many_lines)]
+async fn handle_magic_auth(url: &str, refresh: bool) -> carnelian_common::Result<()> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|e| {
+            carnelian_common::Error::Config(format!("Failed to create HTTP client: {}", e))
+        })?;
+
+    if refresh {
+        let resp = client
+            .post(format!(
+                "{}/v1/magic/auth/quantinuum/refresh",
+                url.trim_end_matches('/')
+            ))
+            .json(&serde_json::json!({}))
+            .send()
+            .await
+            .map_err(|e| {
+                if e.is_connect() {
+                    carnelian_common::Error::Connection(format!(
+                        "Failed to connect to Carnelian at {}. Is it running?",
+                        url
+                    ))
+                } else {
+                    carnelian_common::Error::Connection(format!("Request to {} failed: {}", url, e))
+                }
+            })?;
+
+        if resp.status().is_success() {
+            let body: serde_json::Value = resp.json().await.map_err(|e| {
+                carnelian_common::Error::Config(format!("Failed to parse response: {}", e))
+            })?;
+
+            let expires_at = body["token_expiry"].as_str().unwrap_or("unknown");
+            println!("✓ Token refreshed");
+            println!("   Expires at: {}", expires_at);
+        } else {
+            let body: serde_json::Value = resp.json().await.unwrap_or_default();
+            let error_msg = body["error"].as_str().unwrap_or("unknown error");
+            return Err(carnelian_common::Error::Config(format!(
+                "Failed to refresh token: {}",
+                error_msg
+            )));
+        }
+    } else {
+        use std::io::{stdout, Write};
+
+        print!("Email: ");
+        stdout().flush().map_err(|e| {
+            carnelian_common::Error::Config(format!("Failed to flush stdout: {}", e))
+        })?;
+        let mut email = String::new();
+        std::io::stdin()
+            .read_line(&mut email)
+            .map_err(|e| carnelian_common::Error::Config(format!("Failed to read email: {}", e)))?;
+
+        let password = rpassword::prompt_password("Password: ").map_err(|e| {
+            carnelian_common::Error::Config(format!("Failed to read password: {}", e))
+        })?;
+
+        // Call Quantinuum API directly
+        let qapi_resp = client
+            .post("https://qapi.quantinuum.com/v1/login")
+            .json(&serde_json::json!({
+                "email": email.trim(),
+                "password": password.trim()
+            }))
+            .send()
+            .await
+            .map_err(|e| {
+                carnelian_common::Error::Connection(format!(
+                    "Quantinuum login request failed: {}",
+                    e
+                ))
+            })?;
+
+        if !qapi_resp.status().is_success() {
+            let status = qapi_resp.status();
+            let error_text = qapi_resp.text().await.unwrap_or_default();
+            return Err(carnelian_common::Error::Config(format!(
+                "Quantinuum login failed ({}): {}",
+                status, error_text
+            )));
+        }
+
+        let qapi_data: serde_json::Value = qapi_resp.json().await.map_err(|e| {
+            carnelian_common::Error::Config(format!("Failed to parse Quantinuum response: {}", e))
+        })?;
+
+        let id_token = qapi_data["id-token"].as_str().ok_or_else(|| {
+            carnelian_common::Error::Config("Quantinuum response missing id-token".to_string())
+        })?;
+
+        let refresh_token = qapi_data["refresh-token"].as_str().ok_or_else(|| {
+            carnelian_common::Error::Config("Quantinuum response missing refresh-token".to_string())
+        })?;
+
+        // Calculate expiry (1 hour from now)
+        let expires_at = (chrono::Utc::now() + chrono::Duration::hours(1)).to_rfc3339();
+
+        // Persist tokens via PUT to Carnelian server
+        let persist_resp = client
+            .put(format!(
+                "{}/v1/magic/auth/quantinuum",
+                url.trim_end_matches('/')
+            ))
+            .json(&serde_json::json!({
+                "id_token": id_token,
+                "refresh_token": refresh_token,
+                "expires_at": expires_at
+            }))
+            .send()
+            .await
+            .map_err(|e| {
+                if e.is_connect() {
+                    carnelian_common::Error::Connection(format!(
+                        "Failed to connect to Carnelian at {}. Is it running?",
+                        url
+                    ))
+                } else {
+                    carnelian_common::Error::Connection(format!("Request to {} failed: {}", url, e))
+                }
+            })?;
+
+        if persist_resp.status().is_success() {
+            let body: serde_json::Value = persist_resp.json().await.map_err(|e| {
+                carnelian_common::Error::Config(format!("Failed to parse response: {}", e))
+            })?;
+
+            let stored_expiry = body["expires_at"].as_str().unwrap_or(&expires_at);
+            println!("✓ Authenticated");
+            println!("   Expires at: {}", stored_expiry);
+        } else {
+            let body: serde_json::Value = persist_resp.json().await.unwrap_or_default();
+            let error_msg = body["error"].as_str().unwrap_or("unknown error");
+            return Err(carnelian_common::Error::Config(format!(
+                "Failed to persist tokens: {}",
+                error_msg
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+/// Handle `magic status` - show authentication and provider health status
+#[allow(clippy::too_many_lines)]
+async fn handle_magic_status(url: &str) -> carnelian_common::Result<()> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| {
+            carnelian_common::Error::Config(format!("Failed to create HTTP client: {}", e))
+        })?;
+
+    let auth_resp = client
+        .get(format!(
+            "{}/v1/magic/auth/status",
+            url.trim_end_matches('/')
+        ))
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                carnelian_common::Error::Connection(format!(
+                    "Failed to connect to Carnelian at {}. Is it running?",
+                    url
+                ))
+            } else {
+                carnelian_common::Error::Connection(format!("Request to {} failed: {}", url, e))
+            }
+        })?;
+
+    let auth_status: serde_json::Value = if auth_resp.status().is_success() {
+        auth_resp.json().await.unwrap_or_default()
+    } else {
+        serde_json::json!({})
+    };
+
+    let health_resp = client
+        .get(format!(
+            "{}/v1/magic/entropy/health",
+            url.trim_end_matches('/')
+        ))
+        .send()
+        .await
+        .map_err(|e| {
+            carnelian_common::Error::Connection(format!("Request to {} failed: {}", url, e))
+        })?;
+
+    let health_status: serde_json::Value = if health_resp.status().is_success() {
+        health_resp.json().await.unwrap_or_default()
+    } else {
+        serde_json::json!([])
+    };
+
+    println!("🔥 MAGIC Status");
+
+    // Parse auth status from nested structure: quantinuum.authenticated, quantinuum.expiry, quantum_origin.configured
+    let quantum_origin_configured = auth_status["quantum_origin"]["configured"]
+        .as_bool()
+        .unwrap_or(false);
+    println!(
+        "   Quantum Origin:  {}",
+        if quantum_origin_configured {
+            "configured"
+        } else {
+            "not configured"
+        }
+    );
+
+    let quantinuum_authenticated = auth_status["quantinuum"]["authenticated"]
+        .as_bool()
+        .unwrap_or(false);
+    if quantinuum_authenticated {
+        let expiry = auth_status["quantinuum"]["expiry"]
+            .as_str()
+            .unwrap_or("unknown");
+        println!("   Quantinuum H2:   authenticated (expires {})", expiry);
+    } else {
+        println!("   Quantinuum H2:   not authenticated");
+    }
+
+    // Qiskit not yet in server response, default to not configured
+    println!("   Qiskit:          not configured");
+
+    println!();
+    println!("   Entropy Providers:");
+
+    // Normalize health_status to array (handle both object and array responses)
+    let providers_array = if health_status.is_array() {
+        health_status.as_array().cloned().unwrap_or_default()
+    } else if health_status.is_object() {
+        vec![health_status]
+    } else {
+        vec![]
+    };
+
+    for provider in providers_array {
+        let source = provider["source"].as_str().unwrap_or("unknown");
+        let available = provider["available"].as_bool().unwrap_or(false);
+        let latency_ms = provider["latency_ms"].as_u64();
+        let error = provider["error"].as_str();
+
+        let status_char = if available { "✓" } else { "✗" };
+        let status_text = if available {
+            "available"
+        } else {
+            "unavailable"
+        };
+
+        if let Some(latency) = latency_ms {
+            print!(
+                "     • {:<18} {} {:<12} ({} ms)",
+                source, status_char, status_text, latency
+            );
+        } else {
+            print!("     • {:<18} {} {:<12}", source, status_char, status_text);
+        }
+
+        if let Some(err) = error {
+            print!("  error: {}", err);
+        }
+        println!();
+    }
+
+    Ok(())
+}
+
+/// Handle `magic sample` - draw entropy sample
+async fn handle_magic_sample(url: &str, bytes: usize) -> carnelian_common::Result<()> {
+    if !(1..=1024).contains(&bytes) {
+        return Err(carnelian_common::Error::Config(
+            "Bytes must be between 1 and 1024".to_string(),
+        ));
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| {
+            carnelian_common::Error::Config(format!("Failed to create HTTP client: {}", e))
+        })?;
+
+    let resp = client
+        .post(format!(
+            "{}/v1/magic/entropy/sample",
+            url.trim_end_matches('/')
+        ))
+        .json(&serde_json::json!({
+            "bytes": bytes
+        }))
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                carnelian_common::Error::Connection(format!(
+                    "Failed to connect to Carnelian at {}. Is it running?",
+                    url
+                ))
+            } else {
+                carnelian_common::Error::Connection(format!("Request to {} failed: {}", url, e))
+            }
+        })?;
+
+    if resp.status().is_success() {
+        let body: serde_json::Value = resp.json().await.map_err(|e| {
+            carnelian_common::Error::Config(format!("Failed to parse response: {}", e))
+        })?;
+
+        let hex = body["hex"].as_str().unwrap_or("");
+        let source = body["source"].as_str().unwrap_or("unknown");
+
+        println!("🔥 Entropy sample ({} bytes, source: {})", bytes, source);
+        println!("   {}", hex);
+    } else {
+        let body: serde_json::Value = resp.json().await.unwrap_or_default();
+        let error_msg = body["error"].as_str().unwrap_or("unknown error");
+        return Err(carnelian_common::Error::Config(format!(
+            "Failed to sample entropy: {}",
+            error_msg
+        )));
+    }
+
+    Ok(())
+}
+
+/// Handle `magic providers` - list all entropy providers
+async fn handle_magic_providers(url: &str) -> carnelian_common::Result<()> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| {
+            carnelian_common::Error::Config(format!("Failed to create HTTP client: {}", e))
+        })?;
+
+    let resp = client
+        .get(format!(
+            "{}/v1/magic/entropy/health",
+            url.trim_end_matches('/')
+        ))
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                carnelian_common::Error::Connection(format!(
+                    "Failed to connect to Carnelian at {}. Is it running?",
+                    url
+                ))
+            } else {
+                carnelian_common::Error::Connection(format!("Request to {} failed: {}", url, e))
+            }
+        })?;
+
+    if resp.status().is_success() {
+        let body: serde_json::Value = resp.json().await.map_err(|e| {
+            carnelian_common::Error::Config(format!("Failed to parse response: {}", e))
+        })?;
+
+        println!("🔥 Entropy Providers");
+        println!(
+            "   {:<18} {:<12} {:<10} ERROR",
+            "SOURCE", "AVAILABLE", "LATENCY"
+        );
+
+        // Normalize body to array (handle both object and array responses)
+        let providers_array = if body.is_array() {
+            body.as_array().cloned().unwrap_or_default()
+        } else if body.is_object() {
+            vec![body]
+        } else {
+            vec![]
+        };
+
+        for provider in providers_array {
+            let source = provider["source"].as_str().unwrap_or("unknown");
+            let available = provider["available"].as_bool().unwrap_or(false);
+            let latency_ms = provider["latency_ms"].as_u64();
+            let error = provider["error"].as_str();
+
+            let available_text = if available { "✓" } else { "✗" };
+            let latency_text =
+                latency_ms.map_or_else(|| "—".to_string(), |ms| format!("{} ms", ms));
+            let error_text = error.unwrap_or("—");
+
+            println!(
+                "   {:<18} {:<12} {:<10} {}",
+                source, available_text, latency_text, error_text
+            );
+        }
+    } else {
+        let body: serde_json::Value = resp.json().await.unwrap_or_default();
+        let error_msg = body["error"].as_str().unwrap_or("unknown error");
+        return Err(carnelian_common::Error::Config(format!(
+            "Failed to get provider health: {}",
+            error_msg
+        )));
+    }
 
     Ok(())
 }

@@ -19,10 +19,12 @@ graph TD
     Agentic[Agentic Engine\nSoul · Session · Memory · Context]
     XP[XP Manager\nLevel Curve · Skill Metrics]
     Voice[Voice Gateway\nElevenLabs STT/TTS]
-    NodeW[Node Worker\n600+ Skills]
+    Magic[carnelian-magic\nQuantum entropy + mantras]
+    NodeW[Node Worker\n50+ Skills]
     PythonW[Python Worker\nPython 3.10+]
     WasmW[WASM Worker\nwasmtime · WASI P1]
     NativeW[Native Ops Worker\ngit · blake3 · docker · walkdir]
+    Quantum[Quantum Providers\nOrigin / H2 / Qiskit]
     DB[(PostgreSQL 16\npgvector)]
     Ollama[Ollama\nLocal LLM]
 
@@ -33,6 +35,8 @@ graph TD
     Core --> Agentic
     Core --> XP
     Core --> Voice
+    Core --> Magic
+    Magic --> Quantum
     Scheduler --> Worker
     Worker --> NodeW
     Worker --> PythonW
@@ -49,7 +53,7 @@ graph TD
 
 | Component | Crate / Path | Technology | Responsibility |
 |-----------|-------------|------------|----------------|
-| **Core Orchestrator** | `carnelian-core/src/server.rs` | Axum, Tokio, SQLx | HTTP API, WebSocket events, request routing |
+| **Core Orchestrator** | `carnelian-core/` (28 modules) | Axum, Tokio, SQLx | HTTP API, WebSocket events, request routing |
 | **Scheduler** | `carnelian-core/src/scheduler.rs` | Rust | Priority queue, retry policies, concurrency limits |
 | **Worker Manager** | `carnelian-core/src/worker.rs` | Rust | Process lifecycle, JSONL transport, capability dispatch |
 | **Policy Engine** | `carnelian-core/src/policy.rs` | Rust | Deny-by-default capability checks, grant management |
@@ -57,9 +61,10 @@ graph TD
 | **Agentic Engine** | `carnelian-core/src/agentic/` | Rust | Soul, session, memory, context assembly, model routing |
 | **XP Manager** | `carnelian-core/src/xp.rs` | Rust | XP awards, level curve, skill metrics, leaderboard |
 | **Voice Gateway** | `carnelian-core/src/voice.rs` | Rust, reqwest | ElevenLabs STT/TTS, encrypted API key storage |
+| **MAGIC** | `carnelian-magic/` | Rust, blake3, reqwest | Quantum entropy providers, mantra matrix, integrity hasher |
 | **Event Stream** | `carnelian-core/src/events.rs` | Rust | Bounded-buffer pub/sub, priority sampling, backpressure |
-| **Desktop UI** | `carnelian-ui/` | Dioxus | Native desktop interface with real-time event streaming |
-| **Node Worker** | `workers/node-worker/` | Node.js/TypeScript | Executes 530+ Node.js skills with gateway integration |
+| **Desktop UI** | `carnelian-ui/` (17 pages) | Dioxus | Native desktop interface with real-time event streaming |
+| **Node Worker** | `workers/node-worker/` | Node.js/TypeScript | 50+ curated skills with bulk import tooling |
 | **Python Worker** | `carnelian-worker-python/` + `workers/python-worker/` | Python 3.10+, JSONL | ML/data science skills, Playwright automation |
 | **WASM Worker** | `carnelian-core/src/skills/wasm_runtime.rs` | wasmtime 27, WASI P1 | Sandboxed WASM skill execution with epoch timeout |
 | **Native Ops Worker** | `carnelian-worker-native/src/lib.rs` | Rust inline (no subprocess) | `git_status`, `file_hash`, `docker_ps`, `dir_list` — capability-gated |
@@ -207,6 +212,65 @@ The `VoiceGateway` (`crates/carnelian-core/src/voice.rs`) provides speech integr
 - **API Key Storage** — The ElevenLabs API key is encrypted in the `config_store` table using the project's `EncryptionHelper` (pgcrypto). It is never returned in API responses or stored in `machine.toml`.
 - **Voice Configuration** — Per-identity `voice_config` JSONB on the `identities` table stores voice ID, model preference, and language settings.
 - **Endpoints** — `POST /v1/voice/configure`, `POST /v1/voice/test`, `GET /v1/voice/voices`.
+
+---
+
+## MAGIC — Quantum Entropy & Mantra System
+
+The `carnelian-magic` crate (`crates/carnelian-magic/`) provides quantum-enhanced entropy generation and mantra-based context injection for the agentic loop.
+
+### Entropy Provider Chain
+
+The `EntropyProvider` trait defines a waterfall chain for quantum-random byte generation:
+
+1. **Quantum Origin** — REST API integration with `CARNELIAN_QUANTUM_ORIGIN_API_KEY` environment variable
+2. **Quantinuum H2** — Hadamard circuit entropy via pytket; requires interactive auth (`carnelian magic auth`)
+3. **Qiskit RNG** — IBM Quantum backend integration with `IBM_QUANTUM_TOKEN` environment variable
+4. **OS CSPRNG** — `getrandom` crate fallback (always available)
+
+Each provider is attempted in order. If a provider is unavailable or fails, the chain falls back to the next provider. The OS CSPRNG is always the final fallback, ensuring entropy is never unavailable.
+
+### Quantum Hasher
+
+`QuantumHasher` provides quantum-resistant checksums using BLAKE3 with MAGIC-mixed entropy salt:
+
+- **`compute(data: &[u8]) -> String`** — Compute quantum checksum for a single data blob
+- **`verify(data: &[u8], checksum: &str) -> bool`** — Verify data against stored checksum
+- **`batch_compute(rows: Vec<&[u8]>) -> Vec<String>`** — Batch checksum computation for multiple rows
+
+The entropy salt is mixed into the BLAKE3 hash to provide quantum-resistant integrity verification.
+
+### Quantum Integrity Verifier
+
+`QuantumIntegrityVerifier` provides table-level integrity verification:
+
+- **`verify_table(table: &str) -> VerificationReport`** — Verify all rows in a table with quantum checksums
+- **`verify_row(table: &str, id: Uuid) -> Result<bool>`** — Verify a single row's quantum checksum
+- **`backfill_missing(table: &str) -> BackfillReport`** — Backfill missing quantum checksums in background
+
+Returns `VerificationReport` with counts of verified, tampered, and missing checksums, plus a list of `TamperedRow` entries for any integrity violations.
+
+### Mantra Tree
+
+`MantraTree` provides weighted category selection seeded with quantum entropy:
+
+- **Weighted Selection** — Categories have base weights that are dynamically adjusted based on context (pending tasks, recent errors, elixir quality scores)
+- **Cooldown Map** — Per-category cooldown enforcement (`cooldown_beats` configuration) prevents repetitive context pollution
+- **Inverse Frequency** — Within a chosen category, the least-recently-used mantra is selected
+- **Quantum Seeding** — All random selection is seeded with quantum entropy from the provider chain
+
+### Database Tables
+
+| Table | Purpose |
+|-------|---------|
+| `magic_entropy_log` | Audit log of entropy requests (provider, byte count, timestamp) |
+| `mantra_categories` | 18 mantra categories with base weights and cooldown settings |
+| `mantra_entries` | 100+ mantra prompt fragments with usage tracking |
+| `mantra_history` | Last 10 mantra selections with category, text, and timestamp |
+
+### Setup
+
+See [docs/MAGIC.md](MAGIC.md) for provider setup, authentication, troubleshooting, and security considerations.
 
 ---
 

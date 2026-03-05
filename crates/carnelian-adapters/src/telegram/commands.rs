@@ -7,8 +7,8 @@ use teloxide::macros::BotCommands;
 use teloxide::prelude::*;
 use teloxide::utils::command::BotCommands as BotCommandsTrait;
 
-use carnelian_core::EventStream;
 use carnelian_core::policy::PolicyEngine;
+use carnelian_core::EventStream;
 
 use crate::db as channel_db;
 use crate::types::ChannelConfig;

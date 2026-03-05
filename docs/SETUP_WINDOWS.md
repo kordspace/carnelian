@@ -13,7 +13,7 @@ Carnelian runs inside WSL2 on Windows. This guide covers the full setup from scr
 | NVIDIA GPU drivers | Latest Game Ready or Studio | Installed on Windows host |
 | Docker Desktop | Latest | WSL2 backend enabled |
 | Rust | 1.85+ | Installed inside WSL2 |
-| Node.js | 18+ | For Node.js worker |
+| Node.js | 22+ | For Gateway service and Node.js workers |
 | Python | 3.10+ | For Python worker |
 
 ---

@@ -21,10 +21,10 @@ use std::time::Duration;
 
 use carnelian_core::events::EventStream;
 use carnelian_core::skills::{
-    SkillDiscovery, SkillManifest, compute_manifest_checksum, validate_manifest,
+    compute_manifest_checksum, validate_manifest, SkillDiscovery, SkillManifest,
 };
 use sqlx::PgPool;
-use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
+use testcontainers::{runners::AsyncRunner, GenericImage, ImageExt};
 
 /// Spin up a PostgreSQL container and return a connected pool.
 async fn setup_postgres() -> (PgPool, testcontainers::ContainerAsync<GenericImage>) {

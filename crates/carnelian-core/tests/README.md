@@ -31,7 +31,7 @@ cargo test --test integration_test -- --ignored
 
 ### Migration Tests (12 tests)
 
-Verifies Phase 1 delta schema (sessions, skill_versions, workflows, sub_agents, XP, elixirs), seed data, schema fixes (pronouns, subject_id TEXT, subject_type enum, LZ4 compression), and migration idempotency.
+Verifies the delta schema (sessions, skill_versions, workflows, sub_agents, XP, elixirs), seed data, schema fixes (pronouns, subject_id TEXT, subject_type enum, LZ4 compression), and migration idempotency.
 
 ```bash
 cargo test --test migration_test -- --ignored
@@ -77,9 +77,9 @@ Unit tests for structured logging conventions, log level filtering, and output f
 cargo test --test logging_test
 ```
 
-### Phase 3 Agentic Engine Tests (40+ tests)
+### Agentic Engine Tests (40+ tests)
 
-End-to-end tests for the Phase 3 agentic execution pipeline:
+End-to-end tests for the agentic execution pipeline:
 
 - **Soul**: file loading, parsing, DB sync, hash verification
 - **Session**: CRUD, messages, expiration, token counters, persistence across restart (drop pool + reconnect)
@@ -92,7 +92,6 @@ End-to-end tests for the Phase 3 agentic execution pipeline:
 - **Cross-Module**: soul→memory→context, session lifecycle, session restart persistence
 
 ```bash
-# All Phase 3 tests (requires Docker)
 cargo test --test phase3_integration_test -- --ignored
 
 # Run specific test group

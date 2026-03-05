@@ -1,8 +1,8 @@
 # Carnelian OS Rust formatting configuration
 # These are project-wide formatting standards that align with the workspace edition.
 
-edition = "2024"
-style_edition = "2024"
+edition = "2021"
+style_edition = "2021"
 max_width = 100
 use_small_heuristics = "Default"
 

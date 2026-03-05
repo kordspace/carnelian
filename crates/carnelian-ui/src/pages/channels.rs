@@ -1,11 +1,7 @@
 //! Channel management page with table view, wizard modal, edit modal,
 //! confirmation dialogs, and pairing status indicators.
 
-#![allow(clippy::needless_pass_by_ref_mut)]
-#![allow(clippy::uninlined_format_args)]
-#![allow(clippy::to_string_in_format_args)]
-#![allow(clippy::unnecessary_mut_passed)]
-#![allow(clippy::literal_string_with_formatting_args)]
+#![allow(clippy::option_if_let_else)]
 
 use carnelian_common::types::{
     ChannelDetail, CreateChannelApiRequest, EventType, UpdateChannelApiRequest,
@@ -35,7 +31,11 @@ pub fn Channels() -> Element {
         let _ = refresh();
         let type_filter = {
             let v = filter_type.read().clone();
-            if v == "All" { None } else { Some(v) }
+            if v == "All" {
+                None
+            } else {
+                Some(v)
+            }
         };
         crate::api::list_channels(type_filter)
             .await
@@ -150,7 +150,7 @@ pub fn Channels() -> Element {
                         }
                         tbody {
                             for channel in filtered {
-                                { render_channel_row(channel, &mut edit_channel, &mut confirm_delete, &mut refresh) }
+                                { render_channel_row(channel, &edit_channel, &confirm_delete, &refresh) }
                             }
                         }
                     }
@@ -608,12 +608,18 @@ fn ChannelWizardModal(on_close: EventHandler, on_created: EventHandler) -> Eleme
                                     }
                                 }
                                 p { style: "color: #8E8E93; font-size: 13px; margin-top: 8px;",
-                                    match channel_type.read().as_str() {
-                                        "telegram" => "Send /pair {token} to your Telegram bot to complete pairing.",
-                                        "discord" => "Send !pair {token} in your Discord channel to complete pairing.",
-                                        "whatsapp" => "Send /pair {token} to your WhatsApp bot to complete pairing.",
-                                        "slack" => "Run /carnelian pair {token} in your Slack workspace to complete pairing.",
-                                        _ => "Use the pairing token in your channel to complete pairing.",
+                                    {
+                                        if let Some(ref token) = *pairing_token.read() {
+                                            match channel_type.read().as_str() {
+                                                "telegram" => format!("Send /pair {token} to your Telegram bot to complete pairing."),
+                                                "discord" => format!("Send !pair {token} in your Discord channel to complete pairing."),
+                                                "whatsapp" => format!("Send /pair {token} to your WhatsApp bot to complete pairing."),
+                                                "slack" => format!("Run /carnelian pair {token} in your Slack workspace to complete pairing."),
+                                                _ => format!("Use the pairing token {token} in your channel to complete pairing."),
+                                            }
+                                        } else {
+                                            "Use the pairing token in your channel to complete pairing.".to_string()
+                                        }
                                     }
                                 }
                             }
