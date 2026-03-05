@@ -98,15 +98,16 @@ use tokio::io::AsyncWriteExt;
 
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value as JsonValue, json};
+use serde_json::{json, Value as JsonValue};
 use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
 use carnelian_common::{Error, Result};
+use carnelian_magic::QuantumHasher;
 
 use crate::config::Config;
-use crate::context::{ContextWindow, estimate_tokens};
+use crate::context::{estimate_tokens, ContextWindow};
 use crate::events::EventStream;
 use crate::ledger::Ledger;
 use crate::memory::{MemoryManager, MemorySource};
@@ -799,6 +800,34 @@ impl SessionManager {
                 .await?;
         }
 
+        // 4. Compute quantum checksum for integrity verification
+        // Note: message_id is i64 (BIGSERIAL), convert to Uuid for hasher interface
+        let message_uuid = Uuid::from_u128(message_id as u128);
+        let ts: DateTime<Utc> =
+            sqlx::query_scalar("SELECT ts FROM session_messages WHERE message_id = $1")
+                .bind(message_id)
+                .fetch_one(&mut *tx)
+                .await?;
+
+        let hasher = QuantumHasher::with_os_entropy();
+        match hasher.compute_with_ts("session_messages", message_uuid, content.as_bytes(), ts) {
+            Ok(checksum) => {
+                if let Err(e) = sqlx::query(
+                    "UPDATE session_messages SET quantum_checksum = $1 WHERE message_id = $2",
+                )
+                .bind(&checksum)
+                .bind(message_id)
+                .execute(&mut *tx)
+                .await
+                {
+                    tracing::warn!(message_id = message_id, error = %e, "Failed to store quantum checksum");
+                }
+            }
+            Err(e) => {
+                tracing::warn!(message_id = message_id, error = %e, "Failed to compute quantum checksum");
+            }
+        }
+
         tx.commit().await.map_err(Error::Database)?;
 
         tracing::debug!(
@@ -1285,8 +1314,8 @@ impl SessionManager {
     /// * `session_id` - Session to flush memories from
     /// * `correlation_id` - Optional correlation ID for tracing
     /// * `task_id` - Optional task context
-    // TODO: Replace heuristic extraction with agentic step integration
-    //       when the agentic loop is available (Phase 4+).
+    // Known limitation (v1.0.0): memory extraction uses keyword heuristics; LLM-based
+    // extraction deferred until the gateway session is available inside the flush path.
     #[allow(clippy::too_many_lines)]
     pub async fn trigger_memory_flush(
         &self,
@@ -1427,8 +1456,8 @@ impl SessionManager {
     ///
     /// Returns `(summary_message_id, token_estimate, messages_summarized)`.
     ///
-    // TODO: Replace extractive summarization with LLM-based summarization
-    //       when the LLM Gateway Service is available.
+    // Known limitation (v1.0.0): extractive (frequency-based) summarization only;
+    // LLM-based summarization deferred.
     pub async fn summarize_conversation_segment(
         &self,
         session_id: Uuid,
@@ -1965,10 +1994,11 @@ impl SessionManager {
                 "session.created",
                 json!({
                     "session_id": session.session_id,
-                    "session_key": session.session_key,
-                    "channel": session.channel,
+                    "agent_id": session.agent_id,
                 }),
                 correlation_id,
+                None,
+                None,
                 None,
                 None,
             )
@@ -1991,10 +2021,10 @@ impl SessionManager {
                 "session.deleted",
                 json!({
                     "session_id": session_id,
-                    "reason": reason,
-                    "final_token_counters": final_counters,
                     "message_count": message_count,
                 }),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -2002,7 +2032,7 @@ impl SessionManager {
             .await
     }
 
-    /// Log a compaction event to the audit ledger.
+    /// Log session compaction to the audit ledger.
     pub async fn log_compaction_event(
         &self,
         ledger: &Ledger,
@@ -2018,10 +2048,10 @@ impl SessionManager {
                 "session.compacted",
                 json!({
                     "session_id": session_id,
-                    "before_counters": before_counters,
-                    "after_counters": after_counters,
                     "messages_removed": messages_removed,
                 }),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -2659,7 +2689,7 @@ mod tests {
 
     #[test]
     fn test_soft_trim_reduces_token_count() {
-        use crate::context::{ContextWindow, estimate_tokens};
+        use crate::context::{estimate_tokens, ContextWindow};
 
         // Generate a large tool result
         let large_content = "word ".repeat(2000); // ~2000 tokens
@@ -2689,7 +2719,7 @@ mod tests {
 
     #[test]
     fn test_soft_trim_no_op_when_under_threshold() {
-        use crate::context::{ContextWindow, estimate_tokens};
+        use crate::context::{estimate_tokens, ContextWindow};
 
         let small_content = "Hello, this is a short tool result.";
         let original_tokens = estimate_tokens(small_content, "deepseek-r1:7b");
@@ -2719,7 +2749,7 @@ mod tests {
 
     #[test]
     fn test_soft_trim_token_delta_for_counter_adjustment() {
-        use crate::context::{ContextWindow, estimate_tokens};
+        use crate::context::{estimate_tokens, ContextWindow};
 
         let large_content = "token ".repeat(3000);
         #[allow(clippy::cast_possible_wrap)]
@@ -2915,94 +2945,7 @@ mod tests {
     // Integration tests (require database)
     // =========================================================================
 
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_compact_session_full_flow() {
-        // Verifies the full compaction pipeline:
-        // 1. Create session with messages exceeding token limit
-        // 2. Run compact_session()
-        // 3. Assert tokens_after < tokens_before
-        // 4. Assert compaction_count incremented
-        // 5. Assert compacted messages deleted
-        // 6. Assert summary message inserted
-        unimplemented!("Run with: cargo test -- --ignored test_compact_session_full_flow");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_memory_flush_zero_returns_nothing_to_store() {
-        // Verifies that when trigger_memory_flush returns Ok(0),
-        // the outcome has nothing_to_store=true and flush_failed=false
-        unimplemented!(
-            "Run with: cargo test -- --ignored test_memory_flush_zero_returns_nothing_to_store"
-        );
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_memory_flush_error_sets_flush_failed() {
-        // Verifies that when trigger_memory_flush returns Err,
-        // the outcome has flush_failed=true and nothing_to_store=false
-        unimplemented!(
-            "Run with: cargo test -- --ignored test_memory_flush_error_sets_flush_failed"
-        );
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_tool_result_soft_trim_updates_db() {
-        // Verifies that prune_tool_results() soft-trims oversized tool messages:
-        // 1. Insert tool message with token_estimate > tool_trim_threshold
-        // 2. Run prune_tool_results()
-        // 3. Assert content is trimmed, token_estimate updated
-        // 4. Assert metadata contains {"soft_trimmed": true, "original_tokens": N}
-        unimplemented!("Run with: cargo test -- --ignored test_tool_result_soft_trim_updates_db");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_tool_result_hard_clear_deletes_old() {
-        // Verifies that prune_tool_results() hard-clears old tool messages:
-        // 1. Insert tool message with ts older than tool_clear_age_secs
-        // 2. Run prune_tool_results()
-        // 3. Assert message deleted
-        // 4. Assert token counters adjusted
-        unimplemented!("Run with: cargo test -- --ignored test_tool_result_hard_clear_deletes_old");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_summarization_creates_summary_and_flags_originals() {
-        // Verifies summarize_conversation_segment():
-        // 1. Insert several user/assistant messages
-        // 2. Run summarize_conversation_segment()
-        // 3. Assert a system summary message was inserted
-        // 4. Assert original messages have {"compacted": true} metadata
-        unimplemented!(
-            "Run with: cargo test -- --ignored test_summarization_creates_summary_and_flags_originals"
-        );
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_compaction_increments_count_and_recalculates_counters() {
-        // Verifies compact_session():
-        // 1. Create session, add messages
-        // 2. Run compact_session()
-        // 3. Assert compaction_count = 1
-        // 4. Assert token_counters recalculated from remaining messages
-        unimplemented!(
-            "Run with: cargo test -- --ignored test_compaction_increments_count_and_recalculates_counters"
-        );
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_compaction_ledger_event_recorded() {
-        // Verifies that compact_session() logs to the ledger:
-        // 1. Create session, add messages, run compact_session() with ledger
-        // 2. Query ledger for "session.compacted" events
-        // 3. Assert payload contains all expected fields including flush_failed
-        unimplemented!("Run with: cargo test -- --ignored test_compaction_ledger_event_recorded");
-    }
+    // Session compaction integration tests removed - these are placeholder stubs.
+    // Real integration tests should be implemented in the tests/ directory
+    // when session compaction features are fully developed.
 }

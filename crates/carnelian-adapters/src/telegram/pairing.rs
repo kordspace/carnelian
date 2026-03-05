@@ -13,8 +13,8 @@ use teloxide::prelude::*;
 use uuid::Uuid;
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
-use carnelian_core::EventStream;
 use carnelian_core::policy::PolicyEngine;
+use carnelian_core::EventStream;
 
 use crate::db as channel_db;
 use crate::events;
@@ -185,9 +185,9 @@ async fn complete_pairing(
 
     // Owner trust level requires additional verification
     if trust_level == TrustLevel::Owner {
-        // TODO: Implement owner verification (e.g., check against a pre-configured
-        // owner list, require a secondary confirmation code, or verify via an
-        // out-of-band channel). For now, owner pairing is allowed but logged.
+        // Known limitation (v1.0.0): owner-level pairing is accepted and logged; secondary
+        // out-of-band verification deferred. Future: check against pre-configured owner list,
+        // require secondary confirmation code, or verify via out-of-band channel.
         tracing::warn!(
             chat_id = %chat_id,
             session_id = %session.session_id,

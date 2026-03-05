@@ -11,9 +11,9 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
-use carnelian_core::EventStream;
 use carnelian_core::policy::PolicyEngine;
 use carnelian_core::session::SessionManager;
+use carnelian_core::EventStream;
 
 use crate::db as channel_db;
 use crate::events;
@@ -199,7 +199,8 @@ impl EventHandler for DiscordHandler {
         // 7. Update last_seen_at
         let _ = channel_db::touch_channel_session(&self.db_pool, session.session_id).await;
 
-        // TODO: Process through agentic loop and send response back
+        // Known limitation (v1.0.0): adapter acknowledges receipt only; full agentic loop
+        // routing from channel messages deferred.
         let _ = msg.channel_id.say(&ctx.http, "✅ Message received.").await;
     }
 }

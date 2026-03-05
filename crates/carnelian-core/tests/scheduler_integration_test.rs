@@ -33,7 +33,7 @@ use carnelian_core::{
     WorkerManager,
 };
 use serde_json::json;
-use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
+use testcontainers::{runners::AsyncRunner, GenericImage, ImageExt};
 use uuid::Uuid;
 
 /// Create a PostgreSQL container for testing (matches integration_test.rs pattern).
@@ -555,9 +555,10 @@ async fn test_poll_dequeues_in_priority_order() {
     let ledger_for_guard = Arc::new(Ledger::new(pool.clone()));
     let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
         pool.clone(),
-        ledger_for_guard,
+        ledger_for_guard.clone(),
     ));
     let metrics = Arc::new(MetricsCollector::new());
+    let lane_permits = Arc::new(HashMap::new());
     Scheduler::poll_task_queue(
         &pool,
         &event_stream,
@@ -565,8 +566,11 @@ async fn test_poll_dequeues_in_priority_order() {
         &config,
         &active_tasks,
         &metrics,
+        &ledger_for_guard,
         &safe_mode_guard,
         &None,
+        &None,
+        &lane_permits,
         &None,
     )
     .await
@@ -655,9 +659,10 @@ async fn test_poll_respects_concurrency_limit() {
     let ledger_for_guard = Arc::new(Ledger::new(pool.clone()));
     let safe_mode_guard = Arc::new(carnelian_core::SafeModeGuard::new(
         pool.clone(),
-        ledger_for_guard,
+        ledger_for_guard.clone(),
     ));
     let metrics = Arc::new(MetricsCollector::new());
+    let lane_permits = Arc::new(HashMap::new());
     Scheduler::poll_task_queue(
         &pool,
         &event_stream,
@@ -665,8 +670,11 @@ async fn test_poll_respects_concurrency_limit() {
         &config,
         &active_tasks,
         &metrics,
+        &ledger_for_guard,
         &safe_mode_guard,
         &None,
+        &None,
+        &lane_permits,
         &None,
     )
     .await
@@ -711,8 +719,11 @@ async fn test_poll_respects_concurrency_limit() {
         &config,
         &active_tasks,
         &metrics,
+        &ledger_for_guard,
         &safe_mode_guard,
         &None,
+        &None,
+        &lane_permits,
         &None,
     )
     .await

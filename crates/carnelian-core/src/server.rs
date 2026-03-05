@@ -4,14 +4,13 @@
 //! for real-time event streaming to UI clients.
 
 use axum::{
-    Json, Router,
-    extract::{Path, Query, State, WebSocketUpgrade, ws::Message},
+    extract::{ws::Message, Path, Query, State, WebSocketUpgrade},
     http::StatusCode,
     response::IntoResponse,
-    routing::{delete, get, post},
+    routing::{delete, get, patch, post, put},
+    Json, Router,
 };
 use base64::Engine as _;
-use carnelian_common::Result;
 use carnelian_common::types::{
     AgentXpResponse, AwardXpRequest, AwardXpResponse, CancelTaskRequest, CancelTaskResponse,
     ConfigureVoiceRequest, ConfigureVoiceResponse, CreateElixirRequest, CreateMemoryRequest,
@@ -28,13 +27,14 @@ use carnelian_common::types::{
     TopSkillsQuery, TopSkillsResponse, TranscribeVoiceRequest, TranscribeVoiceResponse,
     UpdateWorkflowRequest, XpEventDetail, XpHistoryQuery, XpHistoryResponse, XpLeaderboardResponse,
 };
+use carnelian_common::Result;
 use futures_util::{SinkExt, StreamExt};
-use http::{HeaderMap, Method, header};
+use http::{header, HeaderMap, Method};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::Row;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tower_http::{
@@ -59,7 +59,15 @@ use crate::safe_mode::SafeModeGuard;
 use crate::session::SessionManager;
 use crate::sub_agent::{CreateSubAgentRequest, SubAgentManager, UpdateSubAgentRequest};
 use crate::worker::{WorkerManager, WorkerRuntime};
-use crate::{Config, EventStream, Scheduler, db, policy::PolicyEngine};
+use crate::{db, policy::PolicyEngine, Config, EventStream, Scheduler};
+
+// Import MAGIC entropy provider and trait
+use carnelian_magic::EntropyProvider;
+// Import Arc trait implementations - this enables EntropyProvider methods on Arc<MixedEntropyProvider>
+#[allow(unused_imports)]
+use carnelian_magic::entropy_arc_impl;
+// Import MAGIC mantra types
+use carnelian_magic::mantra::{MantraContext, MantraEntry, MantraTree};
 
 use carnelian_common::{ChannelAdapter, ChannelAdapterFactory};
 use std::collections::HashMap;
@@ -73,7 +81,7 @@ const X_CARNELIAN_KEY: &str = "X-Carnelian-Key";
 /// Bypasses authentication for localhost requests.
 /// For remote requests, validates the X-Carnelian-Key header against the owner key.
 async fn carnelian_key_auth(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     req: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> axum::response::Response {
@@ -133,9 +141,9 @@ fn validate_carnelian_key(key: &str, state: &AppState) -> bool {
         return false;
     }
 
-    // TODO: Compare against the actual owner signing key from state.config
-    // For now, accept any properly formatted key
-    // In production, this should derive the key from state.config.owner_key_path or similar
+    // Known limitation (v1.0.0): accepts any hex-formatted key; full owner-key binding
+    // deferred to post-v1.0.0 hardening. In production, this should derive the key
+    // from state.config.owner_key_path or similar.
     hex_part.chars().all(|c| c.is_ascii_hexdigit())
 }
 
@@ -203,6 +211,10 @@ pub struct AppState {
     pub skill_book: Arc<crate::skill_book::SkillBook>,
     /// Elixir manager for knowledge artifact lifecycle
     pub elixir_manager: Arc<crate::elixir::ElixirManager>,
+    /// MAGIC entropy provider for quantum-enhanced randomness
+    pub entropy_provider: Option<Arc<carnelian_magic::MixedEntropyProvider>>,
+    /// Cached results of the last integrity verification run, keyed by table name
+    pub integrity_cache: Arc<RwLock<HashMap<String, carnelian_magic::VerificationReport>>>,
     /// Active channel adapters keyed by session_id
     pub channel_adapters: Arc<RwLock<HashMap<Uuid, Arc<dyn ChannelAdapter>>>>,
     /// Factory for building channel adapters from configuration.
@@ -235,6 +247,7 @@ impl AppState {
         voice_gateway: Arc<crate::voice::VoiceGateway>,
         skill_book: Arc<crate::skill_book::SkillBook>,
         elixir_manager: Arc<crate::elixir::ElixirManager>,
+        entropy_provider: Option<Arc<carnelian_magic::MixedEntropyProvider>>,
     ) -> Self {
         Self {
             config,
@@ -254,6 +267,8 @@ impl AppState {
             voice_gateway,
             skill_book,
             elixir_manager,
+            entropy_provider,
+            integrity_cache: Arc::new(RwLock::new(HashMap::new())),
             channel_adapters: Arc::new(RwLock::new(HashMap::new())),
             channel_adapter_factory: None,
             correlation_counter: Arc::new(AtomicU64::new(0)),
@@ -490,40 +505,85 @@ impl Server {
             ))
         };
 
-        let state = AppState::new(
-            self.config.clone(),
-            self.event_stream.clone(),
-            self.policy_engine.clone(),
-            self.ledger.clone(),
-            self.worker_manager.clone(),
-            self.scheduler.clone(),
-            model_router,
-            safe_mode_guard,
-            session_manager,
-            memory_manager,
-            sub_agent_manager,
-            workflow_engine,
-            xp_manager,
-            voice_gateway,
-            skill_book,
-            elixir_manager,
-        );
+        // Initialize MAGIC entropy provider if enabled
+        let entropy_provider = if self.config.magic.enabled {
+            let pool = self
+                .config
+                .pool()
+                .expect("Database pool required for MixedEntropyProvider");
 
-        // Wire in the adapter factory if configured
-        let state = if let Some(ref factory) = self.adapter_factory {
-            AppState {
-                channel_adapter_factory: Some(factory.clone()),
-                ..state
-            }
+            // Build QuantumOrigin provider if API key is configured
+            // Prefer nested config, fallback to flat fields for backward compatibility
+            let quantum_origin = self
+                .config
+                .magic
+                .quantum_origin
+                .as_ref()
+                .and_then(|qo_config| {
+                    if !qo_config.api_key.is_empty() {
+                        Some(carnelian_magic::QuantumOriginProvider::new(
+                            qo_config.url.clone(),
+                            qo_config.api_key.clone(),
+                        ))
+                    } else {
+                        tracing::warn!("Quantum Origin API key is empty, provider disabled");
+                        None
+                    }
+                });
+
+            // Known limitation (v1.0.0): Quantinuum and Qiskit entropy providers not wired
+            // via SkillBridge; returns None until bridge is available.
+            let quantinuum = None;
+            let qiskit = None;
+
+            let node_id = uuid::Uuid::now_v7();
+            let provider = carnelian_magic::MixedEntropyProvider::new(
+                quantum_origin,
+                quantinuum,
+                qiskit,
+                node_id,
+            );
+            tracing::info!("MAGIC entropy provider initialized");
+            Some(Arc::new(provider))
         } else {
-            state
+            tracing::debug!("MAGIC entropy subsystem disabled in configuration");
+            None
         };
 
-        // Share the metrics collector and workflow engine with the scheduler
+        let state = Arc::new(AppState {
+            config: self.config.clone(),
+            event_stream: self.event_stream.clone(),
+            policy_engine: self.policy_engine.clone(),
+            ledger: self.ledger.clone(),
+            worker_manager: self.worker_manager.clone(),
+            scheduler: self.scheduler.clone(),
+            metrics: Arc::new(MetricsCollector::new()),
+            model_router: model_router.clone(),
+            safe_mode_guard: safe_mode_guard.clone(),
+            session_manager: session_manager.clone(),
+            memory_manager: memory_manager.clone(),
+            sub_agent_manager: sub_agent_manager.clone(),
+            workflow_engine: workflow_engine.clone(),
+            xp_manager: xp_manager.clone(),
+            voice_gateway: voice_gateway.clone(),
+            skill_book: skill_book.clone(),
+            elixir_manager: elixir_manager.clone(),
+            entropy_provider: entropy_provider.clone(),
+            integrity_cache: Arc::new(RwLock::new(HashMap::new())),
+            channel_adapters: Arc::new(RwLock::new(HashMap::new())),
+            channel_adapter_factory: self.adapter_factory.clone(),
+            correlation_counter: Arc::new(AtomicU64::new(0)),
+            started_at: std::time::Instant::now(),
+        });
+
+        // Share the metrics collector, workflow engine, and entropy provider with the scheduler
         {
             let mut scheduler = self.scheduler.lock().await;
             scheduler.set_metrics(state.metrics.clone());
             scheduler.set_workflow_engine(state.workflow_engine.clone());
+            if let Some(provider) = state.entropy_provider.as_ref() {
+                scheduler.set_entropy_provider(provider.clone());
+            }
         }
         state.event_stream.set_metrics(state.metrics.clone());
 
@@ -665,7 +725,7 @@ impl Server {
 
 /// Build the Axum router with all routes and middleware.
 #[allow(deprecated)] // TimeoutLayer::new is deprecated but simpler than with_status_code
-fn build_router(state: AppState) -> Router {
+fn build_router(state: Arc<AppState>) -> Router {
     // Health endpoint - exempt from auth (must be first)
     let health_routes = Router::new()
         .route("/v1/health", get(health_handler))
@@ -834,6 +894,81 @@ fn build_router(state: AppState) -> Router {
             "/v1/memory/revoked-grants",
             get(list_revoked_grants_handler),
         )
+        // MAGIC entropy endpoints
+        .route(
+            "/v1/magic/entropy/health",
+            get(magic_entropy_health_handler),
+        )
+        .route(
+            "/v1/magic/entropy/sample",
+            post(magic_entropy_sample_handler),
+        )
+        .route("/v1/magic/entropy/log", get(magic_entropy_log_handler))
+        .route(
+            "/v1/magic/elixirs/rehash",
+            post(magic_elixirs_rehash_handler),
+        )
+        .route("/v1/magic/config", get(magic_get_config_handler))
+        .route("/v1/magic/config", post(magic_update_config_handler))
+        .route(
+            "/v1/magic/auth/quantinuum/login",
+            post(magic_quantinuum_login_handler),
+        )
+        .route(
+            "/v1/magic/auth/quantinuum",
+            put(magic_quantinuum_persist_handler),
+        )
+        .route(
+            "/v1/magic/auth/quantinuum/refresh",
+            post(magic_quantinuum_refresh_handler),
+        )
+        .route("/v1/magic/auth/status", get(magic_auth_status_handler))
+        // MAGIC mantra endpoints
+        .route(
+            "/v1/magic/mantras",
+            get(magic_list_mantras_handler).post(magic_add_mantra_entry_handler),
+        )
+        .route(
+            "/v1/magic/mantras/{entry_id}",
+            patch(magic_update_mantra_entry_handler).delete(magic_delete_mantra_entry_handler),
+        )
+        .route(
+            "/v1/magic/mantras/categories/{id}",
+            get(magic_list_category_entries_handler),
+        )
+        .route(
+            "/v1/magic/mantras/categories/{id}/entries",
+            post(magic_add_mantra_entry_handler),
+        )
+        .route(
+            "/v1/magic/mantras/entries/{id}",
+            put(magic_update_mantra_entry_handler).delete(magic_delete_mantra_entry_handler),
+        )
+        .route(
+            "/v1/magic/mantras/history",
+            get(magic_mantra_history_handler),
+        )
+        .route(
+            "/v1/magic/mantras/context",
+            get(magic_mantra_context_handler),
+        )
+        .route(
+            "/v1/magic/mantras/simulate",
+            post(magic_mantra_simulate_handler),
+        )
+        // MAGIC integrity endpoints
+        .route(
+            "/v1/magic/integrity/verify",
+            post(magic_integrity_verify_handler),
+        )
+        .route(
+            "/v1/magic/integrity/status",
+            get(magic_integrity_status_handler),
+        )
+        .route(
+            "/v1/magic/integrity/backfill",
+            post(magic_integrity_backfill_handler),
+        )
         // Apply auth middleware to all protected routes
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
@@ -887,7 +1022,7 @@ fn build_router(state: AppState) -> Router {
 /// Health check endpoint handler.
 ///
 /// Returns the overall health status of the system including database connectivity.
-async fn health_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn health_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let db_healthy = state.check_database_health().await;
 
     let response = HealthResponse {
@@ -918,7 +1053,7 @@ async fn health_handler(State(state): State<AppState>) -> impl IntoResponse {
 ///
 /// Returns extended health diagnostics including uptime, last heartbeat,
 /// scheduler state, worker manager state, and event stream subscriber count.
-async fn detailed_health_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn detailed_health_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let db_healthy = state.check_database_health().await;
     let uptime_seconds = state.started_at.elapsed().as_secs();
 
@@ -984,7 +1119,7 @@ async fn detailed_health_handler(State(state): State<AppState>) -> impl IntoResp
 ///
 /// Returns current system status including workers, models, and queue depth.
 /// Note: Workers and models will be populated when those systems are implemented.
-async fn status_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let workers = {
         let worker_manager = state.worker_manager.lock().await;
         worker_manager.get_worker_status().await
@@ -1001,7 +1136,8 @@ async fn status_handler(State(state): State<AppState>) -> impl IntoResponse {
         .try_into()
         .unwrap_or(0)
     } else {
-        0 // TODO: return a meaningful estimate if pool is unavailable
+        0 // Known limitation (v1.0.0): returns 0 when pool is unreachable; a meaningful
+          // estimate requires pool introspection not yet exposed.
     };
 
     // Look up the core identity
@@ -1049,7 +1185,7 @@ async fn status_handler(State(state): State<AppState>) -> impl IntoResponse {
 ///
 /// Publishes the event to the EventStream so WebSocket subscribers receive it.
 async fn publish_event_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<serde_json::Value>,
 ) -> impl IntoResponse {
     let event_type_str = body["event_type"].as_str().unwrap_or("Custom");
@@ -1065,6 +1201,7 @@ async fn publish_event_handler(
 
     let event_type = match event_type_str {
         "TaskCreated" => EventType::TaskCreated,
+        "TaskQueued" => EventType::TaskQueued,
         "TaskStarted" => EventType::TaskStarted,
         "TaskCompleted" => EventType::TaskCompleted,
         "TaskFailed" => EventType::TaskFailed,
@@ -1088,7 +1225,7 @@ async fn publish_event_handler(
 /// Metrics endpoint handler — returns aggregated performance metrics.
 ///
 /// Returns task latency percentiles, event throughput, and stream stats.
-async fn metrics_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn metrics_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let event_stats = state.event_stream.stats();
     let snapshot = state.metrics.get_snapshot(&event_stats);
 
@@ -1122,7 +1259,7 @@ async fn metrics_handler(State(state): State<AppState>) -> impl IntoResponse {
 
 /// Create a new task via `POST /v1/tasks`.
 async fn create_task_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<CreateTaskRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -1200,7 +1337,7 @@ async fn create_task_handler(
 
 /// List all tasks via `GET /v1/tasks`.
 #[allow(clippy::type_complexity)]
-async fn list_tasks_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn list_tasks_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(_) => {
@@ -1269,7 +1406,7 @@ async fn list_tasks_handler(State(state): State<AppState>) -> impl IntoResponse 
 /// Get a single task via `GET /v1/tasks/:task_id`.
 #[allow(clippy::type_complexity)]
 async fn get_task_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(task_id): Path<Uuid>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -1342,7 +1479,7 @@ async fn get_task_handler(
 
 /// Cancel a task via `POST /v1/tasks/:task_id/cancel`.
 async fn cancel_task_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(task_id): Path<Uuid>,
     Json(body): Json<CancelTaskRequest>,
 ) -> impl IntoResponse {
@@ -1376,7 +1513,7 @@ async fn cancel_task_handler(
 /// List runs for a task via `GET /v1/tasks/:task_id/runs`.
 #[allow(clippy::type_complexity)]
 async fn list_runs_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(task_id): Path<Uuid>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -1451,7 +1588,7 @@ async fn list_runs_handler(
 /// Get a single run by ID via `GET /v1/runs/:run_id`.
 #[allow(clippy::type_complexity)]
 async fn get_run_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(run_id): Path<Uuid>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -1532,7 +1669,7 @@ async fn get_run_handler(
 /// Get paginated logs for a run via `GET /v1/runs/:run_id/logs`.
 #[allow(clippy::type_complexity)]
 async fn get_run_logs_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(run_id): Path<Uuid>,
     Query(params): Query<RunLogsQuery>,
 ) -> impl IntoResponse {
@@ -1677,7 +1814,7 @@ pub async fn insert_run_log(
 
 /// List all skills via `GET /v1/skills`.
 #[allow(clippy::type_complexity)]
-async fn list_skills_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn list_skills_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(_) => {
@@ -1731,7 +1868,7 @@ async fn list_skills_handler(State(state): State<AppState>) -> impl IntoResponse
 
 /// Enable a skill via `POST /v1/skills/:skill_id/enable`.
 async fn enable_skill_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(skill_id): Path<Uuid>,
 ) -> impl IntoResponse {
     toggle_skill(state, skill_id, true).await
@@ -1739,14 +1876,18 @@ async fn enable_skill_handler(
 
 /// Disable a skill via `POST /v1/skills/:skill_id/disable`.
 async fn disable_skill_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(skill_id): Path<Uuid>,
 ) -> impl IntoResponse {
     toggle_skill(state, skill_id, false).await
 }
 
 /// Shared logic for enable/disable skill.
-async fn toggle_skill(state: AppState, skill_id: Uuid, enabled: bool) -> axum::response::Response {
+async fn toggle_skill(
+    state: Arc<AppState>,
+    skill_id: Uuid,
+    enabled: bool,
+) -> axum::response::Response {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(_) => {
@@ -1790,7 +1931,7 @@ async fn toggle_skill(state: AppState, skill_id: Uuid, enabled: bool) -> axum::r
 ///
 /// Scans the skills registry directory for new, updated, or removed skill
 /// manifests and synchronizes the database accordingly.
-async fn refresh_skills_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn refresh_skills_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p.clone(),
         Err(e) => {
@@ -1839,7 +1980,7 @@ struct SafeModeToggleRequest {
 }
 
 /// GET `/v1/safe-mode/status` — query current safe mode state.
-async fn safe_mode_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn safe_mode_status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match state.safe_mode_guard.is_enabled().await {
         Ok(enabled) => (StatusCode::OK, Json(json!({"safe_mode": enabled}))).into_response(),
         Err(e) => {
@@ -1855,7 +1996,7 @@ async fn safe_mode_status_handler(State(state): State<AppState>) -> impl IntoRes
 
 /// POST `/v1/safe-mode/enable` — enable safe mode.
 async fn enable_safe_mode_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<SafeModeToggleRequest>,
 ) -> impl IntoResponse {
     let signing_key = state.config.owner_signing_key();
@@ -1882,7 +2023,7 @@ async fn enable_safe_mode_handler(
 
 /// POST `/v1/safe-mode/disable` — disable safe mode.
 async fn disable_safe_mode_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<SafeModeToggleRequest>,
 ) -> impl IntoResponse {
     let signing_key = state.config.owner_signing_key();
@@ -1948,7 +2089,7 @@ struct IngestUsageRequest {
 /// Resolves each record's `provider` name to a `provider_id` in `model_providers`,
 /// then inserts a row into `usage_costs`. Unknown providers are skipped with a warning.
 async fn ingest_usage_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<IngestUsageRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -2137,7 +2278,7 @@ const fn default_approval_limit() -> i64 {
 
 /// List pending approvals via `GET /v1/approvals`.
 async fn list_approvals_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<ListApprovalsQuery>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -2196,7 +2337,7 @@ async fn list_approvals_handler(
 
 /// Approve a pending action via `POST /v1/approvals/:id/approve`.
 async fn approve_approval_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(approval_id): Path<Uuid>,
     Json(body): Json<carnelian_common::types::ApprovalActionRequest>,
 ) -> impl IntoResponse {
@@ -2320,7 +2461,7 @@ async fn approve_approval_handler(
 
 /// Deny a pending action via `POST /v1/approvals/:id/deny`.
 async fn deny_approval_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(approval_id): Path<Uuid>,
     Json(body): Json<carnelian_common::types::ApprovalActionRequest>,
 ) -> impl IntoResponse {
@@ -2418,7 +2559,7 @@ async fn deny_approval_handler(
 
 /// Batch approve pending actions via `POST /v1/approvals/batch`.
 async fn batch_approve_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<carnelian_common::types::BatchApprovalRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -2564,7 +2705,7 @@ struct ListCapabilitiesQuery {
 
 /// List capability grants via `GET /v1/capabilities`.
 async fn list_capabilities_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<ListCapabilitiesQuery>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -2650,7 +2791,7 @@ async fn list_capabilities_handler(
 ///
 /// If the action requires approval, returns 202 Accepted with the approval_id.
 async fn grant_capability_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<carnelian_common::types::GrantCapabilityRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -2725,7 +2866,7 @@ async fn grant_capability_handler(
 
 /// Revoke a capability via `DELETE /v1/capabilities/:id`.
 async fn revoke_capability_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(grant_id): Path<Uuid>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -2809,7 +2950,7 @@ fn default_memory_limit() -> i64 {
 
 /// Create a new memory via `POST /v1/memories`.
 async fn create_memory_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<CreateMemoryRequest>,
 ) -> impl IntoResponse {
     // Validate source
@@ -2864,7 +3005,7 @@ async fn create_memory_handler(
 
 /// List memories with optional filtering via `GET /v1/memories`.
 async fn list_memories_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<ListMemoriesQuery>,
 ) -> impl IntoResponse {
     let limit = params.limit.clamp(1, 200);
@@ -2926,7 +3067,7 @@ async fn list_memories_handler(
 
 /// Retrieve a single memory via `GET /v1/memories/{memory_id}`.
 async fn get_memory_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(memory_id): Path<Uuid>,
 ) -> impl IntoResponse {
     match state.memory_manager.get_memory(memory_id).await {
@@ -2968,7 +3109,7 @@ async fn get_memory_handler(
 
 /// Export memories as a signed, encrypted CBOR envelope via `POST /v1/memories/export`.
 async fn export_memories_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<ExportMemoryRequest>,
 ) -> impl IntoResponse {
     use crate::memory::MemoryExportOptions;
@@ -3035,7 +3176,7 @@ async fn export_memories_handler(
 
 /// Import memories from a CBOR envelope via `POST /v1/memories/import`.
 async fn import_memories_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<ImportMemoryRequest>,
 ) -> impl IntoResponse {
     use base64::Engine;
@@ -3053,10 +3194,10 @@ async fn import_memories_handler(
         };
 
     let public_key = if body.verify_signature {
-        match &body.public_key {
-            Some(pk) => Some(pk.as_str()),
-            None => state.config.owner_public_key.as_deref(),
-        }
+        body.public_key.as_ref().map_or_else(
+            || state.config.owner_public_key.as_deref(),
+            |pk| Some(pk.as_str()),
+        )
     } else {
         None
     };
@@ -3130,7 +3271,7 @@ fn default_heartbeat_limit() -> i64 {
 
 /// List recent heartbeat records via `GET /v1/heartbeats`.
 async fn list_heartbeats_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<ListHeartbeatsQuery>,
 ) -> impl IntoResponse {
     let limit = params.limit.clamp(1, 100);
@@ -3195,7 +3336,7 @@ async fn list_heartbeats_handler(
 }
 
 /// Get current heartbeat status via `GET /v1/heartbeats/status`.
-async fn heartbeat_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn heartbeat_status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(e) => {
@@ -3251,7 +3392,7 @@ async fn heartbeat_status_handler(State(state): State<AppState>) -> impl IntoRes
 // =============================================================================
 
 /// Get core identity information via `GET /v1/identity`.
-async fn get_identity_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn get_identity_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(e) => {
@@ -3314,7 +3455,7 @@ async fn get_identity_handler(State(state): State<AppState>) -> impl IntoRespons
 }
 
 /// Get SOUL.md content via `GET /v1/identity/soul`.
-async fn get_soul_content_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn get_soul_content_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(e) => {
@@ -3372,7 +3513,7 @@ async fn get_soul_content_handler(State(state): State<AppState>) -> impl IntoRes
 // =============================================================================
 
 /// List all model providers via `GET /v1/providers`.
-async fn list_providers_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn list_providers_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(e) => {
@@ -3434,7 +3575,7 @@ async fn list_providers_handler(State(state): State<AppState>) -> impl IntoRespo
 }
 
 /// Get Ollama connection status via `GET /v1/providers/ollama/status`.
-async fn ollama_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn ollama_status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let gateway_url = format!("{}/health", state.model_router.gateway_url());
     let http_client = reqwest::Client::new();
 
@@ -3624,7 +3765,7 @@ async fn spawn_worker_for_sub_agent(
 /// sub_agent records in a transaction, grants requested capabilities, and
 /// spawns a worker process for the new sub-agent.
 async fn create_sub_agent_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(body): Json<CreateSubAgentRequest>,
 ) -> impl IntoResponse {
@@ -3711,7 +3852,7 @@ async fn create_sub_agent_handler(
 
 /// List sub-agents via `GET /v1/sub-agents`.
 async fn list_sub_agents_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<ListSubAgentsParams>,
 ) -> impl IntoResponse {
     match state
@@ -3730,7 +3871,7 @@ async fn list_sub_agents_handler(
 
 /// Get a sub-agent by ID via `GET /v1/sub-agents/{id}`.
 async fn get_sub_agent_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     match state.sub_agent_manager.get_sub_agent(id).await {
@@ -3750,7 +3891,7 @@ async fn get_sub_agent_handler(
 
 /// Update a sub-agent via `PUT /v1/sub-agents/{id}`.
 async fn update_sub_agent_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
     Json(body): Json<UpdateSubAgentRequest>,
 ) -> impl IntoResponse {
@@ -3768,7 +3909,7 @@ async fn update_sub_agent_handler(
 ///
 /// Stops the worker process if one is running, then soft-deletes the record.
 async fn delete_sub_agent_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     // Stop worker if running
@@ -3797,7 +3938,7 @@ async fn delete_sub_agent_handler(
 ///
 /// Stops the worker process and sets the `_paused` flag in directives.
 async fn pause_sub_agent_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     // Stop worker if running
@@ -3822,7 +3963,7 @@ async fn pause_sub_agent_handler(
 /// Removes the `_paused` flag from directives and spawns a new worker process
 /// using the runtime stored in the sub-agent's directives.
 async fn resume_sub_agent_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     // First resume the record (remove _paused flag)
@@ -3881,12 +4022,12 @@ async fn resume_sub_agent_handler(
 // =============================================================================
 
 /// WebSocket upgrade handler for event streaming.
-async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
+async fn ws_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> impl IntoResponse {
     ws.on_upgrade(|socket| handle_websocket(socket, state))
 }
 
 /// Handle an established WebSocket connection.
-async fn handle_websocket(socket: axum::extract::ws::WebSocket, state: AppState) {
+async fn handle_websocket(socket: axum::extract::ws::WebSocket, state: Arc<AppState>) {
     let connection_start = std::time::Instant::now();
     let subscriber_count = state.event_stream.subscriber_count();
 
@@ -3986,7 +4127,7 @@ async fn handle_websocket(socket: axum::extract::ws::WebSocket, state: AppState)
 ///
 /// Handles Meta hub challenge verification for webhook subscription.
 async fn whatsapp_verify_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
     // Find the WhatsApp adapter
@@ -4021,7 +4162,7 @@ async fn whatsapp_verify_handler(
 ///
 /// Processes incoming messages from WhatsApp Cloud API.
 async fn whatsapp_inbound_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     body: bytes::Bytes,
 ) -> impl IntoResponse {
@@ -4060,7 +4201,7 @@ async fn whatsapp_inbound_handler(
 ///
 /// Handles both URL verification and message events from Slack.
 async fn slack_event_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     body: bytes::Bytes,
 ) -> impl IntoResponse {
@@ -4129,7 +4270,7 @@ async fn shutdown_signal() {
 
 /// Create a workflow via `POST /v1/workflows`.
 async fn create_workflow_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(body): Json<CreateWorkflowRequest>,
 ) -> impl IntoResponse {
@@ -4180,7 +4321,7 @@ async fn create_workflow_handler(
 
 /// List workflows via `GET /v1/workflows`.
 async fn list_workflows_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<ListWorkflowsParams>,
 ) -> impl IntoResponse {
     match state
@@ -4206,7 +4347,7 @@ async fn list_workflows_handler(
 
 /// Get a workflow via `GET /v1/workflows/{id}`.
 async fn get_workflow_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     match state.workflow_engine.get_workflow(id).await {
@@ -4226,7 +4367,7 @@ async fn get_workflow_handler(
 
 /// Update a workflow via `PUT /v1/workflows/{id}`.
 async fn update_workflow_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
     Json(body): Json<UpdateWorkflowRequest>,
 ) -> impl IntoResponse {
@@ -4249,7 +4390,7 @@ async fn update_workflow_handler(
 
 /// Delete a workflow via `DELETE /v1/workflows/{id}`.
 async fn delete_workflow_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     match state.workflow_engine.delete_workflow(id).await {
@@ -4269,7 +4410,7 @@ async fn delete_workflow_handler(
 
 /// Execute a workflow via `POST /v1/workflows/{id}/execute`.
 async fn execute_workflow_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
     Json(body): Json<ExecuteWorkflowRequest>,
 ) -> impl IntoResponse {
@@ -4401,7 +4542,7 @@ async fn build_and_start_adapter(
 
 /// List all channel sessions via `GET /v1/channels`.
 async fn list_channels_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<ListChannelsQuery>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -4508,7 +4649,7 @@ async fn list_channels_handler(
 /// in `config_store`, builds the corresponding adapter, starts it, and
 /// tracks it in `AppState::channel_adapters`.
 async fn create_channel_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<CreateChannelRequest>,
 ) -> impl IntoResponse {
     // Validate channel_type early
@@ -4640,7 +4781,7 @@ async fn create_channel_handler(
 
 /// Get a single channel session via `GET /v1/channels/{id}`.
 async fn get_channel_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -4723,7 +4864,7 @@ async fn get_channel_handler(
 /// If `bot_token` is provided, the existing adapter is stopped, credentials
 /// are updated, and a new adapter is built and started.
 async fn update_channel_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
     Json(body): Json<UpdateChannelRequest>,
 ) -> impl IntoResponse {
@@ -4860,7 +5001,7 @@ async fn update_channel_handler(
 /// Stops the running adapter, removes credentials from `config_store`,
 /// and deletes the session row.
 async fn delete_channel_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -4939,7 +5080,7 @@ async fn delete_channel_handler(
 ///
 /// Generates a pairing token and stores it in the session metadata.
 async fn pair_channel_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
     Json(body): Json<PairChannelRequest>,
 ) -> impl IntoResponse {
@@ -5030,7 +5171,7 @@ async fn pair_channel_handler(
 
 /// Get agent XP details via `GET /v1/xp/agents/:id`.
 async fn get_agent_xp_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(identity_id): Path<Uuid>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -5158,7 +5299,7 @@ async fn get_agent_xp_handler(
 
 /// Get paginated XP history via `GET /v1/xp/agents/:id/history`.
 async fn get_xp_history_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(identity_id): Path<Uuid>,
     Query(params): Query<XpHistoryQuery>,
 ) -> impl IntoResponse {
@@ -5260,7 +5401,7 @@ async fn get_xp_history_handler(
 }
 
 /// Get XP leaderboard via `GET /v1/xp/leaderboard`.
-async fn get_xp_leaderboard_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn get_xp_leaderboard_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(_) => {
@@ -5314,7 +5455,7 @@ async fn get_xp_leaderboard_handler(State(state): State<AppState>) -> impl IntoR
 
 /// Get skill metrics via `GET /v1/xp/skills/:id`.
 async fn get_skill_metrics_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(skill_id): Path<Uuid>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -5413,7 +5554,7 @@ async fn get_skill_metrics_handler(
 
 /// Get top skills by XP earned via `GET /v1/xp/skills/top`.
 async fn get_top_skills_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<TopSkillsQuery>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -5509,7 +5650,7 @@ async fn get_top_skills_handler(
 
 /// Admin-gated XP award via `POST /v1/xp/award`.
 async fn award_xp_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<AwardXpRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -5695,7 +5836,7 @@ async fn award_xp_handler(
 
 /// Configure voice settings via `POST /v1/voice/configure`.
 async fn configure_voice_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(req): Json<ConfigureVoiceRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -5764,7 +5905,7 @@ async fn configure_voice_handler(
 
 /// Test text-to-speech via `POST /v1/voice/test`.
 async fn test_voice_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(req): Json<TestVoiceRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -5824,7 +5965,7 @@ async fn test_voice_handler(
 }
 
 /// List available voices via `GET /v1/voice/voices`.
-async fn list_voices_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn list_voices_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(_) => {
@@ -5865,7 +6006,7 @@ async fn list_voices_handler(State(state): State<AppState>) -> impl IntoResponse
 
 /// Transcribe audio to text via `POST /v1/voice/transcribe`.
 async fn transcribe_voice_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(req): Json<TranscribeVoiceRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -6014,13 +6155,14 @@ mod tests {
             voice_gateway,
             skill_book,
             elixir_manager,
+            None, // entropy_provider
         )
     }
 
     #[tokio::test]
     async fn test_health_endpoint_structure() {
         let state = create_test_state();
-        let router = build_router(state);
+        let router = build_router(Arc::new(state));
 
         let request = Request::builder()
             .uri("/v1/health")
@@ -6050,7 +6192,7 @@ mod tests {
     #[tokio::test]
     async fn test_status_endpoint_structure() {
         let state = create_test_state();
-        let router = build_router(state);
+        let router = build_router(Arc::new(state));
 
         let request = Request::builder()
             .uri("/v1/status")
@@ -6081,7 +6223,7 @@ mod tests {
     #[tokio::test]
     async fn test_health_response_content_type() {
         let state = create_test_state();
-        let router = build_router(state);
+        let router = build_router(Arc::new(state));
 
         let request = Request::builder()
             .uri("/v1/health")
@@ -6102,7 +6244,7 @@ mod tests {
     #[tokio::test]
     async fn test_status_response_content_type() {
         let state = create_test_state();
-        let router = build_router(state);
+        let router = build_router(Arc::new(state));
 
         let request = Request::builder()
             .uri("/v1/status")
@@ -6143,7 +6285,7 @@ pub struct PublishAnchorResponse {
 
 /// Publish a ledger slice anchor
 async fn publish_ledger_anchor_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<PublishAnchorRequest>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -6229,7 +6371,7 @@ pub struct AnchorProofResponse {
 
 /// Get anchor proof by ID
 async fn get_ledger_anchor_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -6304,7 +6446,7 @@ async fn get_ledger_anchor_handler(
 
 /// Verify a hash against a stored anchor
 async fn verify_ledger_anchor_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Query(params): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
@@ -6378,7 +6520,7 @@ pub struct RevokedGrantResponse {
 
 /// List revoked capability grants via `GET /v1/memory/revoked-grants`.
 async fn list_revoked_grants_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<ListRevokedGrantsQuery>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -6453,7 +6595,7 @@ fn default_ledger_limit() -> i64 {
 
 /// List ledger events via `GET /v1/ledger/events`.
 async fn list_ledger_events_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<LedgerEventsQuery>,
 ) -> impl IntoResponse {
     let pool = match state.config.pool() {
@@ -6573,7 +6715,7 @@ async fn list_ledger_events_handler(
 }
 
 /// Verify ledger chain integrity via `GET /v1/ledger/verify`.
-async fn verify_ledger_chain_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn verify_ledger_chain_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match state.ledger.verify_chain(None).await {
         Ok(intact) => {
             let (event_count, first_event_id, last_event_id) = if let Ok(pool) = state.config.pool()
@@ -6620,7 +6762,7 @@ async fn verify_ledger_chain_handler(State(state): State<AppState>) -> impl Into
 }
 
 /// Get setup status via `GET /v1/config/setup-status`.
-async fn get_setup_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn get_setup_status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(_) => {
@@ -6658,7 +6800,7 @@ async fn get_setup_status_handler(State(state): State<AppState>) -> impl IntoRes
 }
 
 /// Mark setup as complete via `POST /v1/config/setup-complete`.
-async fn post_setup_complete_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn post_setup_complete_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(_) => {
@@ -6702,7 +6844,7 @@ async fn post_setup_complete_handler(State(state): State<AppState>) -> impl Into
 // =============================================================================
 
 /// List all skills in the Skill Book catalog via `GET /v1/node-registry`.
-async fn list_skill_book_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn list_skill_book_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match state.skill_book.load_catalog() {
         Ok(catalog) => (
             StatusCode::OK,
@@ -6722,7 +6864,7 @@ async fn list_skill_book_handler(State(state): State<AppState>) -> impl IntoResp
 
 /// Get a single Skill Book entry via `GET /v1/node-registry/:id`.
 async fn get_skill_book_entry_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(skill_id): Path<String>,
 ) -> impl IntoResponse {
     match state.skill_book.get_entry(&skill_id) {
@@ -6741,7 +6883,7 @@ async fn get_skill_book_entry_handler(
 
 /// Activate a skill from the Skill Book via `POST /v1/node-registry/:id/activate`.
 async fn activate_skill_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(skill_id): Path<String>,
     Json(body): Json<carnelian_common::types::ActivateSkillRequest>,
 ) -> impl IntoResponse {
@@ -6761,7 +6903,7 @@ async fn activate_skill_handler(
 
 /// Deactivate a skill via `DELETE /v1/node-registry/:id/deactivate`.
 async fn deactivate_skill_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(skill_id): Path<String>,
 ) -> impl IntoResponse {
     match state.skill_book.deactivate(&skill_id).await {
@@ -6784,7 +6926,7 @@ async fn deactivate_skill_handler(
 
 /// Get API key for remote clients via `GET /v1/config/api-key`.
 /// Restricted to localhost-only access.
-async fn get_api_key_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn get_api_key_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     // Get owner signing key hash as API key
     let api_key = state
         .config
@@ -6856,7 +6998,7 @@ struct RejectDraftBody {
 
 /// GET /v1/elixirs - List elixirs with optional filtering and pagination
 async fn list_elixirs_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<ListElixirsQuery>,
 ) -> impl IntoResponse {
     match state.elixir_manager.list_elixirs(params).await {
@@ -6875,12 +7017,16 @@ async fn list_elixirs_handler(
 
 /// POST /v1/elixirs - Create a new elixir
 async fn create_elixir_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<CreateElixirRequest>,
 ) -> impl IntoResponse {
     let created_by = body.created_by;
 
-    match state.elixir_manager.create_elixir(body, created_by).await {
+    match state
+        .elixir_manager
+        .create_elixir(body, created_by, None)
+        .await
+    {
         Ok(elixir) => (
             StatusCode::CREATED,
             Json(serde_json::to_value(elixir).unwrap_or_default()),
@@ -6896,7 +7042,7 @@ async fn create_elixir_handler(
 
 /// GET /v1/elixirs/:id - Get a single elixir by ID
 async fn get_elixir_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(elixir_id): Path<Uuid>,
 ) -> impl IntoResponse {
     match state.elixir_manager.get_elixir(elixir_id).await {
@@ -6920,7 +7066,7 @@ async fn get_elixir_handler(
 
 /// GET /v1/elixirs/search - Search elixirs using semantic search
 async fn search_elixirs_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<SearchElixirsQuery>,
 ) -> impl IntoResponse {
     let limit = params.limit.unwrap_or(10);
@@ -6940,7 +7086,7 @@ async fn search_elixirs_handler(
 }
 
 /// GET /v1/elixirs/drafts - List all elixir drafts
-async fn list_elixir_drafts_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn list_elixir_drafts_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = match state.config.pool() {
         Ok(p) => p,
         Err(e) => {
@@ -7002,13 +7148,13 @@ async fn list_elixir_drafts_handler(State(state): State<AppState>) -> impl IntoR
 
 /// POST /v1/elixirs/drafts/:id/approve - Approve a draft and promote to elixir
 async fn approve_elixir_draft_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(draft_id): Path<Uuid>,
     Json(body): Json<ApproveDraftBody>,
 ) -> impl IntoResponse {
     match state
         .elixir_manager
-        .approve_draft(draft_id, body.reviewed_by)
+        .approve_draft(draft_id, body.reviewed_by, None)
         .await
     {
         Ok(response) => (
@@ -7029,7 +7175,7 @@ async fn approve_elixir_draft_handler(
 
 /// POST /v1/elixirs/drafts/:id/reject - Reject a draft
 async fn reject_elixir_draft_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(draft_id): Path<Uuid>,
     Json(body): Json<RejectDraftBody>,
 ) -> impl IntoResponse {
@@ -7052,4 +7198,1644 @@ async fn reject_elixir_draft_handler(
         )
             .into_response(),
     }
+}
+
+// =============================================================================
+// MAGIC ENTROPY HANDLERS
+// =============================================================================
+
+/// GET /v1/magic/entropy/health - Check entropy provider health
+async fn magic_entropy_health_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    match &state.entropy_provider {
+        Some(provider) => {
+            // Try to downcast to MixedEntropyProvider to get all provider health
+            let provider_arc = provider.as_ref();
+            if let Some(mixed) = (provider_arc as &dyn std::any::Any)
+                .downcast_ref::<carnelian_magic::entropy::MixedEntropyProvider>()
+            {
+                let all_health = mixed.all_health().await;
+                let mut health_map = serde_json::Map::new();
+                for h in all_health {
+                    health_map.insert(
+                        h.source.clone(),
+                        json!({
+                            "available": h.available,
+                            "latency_ms": h.latency_ms,
+                            "error": h.error,
+                            "checked_at": h.checked_at,
+                        }),
+                    );
+                }
+                (StatusCode::OK, Json(json!(health_map))).into_response()
+            } else {
+                // Fallback for non-mixed providers
+                let health = provider_arc.health().await;
+                (StatusCode::OK, Json(json!(health))).into_response()
+            }
+        }
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"error": "MAGIC entropy subsystem is disabled"})),
+        )
+            .into_response(),
+    }
+}
+
+/// POST /v1/magic/entropy/sample - Generate entropy sample
+#[derive(Debug, Deserialize)]
+struct EntropySampleRequest {
+    #[serde(default = "default_sample_bytes")]
+    bytes: usize,
+}
+
+fn default_sample_bytes() -> usize {
+    32
+}
+
+async fn magic_entropy_sample_handler(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<EntropySampleRequest>,
+) -> impl IntoResponse {
+    let bytes = body.bytes.clamp(1, 1024);
+
+    match &state.entropy_provider {
+        Some(provider) => match provider.as_ref().get_bytes(bytes).await {
+            Ok(entropy_bytes) => {
+                let hex_encoded = hex::encode(&entropy_bytes);
+                (
+                    StatusCode::OK,
+                    Json(json!({
+                        "bytes": bytes,
+                        "hex": hex_encoded,
+                        "source": provider.source_name(),
+                    })),
+                )
+                    .into_response()
+            }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Entropy generation failed: {}", e)})),
+            )
+                .into_response(),
+        },
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"error": "MAGIC entropy subsystem is disabled"})),
+        )
+            .into_response(),
+    }
+}
+
+/// GET /v1/magic/entropy/log - Get entropy log entries
+async fn magic_entropy_log_handler(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Database pool error: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let limit: i64 = params
+        .get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20)
+        .clamp(1, 100);
+
+    // Query entropy_log table if it exists, otherwise return empty array
+    let result = sqlx::query(
+        r#"
+        SELECT ts, source, bytes_requested, quantum_available, latency_ms
+        FROM entropy_log
+        ORDER BY ts DESC
+        LIMIT $1
+        "#,
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await;
+
+    result.map_or_else(
+        |_| {
+            // Table doesn't exist yet, return empty array
+            (StatusCode::OK, Json(json!({"entries": []}))).into_response()
+        },
+        |rows| {
+            let entries: Vec<serde_json::Value> = rows
+                .iter()
+                .map(|row| {
+                    json!({
+                        "ts": row.try_get::<chrono::DateTime<chrono::Utc>, _>("ts").ok(),
+                        "source": row.try_get::<String, _>("source").ok(),
+                        "bytes_requested": row.try_get::<i32, _>("bytes_requested").ok(),
+                        "quantum_available": row.try_get::<bool, _>("quantum_available").ok(),
+                        "latency_ms": row.try_get::<Option<i64>, _>("latency_ms").ok().flatten(),
+                    })
+                })
+                .collect();
+            (StatusCode::OK, Json(json!({"entries": entries}))).into_response()
+        },
+    )
+}
+
+/// POST /v1/magic/elixirs/rehash - Rehash all elixirs with fresh entropy
+async fn magic_elixirs_rehash_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Database pool error: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    // Get entropy provider
+    let provider = match &state.entropy_provider {
+        Some(p) => p,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": "MAGIC entropy subsystem is disabled"})),
+            )
+                .into_response();
+        }
+    };
+
+    // Fetch all elixirs
+    let elixirs = match sqlx::query(
+        r#"
+        SELECT elixir_id, name
+        FROM elixirs
+        WHERE active = true
+        "#,
+    )
+    .fetch_all(pool)
+    .await
+    {
+        Ok(rows) => rows,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to fetch elixirs: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let mut rehashed = 0;
+    for elixir in elixirs {
+        // Generate 32 bytes of entropy for each elixir
+        if let Ok(entropy_bytes) = provider.as_ref().get_bytes(32).await {
+            let hex_hash = hex::encode(&entropy_bytes);
+            // Get elixir_id from row
+            if let Ok(elixir_id) = elixir.try_get::<uuid::Uuid, _>("elixir_id") {
+                // Update elixir with new quantum hash
+                if sqlx::query(
+                    r#"
+                    UPDATE elixirs
+                    SET quantum_hash = $1, updated_at = NOW()
+                    WHERE elixir_id = $2
+                    "#,
+                )
+                .bind(hex_hash)
+                .bind(elixir_id)
+                .execute(pool)
+                .await
+                .is_ok()
+                {
+                    rehashed += 1;
+                }
+            }
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "rehashed": rehashed,
+            "message": format!("Rehashed {} elixirs with fresh entropy", rehashed)
+        })),
+    )
+        .into_response()
+}
+
+/// GET /v1/magic/config - Get MAGIC configuration (with masked API keys)
+async fn magic_get_config_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let config = &state.config.magic;
+
+    let masked_config = json!({
+        "enabled": config.enabled,
+        "quantum_origin_url": config.quantum_origin_url,
+        "quantum_origin_api_key": if config.quantum_origin_api_key.is_empty() { "" } else { "***MASKED***" },
+        "quantinuum_enabled": config.quantinuum_enabled,
+        "quantinuum_device": config.quantinuum_device,
+        "quantinuum_n_bits": config.quantinuum_n_bits,
+        "qiskit_enabled": config.qiskit_enabled,
+        "qiskit_backend": config.qiskit_backend,
+        "entropy_timeout_ms": config.entropy_timeout_ms,
+        "entropy_mix_ratio": config.entropy_mix_ratio,
+        "log_entropy_events": config.log_entropy_events,
+        "mantra_cooldown_beats": config.mantra_cooldown_beats,
+    });
+
+    (StatusCode::OK, Json(masked_config)).into_response()
+}
+
+/// POST /v1/magic/config - Update MAGIC configuration
+#[derive(Debug, Deserialize)]
+struct MagicConfigUpdate {
+    quantum_origin_api_key: Option<String>,
+    quantinuum_enabled: Option<bool>,
+    qiskit_enabled: Option<bool>,
+}
+
+async fn magic_update_config_handler(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<MagicConfigUpdate>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Database pool error: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let encryption = state
+        .config
+        .owner_signing_key()
+        .map(|sk| crate::encryption::EncryptionHelper::new(pool, sk));
+
+    if let Some(api_key) = body.quantum_origin_api_key {
+        let enc = match encryption {
+            Some(e) => e,
+            None => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(
+                        json!({"error": "Encryption not available - owner signing key not loaded"}),
+                    ),
+                )
+                    .into_response();
+            }
+        };
+
+        let ciphertext = match enc.encrypt_text(&api_key).await {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": format!("Encryption failed: {}", e)})),
+                )
+                    .into_response();
+            }
+        };
+
+        if let Err(e) = sqlx::query(
+            r"INSERT INTO config_store (key, value, value_blob, encrypted, updated_at)
+              VALUES ($1, '{}'::jsonb, $2, true, NOW())
+              ON CONFLICT (key) DO UPDATE
+                SET value = '{}'::jsonb, value_blob = $2, encrypted = true, updated_at = NOW()",
+        )
+        .bind("magic.quantum_origin_api_key")
+        .bind(&ciphertext)
+        .execute(pool)
+        .await
+        {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to store API key: {}", e)})),
+            )
+                .into_response();
+        }
+    }
+
+    if let Some(enabled) = body.quantinuum_enabled {
+        if let Err(e) = sqlx::query(
+            r"INSERT INTO config_store (key, value_text, encrypted, updated_at)
+              VALUES ($1, $2, false, NOW())
+              ON CONFLICT (key) DO UPDATE
+                SET value_text = $2, encrypted = false, updated_at = NOW()",
+        )
+        .bind("magic.quantinuum_enabled")
+        .bind(enabled.to_string())
+        .execute(pool)
+        .await
+        {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to store quantinuum_enabled: {}", e)})),
+            )
+                .into_response();
+        }
+    }
+
+    if let Some(enabled) = body.qiskit_enabled {
+        if let Err(e) = sqlx::query(
+            r"INSERT INTO config_store (key, value_text, encrypted, updated_at)
+              VALUES ($1, $2, false, NOW())
+              ON CONFLICT (key) DO UPDATE
+                SET value_text = $2, encrypted = false, updated_at = NOW()",
+        )
+        .bind("magic.qiskit_enabled")
+        .bind(enabled.to_string())
+        .execute(pool)
+        .await
+        {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to store qiskit_enabled: {}", e)})),
+            )
+                .into_response();
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({"message": "Configuration updated successfully"})),
+    )
+        .into_response()
+}
+
+/// POST /v1/magic/auth/quantinuum/login - Login to Quantinuum and persist tokens
+#[derive(Debug, Deserialize)]
+struct QuantinuumLoginRequest {
+    email: String,
+    password: String,
+}
+
+async fn magic_quantinuum_login_handler(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<QuantinuumLoginRequest>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Database pool error: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let encryption = match state
+        .config
+        .owner_signing_key()
+        .map(|sk| crate::encryption::EncryptionHelper::new(pool, sk))
+    {
+        Some(e) => e,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Encryption not available - owner signing key not loaded"})),
+            )
+                .into_response();
+        }
+    };
+
+    let client = reqwest::Client::new();
+    let login_response = match client
+        .post("https://qapi.quantinuum.com/v1/login")
+        .json(&json!({
+            "email": body.email,
+            "password": body.password,
+        }))
+        .send()
+        .await
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": format!("Quantinuum login request failed: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    if !login_response.status().is_success() {
+        let status = login_response.status();
+        let error_text = login_response.text().await.unwrap_or_default();
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": format!("Quantinuum login failed ({}): {}", status, error_text)})),
+        )
+            .into_response();
+    }
+
+    let login_data: serde_json::Value = match login_response.json().await {
+        Ok(data) => data,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": format!("Failed to parse Quantinuum response: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let id_token = match login_data.get("id-token").and_then(|v| v.as_str()) {
+        Some(t) => t,
+        None => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": "Quantinuum response missing id-token"})),
+            )
+                .into_response();
+        }
+    };
+
+    let refresh_token = match login_data.get("refresh-token").and_then(|v| v.as_str()) {
+        Some(t) => t,
+        None => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": "Quantinuum response missing refresh-token"})),
+            )
+                .into_response();
+        }
+    };
+
+    let id_token_cipher = match encryption.encrypt_text(id_token).await {
+        Ok(c) => c,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to encrypt id-token: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let refresh_token_cipher = match encryption.encrypt_text(refresh_token).await {
+        Ok(c) => c,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to encrypt refresh-token: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    if let Err(e) = sqlx::query(
+        r"INSERT INTO config_store (key, value, value_blob, encrypted, updated_at)
+          VALUES ($1, '{}'::jsonb, $2, true, NOW())
+          ON CONFLICT (key) DO UPDATE
+            SET value = '{}'::jsonb, value_blob = $2, encrypted = true, updated_at = NOW()",
+    )
+    .bind("magic.quantinuum_id_token")
+    .bind(&id_token_cipher)
+    .execute(pool)
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to store id-token: {}", e)})),
+        )
+            .into_response();
+    }
+
+    if let Err(e) = sqlx::query(
+        r"INSERT INTO config_store (key, value, value_blob, encrypted, updated_at)
+          VALUES ($1, '{}'::jsonb, $2, true, NOW())
+          ON CONFLICT (key) DO UPDATE
+            SET value = '{}'::jsonb, value_blob = $2, encrypted = true, updated_at = NOW()",
+    )
+    .bind("magic.quantinuum_refresh_token")
+    .bind(&refresh_token_cipher)
+    .execute(pool)
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to store refresh-token: {}", e)})),
+        )
+            .into_response();
+    }
+
+    let expiry_ts = chrono::Utc::now() + chrono::Duration::hours(1);
+    if let Err(e) = sqlx::query(
+        r"INSERT INTO config_store (key, value_text, encrypted, updated_at)
+          VALUES ($1, $2, false, NOW())
+          ON CONFLICT (key) DO UPDATE
+            SET value_text = $2, encrypted = false, updated_at = NOW()",
+    )
+    .bind("magic.quantinuum_token_expiry")
+    .bind(expiry_ts.to_rfc3339())
+    .execute(pool)
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to store token expiry: {}", e)})),
+        )
+            .into_response();
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "message": "Quantinuum login successful",
+            "expires_at": expiry_ts.to_rfc3339(),
+        })),
+    )
+        .into_response()
+}
+
+/// PUT /v1/magic/auth/quantinuum - Persist Quantinuum tokens (for CLI direct login)
+#[derive(Debug, Deserialize)]
+struct QuantinuumPersistRequest {
+    id_token: String,
+    refresh_token: String,
+    expires_at: String,
+}
+
+async fn magic_quantinuum_persist_handler(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<QuantinuumPersistRequest>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Database pool error: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let encryption = match state
+        .config
+        .owner_signing_key()
+        .map(|sk| crate::encryption::EncryptionHelper::new(pool, sk))
+    {
+        Some(e) => e,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Encryption not available - owner signing key not loaded"})),
+            )
+                .into_response();
+        }
+    };
+
+    let id_token_cipher = match encryption.encrypt_text(&body.id_token).await {
+        Ok(c) => c,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to encrypt id-token: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let refresh_token_cipher = match encryption.encrypt_text(&body.refresh_token).await {
+        Ok(c) => c,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to encrypt refresh-token: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    if let Err(e) = sqlx::query(
+        r"INSERT INTO config_store (key, value, value_blob, encrypted, updated_at)
+          VALUES ($1, '{}'::jsonb, $2, true, NOW())
+          ON CONFLICT (key) DO UPDATE
+            SET value = '{}'::jsonb, value_blob = $2, encrypted = true, updated_at = NOW()",
+    )
+    .bind("magic.quantinuum_id_token")
+    .bind(&id_token_cipher)
+    .execute(pool)
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to store id-token: {}", e)})),
+        )
+            .into_response();
+    }
+
+    if let Err(e) = sqlx::query(
+        r"INSERT INTO config_store (key, value, value_blob, encrypted, updated_at)
+          VALUES ($1, '{}'::jsonb, $2, true, NOW())
+          ON CONFLICT (key) DO UPDATE
+            SET value = '{}'::jsonb, value_blob = $2, encrypted = true, updated_at = NOW()",
+    )
+    .bind("magic.quantinuum_refresh_token")
+    .bind(&refresh_token_cipher)
+    .execute(pool)
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to store refresh-token: {}", e)})),
+        )
+            .into_response();
+    }
+
+    if let Err(e) = sqlx::query(
+        r"INSERT INTO config_store (key, value_text, encrypted, updated_at)
+          VALUES ($1, $2, false, NOW())
+          ON CONFLICT (key) DO UPDATE
+            SET value_text = $2, encrypted = false, updated_at = NOW()",
+    )
+    .bind("magic.quantinuum_token_expiry")
+    .bind(&body.expires_at)
+    .execute(pool)
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to store token expiry: {}", e)})),
+        )
+            .into_response();
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "message": "Quantinuum tokens persisted successfully",
+            "expires_at": body.expires_at,
+        })),
+    )
+        .into_response()
+}
+
+/// POST /v1/magic/auth/quantinuum/refresh - Refresh Quantinuum tokens
+async fn magic_quantinuum_refresh_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Database pool error: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let encryption = match state
+        .config
+        .owner_signing_key()
+        .map(|sk| crate::encryption::EncryptionHelper::new(pool, sk))
+    {
+        Some(e) => e,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Encryption not available - owner signing key not loaded"})),
+            )
+                .into_response();
+        }
+    };
+
+    let refresh_token_row: Option<(Option<Vec<u8>>,)> = match sqlx::query_as(
+        "SELECT value_blob FROM config_store WHERE key = $1 AND encrypted = true",
+    )
+    .bind("magic.quantinuum_refresh_token")
+    .fetch_optional(pool)
+    .await
+    {
+        Ok(row) => row,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to load refresh token: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let refresh_token_cipher = match refresh_token_row.and_then(|(blob,)| blob) {
+        Some(c) => c,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "No refresh token found - please login first"})),
+            )
+                .into_response();
+        }
+    };
+
+    let refresh_token = match encryption.decrypt_bytes(&refresh_token_cipher).await {
+        Ok(plaintext) => String::from_utf8_lossy(&plaintext).to_string(),
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to decrypt refresh token: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let client = reqwest::Client::new();
+    let refresh_response = match client
+        .post("https://qapi.quantinuum.com/v1/refresh")
+        .json(&json!({
+            "refresh-token": refresh_token,
+        }))
+        .send()
+        .await
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": format!("Quantinuum refresh request failed: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    if !refresh_response.status().is_success() {
+        let status = refresh_response.status();
+        let error_text = refresh_response.text().await.unwrap_or_default();
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(
+                json!({"error": format!("Quantinuum refresh failed ({}): {}", status, error_text)}),
+            ),
+        )
+            .into_response();
+    }
+
+    let refresh_data: serde_json::Value = match refresh_response.json().await {
+        Ok(data) => data,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": format!("Failed to parse Quantinuum response: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let id_token = match refresh_data.get("id-token").and_then(|v| v.as_str()) {
+        Some(t) => t,
+        None => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": "Quantinuum response missing id-token"})),
+            )
+                .into_response();
+        }
+    };
+
+    let id_token_cipher = match encryption.encrypt_text(id_token).await {
+        Ok(c) => c,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to encrypt id-token: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    if let Err(e) = sqlx::query(
+        r"INSERT INTO config_store (key, value, value_blob, encrypted, updated_at)
+          VALUES ($1, '{}'::jsonb, $2, true, NOW())
+          ON CONFLICT (key) DO UPDATE
+            SET value = '{}'::jsonb, value_blob = $2, encrypted = true, updated_at = NOW()",
+    )
+    .bind("magic.quantinuum_id_token")
+    .bind(&id_token_cipher)
+    .execute(pool)
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to store id-token: {}", e)})),
+        )
+            .into_response();
+    }
+
+    let expiry_ts = chrono::Utc::now() + chrono::Duration::hours(1);
+    if let Err(e) = sqlx::query(
+        r"INSERT INTO config_store (key, value_text, encrypted, updated_at)
+          VALUES ($1, $2, false, NOW())
+          ON CONFLICT (key) DO UPDATE
+            SET value_text = $2, encrypted = false, updated_at = NOW()",
+    )
+    .bind("magic.quantinuum_token_expiry")
+    .bind(expiry_ts.to_rfc3339())
+    .execute(pool)
+    .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to store token expiry: {}", e)})),
+        )
+            .into_response();
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "message": "Quantinuum tokens refreshed successfully",
+            "token_expiry": expiry_ts.to_rfc3339(),
+        })),
+    )
+        .into_response()
+}
+
+/// GET /v1/magic/auth/status - Check authentication status for quantum providers
+async fn magic_auth_status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Database pool error: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let quantinuum_expiry: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT value_text FROM config_store WHERE key = $1")
+            .bind("magic.quantinuum_token_expiry")
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None);
+
+    let quantinuum_expiry_clone = quantinuum_expiry.clone();
+    let quantinuum_authenticated = quantinuum_expiry_clone
+        .and_then(|(expiry_str,)| expiry_str)
+        .and_then(|expiry_str| chrono::DateTime::parse_from_rfc3339(&expiry_str).ok())
+        .map_or(false, |expiry| {
+            expiry.with_timezone(&chrono::Utc) > chrono::Utc::now()
+        });
+
+    let quantum_origin_configured: Option<(i64,)> =
+        sqlx::query_as("SELECT COUNT(*) FROM config_store WHERE key = $1")
+            .bind("magic.quantum_origin_api_key")
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None);
+
+    let quantum_origin_authenticated = quantum_origin_configured
+        .map(|(count,)| count > 0)
+        .unwrap_or(false);
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "quantinuum": {
+                "authenticated": quantinuum_authenticated,
+                "expiry": quantinuum_expiry.and_then(|(exp,)| exp),
+            },
+            "quantum_origin": {
+                "configured": quantum_origin_authenticated,
+            },
+        })),
+    )
+        .into_response()
+}
+
+// =============================================================================
+// MAGIC MANTRA HANDLERS
+// =============================================================================
+
+/// GET /v1/magic/mantras - List all mantra categories with entry counts
+async fn magic_list_mantras_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Database unavailable: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let rows = match sqlx::query_as::<_, (uuid::Uuid, String, Option<String>, i32, i32, bool, i64)>(
+        r#"
+        SELECT mc.category_id, mc.name, mc.description, mc.base_weight, mc.cooldown_beats, mc.enabled,
+               COUNT(me.entry_id) FILTER (WHERE me.enabled = true) AS entry_count
+        FROM mantra_categories mc
+        LEFT JOIN mantra_entries me ON me.category_id = mc.category_id
+        GROUP BY mc.category_id
+        ORDER BY mc.name
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Query failed: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let categories: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(
+            |(
+                category_id,
+                name,
+                description,
+                base_weight,
+                cooldown_beats,
+                enabled,
+                entry_count,
+            )| {
+                json!({
+                    "category_id": category_id,
+                    "name": name,
+                    "description": description,
+                    "base_weight": base_weight,
+                    "cooldown_beats": cooldown_beats,
+                    "enabled": enabled,
+                    "entry_count": entry_count,
+                })
+            },
+        )
+        .collect();
+
+    (StatusCode::OK, Json(json!({"categories": categories}))).into_response()
+}
+
+/// GET /v1/magic/mantras/categories/{id} - List entries for a category
+async fn magic_list_category_entries_handler(
+    State(state): State<Arc<AppState>>,
+    Path(category_id): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Database unavailable: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let entries = match sqlx::query_as::<_, MantraEntry>(
+        r#"
+        SELECT entry_id, category_id, text, use_count, enabled, elixir_id
+        FROM mantra_entries
+        WHERE category_id = $1
+        ORDER BY use_count ASC
+        "#,
+    )
+    .bind(category_id)
+    .fetch_all(pool)
+    .await
+    {
+        Ok(e) => e,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Query failed: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "entries": entries,
+            "category_id": category_id,
+        })),
+    )
+        .into_response()
+}
+
+#[derive(Debug, Deserialize)]
+struct AddMantraEntryRequest {
+    text: String,
+    elixir_id: Option<uuid::Uuid>,
+    category_id: Option<uuid::Uuid>,
+}
+
+/// POST /v1/magic/mantras - Add a new mantra entry (category_id from payload)
+/// POST /v1/magic/mantras/categories/{id}/entries - Add a new mantra entry (category_id from path)
+async fn magic_add_mantra_entry_handler(
+    State(state): State<Arc<AppState>>,
+    path: Option<Path<uuid::Uuid>>,
+    Json(body): Json<AddMantraEntryRequest>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Database unavailable: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    // Get category_id from path or payload
+    let category_id = match path {
+        Some(Path(id)) => id,
+        None => match body.category_id {
+            Some(id) => id,
+            None => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "category_id required in request body"})),
+                )
+                    .into_response();
+            }
+        },
+    };
+
+    if body.text.trim().is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Text cannot be empty"})),
+        )
+            .into_response();
+    }
+
+    let entry = match sqlx::query_as::<_, MantraEntry>(
+        r#"
+        INSERT INTO mantra_entries (category_id, text, elixir_id)
+        VALUES ($1, $2, $3)
+        RETURNING entry_id, category_id, text, use_count, enabled, elixir_id
+        "#,
+    )
+    .bind(category_id)
+    .bind(&body.text)
+    .bind(body.elixir_id)
+    .fetch_one(pool)
+    .await
+    {
+        Ok(e) => e,
+        Err(e) => {
+            if let sqlx::Error::Database(db_err) = &e {
+                if db_err.message().contains("foreign key") {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({"error": "Invalid category_id"})),
+                    )
+                        .into_response();
+                }
+            }
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Insert failed: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    (
+        StatusCode::CREATED,
+        Json(serde_json::to_value(entry).unwrap()),
+    )
+        .into_response()
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateMantraEntryRequest {
+    text: Option<String>,
+    enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[allow(clippy::option_option)]
+    elixir_id: Option<Option<uuid::Uuid>>,
+}
+
+/// PUT /v1/magic/mantras/entries/{id} - Update a mantra entry
+/// PATCH /v1/magic/mantras/{entry_id} - Update a mantra entry
+async fn magic_update_mantra_entry_handler(
+    State(state): State<Arc<AppState>>,
+    Path(entry_id): Path<uuid::Uuid>,
+    Json(body): Json<UpdateMantraEntryRequest>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Database unavailable: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    // Build dynamic UPDATE query based on which fields are present
+    let mut updates = Vec::new();
+    let mut param_idx = 1_u32;
+
+    if body.text.is_some() {
+        updates.push(format!("text = ${}", param_idx));
+        param_idx += 1;
+    }
+    if body.enabled.is_some() {
+        updates.push(format!("enabled = ${}", param_idx));
+        param_idx += 1;
+    }
+    if let Some(elixir_value) = &body.elixir_id {
+        updates.push(format!("elixir_id = ${}", param_idx));
+        param_idx += 1;
+    }
+
+    if updates.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "No fields to update"})),
+        )
+            .into_response();
+    }
+
+    let set_clause = updates.join(", ");
+    let query_str = format!(
+        "UPDATE mantra_entries SET {} WHERE entry_id = ${} RETURNING entry_id, category_id, text, use_count, enabled, elixir_id",
+        set_clause, param_idx
+    );
+
+    let mut query = sqlx::query_as::<_, MantraEntry>(&query_str);
+
+    if let Some(ref text) = body.text {
+        query = query.bind(text);
+    }
+    if let Some(enabled) = body.enabled {
+        query = query.bind(enabled);
+    }
+    if let Some(ref elixir_value) = body.elixir_id {
+        query = query.bind(elixir_value);
+    }
+    query = query.bind(entry_id);
+
+    let entry = match query.fetch_optional(pool).await {
+        Ok(Some(e)) => e,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": format!("Entry {} not found", entry_id)})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Update failed: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    (StatusCode::OK, Json(serde_json::to_value(entry).unwrap())).into_response()
+}
+
+/// DELETE /v1/magic/mantras/entries/{id} - Soft-delete a mantra entry
+async fn magic_delete_mantra_entry_handler(
+    State(state): State<Arc<AppState>>,
+    Path(entry_id): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Database unavailable: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    match sqlx::query_scalar::<_, uuid::Uuid>(
+        r#"
+        UPDATE mantra_entries
+        SET enabled = false
+        WHERE entry_id = $1
+        RETURNING entry_id
+        "#,
+    )
+    .bind(entry_id)
+    .fetch_optional(pool)
+    .await
+    {
+        Ok(Some(_)) => (
+            StatusCode::OK,
+            Json(json!({
+                "entry_id": entry_id,
+                "disabled": true,
+            })),
+        )
+            .into_response(),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Entry {} not found", entry_id)})),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Delete failed: {}", e)})),
+        )
+            .into_response(),
+    }
+}
+
+/// GET /v1/magic/mantras/history - Get recent mantra selection history
+async fn magic_mantra_history_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Database unavailable: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let rows = match sqlx::query_as::<
+        _,
+        (
+            uuid::Uuid,
+            chrono::DateTime<chrono::Utc>,
+            uuid::Uuid,
+            uuid::Uuid,
+            String,
+            Option<serde_json::Value>,
+            Option<serde_json::Value>,
+            Vec<uuid::Uuid>,
+            Option<uuid::Uuid>,
+        ),
+    >(
+        r#"
+        SELECT history_id, ts, category_id, entry_id, entropy_source,
+               context_snapshot, context_weights, suggested_skill_ids, elixir_reference
+        FROM mantra_history
+        ORDER BY ts DESC
+        LIMIT 10
+        "#,
+    )
+    .fetch_all(pool)
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Query failed: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let history: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(
+            |(
+                history_id,
+                ts,
+                category_id,
+                entry_id,
+                entropy_source,
+                context_snapshot,
+                context_weights,
+                suggested_skill_ids,
+                elixir_reference,
+            )| {
+                json!({
+                    "history_id": history_id,
+                    "ts": ts,
+                    "category_id": category_id,
+                    "entry_id": entry_id,
+                    "entropy_source": entropy_source,
+                    "context_snapshot": context_snapshot,
+                    "context_weights": context_weights,
+                    "suggested_skill_ids": suggested_skill_ids,
+                    "elixir_reference": elixir_reference,
+                })
+            },
+        )
+        .collect();
+
+    (StatusCode::OK, Json(json!({"history": history}))).into_response()
+}
+
+/// GET /v1/magic/mantras/context - Get current mantra context
+async fn magic_mantra_context_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Database unavailable: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    match carnelian_magic::MantraTree::build_context(pool).await {
+        Ok(context) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(context).unwrap_or_default()),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+/// POST /v1/magic/mantras/simulate - Simulate mantra selection with live entropy
+async fn magic_mantra_simulate_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Database unavailable: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    // Build context
+    let context = match MantraTree::build_context(pool).await {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to build context: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    // Get entropy bytes - try primary provider, fall back to OS
+    let entropy_bytes = match &state.entropy_provider {
+        Some(provider) => match provider.get_bytes(8).await {
+            Ok(bytes) => Ok(bytes),
+            Err(_) => {
+                carnelian_magic::entropy::OsEntropyProvider::new()
+                    .get_bytes(8)
+                    .await
+            }
+        },
+        None => {
+            carnelian_magic::entropy::OsEntropyProvider::new()
+                .get_bytes(8)
+                .await
+        }
+    };
+
+    let entropy_bytes = match entropy_bytes {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "All entropy sources failed"})),
+            )
+                .into_response();
+        }
+    };
+
+    // Create tree and select
+    let tree = MantraTree::new(None);
+    match tree.select_with_pool(&entropy_bytes, &context, pool).await {
+        Ok(selection) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(selection).unwrap_or_default()),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+// =============================================================================
+// MAGIC Integrity Endpoints
+// =============================================================================
+
+#[derive(Debug, Deserialize)]
+struct IntegrityVerifyRequest {
+    tables: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct IntegrityBackfillResponse {
+    job_id: Uuid,
+    tables: Vec<String>,
+    status: String,
+}
+
+/// POST /v1/magic/integrity/verify - Verify quantum checksums for specified tables
+async fn magic_integrity_verify_handler(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<IntegrityVerifyRequest>,
+) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Database unavailable: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    // Validate table names
+    let valid_tables = ["memories", "session_messages", "elixirs", "task_runs"];
+    for table in &body.tables {
+        if !valid_tables.contains(&table.as_str()) {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("Unknown table: {}", table)})),
+            )
+                .into_response();
+        }
+    }
+
+    // Construct verifier
+    let verifier = carnelian_magic::QuantumIntegrityVerifier::new(
+        carnelian_magic::QuantumHasher::new(state.entropy_provider.clone().unwrap_or_else(|| {
+            Arc::new(carnelian_magic::MixedEntropyProvider::new(
+                None,
+                None,
+                None,
+                Uuid::nil(),
+            ))
+        })),
+    );
+
+    // Verify each table
+    let mut reports = Vec::new();
+    let mut failed_tables = Vec::new();
+
+    for table in &body.tables {
+        match verifier.verify_table(table, pool).await {
+            Ok(report) => {
+                reports.push(report);
+            }
+            Err(e) => {
+                tracing::warn!(table = %table, error = %e, "Failed to verify table");
+                failed_tables.push(json!({
+                    "table": table,
+                    "error": e.to_string(),
+                }));
+            }
+        }
+    }
+
+    // Atomic cache refresh: remove old entries for requested tables, insert new successful reports
+    {
+        let mut cache = state.integrity_cache.write().await;
+        for table in &body.tables {
+            cache.remove(table);
+        }
+        for report in &reports {
+            cache.insert(report.table.clone(), report.clone());
+        }
+    }
+
+    // Compute overall status
+    let overall_status = if !failed_tables.is_empty() || reports.is_empty() {
+        "error"
+    } else if reports.iter().any(|r| {
+        matches!(
+            r.overall_status,
+            carnelian_magic::VerificationStatus::Tampered
+        )
+    }) {
+        "tampered"
+    } else if reports.iter().any(|r| {
+        matches!(
+            r.overall_status,
+            carnelian_magic::VerificationStatus::Partial
+        )
+    }) {
+        "partial"
+    } else {
+        "ok"
+    };
+
+    let verified_at = chrono::Utc::now().to_rfc3339();
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "reports": serde_json::to_value(&reports).unwrap_or_default(),
+            "failed_tables": failed_tables,
+            "overall_status": overall_status,
+            "verified_at": verified_at,
+        })),
+    )
+        .into_response()
+}
+
+/// GET /v1/magic/integrity/status - Get cached integrity verification status
+async fn magic_integrity_status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let cache = state.integrity_cache.read().await;
+
+    if cache.is_empty() {
+        return (
+            StatusCode::NO_CONTENT,
+            Json(json!({"message": "No verification has been run yet"})),
+        )
+            .into_response();
+    }
+
+    let reports: Vec<_> = cache.values().cloned().collect();
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "reports": serde_json::to_value(&reports).unwrap_or_default(),
+            "cached": true,
+        })),
+    )
+        .into_response()
+}
+
+/// POST /v1/magic/integrity/backfill - Backfill missing quantum checksums
+async fn magic_integrity_backfill_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let pool = match state.config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error": format!("Database unavailable: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    let job_id = Uuid::now_v7();
+    let tables = vec![
+        "memories".to_string(),
+        "session_messages".to_string(),
+        "elixirs".to_string(),
+        "task_runs".to_string(),
+    ];
+
+    // Clone for the spawned task
+    let pool_clone = pool.clone();
+    let job_id_clone = job_id;
+    let entropy_provider = state.entropy_provider.clone();
+
+    // Spawn background task
+    tokio::spawn(async move {
+        let verifier = carnelian_magic::QuantumIntegrityVerifier::new(
+            carnelian_magic::QuantumHasher::new(entropy_provider.unwrap_or_else(|| {
+                Arc::new(carnelian_magic::MixedEntropyProvider::new(
+                    None,
+                    None,
+                    None,
+                    Uuid::nil(),
+                ))
+            })),
+        );
+
+        for table in &["memories", "session_messages", "elixirs", "task_runs"] {
+            match verifier.backfill_missing(table, &pool_clone).await {
+                Ok(count) => {
+                    tracing::info!(job_id = %job_id_clone, table = %table, count = count, "Backfilled missing checksums");
+                }
+                Err(e) => {
+                    tracing::warn!(job_id = %job_id_clone, table = %table, error = %e, "Failed to backfill table");
+                }
+            }
+        }
+
+        tracing::info!(job_id = %job_id_clone, "Integrity backfill job completed");
+    });
+
+    (
+        StatusCode::ACCEPTED,
+        Json(json!({
+            "job_id": job_id,
+            "tables": tables,
+            "status": "started",
+        })),
+    )
+        .into_response()
 }

@@ -1,13 +1,22 @@
 //! Cryptographic utilities for 🔥 Carnelian OS
 //!
-//! This module centralizes Ed25519 digital signature operations and blake3-based
-//! key derivation, separating cryptographic primitives from configuration management.
+//! This module centralizes cryptographic operations including:
+//! - Ed25519 digital signatures (classical)
+//! - Hybrid post-quantum signatures (Dilithium3 + Ed25519) when MAGIC is enabled
+//! - Blake3-based key derivation
 //!
 //! # Ed25519 Signatures
 //!
 //! Ed25519 produces 64-byte signatures from 32-byte signing keys. Signatures are
 //! deterministic (same key + message = same signature) and provide 128-bit security.
 //! Keys are stored as 32-byte seeds; the full 64-byte expanded key is derived on use.
+//!
+//! # Hybrid Post-Quantum Signatures
+//!
+//! When MAGIC is enabled, Carnelian uses hybrid signatures combining:
+//! - CRYSTALS-Dilithium3 (quantum-resistant, NIST Level 3)
+//! - Ed25519 (classical, backward compatible)
+//!   Both signatures must verify for defense-in-depth security.
 //!
 //! # Key Derivation
 //!
@@ -23,11 +32,14 @@
 //! - Hex-encoded signatures in the ledger are human-readable for debugging but
 //!   add 2x storage overhead vs raw bytes
 //! - All signature operations use `ed25519_dalek` which is constant-time
+//! - Hybrid keys provide quantum resistance when MAGIC entropy is available
 
 use carnelian_common::{Error, Result};
+use carnelian_magic::{EntropyProvider, HybridSignature, HybridSigningKey, KeyAlgorithm};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::rngs::OsRng;
 use sqlx::PgPool;
+use std::sync::Arc;
 
 // ── Key Generation ──────────────────────────────────────────────────────────
 
@@ -39,6 +51,34 @@ pub fn generate_ed25519_keypair() -> (SigningKey, VerifyingKey) {
     let signing_key = SigningKey::generate(&mut OsRng);
     let verifying_key = signing_key.verifying_key();
     (signing_key, verifying_key)
+}
+
+/// Generate a new Ed25519 keypair using entropy from a MAGIC entropy provider.
+///
+/// Uses quantum-enhanced entropy when available, falling back to OS entropy on failure.
+/// Returns `(SigningKey, VerifyingKey)` where the signing key contains the 32-byte
+/// seed derived from the entropy provider.
+///
+/// # Errors
+///
+/// Returns an error if the entropy provider fails to generate 32 bytes or if the
+/// resulting bytes cannot be converted to a valid Ed25519 signing key.
+pub async fn generate_ed25519_keypair_with_entropy(
+    provider: &dyn EntropyProvider,
+) -> Result<(SigningKey, VerifyingKey)> {
+    let entropy_bytes = provider
+        .get_bytes(32)
+        .await
+        .map_err(|e| Error::Crypto(format!("Entropy provider failed: {}", e)))?;
+
+    let seed: [u8; 32] = entropy_bytes.try_into().map_err(|_| {
+        Error::Crypto("Failed to convert entropy bytes to 32-byte seed".to_string())
+    })?;
+
+    let signing_key = SigningKey::from_bytes(&seed);
+    let verifying_key = signing_key.verifying_key();
+
+    Ok((signing_key, verifying_key))
 }
 
 /// Serialize a signing key to its 32-byte seed representation.
@@ -70,6 +110,54 @@ pub fn keypair_from_bytes(bytes: &[u8]) -> Result<SigningKey> {
         ))
     })?;
     Ok(SigningKey::from_bytes(&seed))
+}
+
+// ── Hybrid Post-Quantum Key Generation ─────────────────────────────────────
+
+/// Generate a hybrid signing key (Dilithium3 + Ed25519) using quantum entropy.
+///
+/// When MAGIC is enabled, this generates both post-quantum and classical keys
+/// for defense-in-depth security. Both signatures must verify.
+///
+/// # Arguments
+///
+/// * `provider` - MAGIC entropy provider for quantum randomness
+///
+/// # Returns
+///
+/// A `HybridSigningKey` containing both Dilithium3 and Ed25519 keys
+///
+/// # Errors
+///
+/// Returns an error if the entropy provider fails or key generation fails.
+pub async fn generate_hybrid_keypair_with_entropy(
+    provider: &Arc<dyn EntropyProvider>,
+) -> Result<HybridSigningKey> {
+    HybridSigningKey::generate_with_entropy(provider)
+        .await
+        .map_err(|e| Error::Crypto(format!("Hybrid key generation failed: {}", e)))
+}
+
+/// Sign bytes with a hybrid key (both Dilithium3 and Ed25519).
+///
+/// Returns a `HybridSignature` containing both signatures.
+pub fn sign_bytes_hybrid(key: &HybridSigningKey, data: &[u8]) -> HybridSignature {
+    key.sign(data)
+}
+
+/// Verify a hybrid signature.
+///
+/// Both Dilithium3 and Ed25519 signatures must verify for success.
+///
+/// # Returns
+///
+/// `Ok(true)` if both signatures are valid, `Ok(false)` if either fails.
+pub fn verify_hybrid_signature(
+    key: &HybridSigningKey,
+    data: &[u8],
+    signature: &HybridSignature,
+) -> Result<bool> {
+    Ok(key.verify(data, signature).is_ok())
 }
 
 // ── HKDF Derivation Helpers ─────────────────────────────────────────────────
@@ -202,7 +290,50 @@ pub async fn store_keypair_in_db(
     .await
     .map_err(|e| Error::Crypto(format!("Failed to store keypair in database: {}", e)))?;
 
-    tracing::info!("Owner keypair stored in config_store");
+    tracing::info!("Owner keypair stored in config_store (Ed25519)");
+    Ok(())
+}
+
+/// Store a hybrid signing key in the database.
+///
+/// Stores both Dilithium3 and Ed25519 keys with key_algorithm tracking.
+///
+/// # Arguments
+///
+/// * `pool` - Database connection pool
+/// * `key` - The hybrid signing key to store
+/// * `encrypted` - Whether the stored blob is encrypted
+pub async fn store_hybrid_keypair_in_db(
+    pool: &PgPool,
+    key: &HybridSigningKey,
+    encrypted: bool,
+) -> Result<()> {
+    // Serialize hybrid key (store Ed25519 seed + Dilithium keys)
+    let public_keys = key.public_keys();
+    let ed25519_seed = key.ed25519_sk.to_bytes();
+
+    // Store in config_store with key_algorithm
+    sqlx::query(
+        r"INSERT INTO config_store (key, value, value_blob, encrypted, key_algorithm, updated_at)
+          VALUES ('owner_keypair', $1::jsonb, $2, $3, 'hybrid_dilithium_ed25519', NOW())
+          ON CONFLICT (key) DO UPDATE SET 
+            value = $1::jsonb, 
+            value_blob = $2, 
+            encrypted = $3, 
+            key_algorithm = 'hybrid_dilithium_ed25519',
+            updated_at = NOW()",
+    )
+    .bind(serde_json::json!({
+        "dilithium_pk": hex::encode(&public_keys.dilithium_pk),
+        "ed25519_pk": hex::encode(&public_keys.ed25519_pk),
+    }))
+    .bind(ed25519_seed.as_slice())
+    .bind(encrypted)
+    .execute(pool)
+    .await
+    .map_err(|e| Error::Crypto(format!("Failed to store hybrid keypair: {}", e)))?;
+
+    tracing::info!("Owner hybrid keypair stored in config_store (Dilithium3 + Ed25519)");
     Ok(())
 }
 

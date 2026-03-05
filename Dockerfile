@@ -55,8 +55,8 @@ COPY db/ ./db/
 COPY workers/ ./workers/
 COPY skills/ ./skills/
 
-# Copy SQLx query cache for offline builds
-COPY .sqlx/ ./.sqlx/
+# Copy SQLx query cache for offline builds (if it exists)
+# COPY .sqlx/ ./.sqlx/
 
 # Copy build assets
 COPY assets/ ./assets/

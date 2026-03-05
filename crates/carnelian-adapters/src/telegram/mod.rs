@@ -7,8 +7,8 @@ pub mod commands;
 pub mod handlers;
 pub mod pairing;
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde_json::json;
@@ -17,15 +17,15 @@ use teloxide::prelude::*;
 use teloxide::types::ChatId;
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
-use carnelian_core::EventStream;
 use carnelian_core::policy::PolicyEngine;
 use carnelian_core::session::SessionManager;
+use carnelian_core::EventStream;
 
-use crate::ChannelAdapter;
 use crate::events;
 use crate::rate_limiter::RateLimiter;
 use crate::spam_detector::SpamDetector;
 use crate::types::ChannelConfig;
+use crate::ChannelAdapter;
 
 /// Telegram bot adapter.
 ///

@@ -33,14 +33,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use carnelian_common::types::{EventEnvelope, EventLevel, EventType};
-use carnelian_core::scheduler::{WorkspaceScanner, auto_queue_scanned_tasks};
+use carnelian_core::scheduler::{auto_queue_scanned_tasks, WorkspaceScanner};
 use carnelian_core::soul::SoulManager;
 use carnelian_core::{
     Config, EventStream, Ledger, ModelRouter, PolicyEngine, Scheduler, Server, WorkerManager,
 };
 use futures_util::StreamExt;
 use serde_json::json;
-use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
+use testcontainers::{runners::AsyncRunner, GenericImage, ImageExt};
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
@@ -375,7 +375,7 @@ fn latency_stats(latencies: &[Duration]) -> (Duration, Duration, Duration, Durat
 async fn insert_test_identity(pool: &sqlx::PgPool, soul_file_path: Option<&str>) -> Uuid {
     sqlx::query_scalar(
         r"INSERT INTO identities (name, pronouns, identity_type, soul_file_path, directives)
-          VALUES ('Lian', 'she/her', 'core', $1, '[]'::jsonb)
+          VALUES ('Lian', NULL, 'core', $1, '[]'::jsonb)
           RETURNING identity_id",
     )
     .bind(soul_file_path)
@@ -471,8 +471,8 @@ fn assert_event_contains_field(
 /// - `GET /api/tags` with a list of models
 fn start_mock_ollama_server(port: u16) -> tokio::task::JoinHandle<()> {
     use axum::{
-        Router,
         routing::{get, post},
+        Router,
     };
 
     let app = Router::new()
@@ -559,7 +559,7 @@ async fn test_criterion_1_identity_sync() {
 
     // Create temporary souls directory and SOUL.md
     let souls_dir = tempfile::tempdir().expect("Failed to create souls temp dir");
-    let soul_file = souls_dir.path().join("lian.md");
+    let soul_file = souls_dir.path().join("SOUL.md");
     create_test_soul_file(
         &soul_file,
         "Lian",
@@ -568,7 +568,7 @@ async fn test_criterion_1_identity_sync() {
     );
 
     // Insert identity with soul_file_path pointing to our file
-    let identity_id = insert_test_identity(&pool, Some("lian.md")).await;
+    let identity_id = insert_test_identity(&pool, Some("SOUL.md")).await;
 
     // Create event stream and subscribe before sync
     let event_stream = Arc::new(EventStream::new(1000, 100));

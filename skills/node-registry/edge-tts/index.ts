@@ -1,4 +1,4 @@
-import type { SkillContext, SkillResult } from '../../../workers/node-worker/src/types';
+import type { SkillContext, SkillResult } from '../../types';
 
 interface EdgeTTSParams {
   text: string;
@@ -12,14 +12,6 @@ export async function execute(
   context: SkillContext,
   params: EdgeTTSParams
 ): Promise<SkillResult> {
-  const { gateway } = context;
-
-  if (!gateway) {
-    return {
-      success: false,
-      error: 'Gateway connection not available',
-    };
-  }
 
   if (!params.text) {
     return {
@@ -29,17 +21,30 @@ export async function execute(
   }
 
   try {
-    const response = await gateway.call('edge.tts', {
-      text: params.text,
-      voice: params.voice || 'en-US-AriaNeural',
-      rate: params.rate || '+0%',
-      volume: params.volume || '+0%',
-      outputFormat: params.outputFormat || 'audio-24khz-48kbitrate-mono-mp3',
+    const response = await fetch(`${context.gateway}/internal/edge/tts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: params.text,
+        voice: params.voice || 'en-US-AriaNeural',
+        rate: params.rate || '+0%',
+        volume: params.volume || '+0%',
+        outputFormat: params.outputFormat || 'audio-24khz-48kbitrate-mono-mp3',
+      }),
     });
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `Edge TTS failed: ${response.statusText}`,
+      };
+    }
+
+    const data = await response.json();
 
     return {
       success: true,
-      data: response,
+      data,
     };
   } catch (error) {
     return {

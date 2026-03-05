@@ -16,6 +16,7 @@ doc = false
 carnelian-core = { path = "../carnelian-core" }
 carnelian-adapters = { path = "../carnelian-adapters" }
 carnelian-common = { path = "../carnelian-common" }
+carnelian-magic = { path = "../carnelian-magic" }
 
 # Async runtime
 tokio = { workspace = true }
@@ -72,6 +73,9 @@ base64 = { workspace = true }
 # System utilities
 which = { workspace = true }
 libc = { workspace = true }
+
+# Password input
+rpassword = "7.3"
 
 [lints]
 workspace = true

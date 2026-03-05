@@ -94,6 +94,9 @@ pub enum Error {
     #[error("Permission denied: {0}")]
     Permission(String),
 
+    #[error("Skill execution error: {0}")]
+    SkillExecution(String),
+
     #[error("{1}")]
     ExitCode(i32, String),
 }

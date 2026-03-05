@@ -279,13 +279,13 @@ fn ConfirmModal(
                 }
                 div { class: "modal-body",
                     p { "Are you sure you want to {action} approval {approval_id}?" }
-                    p { "Provide the Ed25519 signature (hex) of the approval ID to authorize this action." }
+                    p { "Provide the owner signature (hex) of the approval ID to authorize this action." }
                     div { class: "form-group",
                         label { class: "form-label", "Signature (hex)" }
                         input {
                             class: "form-input",
                             r#type: "text",
-                            placeholder: "Ed25519 signature hex (128 chars)",
+                            placeholder: "Owner signature hex (128 chars)",
                             value: "{signature}",
                             oninput: move |e| signature.set(e.value()),
                         }
@@ -366,13 +366,13 @@ fn BatchConfirmModal(
                 }
                 div { class: "modal-body",
                     p { "Approve {count} selected approval requests?" }
-                    p { "Provide the Ed25519 signature (hex) of the sorted, comma-joined approval IDs." }
+                    p { "Provide the owner signature (hex) of the sorted, comma-joined approval IDs." }
                     div { class: "form-group",
                         label { class: "form-label", "Signature (hex)" }
                         input {
                             class: "form-input",
                             r#type: "text",
-                            placeholder: "Ed25519 signature hex (128 chars)",
+                            placeholder: "Owner signature hex (128 chars)",
                             value: "{signature}",
                             oninput: move |e| signature.set(e.value()),
                         }

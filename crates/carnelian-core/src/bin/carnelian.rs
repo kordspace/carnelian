@@ -27,7 +27,7 @@
 //! - `carnelian migrate` - Run database migrations
 //! - `carnelian logs` - Stream events from running instance
 
-use std::io::{Write, stdin, stdout};
+use std::io::{stdin, stdout, Write};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -42,11 +42,11 @@ use carnelian_core::{
     Config, EventStream, Ledger, ModelRouter, PolicyEngine, Scheduler, Server, WorkerManager,
 };
 
-use bollard::Docker;
 use bollard::container::StartContainerOptions;
 use bollard::container::{Config as ContainerConfig, CreateContainerOptions};
 use bollard::image::CreateImageOptions;
 use bollard::models::{HostConfig, PortBinding};
+use bollard::Docker;
 use futures_util::stream::TryStreamExt;
 
 /// 🔥 Carnelian OS - Local-first AI agent mainframe
@@ -265,7 +265,7 @@ async fn main() {
             handle_key(command, cli.config, cli.log_level, cli.database_url).await
         }
         Commands::MigrateFromThummim { path } => {
-            handle_migrate_from_thummim(path, cli.config, cli.log_level, cli.database_url).await
+            handle_migrate_from_standard(path, cli.config, cli.log_level, cli.database_url).await
         }
     };
 
@@ -1148,9 +1148,9 @@ pub(crate) fn detect_hardware() -> (f64, f64) {
 /// Suggest machine profile based on hardware specs
 pub(crate) fn suggest_profile(ram_gb: f64, vram_gb: f64) -> &'static str {
     if ram_gb >= 48.0 && vram_gb >= 10.0 {
-        "urim"
+        "performance"
     } else if ram_gb >= 16.0 && vram_gb >= 6.0 {
-        "thummim"
+        "standard"
     } else {
         "custom"
     }
@@ -1285,7 +1285,7 @@ async fn handle_init(
     );
     let profile = prompt_or_default(
         &format!(
-            "Select machine profile [urim/thummim/custom] (default: {})",
+            "Select machine profile [performance/standard/custom] (default: {})",
             suggested_profile
         ),
         suggested_profile,
@@ -1306,8 +1306,8 @@ async fn handle_init(
 
     // Default ports and URLs
     let (postgres_port, ollama_port, http_port) = match machine_profile {
-        "thummim" => (5432, 11434, 18789),
-        "urim" => (5432, 11434, 18789),
+        "standard" => (5432, 11434, 18789),
+        "performance" => (5432, 11434, 18789),
         _ => (5432, 11434, 18789),
     };
 
@@ -2444,7 +2444,7 @@ async fn handle_ui(web: bool) -> carnelian_common::Result<()> {
 
 /// Serve web UI static files
 async fn serve_web_ui(web_dir: &std::path::Path, port: u16) -> carnelian_common::Result<()> {
-    use axum::{Router, http::StatusCode};
+    use axum::{http::StatusCode, Router};
     use tokio::net::TcpListener;
     use tower_http::services::ServeDir;
 
@@ -2467,9 +2467,9 @@ async fn serve_web_ui(web_dir: &std::path::Path, port: u16) -> carnelian_common:
     Ok(())
 }
 
-/// Handle the `migrate-from-thummim` command - Migrate from Thummim project
+/// Handle the `migrate-from-standard` command - Migrate from Thummim project
 #[allow(clippy::too_many_lines)]
-async fn handle_migrate_from_thummim(
+async fn handle_migrate_from_standard(
     path: Option<PathBuf>,
     config_path: Option<PathBuf>,
     log_level_override: Option<String>,
@@ -2478,7 +2478,7 @@ async fn handle_migrate_from_thummim(
     use std::io::Write;
 
     // Get Thummim path
-    let thummim_path = if let Some(p) = path {
+    let standard_path = if let Some(p) = path {
         p
     } else {
         print!("Path to Thummim project root: ");
@@ -2495,18 +2495,18 @@ async fn handle_migrate_from_thummim(
     };
 
     // Validate path
-    if !thummim_path.exists() {
+    if !standard_path.exists() {
         return Err(carnelian_common::Error::Config(format!(
             "Path does not exist: {}",
-            thummim_path.display()
+            standard_path.display()
         )));
     }
 
-    let skills_dir = thummim_path.join("skills");
+    let skills_dir = standard_path.join("skills");
     if !skills_dir.exists() {
         return Err(carnelian_common::Error::Config(format!(
             "No skills/ directory found in {}",
-            thummim_path.display()
+            standard_path.display()
         )));
     }
 
@@ -2536,7 +2536,7 @@ async fn handle_migrate_from_thummim(
     // Run migrations
     carnelian_core::db::run_migrations(&pool, None).await?;
 
-    println!("🔥 Migrating from Thummim: {}", thummim_path.display());
+    println!("🔥 Migrating from Thummim: {}", standard_path.display());
     println!();
 
     // Track migration stats
@@ -2647,7 +2647,7 @@ async fn handle_migrate_from_thummim(
     }
 
     // Migrate tasks - read .agent/task-queue.json
-    let task_queue_path = thummim_path.join(".agent").join("task-queue.json");
+    let task_queue_path = standard_path.join(".agent").join("task-queue.json");
     if task_queue_path.exists() {
         let task_content = std::fs::read_to_string(&task_queue_path).map_err(|e| {
             carnelian_common::Error::Config(format!("Failed to read task-queue.json: {}", e))
@@ -2771,23 +2771,23 @@ mod tests {
     }
 
     #[test]
-    fn test_suggest_profile_urim_threshold() {
+    fn test_suggest_profile_performance_threshold() {
         // Urim: >=48GB RAM && >=10GB VRAM
-        assert_eq!(suggest_profile(48.0, 10.0), "urim");
-        assert_eq!(suggest_profile(64.0, 12.0), "urim");
+        assert_eq!(suggest_profile(48.0, 10.0), "performance");
+        assert_eq!(suggest_profile(64.0, 12.0), "performance");
     }
 
     #[test]
-    fn test_suggest_profile_thummim_threshold() {
-        // Thummim: >=16GB RAM && >=6GB VRAM (but less than urim thresholds)
-        assert_eq!(suggest_profile(48.0, 9.9), "thummim");
-        assert_eq!(suggest_profile(16.0, 6.0), "thummim");
-        assert_eq!(suggest_profile(32.0, 8.0), "thummim");
+    fn test_suggest_profile_standard_threshold() {
+        // Thummim: >=16GB RAM && >=6GB VRAM (but less than performance thresholds)
+        assert_eq!(suggest_profile(48.0, 9.9), "standard");
+        assert_eq!(suggest_profile(16.0, 6.0), "standard");
+        assert_eq!(suggest_profile(32.0, 8.0), "standard");
     }
 
     #[test]
     fn test_suggest_profile_custom_threshold() {
-        // Custom: below thummim thresholds
+        // Custom: below standard thresholds
         assert_eq!(suggest_profile(15.9, 6.0), "custom");
         assert_eq!(suggest_profile(32.0, 0.0), "custom");
         assert_eq!(suggest_profile(8.0, 0.0), "custom");

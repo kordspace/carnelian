@@ -304,7 +304,7 @@ carnelian-core → Native Providers → Ollama/OpenAI/Anthropic
 
 The gateway directory can be safely removed:
 ```bash
-rm -rf gateway/
+rm -rf packages/gateway/
 ```
 
 ## Security Considerations

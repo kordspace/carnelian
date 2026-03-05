@@ -1,12 +1,8 @@
 //! First-run wizard component for initial setup.
-
-#![allow(clippy::clone_on_copy)]
-#![allow(clippy::redundant_closure_for_method_calls)]
-#![allow(clippy::redundant_closure_call)]
-#![allow(clippy::shadow_unrelated)]
-#![allow(clippy::redundant_locals)]
 //! 4. Workspace & Models configuration
 //! 5. Starter Skills activation
+
+#![allow(clippy::option_if_let_else)]
 
 use dioxus::prelude::*;
 
@@ -55,7 +51,10 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
 
     // Load initial data
     use_hook({
+        // Dioxus Signal<T> requires .clone() for multi-closure capture even when T: Copy
+        #[allow(clippy::clone_on_copy)]
         let mut health_status = health_status.clone();
+        #[allow(clippy::clone_on_copy)]
         let mut identity = identity.clone();
         move || {
             spawn(async move {
@@ -77,16 +76,20 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
 
     // Navigation handlers
     let mut next_step = {
+        // Dioxus Signal<T> requires .clone() for multi-closure capture
+        #[allow(clippy::clone_on_copy)]
         let mut step = step.clone();
         move || {
             let current = *step.read();
-            if current < 5 {
+            if current < 6 {
                 step.set(current + 1);
             }
         }
     };
 
     let mut prev_step = {
+        // Dioxus Signal<T> requires .clone() for multi-closure capture
+        #[allow(clippy::clone_on_copy)]
         let mut step = step.clone();
         move || {
             let current = *step.read();
@@ -98,7 +101,10 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
 
     let complete_wizard = {
         let on_complete = props.on_complete.clone();
+        // Dioxus Signal<T> requires .clone() for multi-closure capture
+        #[allow(clippy::clone_on_copy)]
         let mut toasts = toasts.clone();
+        #[allow(clippy::clone_on_copy)]
         let selected_skills = selected_skills.clone();
         move || {
             spawn(async move {
@@ -182,6 +188,9 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
                 selected_skills: selected_skills.clone(),
             }
         },
+        6 => rsx! {
+            Step6MagicSetup {}
+        },
         _ => rsx! { div {} },
     };
 
@@ -191,11 +200,11 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
                 // Header
                 div { class: "wizard-header",
                     h2 { "🔥 Carnelian OS Setup" }
-                    p { "Step {*step.read()} of 5" }
+                    p { "Step {*step.read()} of 6" }
                     div { class: "progress-bar",
                         div {
                             class: "progress-fill",
-                            style: "width: {*step.read() * 20}%",
+                            style: "width: {*step.read() * 100 / 6}%",
                         }
                     }
                 }
@@ -214,7 +223,7 @@ pub fn FirstRunWizard(props: FirstRunWizardProps) -> Element {
                             "← Back"
                         }
                     }
-                    if *step.read() < 5 {
+                    if *step.read() < 6 {
                         button {
                             class: "btn-primary",
                             onclick: move |_| next_step(),
@@ -333,7 +342,7 @@ fn Step3Identity(identity: Option<IdentityResponse>) -> Element {
     rsx! {
         div { class: "wizard-step",
             h3 { "Step 3: Owner Keypair" }
-            p { "Your Ed25519 keypair for signing and authentication" }
+            p { "Your signing keypair for authentication" }
 
             div { class: "identity-display",
                 div { class: "key-field",
@@ -418,14 +427,11 @@ fn Step5StarterSkills(selected_skills: Signal<Vec<(&'static str, bool)>>) -> Ele
                         input {
                             r#type: "checkbox",
                             checked: checked,
-                            onchange: {
-                                let skill_id = skill_id;
-                                move |_| {
-                                    let mut skills = selected_skills.read().clone();
-                                    if let Some(idx) = skills.iter().position(|(id, _)| *id == skill_id) {
-                                        skills[idx].1 = !skills[idx].1;
-                                        selected_skills.set(skills);
-                                    }
+                            onchange: move |_| {
+                                let mut skills = selected_skills.read().clone();
+                                if let Some(idx) = skills.iter().position(|(id, _)| *id == skill_id) {
+                                    skills[idx].1 = !skills[idx].1;
+                                    selected_skills.set(skills);
                                 }
                             },
                         }
@@ -449,5 +455,233 @@ fn skill_name(id: &str) -> &'static str {
         "web-search" => "🌐 Web Search",
         "telegram-notify" => "💬 Telegram Notify",
         _ => "Unknown Skill",
+    }
+}
+
+#[component]
+fn Step6MagicSetup() -> Element {
+    let mut quantum_origin_key = use_signal(String::new);
+    let mut quantinuum_email = use_signal(String::new);
+    let mut quantinuum_password = use_signal(String::new);
+    let mut auth_status = use_signal(|| None::<carnelian_common::types::MagicAuthStatusResponse>);
+    let mut loading = use_signal(|| false);
+    let mut feedback = use_signal(String::new);
+
+    use_hook(|| {
+        spawn(async move {
+            if let Ok(status) = api::magic_auth_status().await {
+                auth_status.set(Some(status));
+            }
+        });
+    });
+
+    let save_quantum_origin = move || {
+        spawn(async move {
+            loading.set(true);
+            let key = quantum_origin_key.read().clone();
+            match api::magic_update_config(Some(key), None, None).await {
+                Ok(_) => {
+                    if let Ok(status) = api::magic_auth_status().await {
+                        auth_status.set(Some(status));
+                    }
+                    feedback.set("Quantum Origin key saved ✓".to_string());
+                }
+                Err(e) => {
+                    feedback.set(format!("Error: {e}"));
+                }
+            }
+            loading.set(false);
+        });
+    };
+
+    let authenticate_quantinuum = move || {
+        spawn(async move {
+            loading.set(true);
+            let email = quantinuum_email.read().clone();
+            let password = quantinuum_password.read().clone();
+            match api::magic_quantinuum_login(email, password).await {
+                Ok(resp) => {
+                    if let Ok(status) = api::magic_auth_status().await {
+                        auth_status.set(Some(status));
+                    }
+                    feedback.set(format!("Authenticated ✓ {}", resp.message));
+                    quantinuum_password.set(String::new());
+                }
+                Err(e) => {
+                    feedback.set(format!("Error: {e}"));
+                }
+            }
+            loading.set(false);
+        });
+    };
+
+    let test_ibm_connection = move || {
+        spawn(async move {
+            loading.set(true);
+            match api::magic_update_config(None, None, Some(true)).await {
+                Ok(_) => {
+                    match api::magic_entropy_health().await {
+                        Ok(health) => {
+                            // Validate provider-specific readiness from health payload
+                            let qiskit_available = health
+                                .get("qiskit-rng")
+                                .and_then(|v| v.get("available"))
+                                .and_then(serde_json::Value::as_bool)
+                                .unwrap_or(false);
+
+                            if qiskit_available {
+                                feedback
+                                    .set("IBM Quantum (Qiskit) provider verified ✓".to_string());
+                            } else {
+                                // Provider not ready - revert qiskit_enabled
+                                let _ = api::magic_update_config(None, None, Some(false)).await;
+                                let error_msg = health
+                                    .get("qiskit-rng")
+                                    .and_then(|v| v.get("error"))
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("Provider not available");
+                                feedback
+                                    .set(format!("IBM Quantum provider not ready: {error_msg}"));
+                            }
+                        }
+                        Err(e) => {
+                            // Revert qiskit_enabled on health check failure
+                            let _ = api::magic_update_config(None, None, Some(false)).await;
+                            feedback.set(format!("Connection test failed: {e}"));
+                        }
+                    }
+                }
+                Err(e) => {
+                    feedback.set(format!("Error: {e}"));
+                }
+            }
+            loading.set(false);
+        });
+    };
+
+    rsx! {
+        div { class: "step-content",
+            h3 { "✨ MAGIC Setup (Optional)" }
+            p { "Configure quantum entropy providers for enhanced randomness" }
+
+            div { class: "info-box",
+                p { "Install quantum skill dependencies:" }
+                code { "pip install qiskit qiskit-ibm-runtime pennylane" }
+            }
+
+            // Quantum Origin Section
+            div { class: "provider-section",
+                h4 { "Quantum Origin" }
+                {
+                    if let Some(status) = auth_status.read().as_ref() {
+                        if status.quantum_origin.configured {
+                            rsx! { span { class: "badge-success", "✅ Configured" } }
+                        } else {
+                            rsx! { span { class: "badge-inactive", "⚪ Not Configured" } }
+                        }
+                    } else {
+                        rsx! { span {} }
+                    }
+                }
+                input {
+                    r#type: "password",
+                    value: "{quantum_origin_key}",
+                    oninput: move |e| quantum_origin_key.set(e.value()),
+                    placeholder: "API Key",
+                    disabled: *loading.read()
+                }
+                div { class: "button-group",
+                    button {
+                        onclick: move |_| save_quantum_origin(),
+                        disabled: *loading.read() || quantum_origin_key.read().is_empty(),
+                        "Save Key"
+                    }
+                    button {
+                        class: "btn-secondary",
+                        onclick: move |_| quantum_origin_key.set(String::new()),
+                        "Skip"
+                    }
+                }
+            }
+
+            // Quantinuum Section
+            div { class: "provider-section",
+                h4 { "Quantinuum" }
+                {
+                    if let Some(status) = auth_status.read().as_ref() {
+                        if status.quantinuum.authenticated {
+                            rsx! {
+                                span { class: "badge-success", "✅ Authenticated" }
+                                if let Some(exp) = &status.quantinuum.expiry {
+                                    span { class: "expiry-text", " until {exp}" }
+                                }
+                            }
+                        } else {
+                            rsx! { span { class: "badge-inactive", "⚪ Not Authenticated" } }
+                        }
+                    } else {
+                        rsx! { span {} }
+                    }
+                }
+                input {
+                    r#type: "email",
+                    value: "{quantinuum_email}",
+                    oninput: move |e| quantinuum_email.set(e.value()),
+                    placeholder: "Email",
+                    disabled: *loading.read()
+                }
+                input {
+                    r#type: "password",
+                    value: "{quantinuum_password}",
+                    oninput: move |e| quantinuum_password.set(e.value()),
+                    placeholder: "Password",
+                    disabled: *loading.read()
+                }
+                div { class: "button-group",
+                    button {
+                        onclick: move |_| authenticate_quantinuum(),
+                        disabled: *loading.read() || quantinuum_email.read().is_empty() || quantinuum_password.read().is_empty(),
+                        "Authenticate"
+                    }
+                    button {
+                        class: "btn-secondary",
+                        onclick: move |_| {
+                            quantinuum_email.set(String::new());
+                            quantinuum_password.set(String::new());
+                        },
+                        "Skip"
+                    }
+                }
+            }
+
+            // IBM Quantum Section
+            div { class: "provider-section",
+                h4 { "IBM Quantum (Qiskit)" }
+                p { class: "provider-note", "Enable Qiskit RNG provider (requires qiskit installation)" }
+                div { class: "button-group",
+                    button {
+                        onclick: move |_| test_ibm_connection(),
+                        disabled: *loading.read(),
+                        "Enable & Test Provider"
+                    }
+                    button {
+                        class: "btn-secondary",
+                        onclick: move |_| feedback.set(String::new()),
+                        "Skip"
+                    }
+                }
+            }
+
+            // Feedback message
+            if !feedback.read().is_empty() {
+                div { class: "feedback-message",
+                    p { "{feedback}" }
+                }
+            }
+
+            div { class: "info-box",
+                p { "You can configure MAGIC providers later from the ✨ MAGIC page" }
+            }
+        }
     }
 }

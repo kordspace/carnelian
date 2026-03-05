@@ -1,17 +1,17 @@
 //! Soul File Management and Synchronization
 //!
-//! This module provides automatic discovery and synchronization of soul files
-//! (identity definitions in Markdown format) from the filesystem to PostgreSQL.
+//! This module provides automatic discovery and synchronization of the soul file
+//! (identity definition in Markdown format) from the filesystem to PostgreSQL.
 //!
 //! ## Architecture
 //!
-//! - **SoulDirective**: Parsed actionable directive from a SOUL.md file
-//! - **SoulManager**: Loads, parses, and syncs soul files to the `identities` table
+//! - **SoulDirective**: Parsed actionable directive from SOUL.md
+//! - **SoulManager**: Loads, parses, and syncs the soul file to the `identities` table
 //! - **File Watcher**: Debounced filesystem watcher (2s) for automatic re-sync
 //!
 //! ## File Format
 //!
-//! Soul files are Markdown documents with structured sections:
+//! The soul file (SOUL.md in project root) is a Markdown document with structured sections:
 //!
 //! ```text
 //! # Identity Name
@@ -384,11 +384,11 @@ impl SoulManager {
 // FILE WATCHER
 // =============================================================================
 
-/// Start a background file watcher on the souls directory.
+/// Start a background file watcher on the root directory.
 ///
 /// Uses `notify-debouncer-mini` with a 2-second debounce to batch rapid
-/// filesystem changes. When `.md` file changes are detected, triggers a
-/// sync for all identities with non-null `soul_file_path`.
+/// filesystem changes. When SOUL.md changes are detected, triggers a
+/// sync for all identities with a non-null `soul_file_path`.
 ///
 /// Returns a `JoinHandle` for the background task. The watcher runs until
 /// the handle is aborted or the process exits.
@@ -398,7 +398,7 @@ pub fn start_soul_watcher(
     souls_path: PathBuf,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        use notify_debouncer_mini::{DebouncedEventKind, new_debouncer};
+        use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
 
         let (tx, mut rx) = tokio::sync::mpsc::channel(16);
 

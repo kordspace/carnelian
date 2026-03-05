@@ -1,4 +1,4 @@
-import type { SkillContext, SkillResult } from '../../../workers/node-worker/src/types';
+import type { SkillContext, SkillResult } from '../../types';
 
 interface IntercomMessageParams {
   action: 'send_message' | 'create_user' | 'get_conversation' | 'list_conversations';

@@ -37,7 +37,7 @@ use carnelian_core::{
 use futures_util::StreamExt;
 use serde_json::json;
 use std::process::Stdio;
-use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
+use testcontainers::{runners::AsyncRunner, GenericImage, ImageExt};
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
@@ -886,6 +886,8 @@ async fn test_criterion3_task_creation_and_execution_lifecycle() {
     {
         let active = scheduler.lock().await.active_tasks.clone();
         let metrics = Arc::new(MetricsCollector::new());
+        let ledger = Arc::new(Ledger::new(pool.clone()));
+        let lane_permits = Arc::new(HashMap::new());
         Scheduler::poll_task_queue(
             &pool,
             &event_stream,
@@ -893,12 +895,15 @@ async fn test_criterion3_task_creation_and_execution_lifecycle() {
             &config,
             &active,
             &metrics,
+            &ledger,
             &safe_mode_guard,
             &None,
             &None,
+            &lane_permits,
+            &None,
         )
         .await
-        .expect("Scheduler poll should succeed");
+        .expect("poll_task_queue should succeed");
     }
 
     // 4. Wait for task to reach 'completed' state (mock worker echoes instantly)
@@ -1032,10 +1037,12 @@ async fn test_criterion3_task_creation_and_execution_lifecycle() {
 /// - Task appears in the queue with state "pending"
 /// - Task executes and transitions through running → completed
 /// - CLI prints task ID and final status
+///
+/// Ignored: CLI binary integration test — deferred until the binary is linked into the test harness.
 #[tokio::test]
 #[ignore = "CLI not yet implemented - will be added in a subsequent phase"]
 async fn test_criterion4_cli_task_creation() {
-    // TODO: Implement when CLI binary is available
+    // Known limitation (v1.0.0): CLI binary integration test deferred.
     //
     // Expected test flow:
     // 1. Start server with database
@@ -1148,6 +1155,8 @@ async fn test_criterion5_concurrent_task_execution() {
 
     // First poll: should dequeue exactly 3 (max_workers=3, 0 active)
     let metrics = Arc::new(MetricsCollector::new());
+    let ledger = Arc::new(Ledger::new(pool.clone()));
+    let lane_permits = Arc::new(HashMap::new());
     Scheduler::poll_task_queue(
         &pool,
         &event_stream,
@@ -1155,8 +1164,11 @@ async fn test_criterion5_concurrent_task_execution() {
         &config,
         &active_tasks,
         &metrics,
+        &ledger,
         &safe_mode_guard,
         &None,
+        &None,
+        &lane_permits,
         &None,
     )
     .await
@@ -1215,8 +1227,11 @@ async fn test_criterion5_concurrent_task_execution() {
             &config,
             &active_tasks,
             &metrics,
+            &ledger,
             &safe_mode_guard,
             &None,
+            &None,
+            &lane_permits,
             &None,
         )
         .await
@@ -1389,6 +1404,8 @@ async fn test_criterion6a_invalid_skill_error_handling() {
         ledger_for_guard,
     ));
     let metrics = Arc::new(MetricsCollector::new());
+    let ledger = Arc::new(Ledger::new(pool.clone()));
+    let lane_permits = Arc::new(HashMap::new());
     Scheduler::poll_task_queue(
         &pool,
         &event_stream,
@@ -1396,8 +1413,11 @@ async fn test_criterion6a_invalid_skill_error_handling() {
         &config,
         &active_tasks,
         &metrics,
+        &ledger,
         &safe_mode_guard,
         &None,
+        &None,
+        &lane_permits,
         &None,
     )
     .await
@@ -1640,6 +1660,8 @@ async fn test_criterion6d_timeout_error_handling() {
         ledger_for_guard,
     ));
     let metrics = Arc::new(MetricsCollector::new());
+    let ledger = Arc::new(Ledger::new(pool.clone()));
+    let lane_permits = Arc::new(HashMap::new());
     Scheduler::poll_task_queue(
         &pool,
         &event_stream,
@@ -1647,8 +1669,11 @@ async fn test_criterion6d_timeout_error_handling() {
         &config,
         &active_tasks,
         &metrics,
+        &ledger,
         &safe_mode_guard,
         &None,
+        &None,
+        &lane_permits,
         &None,
     )
     .await
@@ -1789,6 +1814,8 @@ async fn test_criterion6e_crash_error_handling() {
         ledger_for_guard,
     ));
     let metrics = Arc::new(MetricsCollector::new());
+    let ledger = Arc::new(Ledger::new(pool.clone()));
+    let lane_permits = Arc::new(HashMap::new());
     Scheduler::poll_task_queue(
         &pool,
         &event_stream,
@@ -1796,8 +1823,11 @@ async fn test_criterion6e_crash_error_handling() {
         &config,
         &active_tasks,
         &metrics,
+        &ledger,
         &safe_mode_guard,
         &None,
+        &None,
+        &lane_permits,
         &None,
     )
     .await

@@ -2,9 +2,9 @@
 
 use dioxus::prelude::*;
 
-use crate::Route;
 use crate::store::EventStreamStore;
 use crate::websocket::ConnectionState;
+use crate::Route;
 
 /// Format an uptime duration in seconds into a human-readable string.
 fn format_uptime(seconds: u64) -> String {

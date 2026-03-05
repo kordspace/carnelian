@@ -397,34 +397,38 @@ impl ContextWindow {
     // P0: SOUL DIRECTIVES
     // =========================================================================
 
-    /// Load soul directives for the given identity (P0 — never pruned).
-    ///
-    /// Queries the `identities.directives` JSONB column, deserializes into
-    /// `Vec<SoulDirective>`, sorts by priority, and adds each as a P0 segment.
-    pub async fn load_soul_directives(&mut self, identity_id: Uuid) -> Result<()> {
+    /// Private loader for soul directives - returns segments without mutating self.
+    async fn load_soul_directives_inner(
+        pool: &PgPool,
+        identity_id: Option<Uuid>,
+        model: &str,
+    ) -> Result<Vec<ContextSegment>> {
+        let Some(identity_id) = identity_id else {
+            return Ok(vec![]);
+        };
+
         let row = sqlx::query("SELECT directives FROM identities WHERE identity_id = $1")
             .bind(identity_id)
-            .fetch_optional(&self.pool)
+            .fetch_optional(pool)
             .await?;
 
         let Some(row) = row else {
             tracing::warn!(identity_id = %identity_id, "No identity found for soul directives");
-            return Ok(());
+            return Ok(vec![]);
         };
 
         let directives_json: serde_json::Value = row.get("directives");
         let mut directives: Vec<SoulDirective> =
             serde_json::from_value(directives_json).unwrap_or_default();
 
-        // Sort by priority (0 = highest)
         directives.sort_by_key(|d| d.priority);
 
-        for directive in &directives {
+        let mut segments = Vec::new();
+        for (idx, directive) in directives.iter().enumerate() {
             let content = format!("## {}\n- {}", directive.category, directive.content);
-            let tokens = estimate_tokens(&content, &self.model);
+            let tokens = estimate_tokens(&content, model);
 
-            let idx = self.segments.len();
-            self.segments.push(ContextSegment {
+            segments.push(ContextSegment {
                 priority: SegmentPriority::P0,
                 content,
                 token_estimate: tokens,
@@ -436,7 +440,6 @@ impl ContextWindow {
                 }),
                 insertion_order: idx,
             });
-            self.total_tokens += tokens;
         }
 
         tracing::debug!(
@@ -445,6 +448,19 @@ impl ContextWindow {
             "Loaded soul directives (P0)"
         );
 
+        Ok(segments)
+    }
+
+    /// Load soul directives for the given identity (P0 — never pruned).
+    ///
+    /// Queries the `identities.directives` JSONB column, deserializes into
+    /// `Vec<SoulDirective>`, sorts by priority, and adds each as a P0 segment.
+    pub async fn load_soul_directives(&mut self, identity_id: Uuid) -> Result<()> {
+        let segments =
+            Self::load_soul_directives_inner(&self.pool, Some(identity_id), &self.model).await?;
+        for seg in segments {
+            self.add_segment(seg);
+        }
         Ok(())
     }
 
@@ -452,15 +468,19 @@ impl ContextWindow {
     // P1: RECENT MEMORIES
     // =========================================================================
 
-    /// Load recent and high-importance memories for the given identity (P1).
-    ///
-    /// Combines the "today + yesterday" (48hr) window with high-importance
-    /// memories (importance > 0.8), deduplicates by memory_id, and takes
-    /// the top `limit` results sorted by importance then access time.
-    pub async fn load_recent_memories(&mut self, identity_id: Uuid, limit: usize) -> Result<()> {
-        let manager = MemoryManager::new(self.pool.clone(), None);
+    /// Private loader for recent memories - returns segments without mutating self.
+    async fn load_recent_memories_inner(
+        pool: &PgPool,
+        identity_id: Option<Uuid>,
+        limit: usize,
+        model: &str,
+    ) -> Result<Vec<ContextSegment>> {
+        let Some(identity_id) = identity_id else {
+            return Ok(vec![]);
+        };
 
-        // Load both recent (48hr) and high-importance memories
+        let manager = MemoryManager::new(pool.clone(), None);
+
         #[allow(clippy::cast_possible_wrap)]
         let limit_i64 = limit as i64;
         let recent = manager.load_recent_memories(identity_id, limit_i64).await?;
@@ -468,7 +488,6 @@ impl ContextWindow {
             .load_high_importance_memories(identity_id, 0.8, limit_i64)
             .await?;
 
-        // Deduplicate by memory_id
         let mut seen = std::collections::HashSet::new();
         let mut combined = Vec::new();
 
@@ -478,7 +497,6 @@ impl ContextWindow {
             }
         }
 
-        // Sort by importance DESC, then accessed_at DESC
         combined.sort_by(|a, b| {
             b.importance
                 .partial_cmp(&a.importance)
@@ -486,18 +504,17 @@ impl ContextWindow {
                 .then_with(|| b.accessed_at.cmp(&a.accessed_at))
         });
 
-        // Take top `limit`
         combined.truncate(limit);
 
-        for mem in &combined {
+        let mut segments = Vec::new();
+        for (idx, mem) in combined.iter().enumerate() {
             let source_label = mem
                 .source_type()
                 .map_or_else(|| mem.source.clone(), |s| s.to_string());
             let content = format!("[Memory from {}] {}", source_label, mem.content);
-            let tokens = estimate_tokens(&content, &self.model);
+            let tokens = estimate_tokens(&content, model);
 
-            let idx = self.segments.len();
-            self.segments.push(ContextSegment {
+            segments.push(ContextSegment {
                 priority: SegmentPriority::P1,
                 content,
                 token_estimate: tokens,
@@ -510,7 +527,6 @@ impl ContextWindow {
                 }),
                 insertion_order: idx,
             });
-            self.total_tokens += tokens;
         }
 
         tracing::debug!(
@@ -519,6 +535,21 @@ impl ContextWindow {
             "Loaded recent memories (P1)"
         );
 
+        Ok(segments)
+    }
+
+    /// Load recent and high-importance memories for the given identity (P1).
+    ///
+    /// Combines the "today + yesterday" (48hr) window with high-importance
+    /// memories (importance > 0.8), deduplicates by memory_id, and takes
+    /// the top `limit` results sorted by importance then access time.
+    pub async fn load_recent_memories(&mut self, identity_id: Uuid, limit: usize) -> Result<()> {
+        let segments =
+            Self::load_recent_memories_inner(&self.pool, Some(identity_id), limit, &self.model)
+                .await?;
+        for seg in segments {
+            self.add_segment(seg);
+        }
         Ok(())
     }
 
@@ -526,21 +557,25 @@ impl ContextWindow {
     // P2: TASK CONTEXT
     // =========================================================================
 
-    /// Load task context for the given task (P2 — never pruned).
-    ///
-    /// Queries the `tasks` table for task details and `task_runs` for the
-    /// most recent run, formatting them as structured context.
-    pub async fn load_task_context(&mut self, task_id: Uuid) -> Result<()> {
-        // Load task details
+    /// Private loader for task context - returns segments without mutating self.
+    async fn load_task_context_inner(
+        pool: &PgPool,
+        task_id: Option<Uuid>,
+        model: &str,
+    ) -> Result<Vec<ContextSegment>> {
+        let Some(task_id) = task_id else {
+            return Ok(vec![]);
+        };
+
         let task_row =
             sqlx::query("SELECT task_id, title, description, state FROM tasks WHERE task_id = $1")
                 .bind(task_id)
-                .fetch_optional(&self.pool)
+                .fetch_optional(pool)
                 .await?;
 
         let Some(task_row) = task_row else {
             tracing::warn!(task_id = %task_id, "No task found for context loading");
-            return Ok(());
+            return Ok(vec![]);
         };
 
         let title: String = task_row.get("title");
@@ -554,7 +589,6 @@ impl ContextWindow {
             state,
         );
 
-        // Load most recent run
         let run_row = sqlx::query(
             r"SELECT run_id, state, result, error
               FROM task_runs
@@ -563,7 +597,7 @@ impl ContextWindow {
               LIMIT 1",
         )
         .bind(task_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(pool)
         .await?;
 
         let mut run_id: Option<Uuid> = None;
@@ -584,10 +618,9 @@ impl ContextWindow {
             }
         }
 
-        let tokens = estimate_tokens(&content, &self.model);
+        let tokens = estimate_tokens(&content, model);
 
-        let idx = self.segments.len();
-        self.segments.push(ContextSegment {
+        let segment = ContextSegment {
             priority: SegmentPriority::P2,
             content,
             token_estimate: tokens,
@@ -598,12 +631,24 @@ impl ContextWindow {
                 "run_id": run_id,
                 "state": state,
             }),
-            insertion_order: idx,
-        });
-        self.total_tokens += tokens;
+            insertion_order: 0,
+        };
 
         tracing::debug!(task_id = %task_id, "Loaded task context (P2)");
 
+        Ok(vec![segment])
+    }
+
+    /// Load task context for the given task (P2 — never pruned).
+    ///
+    /// Queries the `tasks` table for task details and `task_runs` for the
+    /// most recent run, formatting them as structured context.
+    pub async fn load_task_context(&mut self, task_id: Uuid) -> Result<()> {
+        let segments =
+            Self::load_task_context_inner(&self.pool, Some(task_id), &self.model).await?;
+        for seg in segments {
+            self.add_segment(seg);
+        }
         Ok(())
     }
 
@@ -611,16 +656,17 @@ impl ContextWindow {
     // P3: CONVERSATION HISTORY
     // =========================================================================
 
-    /// Load conversation history for the given session (P3).
-    ///
-    /// Loads the most recent messages (excluding tool-role messages, which are
-    /// loaded separately as P4), ordered chronologically (oldest first).
-    pub async fn load_conversation_history(
-        &mut self,
-        session_id: Uuid,
+    /// Private loader for conversation history - returns segments without mutating self.
+    async fn load_conversation_history_inner(
+        pool: &PgPool,
+        session_id: Option<Uuid>,
         limit: usize,
-    ) -> Result<()> {
-        // Load messages in reverse order (newest first), then reverse for chronological
+        model: &str,
+    ) -> Result<Vec<ContextSegment>> {
+        let Some(session_id) = session_id else {
+            return Ok(vec![]);
+        };
+
         let messages: Vec<SessionMessage> = sqlx::query_as(
             r"SELECT * FROM session_messages
               WHERE session_id = $1 AND role != 'tool'
@@ -629,21 +675,17 @@ impl ContextWindow {
         )
         .bind(session_id)
         .bind(i64::try_from(limit).unwrap_or(i64::MAX))
-        .fetch_all(&self.pool)
+        .fetch_all(pool)
         .await?;
 
-        // Reverse to chronological order (oldest first)
-        for msg in messages.iter().rev() {
+        let mut segments = Vec::new();
+        for (idx, msg) in messages.iter().rev().enumerate() {
             let content = format!("{}: {}", msg.role, msg.content);
-
-            // Use stored token_estimate if available, otherwise estimate
             let tokens = msg
                 .token_estimate
-                .map_or_else(|| estimate_message_tokens(msg, &self.model), |t| t as usize);
+                .map_or_else(|| estimate_message_tokens(msg, model), |t| t as usize);
 
-            // Store message_id as i64 in metadata (not as UUID source_id)
-            let idx = self.segments.len();
-            self.segments.push(ContextSegment {
+            segments.push(ContextSegment {
                 priority: SegmentPriority::P3,
                 content,
                 token_estimate: tokens,
@@ -656,7 +698,6 @@ impl ContextWindow {
                 }),
                 insertion_order: idx,
             });
-            self.total_tokens += tokens;
         }
 
         tracing::debug!(
@@ -665,6 +706,24 @@ impl ContextWindow {
             "Loaded conversation history (P3)"
         );
 
+        Ok(segments)
+    }
+
+    /// Load conversation history for the given session (P3).
+    ///
+    /// Loads the most recent messages (excluding tool-role messages, which are
+    /// loaded separately as P4), ordered chronologically (oldest first).
+    pub async fn load_conversation_history(
+        &mut self,
+        session_id: Uuid,
+        limit: usize,
+    ) -> Result<()> {
+        let segments =
+            Self::load_conversation_history_inner(&self.pool, Some(session_id), limit, &self.model)
+                .await?;
+        for seg in segments {
+            self.add_segment(seg);
+        }
         Ok(())
     }
 
@@ -1052,27 +1111,41 @@ impl ContextWindow {
         self.segments.clear();
         self.total_tokens = 0;
 
-        // 1. Load soul directives (P0)
-        if let Some(iid) = identity_id {
-            self.load_soul_directives(iid).await?;
+        // Capture inputs for concurrent loading
+        let pool = self.pool.clone();
+        let model = self.model.clone();
+
+        // Load P0-P3 concurrently using tokio::join!
+        let (p0_result, p1_result, p2_result, p3_result) = tokio::join!(
+            Self::load_soul_directives_inner(&pool, identity_id, &model),
+            Self::load_recent_memories_inner(&pool, identity_id, 10, &model),
+            Self::load_task_context_inner(&pool, task_id, &model),
+            Self::load_conversation_history_inner(&pool, session_id, 50, &model),
+        );
+
+        // Propagate errors
+        let p0_segments = p0_result?;
+        let p1_segments = p1_result?;
+        let p2_segments = p2_result?;
+        let p3_segments = p3_result?;
+
+        // Merge in priority order: P0 → P1 → P2 → P3
+        let mut all_segments = Vec::new();
+        all_segments.extend(p0_segments);
+        all_segments.extend(p1_segments);
+        all_segments.extend(p2_segments);
+        all_segments.extend(p3_segments);
+
+        // Reassign insertion_order globally and accumulate tokens
+        for (idx, seg) in all_segments.iter_mut().enumerate() {
+            seg.insertion_order = idx;
+            self.total_tokens += seg.token_estimate;
         }
 
-        // 2. Load recent memories (P1)
-        if let Some(iid) = identity_id {
-            self.load_recent_memories(iid, 10).await?;
-        }
+        // Add merged segments to self
+        self.segments.extend(all_segments);
 
-        // 3. Load task context (P2) if task_id provided
-        if let Some(tid) = task_id {
-            self.load_task_context(tid).await?;
-        }
-
-        // 4. Load conversation history (P3)
-        if let Some(sid) = session_id {
-            self.load_conversation_history(sid, 50).await?;
-        }
-
-        // 5. Load tool results (P4)
+        // 5. Load tool results (P4) sequentially - requires session_id from P2 results
         if let Some(sid) = session_id {
             self.load_tool_results(sid, 20).await?;
         }
@@ -1162,6 +1235,8 @@ impl ContextWindow {
                 Some(correlation_id),
                 None,
                 Some(metadata),
+                None,
+                None,
             )
             .await?;
 
@@ -1242,6 +1317,8 @@ impl ContextWindow {
                 Some(correlation_id),
                 None,
                 Some(metadata),
+                None,
+                None,
             )
             .await?;
 
@@ -1844,35 +1921,9 @@ mod tests {
     // Integration tests (require database)
     // =========================================================================
 
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_context_assembly_integration() {
-        unimplemented!("Run with: cargo test --test context -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_build_for_session_integration() {
-        unimplemented!("Run with: cargo test --test context -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_resolve_context_window_limit_integration() {
-        unimplemented!("Run with: cargo test --test context -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_log_to_ledger_integration() {
-        unimplemented!("Run with: cargo test --test context_integrity_test -- --ignored");
-    }
-
-    #[tokio::test]
-    #[ignore = "Requires database connection"]
-    async fn test_log_context_integrity_integration() {
-        unimplemented!("Run with: cargo test --test context_integrity_test -- --ignored");
-    }
+    // Integration tests removed - these are placeholder stubs.
+    // Real integration tests should be implemented in the tests/ directory
+    // when the features are fully developed.
 
     #[tokio::test]
     async fn test_add_segment_updates_tokens_and_order() {

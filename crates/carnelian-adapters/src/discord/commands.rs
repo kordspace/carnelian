@@ -6,8 +6,8 @@ use serenity::all::{Context, Message};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use carnelian_core::EventStream;
 use carnelian_core::policy::PolicyEngine;
+use carnelian_core::EventStream;
 
 use crate::db as channel_db;
 

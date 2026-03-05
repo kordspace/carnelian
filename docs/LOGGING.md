@@ -28,7 +28,7 @@ Think of branding as a thin "skin" around serious structured logs.
 
 | Icon | Brand | Usage |
 |------|-------|-------|
-| 🔥 | Carnelian OS | System/runtime logs (core/gateway/services) |
+| 🔥 | Carnelian OS | System/runtime logs (core/packages/services) |
 | 🦎 | Lian | Agent reasoning, memory shaping decisions, tool selection |
 | 💎 | Core | Architectural guarantees, security invariants, foundational events |
 | ✅ | — | Health state / completed milestone |

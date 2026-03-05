@@ -1,4 +1,4 @@
-import type { SkillContext, SkillResult } from '../../../workers/node-worker/src/types';
+import type { SkillContext, SkillResult } from '../../types';
 
 interface PayPalPaymentParams {
   action: 'create_order' | 'capture_order' | 'refund' | 'get_order';

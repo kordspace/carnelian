@@ -37,8 +37,8 @@ use carnelian_common::{Error, Result};
 use config::Config as ConfigBuilder;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
+use sqlx::PgPool;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -181,7 +181,7 @@ pub struct Config {
     #[serde(default = "default_skills_registry_path")]
     pub skills_registry_path: PathBuf,
 
-    /// Path to soul files directory (default: ./souls)
+    /// Path to soul files directory (default: . for root SOUL.md)
     #[serde(default = "default_souls_path")]
     pub souls_path: PathBuf,
 
@@ -246,6 +246,14 @@ pub struct Config {
     #[serde(default = "default_cors_origins")]
     pub cors_origins: Vec<String>,
 
+    /// MAGIC quantum entropy subsystem configuration
+    #[serde(default)]
+    pub magic: MagicConfig,
+
+    /// Per-lane worker concurrency limits
+    #[serde(default)]
+    pub worker_lanes: WorkerLaneConfig,
+
     /// Database pool (not serialized, initialized separately)
     #[serde(skip)]
     db_pool: Option<Arc<PgPool>>,
@@ -286,6 +294,131 @@ impl Default for MachineConfig {
             gpu_enabled: false,
             default_model: "deepseek-r1:7b".to_string(),
             auto_restart_workers: true,
+        }
+    }
+}
+
+/// Quantum Origin provider configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct QuantumOriginConfig {
+    #[serde(default)]
+    pub api_key: String,
+    #[serde(default = "magic_default_quantum_origin_url")]
+    pub url: String,
+}
+
+/// Quantinuum H2 provider configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct QuantinuumConfig {
+    #[serde(default = "magic_default_quantinuum_device")]
+    pub device: String,
+}
+
+/// IBM Quantum provider configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct IbmQuantumConfig {
+    #[serde(default)]
+    pub token: String,
+    #[serde(default = "magic_default_qiskit_backend")]
+    pub backend: String,
+}
+
+/// CORS origins configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CorsOriginsConfig {
+    #[serde(default)]
+    pub extra: Vec<String>,
+}
+
+/// MAGIC quantum entropy subsystem configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MagicConfig {
+    /// Enable MAGIC quantum entropy subsystem
+    #[serde(default = "magic_default_enabled")]
+    pub enabled: bool,
+
+    /// Quantum Origin API base URL
+    #[serde(default = "magic_default_quantum_origin_url")]
+    pub quantum_origin_url: String,
+
+    /// Quantum Origin API key (set via CARNELIAN_QUANTUM_ORIGIN_API_KEY env var)
+    #[serde(default = "magic_default_quantum_origin_api_key")]
+    pub quantum_origin_api_key: String,
+
+    /// Enable Quantinuum H2 RNG via Python skill
+    #[serde(default = "magic_default_quantinuum_enabled")]
+    pub quantinuum_enabled: bool,
+
+    /// Quantinuum device name (H1-1E = emulator, H2-1 = real hardware)
+    #[serde(default = "magic_default_quantinuum_device")]
+    pub quantinuum_device: String,
+
+    /// Number of bits to request from Quantinuum
+    #[serde(default = "magic_default_quantinuum_n_bits")]
+    pub quantinuum_n_bits: u32,
+
+    /// Enable Qiskit/IBM Quantum RNG via Python skill
+    #[serde(default = "magic_default_qiskit_enabled")]
+    pub qiskit_enabled: bool,
+
+    /// Qiskit backend name
+    #[serde(default = "magic_default_qiskit_backend")]
+    pub qiskit_backend: String,
+
+    /// Entropy provider timeout in milliseconds
+    #[serde(
+        default = "magic_default_entropy_timeout_ms",
+        alias = "entropy_timeout_secs"
+    )]
+    pub entropy_timeout_ms: u64,
+
+    /// Fraction of bytes sourced from quantum provider (0.0-1.0)
+    #[serde(default = "magic_default_entropy_mix_ratio")]
+    pub entropy_mix_ratio: f64,
+
+    /// Log entropy generation events
+    #[serde(default = "magic_default_log_entropy_events")]
+    pub log_entropy_events: bool,
+
+    /// Mantra cooldown in heartbeat cycles
+    #[serde(default = "magic_default_mantra_cooldown_beats")]
+    pub mantra_cooldown_beats: u32,
+
+    /// Automatically suggest skills based on mantra context
+    #[serde(default = "default_true")]
+    pub auto_suggest_skills: bool,
+
+    // Nested configuration (preferred)
+    #[serde(default)]
+    pub quantum_origin: Option<QuantumOriginConfig>,
+    #[serde(default)]
+    pub quantinuum: Option<QuantinuumConfig>,
+    #[serde(default)]
+    pub ibm_quantum: Option<IbmQuantumConfig>,
+    #[serde(default)]
+    pub cors_origins: Option<CorsOriginsConfig>,
+}
+
+impl Default for MagicConfig {
+    fn default() -> Self {
+        Self {
+            enabled: magic_default_enabled(),
+            quantum_origin_url: magic_default_quantum_origin_url(),
+            quantum_origin_api_key: magic_default_quantum_origin_api_key(),
+            quantinuum_enabled: magic_default_quantinuum_enabled(),
+            quantinuum_device: magic_default_quantinuum_device(),
+            quantinuum_n_bits: magic_default_quantinuum_n_bits(),
+            qiskit_enabled: magic_default_qiskit_enabled(),
+            qiskit_backend: magic_default_qiskit_backend(),
+            entropy_timeout_ms: magic_default_entropy_timeout_ms(),
+            entropy_mix_ratio: magic_default_entropy_mix_ratio(),
+            log_entropy_events: magic_default_log_entropy_events(),
+            mantra_cooldown_beats: magic_default_mantra_cooldown_beats(),
+            auto_suggest_skills: true,
+            quantum_origin: None,
+            quantinuum: None,
+            ibm_quantum: None,
+            cors_origins: None,
         }
     }
 }
@@ -392,7 +525,7 @@ fn default_skills_registry_path() -> PathBuf {
 }
 
 fn default_souls_path() -> PathBuf {
-    PathBuf::from("./souls")
+    PathBuf::from(".")
 }
 
 fn default_agent_name() -> String {
@@ -419,6 +552,79 @@ fn default_tool_clear_age_secs() -> i64 {
     3600
 }
 
+fn magic_default_enabled() -> bool {
+    false
+}
+
+fn magic_default_quantum_origin_url() -> String {
+    "https://origin.quantinuum.com".to_string()
+}
+
+fn magic_default_quantum_origin_api_key() -> String {
+    String::new()
+}
+
+fn magic_default_quantinuum_enabled() -> bool {
+    false
+}
+
+fn magic_default_quantinuum_device() -> String {
+    "H1-1E".to_string()
+}
+
+fn magic_default_quantinuum_n_bits() -> u32 {
+    256
+}
+
+fn magic_default_qiskit_enabled() -> bool {
+    false
+}
+
+fn magic_default_qiskit_backend() -> String {
+    "ibm_brisbane".to_string()
+}
+
+fn magic_default_entropy_timeout_ms() -> u64 {
+    5000
+}
+
+fn magic_default_entropy_mix_ratio() -> f64 {
+    0.5
+}
+
+fn magic_default_log_entropy_events() -> bool {
+    true
+}
+
+fn magic_default_mantra_cooldown_beats() -> u32 {
+    3
+}
+
+fn default_true() -> bool {
+    true
+}
+
+// Worker lane concurrency defaults
+fn default_worker_lane_heartbeat() -> usize {
+    1
+}
+
+fn default_worker_lane_code_task() -> usize {
+    2
+}
+
+fn default_worker_lane_data_task() -> usize {
+    4
+}
+
+fn default_worker_lane_io_task() -> usize {
+    8
+}
+
+fn default_worker_lane_chat_task() -> usize {
+    2
+}
+
 /// Machine profile determining resource limits and default model
 ///
 /// # Variants
@@ -433,6 +639,54 @@ pub enum MachineProfile {
     Standard,
     Performance,
     Custom,
+}
+
+/// Worker lane for task classification and concurrency control
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkerLane {
+    Heartbeat,
+    CodeTask,
+    DataTask,
+    IoTask,
+    ChatTask,
+}
+
+/// Per-lane worker concurrency limits
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WorkerLaneConfig {
+    /// Heartbeat lane concurrency (always 1)
+    #[serde(default = "default_worker_lane_heartbeat")]
+    pub heartbeat: usize,
+
+    /// Code task lane concurrency
+    #[serde(default = "default_worker_lane_code_task")]
+    pub code_task: usize,
+
+    /// Data task lane concurrency
+    #[serde(default = "default_worker_lane_data_task")]
+    pub data_task: usize,
+
+    /// I/O task lane concurrency
+    #[serde(default = "default_worker_lane_io_task")]
+    pub io_task: usize,
+
+    /// Chat task lane concurrency
+    #[serde(default = "default_worker_lane_chat_task")]
+    pub chat_task: usize,
+}
+
+impl Default for WorkerLaneConfig {
+    fn default() -> Self {
+        Self {
+            heartbeat: default_worker_lane_heartbeat(),
+            code_task: default_worker_lane_code_task(),
+            data_task: default_worker_lane_data_task(),
+            io_task: default_worker_lane_io_task(),
+            chat_task: default_worker_lane_chat_task(),
+        }
+    }
 }
 
 impl FromStr for MachineProfile {
@@ -493,10 +747,74 @@ impl Default for Config {
             adapter_discord_enabled: false,
             adapter_spam_threshold: default_adapter_spam_threshold(),
             cors_origins: default_cors_origins(),
+            magic: MagicConfig::default(),
+            worker_lanes: WorkerLaneConfig::default(),
             db_pool: None,
             owner_signing_key: None,
         }
     }
+}
+
+/// Classify a task into a worker lane based on title and description keywords
+///
+/// # Arguments
+/// * `title` - Task title
+/// * `description` - Task description
+///
+/// # Returns
+/// The appropriate `WorkerLane` for the task
+///
+/// # Lane Classification Logic
+/// 1. **Heartbeat**: Contains "heartbeat" keyword
+/// 2. **CodeTask**: Code-related keywords (code, refactor, build, compile, test, lint, format)
+/// 3. **DataTask**: Data-related keywords (data, analyse, analyze, query, database, migrate, etl)
+/// 4. **ChatTask**: Conversation keywords (chat, message, respond, reply, conversation)
+/// 5. **IoTask**: Default fallback for I/O and other tasks
+pub fn classify_task_lane(title: &str, description: &str) -> WorkerLane {
+    // Combine title and description into lowercase string for matching
+    let combined = format!("{} {}", title.to_lowercase(), description.to_lowercase());
+
+    // Match in priority order (first match wins)
+    if combined.contains("heartbeat") {
+        return WorkerLane::Heartbeat;
+    }
+
+    // Code-related keywords
+    if combined.contains("code")
+        || combined.contains("refactor")
+        || combined.contains("build")
+        || combined.contains("compile")
+        || combined.contains("test")
+        || combined.contains("lint")
+        || combined.contains("format")
+    {
+        return WorkerLane::CodeTask;
+    }
+
+    // Data-related keywords
+    if combined.contains("data")
+        || combined.contains("analyse")
+        || combined.contains("analyze")
+        || combined.contains("query")
+        || combined.contains("database")
+        || combined.contains("migrate")
+        || combined.contains("etl")
+    {
+        return WorkerLane::DataTask;
+    }
+
+    // Chat-related keywords
+    if combined.contains("chat")
+        || combined.contains("message")
+        || combined.contains("respond")
+        || combined.contains("reply")
+        || combined.contains("conversation")
+    {
+        return WorkerLane::ChatTask;
+    }
+
+    // Default to I/O task lane
+    WorkerLane::IoTask
 }
 
 impl Config {
@@ -741,6 +1059,26 @@ impl Config {
             }
         }
 
+        // CARNELIAN_QUANTUM_ORIGIN_API_KEY — Quantum Origin API key for MAGIC subsystem
+        if let Ok(val) = std::env::var("CARNELIAN_QUANTUM_ORIGIN_API_KEY") {
+            self.magic.quantum_origin_api_key.clone_from(&val);
+            // Also populate nested config if present
+            if let Some(ref mut qo) = self.magic.quantum_origin {
+                qo.api_key = val;
+            } else {
+                self.magic.quantum_origin = Some(QuantumOriginConfig {
+                    api_key: val,
+                    url: self.magic.quantum_origin_url.clone(),
+                });
+            }
+        }
+
+        // Handle entropy_timeout_secs alias: if value is < 100, assume it was specified in seconds
+        // and convert to milliseconds (machine.toml.example uses entropy_timeout_secs)
+        if self.magic.entropy_timeout_ms < 100 && self.magic.entropy_timeout_ms > 0 {
+            self.magic.entropy_timeout_ms *= 1000;
+        }
+
         // SESSION_EXPIRY_HOURS — default session TTL in hours (0 = never)
         if let Ok(val) = std::env::var("SESSION_EXPIRY_HOURS") {
             self.session_default_expiry_hours = val.parse().map_err(|_| {
@@ -934,6 +1272,113 @@ impl Config {
                     "Absolute workspace scan paths are discouraged for security"
                 );
             }
+        }
+
+        // MAGIC subsystem validation
+        if self.magic.enabled {
+            // Validate entropy_mix_ratio is within [0.0, 1.0]
+            if !(0.0..=1.0).contains(&self.magic.entropy_mix_ratio) {
+                return Err(Error::Config(format!(
+                    "magic.entropy_mix_ratio must be between 0.0 and 1.0, got {}",
+                    self.magic.entropy_mix_ratio
+                )));
+            }
+
+            // Validate timeout is positive
+            if self.magic.entropy_timeout_ms == 0 {
+                return Err(Error::Config(
+                    "magic.entropy_timeout_ms must be > 0".to_string(),
+                ));
+            }
+
+            // Validate bit counts are positive
+            if self.magic.quantinuum_n_bits == 0 {
+                return Err(Error::Config(
+                    "magic.quantinuum_n_bits must be > 0".to_string(),
+                ));
+            }
+
+            // Validate Quantum Origin URL when enabled (check both nested and flat config)
+            let qo_api_key = self
+                .magic
+                .quantum_origin
+                .as_ref()
+                .map(|qo| qo.api_key.as_str())
+                .unwrap_or(&self.magic.quantum_origin_api_key);
+            let qo_url = self
+                .magic
+                .quantum_origin
+                .as_ref()
+                .map(|qo| qo.url.as_str())
+                .unwrap_or(&self.magic.quantum_origin_url);
+
+            if !qo_api_key.is_empty() {
+                if qo_url.is_empty() {
+                    return Err(Error::Config(
+                        "magic.quantum_origin.url cannot be empty when API key is set".to_string(),
+                    ));
+                }
+                if !qo_url.starts_with("http://") && !qo_url.starts_with("https://") {
+                    return Err(Error::Config(
+                        "magic.quantum_origin.url must be a valid HTTP URL".to_string(),
+                    ));
+                }
+            }
+
+            // Validate Quantinuum device name when enabled
+            if self.magic.quantinuum_enabled && self.magic.quantinuum_device.is_empty() {
+                return Err(Error::Config(
+                    "magic.quantinuum_device cannot be empty when quantinuum_enabled is true"
+                        .to_string(),
+                ));
+            }
+
+            // Validate Qiskit backend name when enabled
+            if self.magic.qiskit_enabled && self.magic.qiskit_backend.is_empty() {
+                return Err(Error::Config(
+                    "magic.qiskit_backend cannot be empty when qiskit_enabled is true".to_string(),
+                ));
+            }
+
+            // Validate mantra cooldown is reasonable
+            if self.magic.mantra_cooldown_beats > 1000 {
+                tracing::warn!(
+                    beats = self.magic.mantra_cooldown_beats,
+                    "magic.mantra_cooldown_beats is very high, may delay mantra operations"
+                );
+            }
+        }
+
+        // Worker lane validation
+        if self.worker_lanes.heartbeat != 1 {
+            return Err(Error::Config(format!(
+                "worker_lanes.heartbeat must be exactly 1 (reserved for internal heartbeat pulse), got {}",
+                self.worker_lanes.heartbeat
+            )));
+        }
+
+        if self.worker_lanes.code_task == 0 {
+            return Err(Error::Config(
+                "worker_lanes.code_task must be at least 1, got 0".to_string(),
+            ));
+        }
+
+        if self.worker_lanes.data_task == 0 {
+            return Err(Error::Config(
+                "worker_lanes.data_task must be at least 1, got 0".to_string(),
+            ));
+        }
+
+        if self.worker_lanes.io_task == 0 {
+            return Err(Error::Config(
+                "worker_lanes.io_task must be at least 1, got 0".to_string(),
+            ));
+        }
+
+        if self.worker_lanes.chat_task == 0 {
+            return Err(Error::Config(
+                "worker_lanes.chat_task must be at least 1, got 0".to_string(),
+            ));
         }
 
         Ok(())
@@ -1274,6 +1719,8 @@ impl Config {
                     serde_json::json!({
                         "public_key": self.owner_public_key,
                     }),
+                    None,
+                    None,
                     None,
                     None,
                     None,

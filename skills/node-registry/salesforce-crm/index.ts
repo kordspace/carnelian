@@ -1,4 +1,4 @@
-import type { SkillContext, SkillResult } from '../../../workers/node-worker/src/types';
+import type { SkillContext, SkillResult } from '../../types';
 
 interface SalesforceCRMParams {
   action: 'create_lead' | 'update_lead' | 'query' | 'create_opportunity' | 'get_account';

@@ -1,0 +1,1113 @@
+//! Mantra subsystem — quantum-weighted context-aware reflection selection
+
+use crate::{MagicError, Result};
+use chrono::{DateTime, Timelike, Utc};
+use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
+use std::collections::HashMap;
+use uuid::Uuid;
+
+// =============================================================================
+// MantraCategory enum — 18 variants matching migration seed data
+// =============================================================================
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MantraCategory {
+    CodeDevelopment,
+    FinancialManagement,
+    SystemHealth,
+    UserOrganizationHealth,
+    Communications,
+    TaskBuilding,
+    ScheduledJobs,
+    SoulRefinement,
+    MantraOptimization,
+    IntegrationIdeation,
+    SecurityAudit,
+    MemoryKnowledge,
+    CreativeExploration,
+    LearningResearch,
+    PerformanceOptimization,
+    CollaborationDelegation,
+    ReflectionIntrospection,
+    InnovationExperimentation,
+}
+
+impl MantraCategory {
+    pub fn as_db_name(&self) -> &str {
+        match self {
+            Self::CodeDevelopment => "Code Development",
+            Self::FinancialManagement => "Financial Management",
+            Self::SystemHealth => "System Health",
+            Self::UserOrganizationHealth => "User & Organization Health",
+            Self::Communications => "Communications",
+            Self::TaskBuilding => "Task Building",
+            Self::ScheduledJobs => "Scheduled Jobs",
+            Self::SoulRefinement => "Soul Refinement",
+            Self::MantraOptimization => "Mantra Optimization",
+            Self::IntegrationIdeation => "Integration Ideation",
+            Self::SecurityAudit => "Security & Audit",
+            Self::MemoryKnowledge => "Memory & Knowledge",
+            Self::CreativeExploration => "Creative Exploration",
+            Self::LearningResearch => "Learning & Research",
+            Self::PerformanceOptimization => "Performance Optimization",
+            Self::CollaborationDelegation => "Collaboration & Delegation",
+            Self::ReflectionIntrospection => "Reflection & Introspection",
+            Self::InnovationExperimentation => "Innovation & Experimentation",
+        }
+    }
+
+    pub fn from_db_name(s: &str) -> Option<Self> {
+        match s {
+            "Code Development" => Some(Self::CodeDevelopment),
+            "Financial Management" => Some(Self::FinancialManagement),
+            "System Health" => Some(Self::SystemHealth),
+            "User & Organization Health" => Some(Self::UserOrganizationHealth),
+            "Communications" => Some(Self::Communications),
+            "Task Building" => Some(Self::TaskBuilding),
+            "Scheduled Jobs" => Some(Self::ScheduledJobs),
+            "Soul Refinement" => Some(Self::SoulRefinement),
+            "Mantra Optimization" => Some(Self::MantraOptimization),
+            "Integration Ideation" => Some(Self::IntegrationIdeation),
+            "Security & Audit" => Some(Self::SecurityAudit),
+            "Memory & Knowledge" => Some(Self::MemoryKnowledge),
+            "Creative Exploration" => Some(Self::CreativeExploration),
+            "Learning & Research" => Some(Self::LearningResearch),
+            "Performance Optimization" => Some(Self::PerformanceOptimization),
+            "Collaboration & Delegation" => Some(Self::CollaborationDelegation),
+            "Reflection & Introspection" => Some(Self::ReflectionIntrospection),
+            "Innovation & Experimentation" => Some(Self::InnovationExperimentation),
+            _ => None,
+        }
+    }
+}
+
+// =============================================================================
+// MantraEntry struct
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct MantraEntry {
+    pub entry_id: Uuid,
+    pub category_id: Uuid,
+    pub text: String,
+    pub use_count: i32,
+    pub enabled: bool,
+    pub elixir_id: Option<Uuid>,
+}
+
+// =============================================================================
+// MantraContext struct
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MantraContext {
+    pub recent_error_count: i64,
+    pub pending_task_count: i64,
+    pub idle_beats: i64,
+    pub elixir_drafts_pending: i64,
+    pub capability_changes_last_hour: i64,
+    pub model_cost_pct: f64,
+    pub sub_agents_active: i64,
+    pub soul_file_age_days: i64,
+    pub new_skills_last_24h: i64,
+    pub magic_enabled: bool,
+    pub high_latency: bool,
+    pub unread_channel_messages: i64,
+    pub local_hour: u8,
+    pub uptime_hours: f64,
+    pub elixir_quality_by_category: HashMap<String, f32>,
+    pub quantum_providers_available: Vec<String>,
+    pub workflow_executions_last_hour: i64,
+    pub active_sessions: i64,
+}
+
+impl MantraContext {
+    pub fn default_for_fallback() -> Self {
+        Self {
+            recent_error_count: 0,
+            pending_task_count: 0,
+            idle_beats: 0,
+            elixir_drafts_pending: 0,
+            capability_changes_last_hour: 0,
+            model_cost_pct: 0.0,
+            sub_agents_active: 0,
+            soul_file_age_days: 0,
+            new_skills_last_24h: 0,
+            magic_enabled: false,
+            high_latency: false,
+            unread_channel_messages: 0,
+            local_hour: 12,
+            uptime_hours: 0.0,
+            elixir_quality_by_category: HashMap::new(),
+            quantum_providers_available: Vec::new(),
+            workflow_executions_last_hour: 0,
+            active_sessions: 0,
+        }
+    }
+}
+
+// =============================================================================
+// MantraSelection struct
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MantraSelection {
+    pub category: MantraCategory,
+    pub category_id: Uuid,
+    pub entry_id: Uuid,
+    pub mantra_text: String,
+    pub system_message: String,
+    pub user_message: String,
+    pub entropy_source: String,
+    pub selection_ts: DateTime<Utc>,
+    pub suggested_skill_ids: Vec<Uuid>,
+    pub elixir_reference: Option<Uuid>,
+    pub context_weights: HashMap<String, i32>,
+}
+
+// =============================================================================
+// MantraTree struct
+// =============================================================================
+
+#[allow(clippy::type_complexity)]
+pub struct MantraTree {
+    // Preloaded data for no-pool select
+    categories: Option<Vec<(Uuid, String, i32, i32, String, String, Vec<String>)>>,
+    entries_by_category: Option<HashMap<Uuid, Vec<MantraEntry>>>,
+    recent_history: Option<Vec<(Uuid, i64)>>,
+}
+
+impl MantraTree {
+    pub fn new(_cooldown_beats: Option<i32>) -> Self {
+        Self {
+            categories: None,
+            entries_by_category: None,
+            recent_history: None,
+        }
+    }
+
+    /// Preload all data needed for no-pool select
+    #[allow(clippy::too_many_lines, clippy::type_complexity)]
+    pub async fn preload(&mut self, pool: &PgPool) -> Result<()> {
+        // Fetch all enabled categories
+        let categories: Vec<(Uuid, String, i32, i32, String, String, Vec<String>)> = sqlx::query_as(
+            "SELECT category_id, name, base_weight, cooldown_beats, system_message, user_message, elixir_types 
+             FROM mantra_categories WHERE enabled = true"
+        )
+        .fetch_all(pool)
+        .await?;
+
+        if categories.is_empty() {
+            return Err(MagicError::EntropyUnavailable(
+                "No enabled mantra categories".into(),
+            ));
+        }
+
+        // Fetch all enabled entries grouped by category
+        let all_entries: Vec<(Uuid, Uuid, String, i32, bool, Option<Uuid>)> = sqlx::query_as(
+            "SELECT entry_id, category_id, text, use_count, enabled, elixir_id 
+             FROM mantra_entries WHERE enabled = true",
+        )
+        .fetch_all(pool)
+        .await?;
+
+        let mut entries_by_category: HashMap<Uuid, Vec<MantraEntry>> = HashMap::new();
+        for (entry_id, category_id, text, use_count, enabled, elixir_id) in all_entries {
+            entries_by_category
+                .entry(category_id)
+                .or_default()
+                .push(MantraEntry {
+                    entry_id,
+                    category_id,
+                    text,
+                    use_count,
+                    enabled,
+                    elixir_id,
+                });
+        }
+
+        // Fetch recent history up to max cooldown
+        let max_cooldown = categories
+            .iter()
+            .map(|(_, _, _, cd, _, _, _)| *cd)
+            .max()
+            .unwrap_or(3);
+        let recent_history: Vec<(Uuid, i64)> = sqlx::query_as(
+            "SELECT category_id, ROW_NUMBER() OVER (ORDER BY ts DESC) as position 
+             FROM mantra_history ORDER BY ts DESC LIMIT $1",
+        )
+        .bind(max_cooldown)
+        .fetch_all(pool)
+        .await?;
+
+        self.categories = Some(categories);
+        self.entries_by_category = Some(entries_by_category);
+        self.recent_history = Some(recent_history);
+
+        Ok(())
+    }
+
+    /// Build MantraContext from database queries
+    #[allow(clippy::too_many_lines)]
+    pub async fn build_context(pool: &PgPool) -> Result<MantraContext> {
+        let mut tx = pool.begin().await?;
+
+        let recent_error_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM tasks WHERE state = 'failed' AND updated_at > NOW() - INTERVAL '30 minutes'"
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        .unwrap_or(0);
+
+        let pending_task_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE state = 'pending'")
+                .fetch_optional(&mut *tx)
+                .await?
+                .unwrap_or(0);
+
+        let idle_beats: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM heartbeat_history WHERE status = 'ok' AND ts > NOW() - INTERVAL '30 minutes'"
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        .unwrap_or(0);
+
+        let elixir_drafts_pending: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM elixir_drafts WHERE status = 'pending'")
+                .fetch_optional(&mut *tx)
+                .await?
+                .unwrap_or(0);
+
+        let capability_changes_last_hour: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM capability_grants WHERE created_at > NOW() - INTERVAL '1 hour'",
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        .unwrap_or(0);
+
+        let sub_agents_active: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM sub_agents WHERE terminated_at IS NULL")
+                .fetch_optional(&mut *tx)
+                .await?
+                .unwrap_or(0);
+
+        let soul_file_age_days: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(EXTRACT(EPOCH FROM (NOW() - updated_at)) / 86400, 9999)::bigint FROM identities WHERE name = 'Lian' AND identity_type = 'core' LIMIT 1"
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        .unwrap_or(9999);
+
+        let new_skills_last_24h: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM skills WHERE discovered_at > NOW() - INTERVAL '24 hours'",
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        .unwrap_or(0);
+
+        let unread_channel_messages: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM session_messages WHERE role = 'user' AND ts > NOW() - INTERVAL '1 hour'"
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        .unwrap_or(0);
+
+        let workflow_executions_last_hour: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM tasks WHERE skill_id IN (SELECT skill_id FROM skills WHERE name LIKE 'workflow-%') AND created_at > NOW() - INTERVAL '1 hour'"
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        .unwrap_or(0);
+
+        let elixir_quality_rows: Vec<(String, f32)> = sqlx::query_as(
+            "SELECT elixir_type, AVG(quality_score)::real FROM elixirs WHERE quality_score IS NOT NULL GROUP BY elixir_type"
+        )
+        .fetch_all(&mut *tx)
+        .await?;
+
+        let elixir_quality_by_category: HashMap<String, f32> =
+            elixir_quality_rows.into_iter().collect();
+
+        let active_sessions: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE expires_at > NOW()")
+                .fetch_optional(&mut *tx)
+                .await?
+                .unwrap_or(0);
+
+        // Compute uptime from first heartbeat
+        let uptime_hours: f64 = sqlx::query_scalar(
+            "SELECT COALESCE(EXTRACT(EPOCH FROM (NOW() - MIN(ts))) / 3600, 0.0) FROM heartbeat_history"
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        .unwrap_or(0.0);
+
+        // Compute model cost percentage from recent usage
+        let model_cost_pct: f64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(input_tokens + output_tokens) * 100.0 / NULLIF(1000000, 0), 0.0) FROM model_usage WHERE created_at > NOW() - INTERVAL '1 hour'"
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        .unwrap_or(0.0);
+
+        // Check for high latency from recent heartbeats
+        let avg_latency_ms: f64 = sqlx::query_scalar(
+            "SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (ts - LAG(ts) OVER (ORDER BY ts))) * 1000), 0.0) FROM heartbeat_history WHERE ts > NOW() - INTERVAL '5 minutes'"
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        .unwrap_or(0.0);
+        let high_latency = avg_latency_ms > 5000.0;
+
+        // Query magic_enabled from config_store
+        let magic_enabled: bool = sqlx::query_scalar(
+            "SELECT (value->>'enabled')::boolean FROM config_store WHERE key = 'magic' LIMIT 1",
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        .unwrap_or(false);
+
+        // Query active quantum providers from config_store
+        let quantum_providers_json: Option<serde_json::Value> = sqlx::query_scalar(
+            "SELECT value->'quantum_providers' FROM config_store WHERE key = 'magic' LIMIT 1",
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        .flatten();
+
+        let quantum_providers_available: Vec<String> = quantum_providers_json
+            .and_then(|v| v.as_array().cloned())
+            .map_or_else(
+                || vec![],
+                |arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                },
+            );
+
+        tx.commit().await?;
+
+        let local_hour = chrono::Local::now().hour() as u8;
+
+        Ok(MantraContext {
+            recent_error_count,
+            pending_task_count,
+            idle_beats,
+            elixir_drafts_pending,
+            capability_changes_last_hour,
+            model_cost_pct,
+            sub_agents_active,
+            soul_file_age_days,
+            new_skills_last_24h,
+            magic_enabled,
+            high_latency,
+            unread_channel_messages,
+            local_hour,
+            uptime_hours,
+            elixir_quality_by_category,
+            quantum_providers_available,
+            workflow_executions_last_hour,
+            active_sessions,
+        })
+    }
+
+    /// Select a mantra using quantum entropy and context weights (consumer-facing API)
+    #[allow(clippy::unused_async)]
+    pub async fn select(&self, entropy: &[u8], context: &MantraContext) -> Result<MantraSelection> {
+        if entropy.len() < 8 {
+            return Err(MagicError::EntropyUnavailable(
+                "Need at least 8 bytes of entropy".into(),
+            ));
+        }
+
+        // Check if data is preloaded
+        let categories = self.categories.as_ref().ok_or_else(|| {
+            MagicError::EntropyUnavailable("MantraTree not preloaded - call preload() first".into())
+        })?;
+
+        let entries_by_category = self.entries_by_category.as_ref().ok_or_else(|| {
+            MagicError::EntropyUnavailable("MantraTree not preloaded - call preload() first".into())
+        })?;
+
+        let recent_history = self.recent_history.as_ref().ok_or_else(|| {
+            MagicError::EntropyUnavailable("MantraTree not preloaded - call preload() first".into())
+        })?;
+
+        // Build category_last_used map from preloaded history
+        let mut category_last_used: HashMap<Uuid, i64> = HashMap::new();
+        for (cat_id, position) in recent_history {
+            category_last_used.entry(*cat_id).or_insert(*position);
+        }
+
+        // Compute weights
+        let weights = Self::compute_weights(context, categories, &category_last_used);
+
+        // Weighted pick for category
+        let (selected_cat_id, selected_cat_name, system_msg, user_msg) =
+            Self::weighted_pick(entropy, categories, &weights)?;
+
+        // Get entries for selected category from preloaded data
+        let entries = entries_by_category.get(&selected_cat_id).ok_or_else(|| {
+            MagicError::EntropyUnavailable(format!("No entries for category {}", selected_cat_name))
+        })?;
+
+        if entries.is_empty() {
+            return Err(MagicError::EntropyUnavailable(format!(
+                "No enabled entries for category {}",
+                selected_cat_name
+            )));
+        }
+
+        // Inverse frequency pick for entry
+        let selected_entry = Self::inverse_freq_pick(&entropy[4..8], entries)?;
+
+        // Get skill suggestions
+        let suggested_skill_ids = Self::get_skill_suggestions(&selected_cat_name);
+
+        // Resolve templates
+        let system_message = Self::resolve_template(&system_msg, context);
+        let user_message = Self::resolve_template(&user_msg, context);
+
+        // Build category enum
+        let category = MantraCategory::from_db_name(&selected_cat_name)
+            .unwrap_or(MantraCategory::ReflectionIntrospection);
+
+        Ok(MantraSelection {
+            category,
+            category_id: selected_cat_id,
+            entry_id: selected_entry.entry_id,
+            mantra_text: selected_entry.text.clone(),
+            system_message,
+            user_message,
+            entropy_source: "quantum".into(),
+            selection_ts: Utc::now(),
+            suggested_skill_ids,
+            elixir_reference: selected_entry.elixir_id,
+            context_weights: weights,
+        })
+    }
+
+    /// Select a mantra using quantum entropy and context weights with DB access
+    pub async fn select_with_pool(
+        &self,
+        entropy: &[u8],
+        context: &MantraContext,
+        pool: &PgPool,
+    ) -> Result<MantraSelection> {
+        if entropy.len() < 8 {
+            return Err(MagicError::EntropyUnavailable(
+                "Need at least 8 bytes of entropy".into(),
+            ));
+        }
+
+        // Fetch all enabled categories
+        #[allow(clippy::type_complexity)]
+        let categories: Vec<(Uuid, String, i32, i32, String, String, Vec<String>)> = sqlx::query_as(
+            "SELECT category_id, name, base_weight, cooldown_beats, system_message, user_message, elixir_types 
+             FROM mantra_categories WHERE enabled = true"
+        )
+        .fetch_all(pool)
+        .await?;
+
+        if categories.is_empty() {
+            return Err(MagicError::EntropyUnavailable(
+                "No enabled mantra categories".into(),
+            ));
+        }
+
+        // Fetch recently used category_ids with their usage order
+        // We need to check per-category cooldown, so fetch more history
+        let max_cooldown = categories
+            .iter()
+            .map(|(_, _, _, cd, _, _, _)| *cd)
+            .max()
+            .unwrap_or(3);
+        let recent_history: Vec<(Uuid, i64)> = sqlx::query_as(
+            "SELECT category_id, ROW_NUMBER() OVER (ORDER BY ts DESC) as position FROM mantra_history ORDER BY ts DESC LIMIT $1"
+        )
+        .bind(max_cooldown)
+        .fetch_all(pool)
+        .await?;
+
+        // Build a map of category_id -> most recent position (1-indexed)
+        let mut category_last_used: HashMap<Uuid, i64> = HashMap::new();
+        for (cat_id, position) in recent_history {
+            category_last_used.entry(cat_id).or_insert(position);
+        }
+
+        // Compute weights
+        let weights = Self::compute_weights(context, &categories, &category_last_used);
+
+        // Weighted pick for category
+        let (selected_cat_id, selected_cat_name, system_msg, user_msg) =
+            Self::weighted_pick(entropy, &categories, &weights)?;
+
+        // Fetch enabled entries for selected category
+        let entry_rows: Vec<(Uuid, Uuid, String, i32, bool, Option<Uuid>)> = sqlx::query_as(
+            "SELECT entry_id, category_id, text, use_count, enabled, elixir_id 
+             FROM mantra_entries WHERE category_id = $1 AND enabled = true",
+        )
+        .bind(selected_cat_id)
+        .fetch_all(pool)
+        .await?;
+
+        let entries: Vec<MantraEntry> = entry_rows
+            .into_iter()
+            .map(
+                |(entry_id, category_id, text, use_count, enabled, elixir_id)| MantraEntry {
+                    entry_id,
+                    category_id,
+                    text,
+                    use_count,
+                    enabled,
+                    elixir_id,
+                },
+            )
+            .collect();
+
+        if entries.is_empty() {
+            return Err(MagicError::EntropyUnavailable(format!(
+                "No enabled entries for category {}",
+                selected_cat_name
+            )));
+        }
+
+        // Inverse frequency pick for entry
+        let selected_entry = Self::inverse_freq_pick(&entropy[4..8], &entries)?;
+
+        // Get skill suggestions
+        let suggested_skill_ids = Self::get_skill_suggestions(&selected_cat_name);
+
+        // Resolve templates
+        let system_message = Self::resolve_template(&system_msg, context);
+        let user_message = Self::resolve_template(&user_msg, context);
+
+        let category = MantraCategory::from_db_name(&selected_cat_name).ok_or_else(|| {
+            MagicError::EntropyUnavailable(format!("Unknown category: {}", selected_cat_name))
+        })?;
+
+        Ok(MantraSelection {
+            category,
+            category_id: selected_cat_id,
+            entry_id: selected_entry.entry_id,
+            mantra_text: selected_entry.text.clone(),
+            system_message,
+            user_message,
+            entropy_source: "quantum".into(),
+            selection_ts: Utc::now(),
+            suggested_skill_ids,
+            elixir_reference: selected_entry.elixir_id,
+            context_weights: weights,
+        })
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn compute_weights(
+        context: &MantraContext,
+        categories: &[(Uuid, String, i32, i32, String, String, Vec<String>)],
+        category_last_used: &HashMap<Uuid, i64>,
+    ) -> HashMap<String, i32> {
+        let mut weights = HashMap::new();
+
+        for (cat_id, name, base_weight, cooldown_beats, _, _, elixir_types) in categories {
+            let mut weight = *base_weight;
+
+            // Apply context bonuses based on category
+            match name.as_str() {
+                "System Health" if context.recent_error_count > 3 => weight += 3,
+                "Financial Management" if context.model_cost_pct > 80.0 => weight += 3,
+                "Task Building" if context.pending_task_count > 10 => weight += 2,
+                "Communications" if context.unread_channel_messages > 5 => weight += 2,
+                "Soul Refinement" if context.soul_file_age_days > 7 => weight += 3,
+                "Code Development" if context.new_skills_last_24h > 0 => weight += 1,
+                "Security & Audit" if context.capability_changes_last_hour > 0 => weight += 2,
+                "Performance Optimization" if context.high_latency => weight += 3,
+                "Reflection & Introspection"
+                    if context.local_hour >= 22 || context.local_hour <= 6 =>
+                {
+                    weight += 2;
+                }
+                "Innovation & Experimentation" if context.magic_enabled => weight += 1,
+                _ => {}
+            }
+
+            // Apply elixir quality boost
+            for (elixir_type, avg_quality) in &context.elixir_quality_by_category {
+                if *avg_quality > 80.0 {
+                    // First check if elixir_type matches any entry in category's elixir_types
+                    let mut matched = false;
+                    for cat_elixir_type in elixir_types {
+                        if cat_elixir_type.eq_ignore_ascii_case(elixir_type) {
+                            weight += 1;
+                            matched = true;
+                            break;
+                        }
+                    }
+
+                    // Fallback to substring matching if no direct match
+                    if !matched {
+                        let name_lower = name.to_lowercase();
+                        let elixir_type_lower = elixir_type.to_lowercase();
+                        if name_lower.contains(&elixir_type_lower) {
+                            weight += 1;
+                        }
+                    }
+                }
+            }
+
+            // Apply per-category cooldown enforcement
+            if let Some(&last_position) = category_last_used.get(cat_id) {
+                if last_position <= i64::from(*cooldown_beats) {
+                    weight = 0;
+                }
+            }
+
+            weights.insert(name.clone(), weight);
+        }
+
+        // If all weights are zero, reset to base weights
+        if weights.values().all(|&w| w == 0) {
+            for (_, name, base_weight, _, _, _, _) in categories {
+                weights.insert(name.clone(), *base_weight);
+            }
+        }
+
+        weights
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn weighted_pick(
+        entropy: &[u8],
+        categories: &[(Uuid, String, i32, i32, String, String, Vec<String>)],
+        weights: &HashMap<String, i32>,
+    ) -> Result<(Uuid, String, String, String)> {
+        let total_weight: i32 = weights.values().sum();
+        if total_weight == 0 {
+            return Err(MagicError::EntropyUnavailable(
+                "All weights are zero".into(),
+            ));
+        }
+
+        let entropy_val = u32::from_le_bytes([entropy[0], entropy[1], entropy[2], entropy[3]]);
+        #[allow(clippy::cast_possible_wrap)]
+        let pick = (entropy_val % total_weight as u32) as i32;
+
+        let mut cumulative = 0;
+        for (cat_id, name, _, _, sys_msg, user_msg, _) in categories {
+            let weight = weights.get(name).copied().unwrap_or(0);
+            cumulative += weight;
+            if pick < cumulative {
+                return Ok((*cat_id, name.clone(), sys_msg.clone(), user_msg.clone()));
+            }
+        }
+
+        // Fallback to first category
+        let (cat_id, name, _, _, sys_msg, user_msg, _) = &categories[0];
+        Ok((*cat_id, name.clone(), sys_msg.clone(), user_msg.clone()))
+    }
+
+    fn inverse_freq_pick(entropy: &[u8], entries: &[MantraEntry]) -> Result<MantraEntry> {
+        let weights: Vec<f64> = entries
+            .iter()
+            .map(|e| 1.0 / (f64::from(e.use_count) + 1.0))
+            .collect();
+
+        let total_weight: f64 = weights.iter().sum();
+        if total_weight == 0.0 {
+            return Err(MagicError::EntropyUnavailable(
+                "All entry weights are zero".into(),
+            ));
+        }
+
+        let entropy_val = u32::from_le_bytes([entropy[0], entropy[1], entropy[2], entropy[3]]);
+        let pick = (f64::from(entropy_val) / f64::from(u32::MAX)) * total_weight;
+
+        let mut cumulative = 0.0;
+        for (idx, weight) in weights.iter().enumerate() {
+            cumulative += weight;
+            if pick < cumulative {
+                return Ok(entries[idx].clone());
+            }
+        }
+
+        // Fallback to first entry
+        Ok(entries[0].clone())
+    }
+
+    fn resolve_template(template: &str, context: &MantraContext) -> String {
+        template
+            .replace("{mantra_text}", "")
+            .replace("{tasks_queued}", &context.pending_task_count.to_string())
+            .replace(
+                "{recent_error_count}",
+                &context.recent_error_count.to_string(),
+            )
+            .replace("{idle_beats}", &context.idle_beats.to_string())
+            .replace(
+                "{elixir_drafts_pending}",
+                &context.elixir_drafts_pending.to_string(),
+            )
+            .replace(
+                "{capability_changes_last_hour}",
+                &context.capability_changes_last_hour.to_string(),
+            )
+            .replace(
+                "{model_cost_pct}",
+                &format!("{:.1}", context.model_cost_pct),
+            )
+            .replace(
+                "{sub_agents_active}",
+                &context.sub_agents_active.to_string(),
+            )
+            .replace(
+                "{soul_file_age_days}",
+                &context.soul_file_age_days.to_string(),
+            )
+            .replace(
+                "{new_skills_last_24h}",
+                &context.new_skills_last_24h.to_string(),
+            )
+            .replace("{magic_enabled}", &context.magic_enabled.to_string())
+            .replace("{high_latency}", &context.high_latency.to_string())
+            .replace(
+                "{unread_channel_messages}",
+                &context.unread_channel_messages.to_string(),
+            )
+            .replace("{local_hour}", &context.local_hour.to_string())
+            .replace("{uptime_hours}", &format!("{:.1}", context.uptime_hours))
+            .replace(
+                "{workflow_executions_last_hour}",
+                &context.workflow_executions_last_hour.to_string(),
+            )
+            .replace("{active_sessions}", &context.active_sessions.to_string())
+    }
+
+    fn get_skill_suggestions(_category_name: &str) -> Vec<Uuid> {
+        // For preloaded mode, skill suggestions would need to be preloaded too
+        // For now, return empty vec - this can be enhanced later
+        vec![]
+    }
+}
+
+impl Default for MantraTree {
+    fn default() -> Self {
+        Self::new(None)
+    }
+}
+
+// =============================================================================
+// Unit tests
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_compute_weights_system_health_boost() {
+        let _tree = MantraTree::new(None);
+        let mut context = MantraContext::default_for_fallback();
+        context.recent_error_count = 5;
+
+        let categories = vec![
+            (
+                Uuid::new_v4(),
+                "System Health".into(),
+                1,
+                3,
+                String::new(),
+                String::new(),
+                vec![],
+            ),
+            (
+                Uuid::new_v4(),
+                "Code Development".into(),
+                1,
+                3,
+                String::new(),
+                String::new(),
+                vec![],
+            ),
+        ];
+
+        let category_last_used = HashMap::new();
+        let weights = MantraTree::compute_weights(&context, &categories, &category_last_used);
+
+        assert!(weights.get("System Health").copied().unwrap_or(0) >= 4);
+        assert_eq!(weights.get("Code Development").copied().unwrap_or(0), 1);
+    }
+
+    #[test]
+    fn test_cooldown_zeroes_weight() {
+        let _tree = MantraTree::new(None);
+        let context = MantraContext::default_for_fallback();
+
+        let cat_id = Uuid::new_v4();
+        let categories = vec![
+            (
+                cat_id,
+                "System Health".into(),
+                5,
+                3,
+                String::new(),
+                String::new(),
+                vec![],
+            ),
+            (
+                Uuid::new_v4(),
+                "Code Development".into(),
+                1,
+                3,
+                String::new(),
+                String::new(),
+                vec![],
+            ),
+        ];
+
+        let mut category_last_used = HashMap::new();
+        category_last_used.insert(cat_id, 1); // Used in position 1 (most recent)
+        let weights = MantraTree::compute_weights(&context, &categories, &category_last_used);
+
+        assert_eq!(weights.get("System Health").copied().unwrap_or(0), 0);
+        assert_eq!(weights.get("Code Development").copied().unwrap_or(0), 1);
+    }
+
+    #[test]
+    fn test_weighted_pick_distribution() {
+        let _tree = MantraTree::new(None);
+        let cat1 = Uuid::new_v4();
+        let cat2 = Uuid::new_v4();
+
+        let categories = vec![
+            (
+                cat1,
+                "High Weight".into(),
+                10,
+                3,
+                "sys1".into(),
+                "user1".into(),
+                vec![],
+            ),
+            (
+                cat2,
+                "Low Weight".into(),
+                1,
+                3,
+                "sys2".into(),
+                "user2".into(),
+                vec![],
+            ),
+        ];
+
+        let mut weights = HashMap::new();
+        weights.insert("High Weight".into(), 10);
+        weights.insert("Low Weight".into(), 1);
+
+        let mut high_count = 0;
+        let mut low_count = 0;
+
+        for i in 0..1000 {
+            let entropy = [(i % 256) as u8, ((i / 256) % 256) as u8, 0, 0];
+            if let Ok((picked_id, _, _, _)) =
+                MantraTree::weighted_pick(&entropy, &categories, &weights)
+            {
+                if picked_id == cat1 {
+                    high_count += 1;
+                } else {
+                    low_count += 1;
+                }
+            }
+        }
+
+        assert!(high_count > low_count * 5);
+    }
+
+    #[test]
+    fn test_inverse_freq_pick_favors_low_use_count() {
+        let _tree = MantraTree::new(None);
+        let entries = vec![
+            MantraEntry {
+                entry_id: Uuid::new_v4(),
+                category_id: Uuid::new_v4(),
+                text: "Low use".into(),
+                use_count: 0,
+                enabled: true,
+                elixir_id: None,
+            },
+            MantraEntry {
+                entry_id: Uuid::new_v4(),
+                category_id: Uuid::new_v4(),
+                text: "Medium use".into(),
+                use_count: 5,
+                enabled: true,
+                elixir_id: None,
+            },
+            MantraEntry {
+                entry_id: Uuid::new_v4(),
+                category_id: Uuid::new_v4(),
+                text: "High use".into(),
+                use_count: 50,
+                enabled: true,
+                elixir_id: None,
+            },
+        ];
+
+        let mut low_count = 0;
+        for i in 0..1000 {
+            let entropy = [(i % 256) as u8, ((i / 256) % 256) as u8, 0, 0];
+            if let Ok(entry) = MantraTree::inverse_freq_pick(&entropy, &entries) {
+                if entry.use_count == 0 {
+                    low_count += 1;
+                }
+            }
+        }
+
+        assert!(low_count > 700);
+    }
+
+    #[test]
+    fn test_resolve_template_substitutes_all_variables() {
+        let mut context = MantraContext::default_for_fallback();
+        context.pending_task_count = 42;
+        context.recent_error_count = 7;
+        context.local_hour = 14;
+
+        let _tree = MantraTree::new(None);
+        let template = "Tasks: {tasks_queued}, Errors: {recent_error_count}, Hour: {local_hour}";
+        let result = MantraTree::resolve_template(template, &context);
+
+        assert_eq!(result, "Tasks: 42, Errors: 7, Hour: 14");
+        assert!(!result.contains('{'));
+    }
+
+    #[test]
+    fn test_mantra_category_roundtrip() {
+        let cat = MantraCategory::SystemHealth;
+        let db_name = cat.as_db_name();
+        let parsed = MantraCategory::from_db_name(db_name).unwrap();
+        assert_eq!(cat, parsed);
+    }
+
+    #[tokio::test]
+    async fn test_preload_and_select_without_pool() {
+        // Create a tree and manually preload mock data
+        let mut tree = MantraTree::new(None);
+
+        let cat_id = Uuid::new_v4();
+        let entry_id = Uuid::new_v4();
+
+        // Mock categories
+        tree.categories = Some(vec![
+            (
+                cat_id,
+                "System Health".into(),
+                5,
+                3,
+                "System: {recent_error_count} errors".into(),
+                "User: reflect".into(),
+                vec![],
+            ),
+            (
+                Uuid::new_v4(),
+                "Code Development".into(),
+                1,
+                3,
+                String::new(),
+                String::new(),
+                vec![],
+            ),
+        ]);
+
+        // Mock entries by category
+        let mut entries_map = HashMap::new();
+        entries_map.insert(
+            cat_id,
+            vec![MantraEntry {
+                entry_id,
+                category_id: cat_id,
+                text: "Test mantra text".into(),
+                use_count: 0,
+                enabled: true,
+                elixir_id: None,
+            }],
+        );
+        tree.entries_by_category = Some(entries_map);
+
+        // Mock recent history (empty)
+        tree.recent_history = Some(vec![]);
+
+        // Create context
+        let mut context = MantraContext::default_for_fallback();
+        context.recent_error_count = 5;
+
+        // Create entropy
+        let entropy = vec![0xAB, 0xCD, 0xEF, 0x12, 0x34, 0x56, 0x78, 0x90];
+
+        // Select without pool - should work with preloaded data
+        let result = tree.select(&entropy, &context).await;
+        assert!(result.is_ok());
+
+        let selection = result.unwrap();
+        assert_eq!(selection.mantra_text, "Test mantra text");
+        assert_eq!(selection.entry_id, entry_id);
+        assert!(selection.system_message.contains("5 errors"));
+    }
+
+    #[tokio::test]
+    async fn test_select_without_preload_errors() {
+        let tree = MantraTree::new(None);
+        let context = MantraContext::default_for_fallback();
+        let entropy = vec![0xAB, 0xCD, 0xEF, 0x12, 0x34, 0x56, 0x78, 0x90];
+
+        // Should error because not preloaded
+        let result = tree.select(&entropy, &context).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not preloaded"));
+    }
+
+    #[test]
+    fn test_elixir_quality_boost_fires() {
+        let _tree = MantraTree::new(None);
+        let mut context = MantraContext::default_for_fallback();
+
+        // Populate elixir_quality_by_category
+        context
+            .elixir_quality_by_category
+            .insert("code".to_string(), 90.0);
+        context
+            .elixir_quality_by_category
+            .insert("financial".to_string(), 70.0);
+
+        let categories = vec![
+            (
+                Uuid::new_v4(),
+                "Code Development".into(),
+                1,
+                3,
+                String::new(),
+                String::new(),
+                vec!["code".to_string()],
+            ),
+            (
+                Uuid::new_v4(),
+                "Financial Management".into(),
+                1,
+                3,
+                String::new(),
+                String::new(),
+                vec!["cost".to_string()],
+            ),
+        ];
+
+        let category_last_used = HashMap::new();
+        let weights = MantraTree::compute_weights(&context, &categories, &category_last_used);
+
+        // Code Development should get boost (90.0 > 80.0 and "code development" contains "code")
+        assert_eq!(weights.get("Code Development").copied().unwrap_or(0), 2);
+
+        // Financial Management should NOT get boost (70.0 <= 80.0)
+        assert_eq!(weights.get("Financial Management").copied().unwrap_or(0), 1);
+    }
+}

@@ -46,6 +46,34 @@
    ollama pull deepseek-r1:7b
    ```
 
+6. **Enable MAGIC quantum entropy** _(optional — all providers can be skipped)_
+   
+   MAGIC uses quantum-derived randomness for key generation, ledger salting, and mantra scheduling. OS entropy is always the safe fallback.
+
+   **Quantum Origin (simplest):**
+   ```bash
+   # Set your Quantum Origin API key
+   export CARNELIAN_QUANTUM_ORIGIN_API_KEY="your-api-key"
+   # Or add it to machine.toml — see docs/MAGIC.md
+   ```
+
+   **Quantinuum H2 / emulator (free tier):**
+   ```bash
+   pip install pytket pytket-quantinuum
+   carnelian magic auth          # Interactive token setup
+   carnelian magic status        # Verify provider health
+   ```
+
+   **IBM Quantum (Qiskit):**
+   ```bash
+   pip install qiskit qiskit-ibm-runtime
+   export IBM_QUANTUM_TOKEN="your-ibm-token"
+   ```
+
+   All providers are optional. Run `carnelian magic status` to see live availability.
+   
+   See [docs/MAGIC.md](MAGIC.md) for full setup.
+
 ### First Steps
 
 1. **Start the core orchestrator**
@@ -86,6 +114,7 @@ See [DOCKER.md](DOCKER.md) for detailed Docker configuration.
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Understand the system architecture
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development workflow and guidelines
 - **[API.md](API.md)** - HTTP API reference
+- **[MAGIC.md](MAGIC.md)** - Quantum providers setup and troubleshooting
 - **[WASM_SKILLS.md](WASM_SKILLS.md)** - Create custom skills
 - **[OPERATOR_GUIDE.md](OPERATOR_GUIDE.md)** - Production deployment guide
 
@@ -170,7 +199,7 @@ GATEWAY_PORT=18801
 
 Once you have Carnelian running:
 
-1. **Explore Skills** - Browse the 530+ built-in skills
+1. **Explore Skills** - Browse the 50+ curated skills (bulk import tooling available)
 2. **Create Custom Skills** - Build your own WASM or Node.js skills
 3. **Configure Security** - Set up capability grants and approvals
 4. **Deploy to Production** - Follow the [OPERATOR_GUIDE.md](OPERATOR_GUIDE.md)

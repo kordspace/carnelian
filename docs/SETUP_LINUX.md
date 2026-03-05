@@ -13,7 +13,7 @@ Carnelian runs natively on Linux with full GPU support via the NVIDIA Container 
 | NVIDIA GPU drivers | 535+ | For GPU passthrough (optional) |
 | NVIDIA Container Toolkit | Latest | For GPU in Docker containers |
 | Rust | 1.85+ | Native toolchain |
-| Node.js | 18+ | For Node.js worker |
+| Node.js | 22+ | For Gateway service and Node.js workers |
 | Python | 3.10+ | For Python worker |
 
 ---

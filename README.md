@@ -1,88 +1,98 @@
 <p align="center">
-  <img src="assets/logos/carnelian-logo.svg" alt="Carnelian OS" width="400">
+  <img src="assets/logos/carnelian-logo.png" alt="Carnelian Logo" width="120">
+</p>
+
+<h1 align="center">CARNELIAN</h1>
+
+<p align="center">
+  <img src="assets/logos/banners/carnelian-v1-banner-animated.gif" alt="Carnelian Banner" width="100%">
 </p>
 
 <p align="center">
   <a href="https://github.com/kordspace/carnelian/actions/workflows/ci.yml"><img src="https://github.com/kordspace/carnelian/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/kordspace/carnelian"><img src="https://img.shields.io/badge/🔥-Carnelian%20OS-D24B2A" alt="Carnelian OS"></a>
-  <a href="https://github.com/kordspace/carnelian"><img src="https://img.shields.io/badge/🦎-Lian-7C4DFF" alt="Lian"></a>
+  <a href="https://github.com/kordspace/carnelian"><img src="https://img.shields.io/badge/Rust-Core-D24B2A?logo=rust" alt="Rust Core"></a>
+  <a href="https://github.com/kordspace/carnelian"><img src="https://img.shields.io/badge/Multi--Runtime-Workers-7C4DFF" alt="Multi-Runtime Workers"></a>
+  <a href="https://github.com/kordspace/carnelian"><img src="https://img.shields.io/badge/Quantum-Entropy-9C27B0" alt="Quantum Entropy"></a>
+  <a href="https://github.com/kordspace/carnelian"><img src="https://img.shields.io/badge/Capability--Based-Security-FF6B35" alt="Capability Security"></a>
+  <a href="https://github.com/kordspace/carnelian"><img src="https://img.shields.io/badge/Local--First-LLMs-4CAF50" alt="Local-First LLMs"></a>
 </p>
 
 <p align="center">An AI workspace harness built in Rust — orchestrating autonomous agents with capability-based security, event-stream architecture, and local-first execution.</p>
 
-> 💎 *Carnelian Core provides the foundational infrastructure for AI agent orchestration, task execution, and workspace automation. Think of it as the runtime and security layer that makes autonomous AI agents safe, auditable, and productive.*
+<p align="center">
+  <strong>Copyright © 2026 Kordspace LLC</strong><br>
+  <a href="LICENSE.md">License</a>
+</p>
 
-## Brand Identity
+> 💎 *Carnelian provides the foundational infrastructure for AI agent orchestration, task execution, and workspace automation. Think of it as the runtime and security layer that makes autonomous AI agents safe, auditable, and productive.*
 
-| Symbol | Name | Role |
-|--------|------|------|
-| 🔥 | **Carnelian Core** | AI workspace harness — the runtime that orchestrates agents |
-| 🦎 | **Lian** | Agent personality — the spirit that reasons and decides |
-| 💎 | **Foundation** | Architectural guarantees — security, ledger, auditability |
+## System Components
 
-### Brand Assets
-
-- **Logo**: [`assets/logos/carnelian-logo.svg`](assets/logos/carnelian-logo.svg) — Full logo with wordmark
-- **Icon**: [`assets/logos/carnelian-icon.svg`](assets/logos/carnelian-icon.svg) — Icon only (16×16 to 256×256)
-- **Wordmark**: [`assets/logos/carnelian-wordmark.svg`](assets/logos/carnelian-wordmark.svg) — Text only
-- **Color Palette**: [`assets/branding/color-palette.md`](assets/branding/color-palette.md) — Brand colors and usage guidelines
-
-See [docs/BRAND.md](docs/BRAND.md) for the complete dual-theme brand kit (Forge/Night Lab).
+| Symbol | Component | Description |
+|--------|-----------|-------------|
+| 🔥 | **Carnelian** | AI workspace harness with capability-based security and local-first execution |
+| 🦎 | **Lian** | Default agent identity — the reasoning personality that executes tasks |
+| 🔮 | **Magic** | Quantum intelligence — entropy providers, mantra matrix, integrity verification |
+| 🧪 | **Elixirs** | Knowledge persistence — RAG-based learning with approval workflow |
+| 📒 | **Ledger** | Audit trail — BLAKE3 hash-chain for tamper-resistant accountability |
+| 🎯 | **Skills** | Multi-runtime execution — 50+ skills across Node.js, Python, WASM, Rust |
+| 💬 | **Channels** | Communication adapters — Telegram, Discord, voice gateway |
+| 🖥️ | **Desktop UI** | Native interface — Dioxus with real-time event streaming |
 
 ## Overview
 
-🔥 **Carnelian Core** is an AI workspace harness built in Rust that provides the foundational infrastructure for autonomous agent orchestration. It combines capability-based security, event-stream architecture, and local-first LLM execution to create a safe, auditable environment for AI-driven task automation.
+🔥 **Carnelian** is an AI workspace harness built in Rust that provides the foundational infrastructure for autonomous agent orchestration. It combines capability-based security, event-stream architecture, and local-first LLM execution to create a safe, auditable environment for AI-driven task automation.
 
 **Core Value Proposition:**
-- **Workspace Automation** — Autonomous task discovery, scheduling, and execution
-- **Security First** — Capability-based deny-by-default security with tamper-resistant audit trails
-- **Local-First AI** — Ollama integration for on-device inference with cloud fallback
-- **Production Ready** — Event-stream architecture, worker sandboxing, and resource controls
-- **Extensible** — 600+ skills via multi-runtime worker system (Node.js, Python, WASM, native Rust)
+- 🤖 **Workspace Automation** — Autonomous task discovery, scheduling, and execution
+- 🔒 **Security First** — Capability-based deny-by-default security with tamper-resistant audit trails
+- 💻 **Local-First AI** — Ollama integration for on-device inference with cloud fallback
+- ⚡ **Production Ready** — Event-stream architecture, worker sandboxing, and resource controls
+- 🔧 **Extensible** — 50+ skills with bulk import tooling via multi-runtime worker system
 
 ## Features
 
-CARNELIAN is a production-ready AI workspace harness with comprehensive capabilities:
+**🏗️ Core Infrastructure**
+- Core orchestrator (Axum/Tokio), CLI, HTTP API, event stream
+- Policy engine, BLAKE3 ledger, scheduler, worker transport
+- PostgreSQL 16 with pgvector, SQLx migrations
+- 262+ passing tests with 120+ integration tests
 
-**Core Infrastructure**
-- ✅ Core orchestrator (Axum/Tokio), CLI, HTTP API, event stream
-- ✅ Policy engine, blake3 ledger, scheduler, worker transport
-- ✅ PostgreSQL 16 with pgvector, SQLx migrations
-- ✅ 262+ passing tests with 120+ integration tests
+**🎯 Task Execution & Skills**
+- Multi-runtime worker system (Node.js, Python, WASM, native Rust)
+- 50+ skills with bulk import tooling
+- Skill discovery with BLAKE3 checksums and file watching
+- XP progression system with 1.172-exponent level curve
 
-**Task Execution & Skills**
-- ✅ Multi-runtime worker system (Node.js, Python, WASM, native Rust)
-- ✅ 600+ skills via Node worker (full Thummim compatibility)
-- ✅ Skill discovery with blake3 checksums and file watching
-- ✅ XP progression system with 1.172-exponent level curve
+**🧠 Intelligence & Context**
+- Soul management and session lifecycle
+- Memory retrieval with pgvector similarity search
+- Context assembly and compaction pipeline
+- Model routing with TypeScript LLM Gateway
+- Agentic execution with heartbeat system (555,555ms)
 
-**Intelligence & Context**
-- ✅ Soul management and session lifecycle
-- ✅ Memory retrieval with pgvector similarity search
-- ✅ Context assembly and compaction pipeline
-- ✅ Model routing with TypeScript LLM Gateway
-- ✅ Agentic execution with heartbeat system (555,555ms)
+**🔒 Security & Compliance**
+- Capability-based security (deny-by-default)
+- Approval queue for human-in-the-loop workflows
+- Safe mode emergency lockdown
+- Ed25519 attestations and encryption at rest
+- Ledger signatures and chain anchoring
 
-**Security & Compliance**
-- ✅ Capability-based security (deny-by-default)
-- ✅ Approval queue for human-in-the-loop workflows
-- ✅ Safe mode emergency lockdown
-- ✅ Ed25519 attestations and encryption at rest
-- ✅ Ledger signatures and chain anchoring
+**✨ Advanced Features**
+- 🧪 **Elixirs** — Knowledge persistence with approval workflow ([docs](docs/ELIXIR_SYSTEM.md))
+- 🔮 **Magic** — Quantum entropy providers, mantra matrix, integrity verification
+- 📒 **Ledger** — BLAKE3 hash-chain audit trail ([docs](docs/LEDGER_SYSTEM.md))
+- Sub-agents and workflow orchestration
+- 💬 Telegram + Discord adapters with pairing
+- 🎤 Voice gateway (ElevenLabs STT/TTS)
+- Skill Book catalog with activation flow
 
-**Advanced Features**
-- ✅ Sub-agents and workflow orchestration
-- ✅ Telegram + Discord adapters with pairing
-- ✅ Voice gateway (ElevenLabs STT/TTS)
-- ✅ 🧪 Elixir system for knowledge persistence
-- ✅ Skill Book catalog with activation flow
+** Desktop UI**
+- Dioxus native desktop — 17 pages, 6 components
+- WebSocket event streaming with priority-based ring buffer
+- Real-time metrics and monitoring
 
-**Desktop UI** (In Development)
-- 🚧 Dioxus desktop UI — 12 pages, 6 components
-- 🚧 WebSocket event streaming
-- � Real-time metrics and monitoring
-
-## Why Carnelian Core?
+## Why Carnelian?
 
 **Built for Production AI Workflows:**
 - **Rust Foundation** — Performance, memory safety, and reliability
@@ -100,72 +110,41 @@ The following diagram illustrates the full system architecture showing all compo
 
 ```mermaid
 graph TD
-    UI[Dioxus Desktop UI]
-    CLI[CLI carnelian]
+    UI[Dioxus Desktop UI\n17 pages, 6 components]
+    CLI[carnelian CLI\n15 commands]
     TG[Telegram Adapter]
     DC[Discord Adapter]
 
-    Core[Rust Core Orchestrator :18789]
-    Policy[Policy Engine]
-    Ledger[blake3 Ledger]
-    Scheduler[Task Scheduler]
-    Sessions[Session Manager]
-    Context[Context Assembler]
-    Memory[Memory Manager]
-    Soul[Soul File Manager]
-    Agentic[Agentic Loop]
-    Approvals[Approval Queue]
-    SafeMode[Safe Mode]
-    XP[XP Manager]
-    Workers[Worker Manager]
+    Core[carnelian-core\n28 modules]
+    Magic[carnelian-magic\nQuantum entropy + mantras]
+    Gateway[LLM Gateway\nTypeScript, 4 providers]
+    
+    Workers[Worker Pool\nNode / Python / WASM / Native]
+    Quantum[Quantum Providers\nQuantum Origin / H2 / Qiskit]
 
-    Gateway[LLM Gateway :18790]
-    OllamaP[Ollama Provider]
-    OpenAIp[OpenAI Provider]
-    Anthropicp[Anthropic Provider]
-    Fireworksp[Fireworks Provider]
-    Voice[Voice Gateway ElevenLabs]
-
-    NodeW[Node Worker 600+ skills]
-    PythonW[Python Worker]
-    WasmW[WASM Worker\nwasmtime · WASI P1]
-    NativeW[Native Ops Worker\ngit · blake3 · docker]
-
-    DB[(PostgreSQL + pgvector)]
-    OllamaS[Ollama Service :11434]
+    DB[(PostgreSQL 16\n+ pgvector\n18 migrations)]
+    Ollama[Ollama Service :11434]
+    Remote[Remote LLM APIs]
 
     UI -->|WebSocket| Core
     CLI -->|HTTP| Core
     TG -->|HTTP| Core
     DC -->|HTTP| Core
 
-    Core --- Policy
-    Core --- Ledger
-    Core --- Scheduler
-    Core --- Sessions
-    Core --- Context
-    Core --- Memory
-    Core --- Soul
-    Core --- Agentic
-    Core --- Approvals
-    Core --- SafeMode
-    Core --- XP
-    Core --- Workers
-
+    Core --> Magic
     Core -->|HTTP :18790| Gateway
-    Gateway --- OllamaP
-    Gateway --- OpenAIp
-    Gateway --- Anthropicp
-    Gateway --- Fireworksp
-    Gateway --- Voice
-
-    Workers -->|JSONL stdin/stdout| NodeW
-    Workers -->|JSONL stdin/stdout| PythonW
-    Workers -->|wasmtime| WasmW
-    Workers -->|in-process| NativeW
-
-    OllamaP -->|HTTP| OllamaS
+    Core -->|JSONL| Workers
     Core -->|SQLx| DB
+
+    Magic --> Quantum
+    
+    Gateway --> Ollama
+    Gateway --> Remote
+
+    style Core fill:#D24B2A,stroke:#333,stroke-width:2px,color:#fff
+    style Magic fill:#9C27B0,stroke:#333,stroke-width:2px,color:#fff
+    style Gateway fill:#7C4DFF,stroke:#333,stroke-width:2px,color:#fff
+    style DB fill:#336791,stroke:#333,stroke-width:2px,color:#fff
 ```
 
 ### Key Components
@@ -173,10 +152,11 @@ graph TD
 | Component | Technology | Description |
 |-----------|------------|-------------|
 | **Core Orchestrator** | Axum/Tokio/SQLx | HTTP API, WebSocket events, task scheduling |
-| **Desktop UI** | Dioxus | Native desktop interface — 12 pages, 6 components |
+| **Desktop UI** | Dioxus | Native desktop interface — 17 pages, 6 components |
 | **Policy Engine** | Rust (`policy.rs`) | Capability-based security, deny-by-default |
+| **MAGIC Core** | Rust (`carnelian-magic/`) | Quantum entropy provider chain, mantra matrix, blake3 mixing |
 | **Worker Manager** | Rust (`worker.rs`) | Worker lifecycle, JSONL transport, capability grants |
-| **Node Worker** | Node.js/TypeScript | Executes 600+ existing Thummim skills |
+| **Node Worker** | Node.js/TypeScript | 50+ active skills, full compatibility |
 | **Python Worker** | Python 3.10+ | ML/data science skills, Playwright automation |
 | **WASM Worker** | wasmtime 27, WASI P1 (`wasm_runtime.rs`) | Sandboxed WASM skill execution, epoch timeout, capability-gated fs/network |
 | **Native Ops Worker** | Rust inline (`carnelian-worker-native/`) | In-process ops: git_status, file_hash (blake3), docker_ps (bollard), dir_list (walkdir) |
@@ -190,8 +170,8 @@ graph TD
 | **LLM Gateway** | TypeScript (`:18790`) | Unified gateway — Ollama, OpenAI, Anthropic, Fireworks |
 | **Approval Queue** | Rust (`approvals.rs`) | Human-in-the-loop approval workflow |
 | **Safe Mode** | Rust (`safe_mode.rs`) | Emergency lockdown, capability suspension |
-| **Attestation** | Rust (`attestation.rs`) | Worker identity verification, Ed25519 signatures |
-| **Encryption** | Rust (`encryption.rs`, `crypto.rs`) | Encryption at rest, key management |
+| **Attestation** | Rust (`attestation.rs`) | Owner keypair signatures for worker identity verification |
+| **Encryption** | Rust (`encryption.rs`, `crypto.rs`) | Encryption at rest, AES-256-GCM via blake3-derived keys, key management |
 | **Chain Anchor** | Rust (`chain_anchor.rs`) | Ledger chain integrity anchoring |
 | **Channel Adapters** | Rust (`carnelian-adapters/`) | Telegram + Discord bots with pairing, rate limiting |
 | **Voice Gateway** | Rust (`voice.rs`) | ElevenLabs STT/TTS integration |
@@ -205,24 +185,25 @@ Carnelian uses a multi-runtime worker system for skill execution:
 
 | Worker | Runtime | Use Case | Status |
 |--------|---------|----------|--------|
-| **Node Worker** | Node.js/TypeScript | 600+ existing Thummim skills, npm ecosystem | ✅ Built |
+| **Node Worker** | Node.js/TypeScript | 50+ active skills, full compatibility, npm ecosystem | ✅ Built |
 | **Python Worker** | Python 3.10+ | ML/data science, Playwright automation | ✅ Built |
 | **WASM Worker** | WebAssembly (wasmtime 27 + WASI P1) | Sandboxed Rust/C/TinyGo skills | ✅ Built |
 | **Native Ops Worker** | Rust inline (no subprocess) | `git_status`, `file_hash`, `docker_ps`, `dir_list` | ✅ Built |
 
-All 600+ existing Thummim skills run unchanged through the Node worker, ensuring full backward compatibility while migrating to the Rust core. New skills should target WASM for portability and sandboxing.
+All existing skills (50+ active, 600+ in migration queue) run unchanged through the Node worker, ensuring full backward compatibility while migrating to the Rust core. New skills should target WASM for portability and sandboxing.
 
 ## Skill Book
 
 Carnelian includes a curated **Skill Book** — a catalog of pre-integrated, standardized skills ready for immediate activation. Each skill follows a standardized onboarding flow with required API tokens, sandbox configurations, and capability declarations.
 
-**Six Categories:**
+**Seven Categories:**
 - **Code** — skills for reading, analyzing, and modifying code (read_file, search_code, run_tests)
 - **Research** — web search, documentation lookup, academic paper retrieval
 - **Communication** — send message, schedule meeting, draft email
 - **Creative** — image generation, audio synthesis, copywriting
 - **Data** — query databases, transform datasets, generate reports
 - **Automation** — browser automation, API orchestration, scheduled tasks
+- **Quantum** — quantum entropy generation, optimization, and circuit-based skills (quantinuum-h2-rng, qiskit-rng, quantum-optimize)
 
 **Skill Activation Flow:**
 1. Open Skills panel → Skill Book tab
@@ -248,6 +229,11 @@ carnelian skills refresh           # Scan registry and sync skills to database
 carnelian task create "Task title"                           # Create a task
 carnelian task create "Task" --description "Details"         # With description
 carnelian task create "Task" --skill-id <uuid> --priority 5  # With skill and priority
+carnelian magic auth               # Authenticate with Quantinuum
+carnelian magic auth --refresh     # Refresh tokens
+carnelian magic status             # Show provider health
+carnelian magic sample             # Sample 32 quantum-random bytes
+carnelian magic providers          # List configured providers
 ```
 
 Global flags: `--database-url`, `--config`, `--log-level`, `--port`.
@@ -303,11 +289,12 @@ All endpoints are prefixed with `/v1`.
 - **Git** - Version control
 
 ### For GPU Support
-- **NVIDIA GPU** - RTX 2080 or better recommended
-- **NVIDIA Container Toolkit** - For GPU passthrough to Docker
+- **NVIDIA GPU** - RTX 2080 Super or better (RTX 5090 recommended for advanced models)
+- **Apple Silicon** - M3 Ultra with unified memory for large model inference
+- **NVIDIA Container Toolkit** - For GPU passthrough to Docker (NVIDIA only)
 
 ### For Workers
-- **Node.js 18+** - For Node.js worker (600+ skills)
+- **Node.js 22+** - For Node.js worker and Gateway service
 - **Python 3.10+** - For Python worker
 
 ### For Development
@@ -343,12 +330,14 @@ carnelian start
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for detailed setup and development workflow.
 
-## Machine Profiles
+## 💻 Machine Profiles
 
 | Profile | GPU | VRAM | RAM | Recommended Model | Notes |
 |---------|-----|------|-----|-------------------|-------|
-| **Standard** | RTX 2080 Super (8GB VRAM) | 32GB | `deepseek-r1:7b` |
-| **Performance** | RTX 3090 (24GB VRAM) | 64GB+ | `deepseek-r1:32b` or `deepseek-r1:70b` | High-end profile for production workloads |
+| **Standard** | RTX 2080 Super | 8 GB | 32 GB | `deepseek-r1:7b` | Entry-level — balanced local + API usage |
+| **Performance** | RTX 5090 | 24 GB | 64 GB | `qwq:32b` | High-end workstation — advanced reasoning models |
+| **Ultra** | M3 Ultra | 192 GB | 192 GB | `qwq:32b`, `kimi:k2.5` | Apple Silicon — unified memory architecture (500+ GB configurations available) |
+| **Custom** | User-defined | — | — | User-defined | Expert mode — manual resource limits |
 
 Profiles affect Docker resource limits and worker concurrency settings. See [docker-compose.yml](docker-compose.yml) and [machine.toml.example](machine.toml.example) for configuration.
 
@@ -367,6 +356,8 @@ carnelian/
 │   │   │   ├── policy.rs         # Capability-based security engine
 │   │   │   ├── ledger.rs         # blake3 hash-chain audit trail
 │   │   │   ├── skills.rs         # Skill discovery, manifest validation, file watcher
+│   │   │   ├── skills/
+│   │   │   │   └── wasm_runtime.rs  # WASM skill runtime (wasmtime + WASI P1)
 │   │   │   ├── agentic.rs        # Agentic loop, heartbeat turn, compaction pipeline
 │   │   │   ├── approvals.rs      # Approval queue, human-in-the-loop
 │   │   │   ├── attestation.rs    # Worker attestation, Ed25519 verification
@@ -383,12 +374,12 @@ carnelian/
 │   │   │   ├── sub_agent.rs      # Sub-agent delegation
 │   │   │   ├── workflow.rs       # Workflow orchestration
 │   │   │   ├── xp.rs             # XP manager, level curve, skill metrics
-│   │   │   ├── voice.rs          # Voice gateway, ElevenLabs STT/TTS
+│   │   │   ├── voice.rs          # 🎤 Voice Gateway, ElevenLabs STT/TTS
 │   │   │   ├── db.rs             # Database connection and migrations
 │   │   │   └── providers/        # Rust provider modules (ollama, openai, anthropic, fireworks)
 │   │   └── tests/                # 10+ test suites, 120+ tests
 │   ├── carnelian-common/         # Shared types, error handling, API models
-│   ├── carnelian-ui/             # Dioxus desktop UI
+│   ├── carnelian-ui/             # Dioxus desktop UI (17 pages)
 │   │   └── src/
 │   │       ├── components/
 │   │       │   ├── xp_widget.rs       # XP progress bar and recent events
@@ -410,15 +401,22 @@ carnelian/
 │   │           ├── capabilities.rs    # Capability grants
 │   │           ├── approvals.rs       # Approval queue UI
 │   │           ├── workflows.rs       # Workflow management
-│   │           └── xp_progression.rs  # XP progression dashboard
+│   │           ├── xp_progression.rs  # XP progression dashboard
+│   │           ├── magic.rs           # MAGIC quantum entropy & mantras
+│   │           ├── elixirs.rs         # Elixir knowledge persistence
+│   │           ├── ledger.rs          # Ledger audit trail viewer
+│   │           └── settings.rs        # System settings
 │   ├── carnelian-adapters/       # Channel adapters (Telegram, Discord)
+│   ├── carnelian-magic/          # 🔮 Quantum entropy + mantra system
 │   ├── carnelian-worker-node/    # Node.js worker wrapper crate
 │   ├── carnelian-worker-python/  # Python worker wrapper crate
-│   └── carnelian-worker-shell/   # Shell worker wrapper crate
-├── gateway/                      # TypeScript LLM Gateway (:18790)
-│   └── src/
-│       ├── server.ts             # Express server, routing
-│       ├── router.ts             # Provider selection logic
+│   └── carnelian-worker-native/  # Rust named ops (git, blake3, docker, dir)
+├── packages/
+│   ├── gateway/                  # TypeScript LLM Gateway (:18790)
+│   │   └── src/
+│   │       ├── server.ts         # Express server, routing
+│   │       ├── router.ts         # Provider selection logic
+│   └── mcp-server/               # MCP server for Windsurf IDE integration
 │       ├── providers/
 │       │   ├── ollama.ts         # Ollama provider
 │       │   ├── openai.ts         # OpenAI provider
@@ -426,18 +424,18 @@ carnelian/
 │       │   └── fireworks.ts      # Fireworks provider
 │       └── types.ts              # Gateway type definitions
 ├── workers/
-│   ├── node-worker/              # Node.js/TypeScript worker (600+ skills)
-│   ├── python-worker/            # Python worker
-│   └── shell-worker/             # Shell worker
+│   ├── node-worker/              # Node.js/TypeScript worker (50+ skills)
+│   └── python-worker/            # Python worker
 ├── skills/
-│   └── registry/                 # Skill bundles and manifests
+│   ├── registry/                 # Skill bundles and manifests
+│   └── skill-book/               # Curated catalog (7 categories, 30+ skills)
+│       └── quantum/              # quantinuum-h2-rng, qiskit-rng, quantum-optimize
 ├── db/
-│   └── migrations/               # SQL migrations (9 migration files, PostgreSQL 16 + pgvector)
+│   └── migrations/               # SQL migrations (18 migration files, PostgreSQL 16 + pgvector)
 ├── docs/                         # Documentation (development, docker, brand, logging)
 ├── scripts/
 │   ├── setup-hooks.sh            # Development environment setup
-│   ├── ci-local.sh               # Local CI checks before pushing
-│   └── checkpoint1-validation.sh  # Checkpoint 1 automated validation
+│   └── ci-local.sh               # Local CI validation script
 └── .github/workflows/ci.yml      # CI pipeline (lint, build, test, integration, secrets)
 ```
 
@@ -449,11 +447,13 @@ carnelian/
 - **Heartbeat System** - 555,555ms wake routine with mantra rotation, auto-task queuing
 - **Worker Sandboxing** - Isolated process execution with JSONL transport protocol
 - **Tamper-Resistant Ledger** - blake3 hash-chain audit trail for integrity verification
-- **600+ Skills** - Full compatibility with existing Thummim skill library via Node worker
+- **50+ Skills with bulk import tooling** - Full compatibility via Node worker, with WASM/native targets for new skills
+- 🔮 **Quantum-Grade Entropy** - Quantum Origin REST API, Quantinuum H2 Hadamard circuit, and Qiskit IBM, with CSPRNG fallback
+- 🧪 **Elixir Knowledge Persistence** - RAG-based retrieval with pgvector, quality scoring (0–100), and XP integration
+- 🎮 **XP / Leveling System** - Level 1–99 exponential curve (1.172 exponent), ledger-backed event history, leaderboard
 - **Task Lifecycle** - Priority-based scheduling, concurrency limits, configurable retry policies
 - **LZ4 Compression** - Database column compression for large payloads (memories, logs, metadata)
 - **Skill Discovery** - Automatic filesystem watching with blake3 checksums and database sync
-- **XP Progression System** - 1.172-exponent level curve, skill metrics, quality bonuses, leaderboard
 - **Voice Gateway** - ElevenLabs STT/TTS integration with encrypted API key storage
 
 ## Workspace Scanning & Auto-Queueing
@@ -487,7 +487,7 @@ Rust, Python, TypeScript, JavaScript, Go, Java, C/C++, Ruby, Shell, TOML, YAML, 
 **Excluded Directories:**
 `target`, `node_modules`, `.git`, `__pycache__`, `dist`, `build`, `vendor`
 
-## Elixir System
+## 🧪 Elixir System
 
 Carnelian includes an **Elixir System** — a RAG-based knowledge persistence layer that captures skill expertise, domain knowledge, and context for reuse across sessions and agents.
 
@@ -540,22 +540,182 @@ CREATE TABLE elixir_usage (
 ### XP Integration
 
 Elixirs are integrated with the XP progression system:
-- **Creation**: Earn XP when creating high-quality elixirs
-- **Usage**: Track effectiveness and award XP for helpful elixirs
-- **Quality Bonuses**: Higher quality scores yield more XP
+- **Elixir Quality** — Quality scores (0–100) influence XP rewards: high-quality elixirs (>80) boost task XP by 10%
+- **Skill Metrics** — Elixir-backed skills earn bonus XP when the linked elixir has high effectiveness scores
 
-### API Endpoints (Planned)
+**See Also:** [docs/ELIXIR_SYSTEM.md](docs/ELIXIR_SYSTEM.md) — Full technical deep-dive covering versioning internals, embedding pipeline, draft promotion flow, and complete API reference.
+
+## ⭐ XP Progression System
+
+Carnelian includes a comprehensive **XP (Experience Points) and Leveling System** that gamifies agent productivity and tracks skill mastery across all operations.
+
+### Level Curve
+
+**Exponential progression** from Level 1 to Level 99 using a **1.172 exponent**:
+
+```rust
+// XP required for level N
+fn xp_for_level(level: i32) -> i64 {
+    if level <= 1 { return 0; }
+    ((level as f64).powf(1.172) * 100.0).round() as i64
+}
+```
+
+**Sample milestones:**
+- Level 10: ~1,483 XP
+- Level 25: ~5,249 XP
+- Level 50: ~14,142 XP
+- Level 75: ~25,704 XP
+- Level 99: ~40,000 XP
+
+### XP Sources
+
+| Event | Base XP | Multipliers |
+|-------|---------|-------------|
+| **Task Completion** | 10-100 | Priority × complexity × success rate |
+| **Skill Execution** | 5-50 | Skill category × execution time |
+| **Elixir Creation** | 20-200 | Quality score (0-100) |
+| **Elixir Usage** | 5-25 | Effectiveness score × reuse count |
+| **Heartbeat Tick** | 1-5 | Mantra category × context relevance |
+| **Ledger Entry** | 2-10 | Entry type × quantum salt presence |
+
+### Automatic Award System
+
+**XP is awarded automatically** by the system based on verified events. There is no manual XP award capability to prevent gaming the leveling system. All XP grants are:
+- Triggered by actual task completions, skill executions, and ledger events
+- Verified against PostgreSQL event records
+- Immutably logged in the `xp_ledger` table
+- Tied to real worker execution and context validation
+
+This ensures agent levels accurately reflect actual work performed, not artificially inflated scores.
+
+### Ledger-Backed Event Sourcing
+
+All XP events are stored in the **`xp_ledger`** table for full auditability:
+
+```sql
+CREATE TABLE xp_ledger (
+    event_id       UUID PRIMARY KEY,
+    identity_id    UUID NOT NULL REFERENCES identities(identity_id),
+    event_type     TEXT NOT NULL,  -- 'task_complete', 'skill_exec', 'elixir_create', etc.
+    xp_delta       INTEGER NOT NULL,
+    metadata       JSONB,
+    created_at     TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Event Types:**
+- `task_complete` — Task execution completion
+- `skill_exec` — Individual skill execution
+- `elixir_create` — New elixir creation
+- `elixir_usage` — Elixir retrieval and application
+- `heartbeat_tick` — Agentic heartbeat cycle
+- `ledger_entry` — Privileged ledger action
+
+### Leaderboard
+
+The system maintains a real-time leaderboard ranking identities by total XP and level:
+
+```sql
+SELECT 
+    i.identity_id,
+    i.name,
+    i.xp_total,
+    i.xp_level,
+    RANK() OVER (ORDER BY i.xp_total DESC) as rank
+FROM identities i
+ORDER BY i.xp_total DESC
+LIMIT 100;
+```
+
+### Skill Metrics
+
+Per-skill performance tracking with XP integration:
+
+```sql
+CREATE TABLE skill_metrics (
+    skill_id           UUID REFERENCES skills(skill_id),
+    execution_count    INTEGER DEFAULT 0,
+    total_xp_earned    INTEGER DEFAULT 0,
+    avg_execution_ms   REAL,
+    success_rate       REAL,
+    last_executed_at   TIMESTAMPTZ
+);
+```
+
+### UI Integration
+
+The **XP Progression** page in the Dioxus desktop UI provides:
+- Current level and XP progress bar
+- Recent XP events (last 50)
+- Leaderboard view
+- Per-skill XP breakdown
+- Daily/weekly XP trends
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/xp/leaderboard` | Top 100 identities by XP |
+| `GET` | `/v1/xp/history` | XP event history for identity |
+| `GET` | `/v1/xp/skills` | Per-skill XP breakdown |
+
+### API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/v1/elixirs` | Create a new elixir |
-| `GET` | `/v1/elixirs` | List elixirs with filtering |
+| `GET` | `/v1/elixirs` | List elixirs with filtering and pagination |
 | `GET` | `/v1/elixirs/{id}` | Get elixir details |
-| `POST` | `/v1/elixirs/{id}/activate` | Activate an elixir for use |
-| `GET` | `/v1/elixirs/search` | Semantic search via embeddings |
-| `POST` | `/v1/elixirs/drafts` | Review auto-generated proposals |
+| `GET` | `/v1/elixirs/search` | Semantic search via pgvector embeddings |
+| `GET` | `/v1/elixirs/drafts` | List auto-generated draft proposals |
+| `POST` | `/v1/elixirs/drafts/{id}/approve` | Approve a draft and promote to elixir |
+| `POST` | `/v1/elixirs/drafts/{id}/reject` | Reject a draft proposal |
 
-See [docs/SKILLS_MIGRATION_STATUS.md](docs/SKILLS_MIGRATION_STATUS.md) for implementation roadmap.
+## ✨ MAGIC — Quantum Intelligence Core
+
+MAGIC (Mixed Authenticated Quantum Intelligence Core) provides quantum entropy generation and mantra-based context injection for enhanced agent reasoning.
+
+### Provider Priority
+
+| Priority | Provider | Requirement |
+|----------|----------|-------------|
+| 1 | `quantum-origin` | `CARNELIAN_QUANTUM_ORIGIN_API_KEY` |
+| 2 | `quantinuum-h2` | `carnelian magic auth` (pytket) |
+| 3 | `qiskit-rng` | `IBM_QUANTUM_TOKEN` (Qiskit) |
+| 4 | `os` | None — always available fallback |
+
+### Mantra System
+
+The Mantra Library provides weighted, category-grouped prompt fragments injected into the agent's heartbeat context. Mantras are scheduled via `MantraTree::select_with_pool` with quantum entropy seeding, ensuring non-deterministic selection patterns. The `mantra_cooldown_beats` configuration parameter controls how many heartbeat cycles must pass before the same category can fire again, preventing repetitive context pollution.
+
+### Quantum Circuit Skills
+
+Three Python skills leverage quantum circuits for entropy generation and optimization:
+
+- **`quantinuum-h2-rng`** — H-series Hadamard circuit entropy via pytket (`runtime: python`)
+- **`qiskit-rng`** — IBM Quantum Hadamard circuit entropy via Qiskit (`runtime: python`)
+- **`quantum-optimize`** — Quantum-seeded simulated annealing for query/data-loading plans (`runtime: python`)
+
+### Quick Setup
+
+```bash
+# Enable MAGIC and set Quantum Origin key
+export CARNELIAN_QUANTUM_ORIGIN_API_KEY="<key>"
+
+# Authenticate Quantinuum H2 interactively
+carnelian magic auth
+
+# Check live provider health
+carnelian magic status
+
+# Refresh token
+carnelian magic auth --refresh
+```
+
+### UI Access
+
+The MAGIC panel is accessible via the **✨ MAGIC** tab in the Carnelian desktop UI, providing sub-tabs for Entropy Dashboard, Mantra Library, Quantum Jobs, Elixir & Skill Integration, and Auth Settings.
 
 ## Skill Discovery
 
@@ -607,7 +767,6 @@ See [skills/registry/README.md](skills/registry/README.md) for the full manifest
 | `GET` | `/v1/xp/leaderboard` | All agents ranked by total XP |
 | `GET` | `/v1/xp/skills/{id}` | Skill metrics and level |
 | `GET` | `/v1/xp/skills/top` | Top skills by usage/XP |
-| `POST` | `/v1/xp/award` | Manual XP award (admin capability) |
 
 ### Voice
 
@@ -619,16 +778,16 @@ See [skills/registry/README.md](skills/registry/README.md) for the full manifest
 
 ### Security Architecture Notes
 
-The ledger uses **blake3** (not SHA-256) for hash-chain integrity, providing faster performance than traditional cryptographic hashes while maintaining collision resistance.
+Carnelian's security model is built on **capability-based access control** with deny-by-default enforcement. Every privileged action (file writes, git commits, network requests) requires an explicit capability grant signed by the owner keypair. The ledger provides tamper-resistant audit trails for all security-critical events — see **[Ledger System — Technical Deep Dive](docs/LEDGER_SYSTEM.md)** for chain verification, block anchoring, event types, and the BLAKE3 hash-chain specification.
 
-The policy engine (`crates/carnelian-core/src/policy.rs`) and ledger manager (`crates/carnelian-core/src/ledger.rs`) shipped early as part of Phase 1 foundation, though originally planned for Phase 4 in the roadmap.
+The policy engine and ledger manager are shipped and active.
 
-## Development
+## 🔧 Development
 
 - **Setup Guide:** [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 - **Docker Guide:** [docs/DOCKER.md](docs/DOCKER.md)
 - **Logging Guide:** [docs/LOGGING.md](docs/LOGGING.md)
-- **Phase 3 Architecture:** [docs/PHASE3.md](docs/PHASE3.md)
+- **Architecture:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 Pre-commit hooks (prek) run automatically on commit. CI enforces formatting (rustfmt), linting (clippy), and secret scanning.
 
@@ -651,14 +810,14 @@ prek run --all-files
 Run the local CI script before pushing to catch issues early:
 
 ```bash
-# Quick checks (fmt, clippy, unit tests, doc-tests) — no Docker needed
+# Quick checks (fmt, clippy, unit tests) — no Docker needed
 ./scripts/ci-local.sh
 
 # Full checks including integration tests — requires Docker
 ./scripts/ci-local.sh --full
 ```
 
-### Testing
+### 🧪 Testing
 
 The project has **120+ tests** across 10 test suites:
 
@@ -674,7 +833,7 @@ The project has **120+ tests** across 10 test suites:
 | Scheduler tests | 7 | Yes | Priority scheduling, concurrency, retries |
 | Server tests | 8 | Yes | HTTP API, WebSocket, compression |
 | Worker transport tests | 7 | Yes | JSONL protocol, timeouts, cancellation |
-| Phase 3 agentic tests | 40+ | Mixed | Soul/session/memory/context/compaction/routing/heartbeat/restart |
+| Agentic engine tests | 40+ | Mixed | Soul/session/memory/context/compaction/routing/heartbeat/restart |
 
 ```bash
 # Unit tests only (no Docker)
@@ -701,19 +860,28 @@ The GitHub Actions CI pipeline runs on every push to `main` and on pull requests
 
 ## Database
 
-PostgreSQL 16 with pgvector extension. Schema managed via SQLx migrations in `db/migrations/`:
+PostgreSQL 16 with pgvector extension. Schema managed via SQLx migrations in `db/migrations/` (18 migrations):
 
 | Migration | Description |
 |-----------|-------------|
 | `00000000000000_init.sql` | pgvector extension |
 | `00000000000001_core_schema.sql` | Core tables (identities, skills, tasks, task_runs, run_logs, etc.) |
-| `00000000000002_phase1_delta.sql` | Phase 1 additions (sessions, skill_versions, workflows, sub_agents, XP, elixirs) |
+| `00000000000002_phase1_delta.sql` | Sessions, skill versions, workflows, sub-agents, XP, elixirs |
 | `00000000000003_schema_fixes.sql` | Schema refinements (pronouns, subject_id TEXT, LZ4 compression) |
 | `00000000000004_xp_curve_retune.sql` | XP curve rebalancing |
 | `00000000000005_config_store_value_blob.sql` | Config store value column |
 | `00000000000006_memories_created_at_index.sql` | Memory retrieval index |
 | `00000000000007_heartbeat_correlation.sql` | Heartbeat correlation ID tracking |
-| `00000000000008_voice_config.sql` | Voice configuration JSONB on identities |
+| `00000000000008_approval_queue.sql` | Approval queue for high-risk operations |
+| `00000000000009_encryption_at_rest.sql` | Encryption at rest for sensitive data |
+| `00000000000010_worker_attestations.sql` | Worker attestation and verification |
+| `00000000000011_channel_sessions.sql` | Channel adapter session management |
+| `00000000000012_memory_tags.sql` | Memory tagging and categorization |
+| `00000000000013_chain_anchors.sql` | Ledger chain anchoring |
+| `00000000000014_revoked_grants.sql` | Revoked capability grants |
+| `00000000000015_magic_entropy.sql` | MAGIC entropy events and provider tracking |
+| `00000000000016_magic_mantras.sql` | Mantra categories, mantras, and usage tracking |
+| `00000000000017_quantum_integrity.sql` | Quantum salt integration for ledger entries |
 
 ## Configuration
 
@@ -754,6 +922,10 @@ See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 | [docs/SECURITY.md](docs/SECURITY.md) | Security model, capability system, threat model |
 | [docs/LOGGING.md](docs/LOGGING.md) | Structured logging philosophy and conventions |
 | [docs/BRAND.md](docs/BRAND.md) | Dual theme brand kit (Forge / Night Lab) |
+| [docs/MAGIC.md](docs/MAGIC.md) | Quantum providers, setup, troubleshooting |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | v1.0.0 release notes covering all 11 phases |
+| [docs/SKILLS_MIGRATION_STATUS.md](docs/SKILLS_MIGRATION_STATUS.md) | Skills migration tracking |
+| [docs/REMOTE_DEPLOY.md](docs/REMOTE_DEPLOY.md) | Remote deployment guide |
 
 ### Platform Setup
 
@@ -762,6 +934,8 @@ See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 | [docs/SETUP_WINDOWS.md](docs/SETUP_WINDOWS.md) | Windows (WSL2) setup guide |
 | [docs/SETUP_MACOS.md](docs/SETUP_MACOS.md) | macOS setup guide |
 | [docs/SETUP_LINUX.md](docs/SETUP_LINUX.md) | Linux setup guide |
+| [docs/deploy/nginx.conf](docs/deploy/nginx.conf) | Nginx reverse proxy configuration |
+| [docs/deploy/Caddyfile](docs/deploy/Caddyfile) | Caddy reverse proxy configuration |
 
 ### Project Status & Planning
 
@@ -773,33 +947,181 @@ See [docs/DOCKER.md](docs/DOCKER.md) for detailed troubleshooting.
 | [documentation/SECURITY_CHECKLIST.md](documentation/SECURITY_CHECKLIST.md) | Security hardening checklist |
 | [documentation/TESTING_GUIDE.md](documentation/TESTING_GUIDE.md) | Comprehensive testing guide |
 | [documentation/MACHINE_PROFILES.md](documentation/MACHINE_PROFILES.md) | Deployment machine profiles |
-| [docs/ENHANCEMENT_SUMMARY.md](docs/ENHANCEMENT_SUMMARY.md) | Project enhancement summary |
-| [docs/FINAL_STATUS_REPORT.md](docs/FINAL_STATUS_REPORT.md) | Final status report |
 
 ### Technical Deep Dives
 
 | Document | Description |
 |----------|-------------|
-| [docs/PHASE3.md](docs/PHASE3.md) | Phase 3 architecture deep-dive |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Agentic architecture deep-dive |
+| [docs/ELIXIR_SYSTEM.md](docs/ELIXIR_SYSTEM.md) | Elixir knowledge persistence system |
+| [docs/LEDGER_SYSTEM.md](docs/LEDGER_SYSTEM.md) | Ledger hash-chain and audit trail |
 | [docs/WASM_SKILLS.md](docs/WASM_SKILLS.md) | WASM skill system documentation |
 | [docs/RUST_SKILL_SYSTEM.md](docs/RUST_SKILL_SYSTEM.md) | Rust skill system design |
 | [docs/ATTESTATION.md](docs/ATTESTATION.md) | Attestation and verification system |
-| [docs/SKILL_GAP_ANALYSIS.md](docs/SKILL_GAP_ANALYSIS.md) | Skills migration tracking |
-| [docs/REMOTE_DEPLOY.md](docs/REMOTE_DEPLOY.md) | Remote deployment guide |
-| [docs/DOCKER_ECOSYSTEM.md](docs/DOCKER_ECOSYSTEM.md) | Docker ecosystem overview |
+| [docs/SKILL_GAP_ANALYSIS.md](docs/SKILL_GAP_ANALYSIS.md) | Skills gap analysis |
+| [docs/DOCKER_ECOSYSTEM.md](docs/DOCKER_ECOSYSTEM.md) | Multi-container orchestration (Core + Ollama + PostgreSQL + Gateway) |
+| [docs/GATEWAY.md](docs/GATEWAY.md) | LLM Gateway routing algorithm, circuit breaker, provider config, voice integration |
+| [docs/MEMORY_SYSTEM.md](docs/MEMORY_SYSTEM.md) | Memory lifecycle, pgvector embeddings, context assembly pipeline, cross-instance portability |
+| [docs/XP_SYSTEM.md](docs/XP_SYSTEM.md) | XP level curve, earning sources, elixir boost, skill metrics board, ledger integration |
+| [docs/SESSION_MANAGEMENT.md](docs/SESSION_MANAGEMENT.md) | Soul files, session lifecycle, DB-backed transcripts, compaction protocol |
+| [docs/WORKER_SYSTEM.md](docs/WORKER_SYSTEM.md) | JSONL protocol, four runtimes (Node/Python/WASM/Native), attestation, capability enforcement |
+| [DOCUMENTATION/FUTURE_PQC.md](DOCUMENTATION/FUTURE_PQC.md) | Post-quantum cryptography roadmap, hybrid signatures, v1.1.0/v1.2.0/v2.0.0 migration plan |
 
 ### Project Planning
 
-- **Epic Brief:** [`spec:5e7be550-aec5-4ebb-b0e3-3ce021e3f9ab/7c191398-0049-4dc4-8378-585569a1a4e4`](spec:5e7be550-aec5-4ebb-b0e3-3ce021e3f9ab/7c191398-0049-4dc4-8378-585569a1a4e4) - Design goals, machine profiles (Urim/Thummim), success criteria.
+- **Epic Brief:** [`spec:5e7be550-aec5-4ebb-b0e3-3ce021e3f9ab/7c191398-0049-4dc4-8378-585569a1a4e4`](spec:5e7be550-aec5-4ebb-b0e3-3ce021e3f9ab/7c191398-0049-4dc4-8378-585569a1a4e4) - Design goals, machine profiles, success criteria.
 - **Technical Plan:** [`spec:5e7be550-aec5-4ebb-b0e3-3ce021e3f9ab/3ccb59e1-e29e-4f62-883e-e5d97a90d157`](spec:5e7be550-aec5-4ebb-b0e3-3ce021e3f9ab/3ccb59e1-e29e-4f62-883e-e5d97a90d157) - Architecture, data model, components (includes Mermaid system diagram).
+
+## 📊 Architecture Diagrams
+
+### Full System Architecture
+
+```mermaid
+graph TD
+    UI[Dioxus Desktop UI\n17 pages, 6 components]
+    CLI[carnelian CLI\n15 commands]
+    TG[Telegram Adapter]
+    DC[Discord Adapter]
+
+    Core[carnelian-core\n28 modules]
+    Magic[carnelian-magic\nQuantum entropy + mantras]
+    Gateway[LLM Gateway\nTypeScript, 4 providers]
+    
+    Workers[Worker Pool\nNode / Python / WASM / Native]
+    Quantum[Quantum Providers\nQuantum Origin / H2 / Qiskit]
+
+    DB[(PostgreSQL 16\n+ pgvector\n18 migrations)]
+    Ollama[Ollama Service :11434]
+    Remote[Remote LLM APIs]
+
+    UI -->|WebSocket| Core
+    CLI -->|HTTP| Core
+    TG -->|HTTP| Core
+    DC -->|HTTP| Core
+
+    Core --> Magic
+    Core -->|HTTP :18790| Gateway
+    Core -->|JSONL| Workers
+    Core -->|SQLx| DB
+
+    Magic --> Quantum
+    
+    Gateway --> Ollama
+    Gateway --> Remote
+
+    style Core fill:#D24B2A,stroke:#333,stroke-width:2px,color:#fff
+    style Magic fill:#9C27B0,stroke:#333,stroke-width:2px,color:#fff
+    style Gateway fill:#7C4DFF,stroke:#333,stroke-width:2px,color:#fff
+    style DB fill:#336791,stroke:#333,stroke-width:2px,color:#fff
+```
+
+### MAGIC Entropy Provider Chain
+
+```mermaid
+graph TD
+    Request[Entropy Request\n8-32 bytes]
+    QO[Quantum Origin\nREST API]
+    H2[Quantinuum H2\nHadamard circuit]
+    Qiskit[Qiskit IBM\nQuantum backend]
+    OS[CSPRNG Fallback\ngetrandom crate]
+    Mix[blake3 Mixing\nProvider chain hash]
+    Out[Entropy Output]
+
+    Request --> QO
+    QO -->|available| Mix
+    QO -->|unavailable| H2
+    H2 -->|available| Mix
+    H2 -->|unavailable| Qiskit
+    Qiskit -->|available| Mix
+    Qiskit -->|unavailable| OS
+    OS --> Mix
+    Mix --> Out
+
+    style QO fill:#9C27B0,stroke:#333,stroke-width:2px,color:#fff
+    style H2 fill:#9C27B0,stroke:#333,stroke-width:2px,color:#fff
+    style Qiskit fill:#9C27B0,stroke:#333,stroke-width:2px,color:#fff
+    style OS fill:#666,stroke:#333,stroke-width:2px,color:#fff
+    style Mix fill:#D24B2A,stroke:#333,stroke-width:2px,color:#fff
+```
+
+### Mantra Matrix Selection Flow
+
+```mermaid
+flowchart TD
+    Start[Heartbeat Tick\n555,555ms]
+    Entropy[Get Entropy\n8 bytes]
+    Context[Build Context\npending tasks, errors, etc.]
+    Weights[Compute Weights\nbase + context + elixir]
+    Category[Weighted Category Pick]
+    Cooldown{Cooldown\nCheck}
+    Mantra[Select Mantra\nInverse frequency]
+    SysMsg[Resolve System Message\nTemplate substitution]
+    Model[LLM Completion\nGateway request]
+    Parse[Parse Tool Calls]
+    Queue[Queue Tasks]
+    Ledger[Write Ledger Entry]
+
+    Start --> Entropy
+    Entropy --> Context
+    Context --> Weights
+    Weights --> Category
+    Category --> Cooldown
+    Cooldown -->|within cooldown| Weights
+    Cooldown -->|available| Mantra
+    Mantra --> SysMsg
+    SysMsg --> Model
+    Model --> Parse
+    Parse --> Queue
+    Queue --> Ledger
+
+    style Start fill:#9C27B0,stroke:#333,stroke-width:2px,color:#fff
+    style Entropy fill:#9C27B0,stroke:#333,stroke-width:2px,color:#fff
+    style Model fill:#7C4DFF,stroke:#333,stroke-width:2px,color:#fff
+    style Ledger fill:#D24B2A,stroke:#333,stroke-width:2px,color:#fff
+```
+
+### Agentic Loop Data Flow
+
+```mermaid
+sequenceDiagram
+    participant Scheduler
+    participant MAGIC
+    participant Context
+    participant Gateway
+    participant Ledger
+    participant Workers
+
+    Scheduler->>MAGIC: Request entropy (8 bytes)
+    MAGIC->>MAGIC: Try Quantum Origin → H2 → Qiskit → CSPRNG
+    MAGIC-->>Scheduler: Entropy bytes + provider chain
+
+    Scheduler->>Context: Assemble context
+    Context->>Context: Fetch pending tasks, errors, sessions
+    Context-->>Scheduler: MantraContext
+
+    Scheduler->>MAGIC: Compute weights + select mantra
+    MAGIC->>MAGIC: Apply context bonuses, elixir quality boost
+    MAGIC->>MAGIC: Weighted category pick, inverse frequency mantra
+    MAGIC-->>Scheduler: MantraSelection (category, text, messages)
+
+    Scheduler->>Gateway: LLM completion request
+    Gateway->>Gateway: Route to Ollama/OpenAI/Anthropic
+    Gateway-->>Scheduler: Model response
+
+    Scheduler->>Scheduler: Parse tool calls
+    Scheduler->>Workers: Queue discovered tasks
+    Scheduler->>Ledger: Write HeartbeatTick entry + quantum_salt
+
+    Ledger-->>Scheduler: Ledger entry ID
+```
 
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
-- Development setup
-- Code style guidelines
-- Testing requirements
-- Pull request process
+We welcome contributions from the community! Carnelian Core is open source software with a vibrant ecosystem of contributors and collaborators.
+
+**Key Resources:**
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — Development setup, code style, testing, and pull request process
+- **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** — Detailed development workflow and architecture guide
 
 ### Quick Start for Contributors
 
@@ -810,22 +1132,35 @@ cd carnelian
 
 # Install dependencies
 cargo build
-npm install --prefix tests/e2e
+
+# Start development services
+docker-compose up -d
 
 # Run tests
 cargo test --all
-
-# Start development server
-docker-compose up -d
 ```
 
-See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for detailed development workflow.
+### Contributor Recognition
 
-This is currently a personal project (Marco + Mim). The architecture is designed for eventual sharing as a platform.
+All contributors who submit accepted pull requests are valued and recognized. We appreciate contributions across code, documentation, testing, design, and community support.
 
-## License
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the Contributor License Agreement and detailed guidelines.
 
-MIT
+## 🙏 Acknowledgments
+
+Carnelian was inspired by OpenClaw, an AI agent framework created by Peter Steinberger. For a detailed architectural comparison, see [docs/OPENCLAW_COMPARISON.md](docs/OPENCLAW_COMPARISON.md).
+
+---
+
+## 📜 License
+
+**Copyright © 2026 Kordspace LLC**
+
+Carnelian is open source software with commercial licensing options available.
+
+See [LICENSE.md](LICENSE.md) for complete terms and licensing details.
+
+Special thanks to our contributors and mentors who made Carnelian possible.
 
 ## Repository
 

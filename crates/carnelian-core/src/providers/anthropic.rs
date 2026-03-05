@@ -7,8 +7,8 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use futures_util::stream::{BoxStream, StreamExt};
+use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use reqwest::Client;
-use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 
 use crate::model_router::{

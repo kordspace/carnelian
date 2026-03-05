@@ -21,6 +21,7 @@
 //! cargo test --test safe_mode_integration_test -- --ignored
 //! ```
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -30,7 +31,7 @@ use carnelian_core::{
 };
 use serde_json::json;
 use sqlx::PgPool;
-use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
+use testcontainers::{runners::AsyncRunner, GenericImage, ImageExt};
 use tokio::net::TcpListener;
 use uuid::Uuid;
 
@@ -321,6 +322,8 @@ async fn test_safe_mode_blocks_task_execution() {
         tokio::sync::Mutex<std::collections::HashMap<Uuid, tokio::task::JoinHandle<()>>>,
     > = Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
     let metrics = Arc::new(carnelian_core::MetricsCollector::new());
+    let ledger = Arc::new(carnelian_core::Ledger::new(pool.clone()));
+    let lane_permits = Arc::new(HashMap::new());
 
     // Poll task queue — should short-circuit because safe mode is active
     Scheduler::poll_task_queue(
@@ -330,8 +333,11 @@ async fn test_safe_mode_blocks_task_execution() {
         &config,
         &active_tasks,
         &metrics,
+        &ledger,
         &safe_mode_guard,
         &None,
+        &None,
+        &lane_permits,
         &None,
     )
     .await

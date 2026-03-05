@@ -10,9 +10,9 @@ use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
 use wasmtime::{Config, Engine, Linker, Module, Store};
 use wasmtime_wasi::{
-    WasiCtxBuilder,
     pipe::{MemoryInputPipe, MemoryOutputPipe},
     preview1::WasiP1Ctx,
+    WasiCtxBuilder,
 };
 
 use crate::skills::skill_trait::{SkillInput, SkillOutput};

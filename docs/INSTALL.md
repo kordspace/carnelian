@@ -8,7 +8,7 @@ This guide covers installing and setting up Carnelian OS, an AI agent runtime wi
 |-------------|---------|-------------|-------|
 | **Rust** | 1.85+ | Latest stable | Install via [rustup](https://rustup.rs) |
 | **Docker** | 20.10+ | Latest | Required for PostgreSQL and Ollama containers |
-| **Node.js** | 18.x | 20.x+ | For building UI components |
+| **Node.js** | 22.x | 22.x+ | For Gateway service and Node.js workers |
 | **Python** | 3.10+ | 3.12 | For skill dependencies |
 | **NVIDIA Drivers** | 525+ | 550+ | For GPU inference (optional) |
 | **RAM** | 8 GB | 16+ GB | ≥32 GB recommended for `standard` profile |

@@ -1,4 +1,4 @@
-import type { SkillContext, SkillResult } from '../../../workers/node-worker/src/types';
+import type { SkillContext, SkillResult } from '../../types';
 
 interface StripePaymentParams {
   action: 'create_payment' | 'create_customer' | 'list_payments' | 'refund';

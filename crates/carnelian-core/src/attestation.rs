@@ -14,7 +14,7 @@
 //! The orchestrator compares these against its own expected values. Mismatches
 //! trigger quarantine: the worker is marked in the `worker_attestations` table
 //! and denied new task assignments. A `"worker.quarantined"` ledger event is
-//! logged as a privileged action with Ed25519 signature for audit trail.
+//! logged as a privileged action with owner keypair signature for audit trail.
 //!
 //! # Threat Model
 //!

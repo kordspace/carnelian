@@ -83,7 +83,7 @@ use std::time::Instant;
 use sysinfo::{Disks, Networks, ProcessRefreshKind, RefreshKind, System};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout};
-use tokio::sync::{RwLock, mpsc, oneshot, watch};
+use tokio::sync::{mpsc, oneshot, watch, RwLock};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -2933,6 +2933,8 @@ impl WorkerManager {
                                                             None,
                                                             None,
                                                             None,
+                                                            None,
+                                                            None,
                                                         ).await {
                                                             tracing::warn!(worker_id = %worker_id, error = %e, "Failed to log quarantine to ledger");
                                                         }
@@ -3128,6 +3130,8 @@ impl WorkerManager {
                             "reason": result.mismatch_reason,
                             "attestation": attestation_data,
                         }),
+                        None,
+                        None,
                         None,
                         None,
                         None,
@@ -3341,8 +3345,7 @@ impl WorkerManager {
     }
 
     /// Get the transport for a specific worker.
-    ///
-    /// # Errors
+    /// Get a worker's transport by worker ID.
     ///
     /// Returns an error if the worker is not found or has no transport.
     #[allow(clippy::significant_drop_tightening)]
@@ -3350,11 +3353,41 @@ impl WorkerManager {
         let workers = self.workers.read().await;
         let worker = workers
             .get(worker_id)
-            .ok_or_else(|| Error::Config(format!("Worker not found: {}", worker_id)))?;
-        worker
-            .transport
-            .clone()
-            .ok_or_else(|| Error::Config(format!("Worker {} has no transport", worker_id)))
+            .ok_or_else(|| Error::Config(format!("Worker '{}' not found", worker_id)))?;
+
+        worker.transport.clone().ok_or_else(|| {
+            Error::Config(format!(
+                "Worker '{}' has no transport configured",
+                worker_id
+            ))
+        })
+    }
+
+    /// Get a transport for a specific runtime by finding a running, non-quarantined worker.
+    ///
+    /// Returns the first matching worker's transport, or an error if no suitable worker is found.
+    pub async fn get_transport_for_runtime(
+        &self,
+        runtime: WorkerRuntime,
+    ) -> Result<Arc<dyn WorkerTransport>> {
+        let workers = self.workers.read().await;
+
+        for worker in workers.values() {
+            if worker.runtime == runtime
+                && worker.status == WorkerStatus::Running
+                && !worker.quarantined
+            {
+                // Continue scanning if this worker lacks transport
+                if let Some(transport) = worker.transport.clone() {
+                    return Ok(transport);
+                }
+            }
+        }
+
+        Err(Error::Config(format!(
+            "No running {} worker available",
+            runtime
+        )))
     }
 
     /// Spawn a background task to read and log worker stderr.
@@ -3433,12 +3466,10 @@ mod tests {
 
         let result = manager.spawn_worker(WorkerRuntime::Node, false).await;
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Max workers limit reached")
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Max workers limit reached"));
     }
 
     #[tokio::test]

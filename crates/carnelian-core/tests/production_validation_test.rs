@@ -136,6 +136,8 @@ async fn test_chain_anchor_published_and_verified() {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .expect("Failed to append event");
@@ -414,6 +416,8 @@ async fn test_complete_feature_set_ledger_integrity() {
                 None,
                 "integrity.test",
                 serde_json::json!({"test_index": i}),
+                None,
+                None,
                 None,
                 None,
                 None,

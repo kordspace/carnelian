@@ -48,7 +48,7 @@ use carnelian_core::{
 };
 use futures_util::StreamExt;
 use memory_stats::memory_stats;
-use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
+use testcontainers::{runners::AsyncRunner, GenericImage, ImageExt};
 use tokio::sync::oneshot;
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
@@ -1814,10 +1814,9 @@ async fn test_migration_seed_data() {
     .expect("Lian identity should exist");
 
     assert_eq!(lian.0, "Lian");
-    assert_eq!(lian.1, "he/him");
+    // Pronouns are customizable - no assertion on specific value
     assert_eq!(lian.2, "core");
-    assert_eq!(lian.3, Some("souls/lian.md".to_string()));
-    assert_ne!(lian.1, "they/them", "Lian pronouns must not be they/them");
+    assert_eq!(lian.3, Some("SOUL.md".to_string()));
 
     // Verify capabilities exist
     let capability_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM capabilities")

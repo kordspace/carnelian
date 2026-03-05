@@ -1,15 +1,11 @@
-//! Skill Book Library page — curated skill catalog with activation.
+//! Skill Book page — browse and activate skills from the catalog.
 //!
-//! Features:
+//! # Features
+//!
 //! - Category filter tabs
 //! - Grid of skill cards with activation status
 //! - Inline activation wizard with config prompts
 //! - Deactivate functionality
-//! Skill Book page — browse and activate skills from the catalog.
-
-#![allow(clippy::clone_on_copy)]
-#![allow(clippy::map_unwrap_or)]
-#![allow(clippy::doc_lazy_continuation)]
 
 use dioxus::prelude::*;
 use std::collections::HashMap;
@@ -37,7 +33,10 @@ pub fn SkillBook() -> Element {
 
     // Load catalog on mount
     let load_catalog = {
+        // Dioxus Signal<T> requires .clone() for multi-closure capture
+        #[allow(clippy::clone_on_copy)]
         let mut catalog = catalog.clone();
+        #[allow(clippy::clone_on_copy)]
         let mut loading = loading.clone();
         move || {
             loading.set(true);
@@ -54,6 +53,8 @@ pub fn SkillBook() -> Element {
     };
 
     use_hook({
+        // Dioxus Signal<T> requires .clone() for multi-closure capture
+        #[allow(clippy::clone_on_copy)]
         let mut load_catalog = load_catalog.clone();
         move || {
             load_catalog();
@@ -77,10 +78,9 @@ pub fn SkillBook() -> Element {
     };
 
     // Categories for tabs - compute owned strings to avoid lifetime issues
-    let categories: Vec<(String, String)> = catalog
-        .read()
-        .as_ref()
-        .map(|c| {
+    let categories: Vec<(String, String)> = catalog.read().as_ref().map_or_else(
+        || vec![("all".to_string(), "All".to_string())],
+        |c| {
             let mut cats = vec![("all".to_string(), "All".to_string())];
             cats.extend(c.categories.iter().map(|id| {
                 let name = match id.as_str() {
@@ -95,11 +95,13 @@ pub fn SkillBook() -> Element {
                 (id.clone(), name.to_string())
             }));
             cats
-        })
-        .unwrap_or_else(|| vec![("all".to_string(), "All".to_string())]);
+        },
+    );
 
     // Activation handler
     let activate_skill = {
+        // Dioxus Signal<T> requires .clone() for multi-closure capture
+        #[allow(clippy::clone_on_copy)]
         let mut toasts = toasts.clone();
         let mut show_modal = show_activation_modal.clone();
         let mut load_catalog = load_catalog.clone();
