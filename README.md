@@ -5,7 +5,7 @@
 <h1 align="center">CARNELIAN</h1>
 
 <p align="center">
-  <img src="assets/logos/banners/carnelian-v1-banner-animated.gif" alt="Carnelian Banner" width="100%">
+  <img src="assets/banners/carnelian-v1-banner-animated.gif" alt="Carnelian Banner" width="100%">
 </p>
 
 <p align="center">
