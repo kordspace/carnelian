@@ -20,7 +20,7 @@
 <p align="center">An AI workspace harness built in Rust — orchestrating autonomous agents with capability-based security, event-stream architecture, and local-first execution.</p>
 
 <p align="center">
-  <strong>Copyright © 2026 Marco Julio Lopes and Kordspace LLC</strong><br>
+  <strong>Copyright © 2026 Kordspace LLC</strong><br>
   <a href="LICENSE">License</a>
 </p>
 
