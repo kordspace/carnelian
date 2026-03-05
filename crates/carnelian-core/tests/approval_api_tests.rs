@@ -187,10 +187,10 @@ async fn test_approve_approval_with_valid_signature() {
         .await
         .expect("Migrations should succeed");
 
-    // Queue an approval directly
+    // Queue an approval directly - use test.action which has no automatic execution path
     let queue = carnelian_core::ApprovalQueue::new(pool.clone());
     let approval_id = queue
-        .queue_action("capability.grant", json!({"test": true}), None, None)
+        .queue_action("test.action", json!({"test": true}), None, None)
         .await
         .expect("Queue should succeed");
     drop(pool);
@@ -239,9 +239,10 @@ async fn test_deny_approval_with_valid_signature() {
         .await
         .expect("Migrations should succeed");
 
+    // Use test.action which has no automatic execution path
     let queue = carnelian_core::ApprovalQueue::new(pool.clone());
     let approval_id = queue
-        .queue_action("config.change", json!({"key": "test"}), None, None)
+        .queue_action("test.action", json!({"key": "test"}), None, None)
         .await
         .expect("Queue should succeed");
     drop(pool);
@@ -290,13 +291,14 @@ async fn test_batch_approve() {
         .await
         .expect("Migrations should succeed");
 
+    // Use test.action which has no automatic execution path
     let queue = carnelian_core::ApprovalQueue::new(pool.clone());
     let id1 = queue
-        .queue_action("capability.grant", json!({"cap": "fs.read"}), None, None)
+        .queue_action("test.action", json!({"cap": "fs.read"}), None, None)
         .await
         .expect("Queue should succeed");
     let id2 = queue
-        .queue_action("capability.grant", json!({"cap": "fs.write"}), None, None)
+        .queue_action("test.action", json!({"cap": "fs.write"}), None, None)
         .await
         .expect("Queue should succeed");
     drop(pool);
@@ -304,8 +306,14 @@ async fn test_batch_approve() {
     let (port, handle, config) = start_db_backed_server(&db_url).await;
     let client = reqwest::Client::new();
 
-    // Generate valid signature for batch approval
-    let message = format!("{},{}", id1, id2);
+    // Generate valid signature for batch approval - must use sorted IDs like server expects
+    let mut sorted_ids = vec![id1, id2];
+    sorted_ids.sort();
+    let message = sorted_ids
+        .iter()
+        .map(|id| id.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
     let signature = config
         .sign_message(message.as_bytes())
         .expect("Should sign message");
