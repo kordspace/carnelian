@@ -21,10 +21,10 @@
 
 <p align="center">
   <strong>Copyright © 2026 Kordspace LLC</strong><br>
-  <a href="LICENSE">License</a>
+  <a href="LICENSE.md">License</a>
 </p>
 
-> 💎 *Carnelian provides the foundational infrastructure for AI agent orchestration, task execution, and workspace automation. Think of it as the runtime and security layer that makes autonomous AI agents safe, auditable, and productive.*
+> *Carnelian provides the foundational infrastructure for AI agent orchestration, task execution, and workspace automation. Think of it as the runtime and security layer that makes autonomous AI agents safe, auditable, and productive.*
 
 ## System Components
 

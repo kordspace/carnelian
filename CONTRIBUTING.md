@@ -259,7 +259,7 @@ If you have questions, feel free to:
 
 ## License
 
-By contributing to CARNELIAN, you agree that your contributions will be licensed under the [LICENSE](LICENSE) file in this repository.
+By contributing to CARNELIAN, you agree that your contributions will be licensed under the [LICENSE.md](LICENSE.md) file in this repository.
 
 ## MAGIC Development Guide
 
