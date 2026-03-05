@@ -1125,7 +1125,7 @@ mod tests {
             .await
             .expect("Failed to connect to database");
 
-        sqlx::query("TRUNCATE ledger_events")
+        sqlx::query("TRUNCATE ledger_events CASCADE")
             .execute(&pool)
             .await
             .expect("Failed to truncate ledger_events");
@@ -1212,7 +1212,7 @@ mod tests {
             .await
             .expect("Failed to connect to database");
 
-        sqlx::query("TRUNCATE ledger_events")
+        sqlx::query("TRUNCATE ledger_events CASCADE")
             .execute(&pool)
             .await
             .expect("Failed to truncate ledger_events");
