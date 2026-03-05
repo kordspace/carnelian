@@ -474,11 +474,14 @@ impl Ledger {
                         }
                     }
                 } else {
-                    tracing::warn!(
+                    // If event has a signature but we don't have the public key to verify it,
+                    // this is a verification failure for security reasons
+                    tracing::error!(
                         event_id = event.event_id,
                         action_type = %event.action_type,
-                        "Signed event cannot be verified: owner public key not loaded"
+                        "Ledger chain break: signed event cannot be verified without owner public key"
                     );
+                    return Ok(false);
                 }
             } else if is_privileged_action(&event.action_type) {
                 tracing::warn!(
