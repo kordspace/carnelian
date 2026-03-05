@@ -91,6 +91,11 @@ async fn start_db_backed_server(db_url: &str) -> (u16, tokio::task::JoinHandle<(
     let config_arc = Arc::new(config);
     let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));
     let ledger = Arc::new(Ledger::new(pool.clone()));
+    // Initialize ledger's last_hash from database to enable append_event
+    ledger
+        .load_last_hash()
+        .await
+        .expect("Should load last hash");
     let worker_manager = Arc::new(tokio::sync::Mutex::new(WorkerManager::new(
         config_arc.clone(),
         event_stream.clone(),
