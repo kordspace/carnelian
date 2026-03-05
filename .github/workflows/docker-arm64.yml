@@ -65,6 +65,9 @@ jobs:
           SQLX_OFFLINE: true
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         run: |
+          # Ensure aarch64 target is installed
+          rustup target add aarch64-unknown-linux-gnu
+          
           # Use zigbuild for better cross-compilation support
           cargo zigbuild --release --target aarch64-unknown-linux-gnu --bin carnelian
           

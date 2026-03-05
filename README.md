@@ -20,11 +20,11 @@
 <p align="center">An AI workspace harness built in Rust — orchestrating autonomous agents with capability-based security, event-stream architecture, and local-first execution.</p>
 
 <p align="center">
-  <strong>Copyright © 2026 Marco Julio Lopes and Kordspace LLC</strong><br>
-  <a href="LICENSE">License</a>
+  <strong>Copyright 2026 Kordspace LLC</strong><br>
+  <a href="LICENSE.md">License</a>
 </p>
 
-> 💎 *Carnelian provides the foundational infrastructure for AI agent orchestration, task execution, and workspace automation. Think of it as the runtime and security layer that makes autonomous AI agents safe, auditable, and productive.*
+> *Carnelian provides the foundational infrastructure for AI agent orchestration, task execution, and workspace automation. Think of it as the runtime and security layer that makes autonomous AI agents safe, auditable, and productive.*
 
 ## System Components
 

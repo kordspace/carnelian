@@ -242,6 +242,5 @@ export CARGO_INCREMENTAL=0
 ## See Also
 
 - [TESTING.md](TESTING.md) - Comprehensive testing guide
-- [CI_OPTIMIZATION.md](../DOCUMENTATION/CI_OPTIMIZATION.md) - CI/CD optimization details
 - [docker-compose.yml](../docker-compose.yml) - Full stack configuration
 - [README.md](../README.md) - Project overview
