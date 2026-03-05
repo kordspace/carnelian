@@ -9,7 +9,6 @@
 
 use carnelian_common::Result;
 use carnelian_core::memory::{MemoryManager, MemorySource};
-use chrono::Utc;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -57,7 +56,7 @@ async fn test_create_and_retrieve_memory() -> Result<()> {
     // Verify memory was created
     assert_eq!(memory.identity_id, identity_id);
     assert_eq!(memory.content, "User prefers concise responses");
-    assert_eq!(memory.importance, 0.9);
+    assert!((memory.importance - 0.9).abs() < f32::EPSILON);
 
     // Retrieve the memory
     let retrieved = manager.get_memory(memory.memory_id).await?;
@@ -328,15 +327,16 @@ async fn test_memory_stats() -> Result<()> {
     let identity_id = create_test_identity(&pool, "test_stats_user").await?;
 
     // Create multiple memories
+    #[allow(clippy::cast_precision_loss)]
     for i in 0..5 {
         manager
             .create_memory(
                 identity_id,
-                &format!("Memory {}", i),
+                &format!("Memory {i}"),
                 None,
                 MemorySource::Conversation,
                 None,
-                0.5 + (i as f32 * 0.1),
+                0.5 + (i as f32).mul_add(0.1, 0.0),
                 None,
             )
             .await?;

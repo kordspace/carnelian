@@ -98,7 +98,7 @@ async fn test_build_for_session_integration() -> Result<()> {
         .await?;
 
     // Build context window
-    let ctx =
+    let _ctx =
         ContextWindow::build_for_session(pool.clone(), None, session.session_id, None, &config)
             .await?;
 
@@ -265,7 +265,7 @@ async fn test_resolve_context_window_limit_integration() -> Result<()> {
             .append_message(
                 session.session_id,
                 if i % 2 == 0 { "user" } else { "assistant" },
-                format!("Message {} with some content to increase token count", i),
+                format!("Message {i} with some content to increase token count"),
                 Some(20),
                 None,
                 None,

@@ -59,10 +59,7 @@ async fn test_compact_session_full_flow() -> Result<()> {
             .append_message(
                 session.session_id,
                 if i % 2 == 0 { "user" } else { "assistant" },
-                format!(
-                    "Message {} with content to increase token count significantly",
-                    i
-                ),
+                format!("Message {i} with content to increase token count significantly"),
                 Some(15),
                 None,
                 None,
@@ -79,10 +76,10 @@ async fn test_compact_session_full_flow() -> Result<()> {
         .fetch_one(&pool)
         .await?;
 
-    let tokens_before: i64 = session_before
+    let _tokens_before: i64 = session_before
         .token_counters
         .get("total")
-        .and_then(|v| v.as_i64())
+        .and_then(sqlx::types::JsonValue::as_i64)
         .unwrap_or(0);
 
     // Run compaction
@@ -326,7 +323,7 @@ async fn test_compaction_increments_count_and_recalculates_counters() -> Result<
             .append_message(
                 session.session_id,
                 if i % 2 == 0 { "user" } else { "assistant" },
-                format!("Message {}", i),
+                format!("Message {i}"),
                 Some(10),
                 None,
                 None,
@@ -361,7 +358,7 @@ async fn test_compaction_increments_count_and_recalculates_counters() -> Result<
     let total = session_after
         .token_counters
         .get("total")
-        .and_then(|v| v.as_i64())
+        .and_then(sqlx::types::JsonValue::as_i64)
         .unwrap_or(0);
     assert!(total > 0, "Token counters should be recalculated");
 
@@ -394,7 +391,7 @@ async fn test_compaction_ledger_event_recorded() -> Result<()> {
             .append_message(
                 session.session_id,
                 if i % 2 == 0 { "user" } else { "assistant" },
-                format!("Message {}", i),
+                format!("Message {i}"),
                 Some(10),
                 None,
                 None,
