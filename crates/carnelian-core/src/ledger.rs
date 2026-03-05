@@ -925,8 +925,9 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires database connection"]
     async fn test_append_event_updates_last_hash() {
-        let db_url = std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian_test".into());
+        let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+            "postgresql://carnelian:carnelian@localhost:5432/carnelian_test".into()
+        });
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
             .connect(&db_url)
@@ -961,8 +962,9 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires database connection"]
     async fn test_verify_chain_empty_ledger() {
-        let db_url = std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian_test".into());
+        let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+            "postgresql://carnelian:carnelian@localhost:5432/carnelian_test".into()
+        });
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
             .connect(&db_url)
@@ -1050,8 +1052,9 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires database connection"]
     async fn test_append_privileged_event_with_signature() {
-        let db_url = std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian_test".into());
+        let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+            "postgresql://carnelian:carnelian@localhost:5432/carnelian_test".into()
+        });
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
             .connect(&db_url)
@@ -1107,8 +1110,9 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires database connection"]
     async fn test_verify_chain_with_signatures() {
-        let db_url = std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian_test".into());
+        let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+            "postgresql://carnelian:carnelian@localhost:5432/carnelian_test".into()
+        });
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
             .connect(&db_url)
@@ -1193,8 +1197,9 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires database connection"]
     async fn test_verify_chain_rejects_invalid_signature() {
-        let db_url = std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://carnelian:carnelian@localhost:5432/carnelian_test".into());
+        let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+            "postgresql://carnelian:carnelian@localhost:5432/carnelian_test".into()
+        });
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
             .connect(&db_url)
