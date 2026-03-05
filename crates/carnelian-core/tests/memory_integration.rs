@@ -62,7 +62,7 @@ async fn test_create_and_retrieve_memory() -> Result<()> {
     // Retrieve the memory
     let retrieved = manager.get_memory(memory.memory_id).await?;
     assert!(retrieved.is_some(), "Memory should be retrievable");
-    
+
     let retrieved = retrieved.unwrap();
     assert_eq!(retrieved.memory_id, memory.memory_id);
     assert_eq!(retrieved.content, memory.content);
@@ -72,7 +72,7 @@ async fn test_create_and_retrieve_memory() -> Result<()> {
         .bind(memory.memory_id)
         .execute(&pool)
         .await?;
-    
+
     sqlx::query("DELETE FROM identities WHERE identity_id = $1")
         .bind(identity_id)
         .execute(&pool)
@@ -120,7 +120,7 @@ async fn test_load_recent_memories_today_yesterday() -> Result<()> {
 
     // Verify memories were loaded
     assert!(recent.len() >= 2, "Should load at least 2 recent memories");
-    
+
     let memory_ids: Vec<Uuid> = recent.iter().map(|m| m.memory_id).collect();
     assert!(memory_ids.contains(&memory1.memory_id));
     assert!(memory_ids.contains(&memory2.memory_id));
@@ -130,7 +130,7 @@ async fn test_load_recent_memories_today_yesterday() -> Result<()> {
         .bind(identity_id)
         .execute(&pool)
         .await?;
-    
+
     sqlx::query("DELETE FROM identities WHERE identity_id = $1")
         .bind(identity_id)
         .execute(&pool)
@@ -190,7 +190,7 @@ async fn test_load_high_importance_memories() -> Result<()> {
         .bind(identity_id)
         .execute(&pool)
         .await?;
-    
+
     sqlx::query("DELETE FROM identities WHERE identity_id = $1")
         .bind(identity_id)
         .execute(&pool)
@@ -237,7 +237,7 @@ async fn test_update_access_count() -> Result<()> {
         .bind(memory.memory_id)
         .execute(&pool)
         .await?;
-    
+
     sqlx::query("DELETE FROM identities WHERE identity_id = $1")
         .bind(identity_id)
         .execute(&pool)
@@ -309,7 +309,7 @@ async fn test_query_memories_with_filters() -> Result<()> {
         .bind(identity_id)
         .execute(&pool)
         .await?;
-    
+
     sqlx::query("DELETE FROM identities WHERE identity_id = $1")
         .bind(identity_id)
         .execute(&pool)
@@ -343,30 +343,31 @@ async fn test_memory_stats() -> Result<()> {
     }
 
     // Get memory stats
-    let count = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM memories WHERE identity_id = $1",
-    )
-    .bind(identity_id)
-    .fetch_one(&pool)
-    .await?;
+    let count =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM memories WHERE identity_id = $1")
+            .bind(identity_id)
+            .fetch_one(&pool)
+            .await?;
 
     assert_eq!(count, 5, "Should have 5 memories");
 
-    let avg_importance = sqlx::query_scalar::<_, f32>(
-        "SELECT AVG(importance) FROM memories WHERE identity_id = $1",
-    )
-    .bind(identity_id)
-    .fetch_one(&pool)
-    .await?;
+    let avg_importance =
+        sqlx::query_scalar::<_, f32>("SELECT AVG(importance) FROM memories WHERE identity_id = $1")
+            .bind(identity_id)
+            .fetch_one(&pool)
+            .await?;
 
-    assert!(avg_importance > 0.6 && avg_importance < 0.7, "Average importance should be around 0.65");
+    assert!(
+        avg_importance > 0.6 && avg_importance < 0.7,
+        "Average importance should be around 0.65"
+    );
 
     // Cleanup
     sqlx::query("DELETE FROM memories WHERE identity_id = $1")
         .bind(identity_id)
         .execute(&pool)
         .await?;
-    
+
     sqlx::query("DELETE FROM identities WHERE identity_id = $1")
         .bind(identity_id)
         .execute(&pool)

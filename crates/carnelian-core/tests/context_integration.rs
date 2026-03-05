@@ -62,20 +62,18 @@ async fn test_context_assembly_integration() -> Result<()> {
         .await?;
 
     // Build context for the session
-    let mut ctx = ContextWindow::build_for_session(
-        pool.clone(),
-        None,
-        session.session_id,
-        None,
-        &config,
-    )
-    .await?;
+    let mut ctx =
+        ContextWindow::build_for_session(pool.clone(), None, session.session_id, None, &config)
+            .await?;
 
     // Assemble the context
     let assembled = ctx.assemble(&config).await?;
 
     // Verify context was assembled
-    assert!(!assembled.is_empty(), "Assembled context should not be empty");
+    assert!(
+        !assembled.is_empty(),
+        "Assembled context should not be empty"
+    );
     // Context was successfully assembled if we got here
 
     // Cleanup
@@ -100,14 +98,9 @@ async fn test_build_for_session_integration() -> Result<()> {
         .await?;
 
     // Build context window
-    let ctx = ContextWindow::build_for_session(
-        pool.clone(),
-        None,
-        session.session_id,
-        None,
-        &config,
-    )
-    .await?;
+    let ctx =
+        ContextWindow::build_for_session(pool.clone(), None, session.session_id, None, &config)
+            .await?;
 
     // Verify context window was created successfully
     // If we got here without errors, the context window was built correctly
@@ -149,14 +142,9 @@ async fn test_log_to_ledger_integration() -> Result<()> {
         .await?;
 
     // Build and assemble context
-    let mut ctx = ContextWindow::build_for_session(
-        pool.clone(),
-        None,
-        session.session_id,
-        None,
-        &config,
-    )
-    .await?;
+    let mut ctx =
+        ContextWindow::build_for_session(pool.clone(), None, session.session_id, None, &config)
+            .await?;
 
     ctx.assemble(&config).await?;
 
@@ -219,14 +207,9 @@ async fn test_log_context_integrity_integration() -> Result<()> {
         .await?;
 
     // Build and assemble context
-    let mut ctx = ContextWindow::build_for_session(
-        pool.clone(),
-        None,
-        session.session_id,
-        None,
-        &config,
-    )
-    .await?;
+    let mut ctx =
+        ContextWindow::build_for_session(pool.clone(), None, session.session_id, None, &config)
+            .await?;
 
     ctx.assemble(&config).await?;
 
@@ -238,8 +221,14 @@ async fn test_log_context_integrity_integration() -> Result<()> {
     assert!(event_id > 0, "Event ID should be positive");
 
     // Verify provenance data
-    assert!(!provenance.context_bundle_hash.is_empty(), "Hash should not be empty");
-    assert!(provenance.total_tokens > 0, "Total tokens should be positive");
+    assert!(
+        !provenance.context_bundle_hash.is_empty(),
+        "Hash should not be empty"
+    );
+    assert!(
+        provenance.total_tokens > 0,
+        "Total tokens should be positive"
+    );
 
     // Cleanup
     sqlx::query("DELETE FROM sessions WHERE session_id = $1")
@@ -260,7 +249,7 @@ async fn test_log_context_integrity_integration() -> Result<()> {
 async fn test_resolve_context_window_limit_integration() -> Result<()> {
     let pool = PgPool::connect(&get_test_db_url()).await?;
     let mut config = Config::default();
-    
+
     // Set a very small context window to trigger pruning
     config.context_window_tokens = 100;
 
@@ -288,19 +277,17 @@ async fn test_resolve_context_window_limit_integration() -> Result<()> {
     }
 
     // Build and assemble context
-    let mut ctx = ContextWindow::build_for_session(
-        pool.clone(),
-        None,
-        session.session_id,
-        None,
-        &config,
-    )
-    .await?;
+    let mut ctx =
+        ContextWindow::build_for_session(pool.clone(), None, session.session_id, None, &config)
+            .await?;
 
     let assembled = ctx.assemble(&config).await?;
 
     // Verify context was pruned to fit within limit
-    assert!(!assembled.is_empty(), "Assembled context should not be empty");
+    assert!(
+        !assembled.is_empty(),
+        "Assembled context should not be empty"
+    );
     // If assembly succeeded, pruning worked correctly
 
     // Cleanup

@@ -39,7 +39,7 @@ async fn test_compact_session_full_flow() -> Result<()> {
     let pool = PgPool::connect(&get_test_db_url()).await?;
     let mut config = Config::default();
     let ledger = Ledger::new(pool.clone());
-    
+
     // Set low context window to trigger compaction
     config.context_window_tokens = 200;
     config.context_reserve_percent = 10;
@@ -59,7 +59,10 @@ async fn test_compact_session_full_flow() -> Result<()> {
             .append_message(
                 session.session_id,
                 if i % 2 == 0 { "user" } else { "assistant" },
-                format!("Message {} with content to increase token count significantly", i),
+                format!(
+                    "Message {} with content to increase token count significantly",
+                    i
+                ),
                 Some(15),
                 None,
                 None,
@@ -71,13 +74,11 @@ async fn test_compact_session_full_flow() -> Result<()> {
     }
 
     // Get token count before compaction
-    let session_before: Session = sqlx::query_as(
-        "SELECT * FROM sessions WHERE session_id = $1"
-    )
-    .bind(session.session_id)
-    .fetch_one(&pool)
-    .await?;
-    
+    let session_before: Session = sqlx::query_as("SELECT * FROM sessions WHERE session_id = $1")
+        .bind(session.session_id)
+        .fetch_one(&pool)
+        .await?;
+
     let tokens_before: i64 = session_before
         .token_counters
         .get("total")
@@ -97,28 +98,32 @@ async fn test_compact_session_full_flow() -> Result<()> {
         .await?;
 
     // Verify compaction occurred
-    assert!(outcome.tokens_before > 0, "Should have tokens before compaction");
+    assert!(
+        outcome.tokens_before > 0,
+        "Should have tokens before compaction"
+    );
     assert!(
         outcome.tokens_after < outcome.tokens_before,
         "Token count should decrease after compaction"
     );
 
     // Verify compaction_count incremented
-    let session_after: Session = sqlx::query_as(
-        "SELECT * FROM sessions WHERE session_id = $1"
-    )
-    .bind(session.session_id)
-    .fetch_one(&pool)
-    .await?;
-    
-    assert_eq!(session_after.compaction_count, 1, "Compaction count should be 1");
+    let session_after: Session = sqlx::query_as("SELECT * FROM sessions WHERE session_id = $1")
+        .bind(session.session_id)
+        .fetch_one(&pool)
+        .await?;
+
+    assert_eq!(
+        session_after.compaction_count, 1,
+        "Compaction count should be 1"
+    );
 
     // Cleanup
     sqlx::query("DELETE FROM sessions WHERE session_id = $1")
         .bind(session.session_id)
         .execute(&pool)
         .await?;
-    
+
     sqlx::query("DELETE FROM identities WHERE identity_id = $1")
         .bind(identity_id)
         .execute(&pool)
@@ -168,7 +173,7 @@ async fn test_memory_flush_zero_returns_nothing_to_store() -> Result<()> {
         .bind(session.session_id)
         .execute(&pool)
         .await?;
-    
+
     sqlx::query("DELETE FROM identities WHERE identity_id = $1")
         .bind(identity_id)
         .execute(&pool)
@@ -211,12 +216,17 @@ async fn test_tool_result_soft_trim_updates_db() -> Result<()> {
         .await?;
 
     // Verify at least one message was trimmed
-    assert!(trimmed_count > 0, "Should have trimmed at least one tool result");
+    assert!(
+        trimmed_count > 0,
+        "Should have trimmed at least one tool result"
+    );
 
     // Verify the message was actually trimmed in the database
-    let messages = manager.load_messages(session.session_id, None, None).await?;
+    let messages = manager
+        .load_messages(session.session_id, None, None)
+        .await?;
     let tool_msg = messages.iter().find(|m| m.role == "tool");
-    
+
     if let Some(msg) = tool_msg {
         assert!(
             msg.content.len() < large_content.len(),
@@ -265,13 +275,11 @@ async fn test_tool_result_hard_clear_deletes_old() -> Result<()> {
         .await?;
 
     // Manually set the message timestamp to be old
-    sqlx::query(
-        "UPDATE session_messages SET ts = $1 WHERE message_id = $2",
-    )
-    .bind(Utc::now() - Duration::seconds(10))
-    .bind(msg_id)
-    .execute(&pool)
-    .await?;
+    sqlx::query("UPDATE session_messages SET ts = $1 WHERE message_id = $2")
+        .bind(Utc::now() - Duration::seconds(10))
+        .bind(msg_id)
+        .execute(&pool)
+        .await?;
 
     // Run tool result pruning
     let (_trimmed_count, cleared_count) = manager
@@ -279,10 +287,15 @@ async fn test_tool_result_hard_clear_deletes_old() -> Result<()> {
         .await?;
 
     // Verify at least one message was cleared
-    assert!(cleared_count > 0, "Should have cleared at least one old tool result");
+    assert!(
+        cleared_count > 0,
+        "Should have cleared at least one old tool result"
+    );
 
     // Verify the message was deleted
-    let messages = manager.load_messages(session.session_id, None, None).await?;
+    let messages = manager
+        .load_messages(session.session_id, None, None)
+        .await?;
     let tool_msg = messages.iter().find(|m| m.message_id == msg_id);
     assert!(tool_msg.is_none(), "Old tool result should be deleted");
 
@@ -337,17 +350,19 @@ async fn test_compaction_increments_count_and_recalculates_counters() -> Result<
         .await?;
 
     // Verify compaction count
-    let session_after: Session = sqlx::query_as(
-        "SELECT * FROM sessions WHERE session_id = $1"
-    )
-    .bind(session.session_id)
-    .fetch_one(&pool)
-    .await?;
-    
+    let session_after: Session = sqlx::query_as("SELECT * FROM sessions WHERE session_id = $1")
+        .bind(session.session_id)
+        .fetch_one(&pool)
+        .await?;
+
     assert_eq!(session_after.compaction_count, 1);
 
     // Verify token counters were recalculated
-    let total = session_after.token_counters.get("total").and_then(|v| v.as_i64()).unwrap_or(0);
+    let total = session_after
+        .token_counters
+        .get("total")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
     assert!(total > 0, "Token counters should be recalculated");
 
     // Cleanup
@@ -365,7 +380,7 @@ async fn test_compaction_ledger_event_recorded() -> Result<()> {
     let pool = PgPool::connect(&get_test_db_url()).await?;
     let mut config = Config::default();
     let ledger = Ledger::new(pool.clone());
-    
+
     config.context_window_tokens = 150;
 
     let manager = SessionManager::new(pool.clone(), None, None, 24);
@@ -422,7 +437,7 @@ async fn test_compaction_ledger_event_recorded() -> Result<()> {
         .bind(session.session_id)
         .execute(&pool)
         .await?;
-    
+
     sqlx::query("DELETE FROM ledger_events WHERE correlation_id = $1")
         .bind(correlation_id)
         .execute(&pool)

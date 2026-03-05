@@ -69,7 +69,7 @@ async fn test_create_and_retrieve_sub_agent() -> Result<()> {
     // Retrieve sub-agent
     let retrieved = manager.get_sub_agent(sub_agent.sub_agent_id).await?;
     assert!(retrieved.is_some(), "Sub-agent should be retrievable");
-    
+
     let retrieved = retrieved.unwrap();
     assert_eq!(retrieved.sub_agent_id, sub_agent.sub_agent_id);
     assert_eq!(retrieved.name, sub_agent.name);
@@ -79,7 +79,7 @@ async fn test_create_and_retrieve_sub_agent() -> Result<()> {
         .bind(sub_agent.sub_agent_id)
         .execute(&pool)
         .await?;
-    
+
     sqlx::query("DELETE FROM identities WHERE identity_id IN ($1, $2, $3)")
         .bind(parent_id)
         .bind(created_by)
@@ -152,7 +152,7 @@ async fn test_list_sub_agents_with_filters() -> Result<()> {
         .bind(sub2.sub_agent_id)
         .execute(&pool)
         .await?;
-    
+
     sqlx::query("DELETE FROM identities WHERE identity_id IN ($1, $2, $3, $4, $5)")
         .bind(parent1)
         .bind(parent2)
@@ -196,7 +196,10 @@ async fn test_pause_and_resume_sub_agent() -> Result<()> {
     manager.pause_sub_agent(sub_agent.sub_agent_id).await?;
 
     // Verify pause flag is set
-    let paused = manager.get_sub_agent(sub_agent.sub_agent_id).await?.unwrap();
+    let paused = manager
+        .get_sub_agent(sub_agent.sub_agent_id)
+        .await?
+        .unwrap();
     let directives = paused.directives.unwrap();
     assert_eq!(
         directives.get("_paused"),
@@ -208,7 +211,10 @@ async fn test_pause_and_resume_sub_agent() -> Result<()> {
     manager.resume_sub_agent(sub_agent.sub_agent_id).await?;
 
     // Verify pause flag is removed
-    let resumed = manager.get_sub_agent(sub_agent.sub_agent_id).await?.unwrap();
+    let resumed = manager
+        .get_sub_agent(sub_agent.sub_agent_id)
+        .await?
+        .unwrap();
     if let Some(directives) = resumed.directives {
         assert!(
             !directives.as_object().unwrap().contains_key("_paused"),
@@ -221,7 +227,7 @@ async fn test_pause_and_resume_sub_agent() -> Result<()> {
         .bind(sub_agent.sub_agent_id)
         .execute(&pool)
         .await?;
-    
+
     sqlx::query("DELETE FROM identities WHERE identity_id IN ($1, $2, $3)")
         .bind(parent_id)
         .bind(created_by)
@@ -264,7 +270,10 @@ async fn test_soft_delete_sub_agent() -> Result<()> {
     assert!(deleted, "Sub-agent should be deleted");
 
     // Verify terminated_at is set
-    let terminated = manager.get_sub_agent(sub_agent.sub_agent_id).await?.unwrap();
+    let terminated = manager
+        .get_sub_agent(sub_agent.sub_agent_id)
+        .await?
+        .unwrap();
     assert!(
         terminated.terminated_at.is_some(),
         "Sub-agent should have terminated_at timestamp"
@@ -273,14 +282,18 @@ async fn test_soft_delete_sub_agent() -> Result<()> {
     // Verify it doesn't appear in default listings (exclude_terminated=true)
     let active_list = manager.list_sub_agents(Some(parent_id), false).await?;
     assert!(
-        !active_list.iter().any(|s| s.sub_agent_id == sub_agent.sub_agent_id),
+        !active_list
+            .iter()
+            .any(|s| s.sub_agent_id == sub_agent.sub_agent_id),
         "Terminated sub-agent should not appear in active list"
     );
 
     // Verify it appears when including terminated
     let all_list = manager.list_sub_agents(Some(parent_id), true).await?;
     assert!(
-        all_list.iter().any(|s| s.sub_agent_id == sub_agent.sub_agent_id),
+        all_list
+            .iter()
+            .any(|s| s.sub_agent_id == sub_agent.sub_agent_id),
         "Terminated sub-agent should appear when including terminated"
     );
 
@@ -289,7 +302,7 @@ async fn test_soft_delete_sub_agent() -> Result<()> {
         .bind(sub_agent.sub_agent_id)
         .execute(&pool)
         .await?;
-    
+
     sqlx::query("DELETE FROM identities WHERE identity_id IN ($1, $2, $3)")
         .bind(parent_id)
         .bind(created_by)
