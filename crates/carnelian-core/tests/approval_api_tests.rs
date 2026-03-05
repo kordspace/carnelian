@@ -80,6 +80,12 @@ async fn start_db_backed_server(db_url: &str) -> (u16, tokio::task::JoinHandle<(
         .expect("Config should connect to database");
     let pool = config.pool().expect("Pool should be set").clone();
 
+    // Generate owner keypair for approval signature verification
+    config
+        .generate_and_store_owner_keypair(None)
+        .await
+        .expect("Should generate owner keypair");
+
     let event_stream = Arc::new(EventStream::new(100, 10));
     let config = Arc::new(config);
     let policy_engine = Arc::new(PolicyEngine::new(pool.clone()));

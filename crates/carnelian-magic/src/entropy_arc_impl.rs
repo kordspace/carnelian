@@ -1,4 +1,4 @@
-//! Arc<T> implementations for EntropyProvider trait
+//! `Arc<T>` implementations for EntropyProvider trait
 //!
 //! This module provides EntropyProvider implementations for Arc-wrapped providers
 //! to enable calling async trait methods on Arc references.
